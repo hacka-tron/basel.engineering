@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Literal
@@ -35,7 +36,14 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_PROMPT_VERSION = "v7"
+_PROMPT_VERSION = "v11"
+_PLANNED_SOURCE_SIGNAL = re.compile(
+    r"\b(?:planned|deferred|not (?:yet )?(?:started|built|implemented)|"
+    r"stretch ideas?|future (?:milestones?|path|work|features?|plans?)|"
+    r"phase [4-7]|milestone [2-4]|"
+    r"KEDA|k3s|Terraform|Flux|GitOps|CI/CD|Auto Scaling Group)\b",
+    re.IGNORECASE,
+)
 _ANSWER_LOCK_TTL_MS = 15000
 _ANSWER_LOCK_WAIT_S = 3.0
 _ANSWER_LOCK_RELEASE = """
@@ -114,6 +122,8 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
         status = (
             " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
             if chunk.source_path == "docs/DESIGN-003-ingestion.md"
+            else " [PLANNED DESIGN; features in this source are not implemented yet]"
+            if _PLANNED_SOURCE_SIGNAL.search(chunk.text)
             else ""
         )
         return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
@@ -122,9 +132,13 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
     return (
         "Answer the question using only the following numbered sources. "
         "Use two or three concise sentences and cite the supporting sources by number. "
+        "Never cite a source number that is not listed below. "
         "Only describe a feature as working now when a source says it is implemented or current. "
         "If a source says it is planned, future, on a roadmap, or not yet built, "
         "say so explicitly. "
+        "Bracketed source status overrides present-tense design prose. "
+        "If asked whether a feature works now, answer No when its bracketed status says "
+        "not implemented yet. "
         "A design document describes intended behavior, not proof that code is running. "
         "When asked whether a feature exists today, check its source status and implemented code. "
         "Do not list every detail unless the question asks for a list.\n\n"
