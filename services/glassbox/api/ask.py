@@ -14,12 +14,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.glassbox.api.sse import frame
+from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache
 from services.glassbox.cache.embedding import (
     EmbeddingCache,
     RedisEmbeddingCache,
     embedding_cache_key,
     normalize_question,
 )
+from services.glassbox.cache.retrieval import RedisRetrievalCache
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
@@ -103,6 +105,10 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
     )
 
 
+def get_answer_cache(client) -> AnswerCache:
+    return RedisAnswerCache(client)
+
+
 def _save_query(
     *,
     request_id: str,
@@ -112,6 +118,7 @@ def _save_query(
     total_ms: int,
     tokens_in: int,
     tokens_out: int,
+    cache_status: str = "miss",
 ) -> None:
     with get_session_factory()() as session:
         session.add(
@@ -119,7 +126,7 @@ def _save_query(
                 request_id=request_id,
                 corpus=request.corpus,
                 question=request.question,
-                cache_status="miss",
+                cache_status=cache_status,
                 mode="full",
                 chunk_ids=[chunk.chunk_id for chunk in chunks],
                 stage_timings_ms=timings,
@@ -175,7 +182,47 @@ async def _stream(
             yield await stage(
                 "embed", "end", duration_ms=round((time.monotonic() - embed_started) * 1000)
             )
-        yield await stage("answer_cache", "end", cache="miss")
+        corpus_version = await RedisRetrievalCache(client).version(request.corpus)
+        answer_cache = get_answer_cache(client)
+        answer_hit = await answer_cache.get(
+            request.corpus, corpus_version, provider.model_id, embedding
+        )
+        yield await stage("answer_cache", "end", cache="hit" if answer_hit else "miss")
+        if answer_hit:
+            chunks = [WorkerChunk.model_validate(item) for item in answer_hit["chunks"]]
+            answer = answer_hit["answer"]
+            yield frame(
+                "retrieval",
+                {
+                    "chunks": [
+                        chunk.model_dump(exclude={"text"}, exclude_none=True) for chunk in chunks
+                    ]
+                },
+            )
+            yield frame("token", {"text": answer})
+            total_ms = elapsed_ms(request_start_ts)
+            await asyncio.to_thread(
+                _save_query,
+                request_id=request_id,
+                request=request,
+                chunks=chunks,
+                timings=timings,
+                total_ms=total_ms,
+                tokens_in=0,
+                tokens_out=0,
+                cache_status="answer_hit",
+            )
+            yield frame(
+                "done",
+                {
+                    "total_ms": total_ms,
+                    "mode": "full",
+                    "answer_cache": "hit",
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                },
+            )
+            return
 
         async with client.pubsub() as pubsub:
             await pubsub.subscribe(f"trace:{request_id}")
@@ -262,6 +309,20 @@ async def _stream(
         total_ms = elapsed_ms(request_start_ts)
         tokens_in = len(prompt.split())
         tokens_out = len("".join(response_parts).split())
+        if await RedisRetrievalCache(client).version(request.corpus) == corpus_version:
+            try:
+                await answer_cache.put(
+                    request.corpus,
+                    corpus_version,
+                    provider.model_id,
+                    embedding,
+                    {
+                        "answer": "".join(response_parts),
+                        "chunks": [chunk.model_dump(exclude_none=True) for chunk in chunks],
+                    },
+                )
+            except Exception:
+                LOGGER.warning("Answer cache write failed for %s", request_id, exc_info=True)
         await asyncio.to_thread(
             _save_query,
             request_id=request_id,

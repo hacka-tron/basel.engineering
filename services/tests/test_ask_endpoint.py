@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import struct
 
 import pytest
 import redis.asyncio as redis
@@ -12,6 +13,20 @@ from services.glassbox.api.main import app
 from services.glassbox.db.models import Chunk, Document, Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.worker.main import STREAM_NAME
+
+
+@pytest.fixture(autouse=True)
+def isolated_answer_cache(monkeypatch):
+    from services.glassbox.api import ask
+
+    class NoopAnswerCache:
+        async def get(self, *args):
+            return None
+
+        async def put(self, *args):
+            pass
+
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: NoopAnswerCache())
 
 
 def events(response):
@@ -183,6 +198,52 @@ def test_second_question_uses_embedding_cache(monkeypatch):
         == "hit"
     )
     assert all(data.get("node") != "embed" for name, data in second if name == "stage")
+
+
+def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
+    from services.glassbox.api import ask
+    from services.glassbox.providers.fake import FakeLLMProvider
+
+    class MemoryAnswerCache:
+        def __init__(self):
+            self.values = {}
+
+        async def get(self, corpus, version, model_id, vector):
+            return self.values.get((corpus, version, model_id, struct.pack("512f", *vector)))
+
+        async def put(self, corpus, version, model_id, vector, payload):
+            self.values[(corpus, version, model_id, struct.pack("512f", *vector))] = payload
+
+    class CountingLLM(FakeLLMProvider):
+        calls = 0
+
+        async def generate(self, prompt, *, max_tokens):
+            self.calls += 1
+            async for part in super().generate(prompt, max_tokens=max_tokens):
+                yield part
+
+    redis_client = MemoryRedis()
+    cache = MemoryAnswerCache()
+    llm = CountingLLM()
+    saved = []
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: redis_client)
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
+    monkeypatch.setattr(ask, "get_llm_provider", lambda: llm)
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
+    http = TestClient(app)
+    body = {"question": "Who is Basel?", "corpus": "about_me"}
+    first = events(http.post("/api/ask", json=body))
+    enqueued = redis_client.enqueued
+    second = events(http.post("/api/ask", json=body))
+    assert llm.calls == 1
+    assert redis_client.enqueued is enqueued
+    assert next(data for name, data in second if name == "done")["answer_cache"] == "hit"
+    assert saved[0].get("cache_status", "miss") == "miss"
+    assert saved[1]["cache_status"] == "answer_hit"
+    assert "".join(data["text"] for name, data in first if name == "token") == "".join(
+        data["text"] for name, data in second if name == "token"
+    )
 
 
 def test_worker_error_ends_stream_before_llm(monkeypatch):

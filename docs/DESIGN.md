@@ -304,7 +304,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `emb:{sha256(normalized_q)}` | string (packed vector) | Embedding cache | 7 days |
 | `ret:{corpus}:v{ver}:{sha}` | list of chunk IDs + scores | Retrieval cache | 1 hour |
 | `chunktxt:{id}` | hash | Chunk text/metadata cache (avoids MySQL round trip) | 1 day |
-| `idx:answers` over `ans:{corpus}:v{ver}:{id}` | Vector index + hashes | Semantic answer cache (question vector, answer, citations, recorded trace) | 24 hours |
+| `idx:answers` over `ans:{corpus}:v{ver}:{id}` | Vector index + hashes | Semantic answer cache (question vector, answer, citations, source chunks); model identity is a TAG filter | 24 hours |
 | `corpus:ver:{corpus}` | integer | Corpus version for cache invalidation | none |
 | `retrieval:jobs` (group `workers`) | Stream | Job queue | trimmed with `MAXLEN ~ 10000` |
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
@@ -318,7 +318,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 
 Three layers, cheapest check first:
 
-1. **Semantic answer cache.** KNN over previous question vectors; a match with cosine similarity of 0.95 or more replays the stored answer and its recorded trace (marked as a cache hit in the UI). Saves the LLM call entirely.
+1. **Semantic answer cache.** KNN over previous question vectors; a match with cosine similarity of 0.95 or more replays the stored answer and cited retrieval results as a new, honest cache-hit trace. It does not replay queue, worker, or LLM stages that did not run for this request. Saves the LLM call entirely.
 2. **Embedding cache.** Exact match on the normalized question. Saves a Bedrock call.
 3. **Retrieval and chunk caches.** Save vector search and MySQL reads.
 
