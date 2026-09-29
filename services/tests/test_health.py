@@ -10,6 +10,30 @@ from services.glassbox.api.main import app
 client = TestClient(app)
 
 
+def test_invalid_provider_fails_app_startup(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrok")
+    with pytest.raises(ValueError, match="GLASSBOX_PROVIDER"):
+        with TestClient(app):
+            pass
+
+
+@pytest.mark.parametrize("cap", ["abc", "0", "-1"])
+def test_invalid_daily_cap_fails_app_startup(monkeypatch, cap):
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    monkeypatch.setenv("GLASSBOX_DAILY_LLM_CAP", cap)
+    with pytest.raises(ValueError, match="GLASSBOX_DAILY_LLM_CAP"):
+        with TestClient(app):
+            pass
+
+
+def test_invalid_bedrock_model_id_fails_app_startup(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrock")
+    monkeypatch.setenv("BEDROCK_LLM_MODEL_ID", "bad model ID")
+    with pytest.raises(ValueError, match="BEDROCK_LLM_MODEL_ID"):
+        with TestClient(app):
+            pass
+
+
 def test_healthz_returns_ok():
     response = client.get("/healthz")
     assert response.status_code == 200

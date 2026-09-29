@@ -1,10 +1,20 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Response
 
 from services.glassbox.api.ask import router as ask_router
 from services.glassbox.api.cache import ping_redis
 from services.glassbox.api.db import ping_mysql
+from services.glassbox.providers.factory import validate_provider_config
 
-app = FastAPI(title="glassbox-api")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    validate_provider_config()
+    yield
+
+
+app = FastAPI(title="glassbox-api", lifespan=lifespan)
 app.include_router(ask_router)
 
 
