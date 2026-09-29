@@ -1,0 +1,254 @@
+"""Scanner checks and real MySQL/Redis ingestion coverage."""
+
+import hashlib
+from pathlib import Path
+
+import pytest
+import redis.asyncio as redis
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from services.glassbox.db.models import Base, Document, IngestionRun
+from services.glassbox.db.models import Chunk as DbChunk
+from services.glassbox.db.session import create_db_engine
+from services.glassbox.ingest import run as ingest_run
+from services.glassbox.ingest.run import chunker_for_path, ingest
+from services.glassbox.ingest.scanner import (
+    scan_file,
+    scan_sources,
+    secret_reason,
+    strip_front_matter,
+)
+
+
+def test_front_matter_and_dispatch(tmp_path):
+    body = "# Heading\n\nContent.\n"
+    assert strip_front_matter("---\ntype: bio\n---\n" + body) == body
+    assert strip_front_matter(body) == body
+    assert chunker_for_path(Path("item.md"))(body, "item.md")[0].text == body
+    for extension in (".tf", ".yml", ".yaml", ".py", ".ts", ".tsx"):
+        assert chunker_for_path(Path("item" + extension)) is not None
+    assert chunker_for_path(Path("item.txt")) is None
+
+
+def test_scanner_quarantines_secret_and_denylisted_paths(tmp_path):
+    root = tmp_path
+    about_me = root / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    (about_me / "safe.md").write_text("# Safe\n")
+    (about_me / "key.md").write_text("# Unsafe\naws_key = AKIA1234567890ABCDEF\n")
+    (about_me / ".env.md").write_text("# Hidden\n")
+    candidates = list(scan_sources(root))
+    results = {source.source_path: scan_file(source) for source in candidates}
+    assert results["corpus/about-me/safe.md"].error is None
+    assert (
+        results["corpus/about-me/safe.md"].content_hash == hashlib.sha256(b"# Safe\n").hexdigest()
+    )
+    assert results["corpus/about-me/key.md"].error is not None
+    assert results["corpus/about-me/.env.md"].error is not None
+
+
+def test_system_scanner_ignores_unsupported_files_and_missing_directories(tmp_path):
+    services = tmp_path / "services"
+    services.mkdir()
+    (services / "api.py").write_text("def run():\n    pass\n")
+    (services / "notes.txt").write_text("Skip me")
+    (services / "secret.tfvars").write_text("credential = hidden")
+    sources = {source.source_path: source for source in scan_sources(tmp_path)}
+    assert set(sources) == {"services/api.py", "services/secret.tfvars"}
+    assert scan_file(sources["services/secret.tfvars"]).error == "denylisted path"
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["services/secrets.yml", "services/Secrets/main.py", "services/.ENV", "services/config.TFVARS"],
+)
+def test_scanner_denylist_is_case_insensitive_and_catches_secrets_files(tmp_path, relative_path):
+    path = tmp_path / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("safe content")
+    sources = {source.source_path: source for source in scan_sources(tmp_path)}
+    assert relative_path in sources
+    assert scan_file(sources[relative_path]).error == "denylisted path"
+
+
+def test_secret_heuristic_catches_private_key_and_high_entropy_assignment():
+    assert secret_reason("-----BEGIN RSA PRIVATE KEY-----") == "private key header at line 1"
+    assert secret_reason("token = 'aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5z'")
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        'api_key = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5z"',
+        '"api_key": "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5z"',
+    ],
+)
+def test_secret_heuristic_catches_quoted_and_unquoted_keys(assignment):
+    assert secret_reason(assignment) == "possible high-entropy assigned value at line 1"
+
+
+def test_secret_heuristic_catches_temporary_aws_key():
+    assert secret_reason("key = ASIA1234567890ABCDEF") == "possible AWS access key at line 1"
+
+
+@pytest.fixture
+def integration_stack(monkeypatch):
+    monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
+    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_USER", "glassbox")
+    monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
+    monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    engine = create_db_engine()
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    Base.metadata.create_all(engine)
+    yield engine, client
+    engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ingest_happy_path_idempotency_and_quarantine(tmp_path, integration_stack):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    about_me = tmp_path / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    fixture_name = f"{tmp_path.name}.md"
+    source_path = f"corpus/about-me/{fixture_name}"
+    (about_me / fixture_name).write_text("---\ntype: bio\n---\n# Fixture\n\nBody.\n")
+    (about_me / "unsafe.md").write_text("# Unsafe\nkey = AKIA1234567890ABCDEF\n")
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+    redis_keys = []
+    try:
+        first = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert first.docs_changed == 1
+        assert first.chunks_written == 1
+        assert "corpus/about-me/unsafe.md" in first.errors
+        with Session(engine) as session:
+            document = session.scalar(select(Document).where(Document.source_path == source_path))
+            assert document is not None
+            chunks = list(
+                session.scalars(select(DbChunk).where(DbChunk.document_id == document.id))
+            )
+            assert len(chunks) == 1
+            chunk = chunks[0]
+            assert chunk.text.startswith("# Fixture")
+            assert len(chunk.embedding) == 2048
+            redis_key = f"chunk:{chunk.id}"
+            redis_keys.append(redis_key)
+        assert await client.hget(redis_key, "source_path") == source_path.encode()
+        assert await client.execute_command("FT.INFO", "idx:chunks")
+
+        second = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert second.docs_changed == 0
+        assert second.chunks_written == 0
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    select(func.count())
+                    .select_from(DbChunk)
+                    .where(DbChunk.document_id == document.id)
+                )
+                == 1
+            )
+
+        (about_me / fixture_name).write_text("# Fixture updated\n\nNew body.\n")
+        third = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert third.docs_changed == 1
+        assert third.chunks_written == 1
+        assert not await client.exists(redis_key)
+        with Session(engine) as session:
+            new_chunk = session.scalar(select(DbChunk).where(DbChunk.document_id == document.id))
+            assert new_chunk.text.startswith("# Fixture updated")
+            redis_keys.append(f"chunk:{new_chunk.id}")
+        assert await client.exists(redis_keys[-1])
+    finally:
+        with engine.begin() as connection:
+            document_id = connection.scalar(
+                select(Document.id).where(Document.source_path == source_path)
+            )
+            if document_id is not None:
+                connection.execute(Document.__table__.delete().where(Document.id == document_id))
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        if redis_keys:
+            await client.delete(*redis_keys)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chunker_exception_quarantines_document_and_continues(
+    tmp_path, integration_stack, monkeypatch
+):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    about_me = tmp_path / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    bad_path = f"corpus/about-me/{tmp_path.name}-bad.md"
+    good_path = f"corpus/about-me/{tmp_path.name}-good.md"
+    (tmp_path / bad_path).write_text("# Bad\n")
+    (tmp_path / good_path).write_text("# Good\n")
+    original_chunker = ingest_run._CHUNKERS[".md"]
+
+    def failing_chunker(content, source_path):
+        if source_path == bad_path:
+            raise IndexError("malformed document")
+        return original_chunker(content, source_path)
+
+    monkeypatch.setitem(ingest_run._CHUNKERS, ".md", failing_chunker)
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+    redis_keys = []
+    try:
+        result = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert result.errors[bad_path] == "malformed document"
+        assert result.docs_changed == 1
+        assert result.chunks_written == 1
+        with Session(engine) as session:
+            assert session.scalar(select(Document).where(Document.source_path == bad_path)) is None
+            document = session.scalar(select(Document).where(Document.source_path == good_path))
+            assert document is not None
+            redis_keys = [
+                f"chunk:{chunk_id}"
+                for chunk_id in session.scalars(
+                    select(DbChunk.id).where(DbChunk.document_id == document.id)
+                )
+            ]
+            assert len(redis_keys) == 1
+            run = session.scalar(
+                select(IngestionRun).where(IngestionRun.id.not_in(existing_run_ids))
+            )
+            assert run.status == "succeeded"
+    finally:
+        with engine.begin() as connection:
+            for source_path in (bad_path, good_path):
+                document_id = connection.scalar(
+                    select(Document.id).where(Document.source_path == source_path)
+                )
+                if document_id is not None:
+                    connection.execute(
+                        Document.__table__.delete().where(Document.id == document_id)
+                    )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        if redis_keys:
+            await client.delete(*redis_keys)
+        await client.aclose()
