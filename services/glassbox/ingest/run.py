@@ -171,6 +171,9 @@ async def ingest(
                         (row.id, source.corpus, packed, source.source_path, document.id)
                     )
                 await replace_document_vectors(redis_client, old_ids, new_vectors)
+            # The DB transaction has committed; invalidate content-dependent
+            # caches for this corpus before another request can reuse them.
+            await redis_client.incr(f"corpus:ver:{source.corpus}")
             result.docs_changed += 1
             result.chunks_written += len(chunks)
         with sessions.begin() as session:

@@ -72,6 +72,16 @@ class RecordingRedis:
         self.enqueued = None
         self.sequence = 41
         self.expirations = []
+        self.values = {}
+
+    async def get(self, key):
+        return self.values.get(key)
+
+    async def mget(self, keys):
+        return [self.values.get(key) for key in keys]
+
+    async def set(self, key, value, *, ex):
+        self.values[key] = value
 
     async def execute_command(self, *args):
         self.command = args
@@ -174,6 +184,46 @@ async def test_worker_events_use_redis_sequence_and_request_start(monkeypatch):
     assert all(event["t_ms"] == 5000 for event in events)
     assert client.sequence == 46
     assert client.expirations == [("seq:shared-request", 300)] * len(events)
+
+
+@pytest.mark.asyncio
+async def test_repeat_worker_job_uses_retrieval_and_chunk_caches(monkeypatch):
+    calls = {"search": 0, "mysql": 0}
+
+    async def counted_search(*args, **kwargs):
+        calls["search"] += 1
+        return [{"chunk_id": 42, "score": 0.8}]
+
+    def counted_load(session_factory, matches):
+        calls["mysql"] += 1
+        return [
+            {
+                "n": 1,
+                "chunk_id": 42,
+                "score": 0.8,
+                "text": "answer source",
+                "source_path": "corpus/about-me/bio.md",
+                "title": "Bio",
+            }
+        ]
+
+    monkeypatch.setattr(worker_module, "search_chunks", counted_search)
+    monkeypatch.setattr(worker_module, "_load_chunks", counted_load)
+    client = RecordingRedis(
+        {
+            b"request_id": b"repeat-request",
+            b"request_start_ts": b"1000000",
+            b"corpus": b"about_me",
+            b"embedding_model": b"fake-v1",
+            b"embedding": struct.pack("512f", *([0.25] * 512)),
+        }
+    )
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert calls == {"search": 1, "mysql": 1}
+    second = [payload for _, payload in client.events[-5:]]
+    assert [e["cache"] for e in second if e.get("cache")] == ["hit", "hit"]
+    assert second[-1]["chunks"][0]["score"] == 0.8
 
 
 @pytest.mark.asyncio

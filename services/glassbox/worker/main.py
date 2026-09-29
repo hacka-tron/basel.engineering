@@ -13,6 +13,12 @@ import redis.asyncio as redis
 from redis.exceptions import ResponseError
 from sqlalchemy import select
 
+from services.glassbox.cache.retrieval import (
+    ChunkCache,
+    RedisChunkCache,
+    RedisRetrievalCache,
+    RetrievalCache,
+)
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.retrieval.search import VECTOR_DIMENSIONS, search_chunks
@@ -39,6 +45,7 @@ async def enqueue_retrieval_job(
     corpus: str,
     embedding: list[float],
     request_start_ts: int,
+    embedding_model: str = "unknown",
 ) -> bytes:
     if len(embedding) != VECTOR_DIMENSIONS:
         raise ValueError(f"embedding must have {VECTOR_DIMENSIONS} float32 values")
@@ -50,6 +57,7 @@ async def enqueue_retrieval_job(
             "corpus": corpus,
             "request_start_ts": request_start_ts,
             "embedding": struct.pack(f"{VECTOR_DIMENSIONS}f", *embedding),
+            "embedding_model": embedding_model,
         },
         maxlen=10000,
         approximate=True,
@@ -133,10 +141,14 @@ async def process_one_message(
             },
         )
 
-    async def stage(node: str, status: str, duration_ms: int | None = None) -> None:
+    async def stage(
+        node: str, status: str, duration_ms: int | None = None, cache: str | None = None
+    ) -> None:
         payload = {"node": node, "status": status}
         if duration_ms is not None:
             payload["duration_ms"] = duration_ms
+        if cache is not None:
+            payload["cache"] = cache
         await emit("stage", payload)
 
     try:
@@ -153,16 +165,41 @@ async def process_one_message(
         if not isinstance(packed, bytes) or len(packed) != VECTOR_DIMENSIONS * 4:
             raise ValueError("embedding must contain 512 packed float32 values")
         embedding = list(struct.unpack(f"{VECTOR_DIMENSIONS}f", packed))
+        embedding_model = _field(fields, "embedding_model") or b"unknown"
+        if isinstance(embedding_model, bytes):
+            embedding_model = embedding_model.decode()
+        retrieval_cache: RetrievalCache = RedisRetrievalCache(redis_client)
+        chunk_cache: ChunkCache = RedisChunkCache(redis_client)
+        version = await retrieval_cache.version(corpus)
+        retrieval_key = retrieval_cache.key(corpus, version, embedding_model, embedding)
 
         vector_started = time.monotonic()
         await stage("vector_search", "start")
-        matches = await search_chunks(redis_client, embedding, corpus, top_k=8)
-        await stage("vector_search", "end", round((time.monotonic() - vector_started) * 1000))
+        matches = await retrieval_cache.get(retrieval_key)
+        retrieval_hit = matches is not None
+        if matches is None:
+            matches = await search_chunks(redis_client, embedding, corpus, top_k=8)
+            await retrieval_cache.put(retrieval_key, matches)
+        await stage(
+            "vector_search",
+            "end",
+            round((time.monotonic() - vector_started) * 1000),
+            cache="hit" if retrieval_hit else "miss",
+        )
 
         mysql_started = time.monotonic()
         await stage("mysql", "start")
-        chunks = _load_chunks(session_factory, matches)
-        await stage("mysql", "end", round((time.monotonic() - mysql_started) * 1000))
+        chunks = await chunk_cache.get(matches)
+        chunk_hit = chunks is not None
+        if chunks is None:
+            chunks = _load_chunks(session_factory, matches)
+            await chunk_cache.put(chunks)
+        await stage(
+            "mysql",
+            "end",
+            round((time.monotonic() - mysql_started) * 1000),
+            cache="hit" if chunk_hit else "miss",
+        )
         await emit("retrieval", {"chunks": chunks})
     except Exception as exc:
         LOGGER.exception("Retrieval job %s failed", message_id)

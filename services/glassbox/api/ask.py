@@ -190,6 +190,7 @@ async def _stream(
                 corpus=request.corpus,
                 embedding=embedding,
                 request_start_ts=request_start_ts,
+                embedding_model=provider.model_id,
             )
             yield await stage("queue", "end", seq=queue_end_seq)
 
