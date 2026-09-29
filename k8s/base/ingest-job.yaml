@@ -13,7 +13,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: ingest
-          image: ghcr.io/hacka-tron/basel.engineering:phase4-k8s
+          image: ghcr.io/hacka-tron/basel.engineering:9c03c06
           command: ["python", "-m", "services.glassbox.ingest.run"]
           envFrom:
             - configMapRef:

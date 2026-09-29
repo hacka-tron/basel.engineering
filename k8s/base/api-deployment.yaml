@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: ghcr.io/hacka-tron/basel.engineering:phase4-k8s
+          image: ghcr.io/hacka-tron/basel.engineering:9c03c06
           ports:
             - name: http
               containerPort: 8000
