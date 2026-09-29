@@ -1,0 +1,61 @@
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-600.css';
+@import 'tailwindcss';
+
+/*
+ * Design tokens live directly in @theme (not aliased through a separate
+ * :root block) — Tailwind v4's `@theme inline` does not reliably resolve
+ * var()-to-var() indirection at the custom-property level (verified: an
+ * alias like `--color-primary: var(--color-text-primary)` here resolved
+ * to an empty string in the browser, even though --color-text-primary
+ * itself resolved fine). Hardcoding the hex values directly avoids that.
+ *
+ * Token names deliberately avoid Tailwind's own reserved scale keys
+ * (xs/sm/base/lg/xl/2xl...). Naming a color token "base" collided with
+ * Tailwind's built-in --text-base (font-size) key and silently replaced
+ * it — `.text-base` was generated as a *color* rule instead of the
+ * standard font-size utility, which made text using `text-base` for
+ * its size (not its color) render invisible. Hence "canvas", not "base".
+ */
+@theme {
+  --color-canvas: #0b0d11;
+  --color-panel: #12151b;
+  --color-hairline: #232830;
+  --color-primary: #e6e9ee;
+  --color-muted: #7c8494;
+  --color-cyan: #22d3ee;
+  --color-hit: #34d399;
+  --color-miss: #f5a623;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+:root {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--color-primary);
+  background: var(--color-canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
