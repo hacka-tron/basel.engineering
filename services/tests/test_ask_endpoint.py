@@ -7,6 +7,7 @@ import struct
 import pytest
 import redis.asyncio as redis
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
 from services.glassbox.api.main import app
@@ -44,6 +45,89 @@ def events(response):
         for frame in response.text.strip().split("\n\n")
         for name, data in [frame.splitlines()]
     ]
+
+
+def test_prompt_marks_future_design_as_planned():
+    from services.glassbox.api.ask import WorkerChunk, _prompt
+
+    prompt = _prompt(
+        "Does Drive ingestion work now?",
+        [
+            WorkerChunk(
+                n=1,
+                chunk_id=1,
+                text="Drive sync runs every 15 minutes.",
+                source_path="docs/DESIGN-003-ingestion.md",
+                title="Design",
+                score=0.8,
+            )
+        ],
+    )
+    assert "PLANNED M4 DESIGN" in prompt
+    assert "not implemented yet" in prompt
+    assert "design document describes intended behavior" in prompt
+    assert "Never cite a source number that is not listed" in prompt
+    assert "answer No when its bracketed status says not implemented yet" in prompt
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "## Future milestones (not started)\nKubernetes deployment comes later.",
+        "**Phase 5: Autoscaling demo**\nKEDA scales workers.",
+        "## 9. Kubernetes design\nThe retrieval-worker is scaled by KEDA.",
+        "## 7. Milestone 3: DD2 features (deferred)",
+        "## Stretch ideas\nTry an EKS demo.",
+    ],
+)
+def test_prompt_marks_planned_content_from_other_design_docs(text):
+    from services.glassbox.api.ask import WorkerChunk, _prompt
+
+    prompt = _prompt(
+        "Is this built now?",
+        [
+            WorkerChunk(
+                n=1,
+                chunk_id=1,
+                text=text,
+                source_path="docs/DESIGN.md",
+                title="Design",
+                score=0.8,
+            )
+        ],
+    )
+    assert (
+        "docs/DESIGN.md [PLANNED DESIGN; features in this source are not implemented yet]:"
+        in prompt
+    )
+    assert "Bracketed source status overrides present-tense design prose" in prompt
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The API streams cited answers from the current local service.",
+        "A future format change can use a versioned cache key.",
+    ],
+)
+def test_prompt_does_not_mark_current_or_incidental_future_content(text):
+    from services.glassbox.api.ask import WorkerChunk, _prompt
+
+    prompt = _prompt(
+        "What works now?",
+        [
+            WorkerChunk(
+                n=1,
+                chunk_id=1,
+                text=text,
+                source_path="docs/DESIGN.md",
+                title="Design",
+                score=0.8,
+            )
+        ],
+    )
+    assert "docs/DESIGN.md:" in prompt
+    assert "[PLANNED DESIGN; features in this source are not implemented yet]" not in prompt
 
 
 def test_request_rejects_unknown_corpus():
@@ -85,8 +169,17 @@ class MemoryRedis:
     async def get(self, key):
         return self.cache.get(key)
 
-    async def set(self, key, value, *, ex):
+    async def set(self, key, value, *, ex=None, nx=False, px=None):
+        if nx and key in self.cache:
+            return False
         self.cache[key] = value
+        return True
+
+    async def eval(self, script, numkeys, key, token):
+        if self.cache.get(key) == token:
+            del self.cache[key]
+            return 1
+        return 0
 
     async def incr(self, key):
         self.sequence += 1
@@ -126,6 +219,8 @@ class MemoryRedis:
         await self.expire(f"seq:{request_id}", 300)
         if kind == "error":
             payload.update(code="internal", message="worker failed")
+        elif self.outcome == "empty":
+            payload["chunks"] = []
         else:
             payload["chunks"] = [
                 {
@@ -318,6 +413,100 @@ def test_daily_budget_exhaustion_returns_sources_without_llm(monkeypatch):
     assert retrieval["chunks"][0]["snippet"] == "Basel builds software."
     assert all(name != "token" for name, _ in stream)
     assert saved[0]["mode"] == "retrieval_only"
+
+
+def test_empty_model_filtered_retrieval_answers_without_llm(monkeypatch):
+    from services.glassbox.api import ask
+
+    class NoBudget:
+        async def reserve(self):
+            pytest.fail("empty retrieval must not reserve LLM budget")
+
+    class NoLLM:
+        model_id = "no-llm"
+
+        async def generate(self, prompt, *, max_tokens):
+            pytest.fail("empty retrieval must not invoke the LLM")
+            yield ""
+
+    client = MemoryRedis("empty")
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: NoBudget())
+    monkeypatch.setattr(ask, "get_llm_provider", lambda: NoLLM())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: None)
+    stream = events(
+        TestClient(app).post("/api/ask", json={"question": "What exists?", "corpus": "about_me"})
+    )
+    assert next(data for name, data in stream if name == "retrieval")["chunks"] == []
+    assert next(data for name, data in stream if name == "token")["text"] == (
+        "I don't know from what I have."
+    )
+    assert next(data for name, data in stream if name == "done")["mode"] == "full"
+    assert all(name != "error" for name, _ in stream)
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_answer_cache_misses_use_one_llm_call(monkeypatch):
+    from services.glassbox.api import ask
+
+    class MemoryAnswerCache:
+        value = None
+
+        async def get(self, *args):
+            return self.value
+
+        async def put(self, *args):
+            self.value = args[-1]
+
+    class SlowLLM:
+        model_id = "slow-llm"
+        calls = 0
+
+        async def generate(self, prompt, *, max_tokens):
+            self.calls += 1
+            await asyncio.sleep(0.2)
+            yield "A grounded answer [1]."
+
+    client = MemoryRedis()
+    cache = MemoryAnswerCache()
+    llm = SlowLLM()
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
+    monkeypatch.setattr(ask, "get_llm_provider", lambda: llm)
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: None)
+    body = {"question": "  What   is Basel's work? ", "corpus": "about_me"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        responses = await asyncio.gather(
+            http.post("/api/ask", json=body),
+            http.post("/api/ask", json={**body, "question": "what is basel's work?"}),
+        )
+    streams = [events(response) for response in responses]
+    assert llm.calls == 1
+    assert sorted(
+        next(data for name, data in stream if name == "done")["answer_cache"] for stream in streams
+    ) == ["hit", "miss"]
+    assert all(name != "error" for stream in streams for name, _ in stream)
+
+
+@pytest.mark.asyncio
+async def test_answer_lock_wait_is_bounded(monkeypatch):
+    from services.glassbox.api import ask
+
+    class NeverFilled:
+        calls = 0
+
+        async def get(self, *args):
+            self.calls += 1
+            return None
+
+    cache = NeverFilled()
+    monkeypatch.setattr(ask, "_ANSWER_LOCK_WAIT_S", 0.03)
+    start = asyncio.get_running_loop().time()
+    assert await ask._wait_for_answer(cache, "about_me", 1, "model", [0.0] * 512) is None
+    assert asyncio.get_running_loop().time() - start < 0.2
+    assert cache.calls == 1
 
 
 def test_worker_error_ends_stream_before_llm(monkeypatch):

@@ -178,7 +178,7 @@ async def process_one_message(
         matches = await retrieval_cache.get(retrieval_key)
         retrieval_hit = matches is not None
         if matches is None:
-            matches = await search_chunks(redis_client, embedding, corpus, top_k=8)
+            matches = await search_chunks(redis_client, embedding, corpus, embedding_model, top_k=8)
             await retrieval_cache.put(retrieval_key, matches)
         await stage(
             "vector_search",

@@ -1,0 +1,518 @@
+{
+  "embedding_model": "amazon.titan-embed-text-v2:0",
+  "index_name": "idx:chunks",
+  "corpus_versions": {
+    "about_me": 126,
+    "about_system": 105
+  },
+  "dataset_fingerprint": "8a859ec44f259a5d490a025ca3629d4136163ca42e67fc7bf9d10983192f7a61",
+  "overall": {
+    "count": 30,
+    "recall_at_5": 0.8667,
+    "mrr": 0.6917
+  },
+  "by_corpus": {
+    "about_me": {
+      "count": 15,
+      "recall_at_5": 0.9333,
+      "mrr": 0.7944
+    },
+    "about_system": {
+      "count": 15,
+      "recall_at_5": 0.8,
+      "mrr": 0.5889
+    }
+  },
+  "cases": [
+    {
+      "id": "me-current-role",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-assets",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-outages",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-cpu",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-release",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-fitbit-gate",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-youtube",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-framework",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-education",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/projects.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "id": "me-contact",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "id": "me-background",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.25
+    },
+    {
+      "id": "me-goal-buddy",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/projects.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-cryptoking",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/projects.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-languages",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/skills.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/skills.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-observability",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/skills.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-sse",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "services/glassbox/api/ask.py",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "docs/DESIGN-002-followups.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-vector",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/retrieval/search.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/ingest/redis_index.py",
+        "services/glassbox/cache/retrieval.py",
+        "services/glassbox/retrieval/search.py",
+        "services/glassbox/worker/main.py",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "id": "system-worker",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/worker/main.py"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "services/glassbox/worker/main.py",
+        "services/glassbox/api/ask.py",
+        "services/glassbox/worker/main.py",
+        "services/glassbox/worker/__init__.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-schema",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/db/models.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/db/models.py",
+        "services/glassbox/db/migrations/versions/0001_initial_schema.py",
+        "services/glassbox/worker/main.py",
+        "docs/DESIGN.md",
+        "services/glassbox/cache/retrieval.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-ingest",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/run.py",
+        "docs/DESIGN-003-ingestion.md"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "services/glassbox/ingest/run.py",
+        "docs/DESIGN-003-ingestion.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN-003-ingestion.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-secrets",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/scanner.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/ingest/run.py",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "docs/DESIGN-003-ingestion.md",
+        "docs/DESIGN-003-ingestion.md",
+        "services/glassbox/db/models.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-chunk-markdown",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/chunkers/markdown.py"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/ingest/chunkers/markdown.py",
+        "services/glassbox/ingest/chunkers/markdown.py",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "services/glassbox/ingest/chunkers/yaml_doc.py",
+        "services/tests/test_chunker_markdown.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-chunk-terraform",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/chunkers/terraform.py"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/ingest/chunkers/terraform.py",
+        "services/glassbox/ingest/chunkers/terraform.py",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "services/tests/test_chunker_terraform.py",
+        "services/tests/test_chunker_terraform.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-providers",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/providers/base.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/providers/factory.py",
+        "services/glassbox/providers/base.py",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "services/glassbox/providers/bedrock.py",
+        "services/glassbox/providers/factory.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-caches",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_answer_cache.py",
+        "docs/DESIGN.md",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "services/glassbox/ingest/run.py",
+        "services/glassbox/api/ask.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-rate-limit",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_limits.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-budget",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_limits.py",
+        "services/glassbox/limits.py",
+        "services/glassbox/limits.py",
+        "services/glassbox/limits.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-edge",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-004-action-plan.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN-004-action-plan.md",
+        "services/glassbox/providers/factory.py",
+        "docs/DESIGN.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN-004-action-plan.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-deploy",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-004-action-plan.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN-004-action-plan.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-followups",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-002-followups.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    }
+  ]
+}

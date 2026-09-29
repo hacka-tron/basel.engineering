@@ -21,7 +21,11 @@ from services.glassbox.ingest.chunkers.code import chunk_code
 from services.glassbox.ingest.chunkers.markdown import chunk_markdown
 from services.glassbox.ingest.chunkers.terraform import chunk_terraform
 from services.glassbox.ingest.chunkers.yaml_doc import chunk_yaml
-from services.glassbox.ingest.redis_index import ensure_index, replace_document_vectors
+from services.glassbox.ingest.redis_index import (
+    backfill_model_tags,
+    ensure_index,
+    replace_document_vectors,
+)
 from services.glassbox.ingest.scanner import scan_file, scan_sources, strip_front_matter
 from services.glassbox.providers.factory import get_embedding_provider
 
@@ -80,7 +84,17 @@ async def ingest(
             session.add(run)
             session.flush()
             run_id = run.id
-        await ensure_index(redis_client)
+        index_changed = await ensure_index(redis_client)
+        # Retry the backfill if an earlier run stopped after FT.ALTER but before
+        # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
+        if index_changed or not await redis_client.get("idx:chunks:model-tags-ready"):
+            with sessions() as session:
+                rows = session.execute(select(DbChunk.id, DbChunk.embedding_model)).all()
+            await backfill_model_tags(redis_client, rows)
+            # Old retrieval-cache entries may include mixed-model matches.
+            for corpus in ("about_me", "about_system"):
+                await redis_client.incr(f"corpus:ver:{corpus}")
+            await redis_client.set("idx:chunks:model-tags-ready", "1")
         provider = get_embedding_provider()
         for source in scan_sources(root):
             scanned = scan_file(source)
@@ -170,7 +184,9 @@ async def ingest(
                     new_vectors.append(
                         (row.id, source.corpus, packed, source.source_path, document.id)
                     )
-                await replace_document_vectors(redis_client, old_ids, new_vectors)
+                await replace_document_vectors(
+                    redis_client, old_ids, new_vectors, provider.model_id
+                )
             # The DB transaction has committed; invalidate content-dependent
             # caches for this corpus before another request can reuse them.
             await redis_client.incr(f"corpus:ver:{source.corpus}")
