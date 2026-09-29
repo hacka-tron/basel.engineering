@@ -48,7 +48,7 @@ Owner tasks — manual, console/CLI work that can't be delegated to Claude Code.
 
 - [x] Commit the DESIGN docs to git.
 - [x] Install and configure the AWS CLI locally. Authentication was verified; needed for local Bedrock calls in M1 Phase 2 and for Terraform later.
-- [ ] Confirm 512-dimension Titan Text Embeddings V2 access in `us-east-1`. A Claude Haiku-class Bedrock invocation succeeded; the Titan check was interrupted before its result was recorded.
+- [x] Confirm 512-dimension Titan Text Embeddings V2 access in `us-east-1`. A small real call returned a 512-dimensional vector on 2026-09-29. A prior nonstreaming Haiku call succeeded; a later `converse_stream` attempt reported missing model use-case details, so streaming access still needs verification before Phase 2 acceptance.
 - [x] Set up AWS Budgets before deploying resources: `Glassbox-Monthly` is set to $20/month, per the owner's updated limit. The previous session recorded actual-spend alerts at 50/80/100% and a forecast alert; the budget amount was verified again by CLI.
 - [ ] **Decision checkpoint before M2**: AWS account is currently on the Free plan, which auto-closes the account after 6 months or when credits run out — this would take the live site down mid-search with no warning beyond the budget alerts. Decide Free vs. Paid before the first `terraform apply` against real AWS resources in M2.
 - [ ] Confirm Cloudflare proxy mode (orange-cloud/proxied) is intentional for `basel.engineering`, and that DNS is otherwise untouched (no conflicting records).

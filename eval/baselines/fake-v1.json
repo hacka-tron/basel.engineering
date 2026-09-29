@@ -1,0 +1,518 @@
+{
+  "embedding_model": "fake-v1",
+  "index_name": "idx:chunks",
+  "corpus_versions": {
+    "about_me": 40,
+    "about_system": 39
+  },
+  "dataset_fingerprint": "2113c721bb4875e4e5d0498e8174e8d03dd94c6d00a6f6cf23673dbe13141487",
+  "overall": {
+    "count": 30,
+    "recall_at_5": 0.4667,
+    "mrr": 0.3078
+  },
+  "by_corpus": {
+    "about_me": {
+      "count": 15,
+      "recall_at_5": 0.7333,
+      "mrr": 0.4489
+    },
+    "about_system": {
+      "count": 15,
+      "recall_at_5": 0.2,
+      "mrr": 0.1667
+    }
+  },
+  "cases": [
+    {
+      "id": "me-current-role",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-assets",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "me-outages",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "id": "me-cpu",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.25
+    },
+    {
+      "id": "me-release",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-fitbit-gate",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "me-youtube",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.2
+    },
+    {
+      "id": "me-framework",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/google.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "me-education",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/projects.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "me-contact",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/google.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.2
+    },
+    {
+      "id": "me-background",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/bio.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/projects.md",
+        "corpus/about-me/google.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "me-goal-buddy",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/projects.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.25
+    },
+    {
+      "id": "me-cryptoking",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/projects.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/projects.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/skills.md",
+        "corpus/about-me/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-languages",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/skills.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/skills.md",
+        "corpus/about-me/projects.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "me-observability",
+      "corpus": "about_me",
+      "expected_sources": [
+        "corpus/about-me/skills.md"
+      ],
+      "retrieved_sources": [
+        "corpus/about-me/skills.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/bio.md",
+        "corpus/about-me/microsoft.md",
+        "corpus/about-me/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-sse",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_embedding_cache.py",
+        "docs/superpowers/plans/2026-09-28-phase0-repo-scaffold.md",
+        "services/glassbox/db/session.py",
+        "docs/superpowers/plans/2026-09-30-phase3a-frontend-skeleton.md",
+        "services/tests/test_bedrock_providers.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-vector",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/retrieval/search.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/api/ask.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/tests/test_bedrock_providers.py",
+        "services/glassbox/providers/bedrock.py",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-worker",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/worker/main.py"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-30-phase3a-frontend-skeleton.md",
+        "docs/DESIGN.md",
+        "services/glassbox/api/cache.py",
+        "services/tests/test_limits.py",
+        "services/glassbox/trace.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-schema",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/db/models.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/providers/__init__.py",
+        "services/tests/test_bedrock_providers.py",
+        "docs/DESIGN-004-action-plan.md",
+        "services/tests/test_worker.py"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-ingest",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/run.py",
+        "docs/DESIGN-003-ingestion.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/providers/bedrock.py",
+        "services/glassbox/ingest/run.py",
+        "services/tests/test_chunker_terraform.py",
+        "docs/superpowers/plans/2026-09-29-phase2-models-caches-eval.md",
+        "docs/DESIGN-002-followups.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "id": "system-secrets",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/scanner.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN.md",
+        "services/tests/test_ask_endpoint.py",
+        "docs/superpowers/plans/2026-09-30-phase3a-frontend-skeleton.md",
+        "services/tests/test_bedrock_providers.py",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "id": "system-chunk-markdown",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/chunkers/markdown.py"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/providers/bedrock.py",
+        "docs/DESIGN-003-ingestion.md",
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-chunk-terraform",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/ingest/chunkers/terraform.py"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN-003-ingestion.md",
+        "services/tests/test_retrieval_cache.py",
+        "docs/superpowers/plans/2026-09-28-phase0-repo-scaffold.md",
+        "docs/DESIGN-002-followups.md",
+        "services/tests/test_chunker_code.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-providers",
+      "corpus": "about_system",
+      "expected_sources": [
+        "services/glassbox/providers/base.py",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-30-phase3a-frontend-skeleton.md",
+        "services/glassbox/providers/bedrock.py",
+        "services/tests/test_bedrock_providers.py",
+        "services/tests/test_chunker_terraform.py",
+        "services/tests/test_chunker_markdown.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-caches",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_chunker_code.py",
+        "services/glassbox/providers/bedrock.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/glassbox/ingest/chunkers/markdown.py",
+        "services/glassbox/providers/bedrock.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-rate-limit",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "services/tests/test_health.py",
+        "services/glassbox/providers/bedrock.py",
+        "services/tests/test_db_models.py",
+        "services/glassbox/providers/bedrock.py",
+        "services/glassbox/limits.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-budget",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/providers/bedrock.py",
+        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "services/tests/test_providers.py",
+        "services/glassbox/api/cache.py",
+        "docs/DESIGN-002-followups.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-edge",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-004-action-plan.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/ingest/chunkers/code.py",
+        "services/tests/test_chunker_markdown.py",
+        "services/tests/test_chunker_yaml.py",
+        "docs/superpowers/plans/2026-09-28-phase0-repo-scaffold.md",
+        "docs/superpowers/plans/2026-09-30-phase3a-frontend-skeleton.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-deploy",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-004-action-plan.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/db/session.py",
+        "services/tests/test_bedrock_providers.py",
+        "docs/DESIGN-002-followups.md",
+        "docs/superpowers/plans/2026-09-28-phase0-repo-scaffold.md",
+        "services/tests/test_health.py"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "id": "system-followups",
+      "corpus": "about_system",
+      "expected_sources": [
+        "docs/DESIGN-002-followups.md"
+      ],
+      "retrieved_sources": [
+        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
+        "services/glassbox/providers/factory.py",
+        "services/tests/test_ask_endpoint.py",
+        "services/glassbox/api/ask.py",
+        "docs/DESIGN.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+questions:
+  - id: me-current-role
+    corpus: about_me
+    question: What does Basel work on at Microsoft?
+    expected_sources: [corpus/about-me/microsoft.md]
+  - id: me-assets
+    corpus: about_me
+    question: How many assets does Basel's Azure service catalog?
+    expected_sources: [corpus/about-me/microsoft.md]
+  - id: me-outages
+    corpus: about_me
+    question: How did Basel reduce outages with distributed rate limiting?
+    expected_sources: [corpus/about-me/microsoft.md]
+  - id: me-cpu
+    corpus: about_me
+    question: What change cut service CPU utilization by 53 percent?
+    expected_sources: [corpus/about-me/microsoft.md]
+  - id: me-release
+    corpus: about_me
+    question: How did Basel isolate release rollbacks at Microsoft?
+    expected_sources: [corpus/about-me/microsoft.md]
+  - id: me-fitbit-gate
+    corpus: about_me
+    question: How did Basel build the Fitbit release gate?
+    expected_sources: [corpus/about-me/google.md]
+  - id: me-youtube
+    corpus: about_me
+    question: What device platforms did Basel test on YouTube Living Room?
+    expected_sources: [corpus/about-me/google.md]
+  - id: me-framework
+    corpus: about_me
+    question: How reliable was Basel's TypeScript end-to-end testing framework at Google?
+    expected_sources: [corpus/about-me/google.md]
+  - id: me-education
+    corpus: about_me
+    question: Where did Basel study computer science?
+    expected_sources: [corpus/about-me/bio.md]
+  - id: me-contact
+    corpus: about_me
+    question: How can I contact Basel?
+    expected_sources: [corpus/about-me/bio.md]
+  - id: me-background
+    corpus: about_me
+    question: What did Basel do between Google and Microsoft?
+    expected_sources: [corpus/about-me/bio.md]
+  - id: me-goal-buddy
+    corpus: about_me
+    question: What is Goal Buddy and what stack does it use?
+    expected_sources: [corpus/about-me/projects.md]
+  - id: me-cryptoking
+    corpus: about_me
+    question: What is CryptoKing's serverless backend built with?
+    expected_sources: [corpus/about-me/projects.md]
+  - id: me-languages
+    corpus: about_me
+    question: Which programming languages does Basel use?
+    expected_sources: [corpus/about-me/skills.md]
+  - id: me-observability
+    corpus: about_me
+    question: Which observability tools has Basel used?
+    expected_sources: [corpus/about-me/skills.md]
+  - id: system-sse
+    corpus: about_system
+    question: What SSE events does the ask endpoint stream?
+    expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
+  - id: system-vector
+    corpus: about_system
+    question: How does Redis perform vector search over document chunks?
+    expected_sources: [services/glassbox/retrieval/search.py, docs/DESIGN.md]
+  - id: system-worker
+    corpus: about_system
+    question: How does the retrieval worker consume queued jobs?
+    expected_sources: [services/glassbox/worker/main.py]
+  - id: system-schema
+    corpus: about_system
+    question: Which MySQL tables store documents and chunks?
+    expected_sources: [services/glassbox/db/models.py, docs/DESIGN.md]
+  - id: system-ingest
+    corpus: about_system
+    question: How are source files scanned and ingested into Glassbox?
+    expected_sources: [services/glassbox/ingest/run.py, docs/DESIGN-003-ingestion.md]
+  - id: system-secrets
+    corpus: about_system
+    question: How does ingestion avoid indexing secrets?
+    expected_sources: [services/glassbox/ingest/scanner.py, docs/DESIGN.md]
+  - id: system-chunk-markdown
+    corpus: about_system
+    question: How are Markdown files split into chunks?
+    expected_sources: [services/glassbox/ingest/chunkers/markdown.py]
+  - id: system-chunk-terraform
+    corpus: about_system
+    question: How are Terraform blocks chunked?
+    expected_sources: [services/glassbox/ingest/chunkers/terraform.py]
+  - id: system-providers
+    corpus: about_system
+    question: How are embedding and language model providers swapped?
+    expected_sources: [services/glassbox/providers/base.py, docs/DESIGN.md]
+  - id: system-caches
+    corpus: about_system
+    question: Which Redis cache layers does Glassbox use?
+    expected_sources: [docs/DESIGN.md]
+  - id: system-rate-limit
+    corpus: about_system
+    question: What happens when a visitor reaches the question rate limit?
+    expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
+  - id: system-budget
+    corpus: about_system
+    question: What happens when the daily LLM budget is exhausted?
+    expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
+  - id: system-edge
+    corpus: about_system
+    question: Why does Glassbox use Cloudflare for its edge?
+    expected_sources: [docs/DESIGN-004-action-plan.md, docs/DESIGN.md]
+  - id: system-deploy
+    corpus: about_system
+    question: How is the site planned to deploy on EC2 and k3s?
+    expected_sources: [docs/DESIGN-004-action-plan.md, docs/DESIGN.md]
+  - id: system-followups
+    corpus: about_system
+    question: What conversational follow-up features are planned?
+    expected_sources: [docs/DESIGN-002-followups.md]
