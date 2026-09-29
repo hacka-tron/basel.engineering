@@ -300,7 +300,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 
 | Key / structure | Type | Purpose | TTL |
 |---|---|---|---|
-| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + hashes | KNN retrieval, filtered by `corpus` tag | none (rebuilt from MySQL) |
+| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + hashes | KNN retrieval, filtered by `corpus` and hashed embedding-model tags | none (rebuilt from MySQL) |
 | `emb:{sha256(normalized_q)}` | string (packed vector) | Embedding cache | 7 days |
 | `ret:{corpus}:v{ver}:{sha}` | list of chunk IDs + scores | Retrieval cache | 1 hour |
 | `chunktxt:{id}` | hash | Chunk text/metadata cache (avoids MySQL round trip) | 1 day |

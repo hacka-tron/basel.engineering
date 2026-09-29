@@ -2,13 +2,14 @@
 
 import struct
 
+from services.glassbox.cache.answer import _model_tag
 from services.glassbox.ingest.redis_index import INDEX_NAME
 
 VECTOR_DIMENSIONS = 512
 
 
 async def search_chunks(
-    redis_client, embedding: list[float], corpus: str, top_k: int = 8
+    redis_client, embedding: list[float], corpus: str, model_id: str, top_k: int = 8
 ) -> list[dict]:
     """Return chunk IDs and cosine similarities in nearest-first order."""
     if len(embedding) != VECTOR_DIMENSIONS:
@@ -19,7 +20,11 @@ async def search_chunks(
         raise ValueError("unknown corpus")
 
     vector = struct.pack(f"{VECTOR_DIMENSIONS}f", *embedding)
-    query = f"(@corpus:{{{corpus}}})=>[KNN {top_k} @vector $vec AS distance]"
+    # Empty results after a provider switch flow to the API's no-sources answer.
+    query = (
+        f"(@corpus:{{{corpus}}} @model:{{{_model_tag(model_id)}}})"
+        f"=>[KNN {top_k} @vector $vec AS distance]"
+    )
     response = await redis_client.execute_command(
         "FT.SEARCH",
         INDEX_NAME,

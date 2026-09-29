@@ -111,7 +111,9 @@ async def evaluate(questions: list[dict]) -> dict:
             if missing:
                 raise ValueError(f"{item['id']} expected sources are not indexed: {missing}")
             vector = (await provider.embed([normalize_question(item["question"])]))[0]
-            matches = await search_chunks(client, vector, item["corpus"], top_k=5)
+            matches = await search_chunks(
+                client, vector, item["corpus"], provider.model_id, top_k=5
+            )
             retrieved = [by_chunk[match["chunk_id"]] for match in matches]
             hit, reciprocal_rank = score_case(retrieved, set(item["expected_sources"]))
             cases.append(

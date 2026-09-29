@@ -12,8 +12,10 @@ import redis.asyncio as redis
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from services.glassbox.cache.answer import _model_tag
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import create_db_engine
+from services.glassbox.ingest.redis_index import ensure_index, replace_document_vectors
 from services.glassbox.retrieval.search import search_chunks
 from services.glassbox.worker import main as worker_module
 from services.glassbox.worker.main import (
@@ -111,14 +113,54 @@ class RecordingRedis:
 @pytest.mark.asyncio
 async def test_search_uses_existing_index_and_converts_distance_to_similarity():
     client = RecordingRedis()
-    matches = await search_chunks(client, [0.25] * 512, "about_me")
+    matches = await search_chunks(client, [0.25] * 512, "about_me", "fake-v1")
     assert matches == [{"chunk_id": 42, "score": 0.75}]
     assert client.command[:3] == (
         "FT.SEARCH",
         "idx:chunks",
-        "(@corpus:{about_me})=>[KNN 8 @vector $vec AS distance]",
+        f"(@corpus:{{about_me}} @model:{{{_model_tag('fake-v1')}}})"
+        "=>[KNN 8 @vector $vec AS distance]",
     )
     assert len(client.command[client.command.index("vec") + 1]) == 2048
+
+
+@pytest.mark.asyncio
+async def test_search_isolates_model_during_partial_reingestion():
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis Stack unavailable: {exc}")
+    model_a = f"model-a-{uuid4().hex}"
+    model_b = f"model-b-{uuid4().hex}"
+    ids = [-(uuid4().int % 1_000_000_000) - i for i in range(3)]
+    vector = [1.0] + [0.0] * 511
+    packed = struct.pack("512f", *vector)
+    try:
+        await ensure_index(client)
+        await replace_document_vectors(
+            client, [], [(ids[0], "about_me", packed, "old.md", 1)], model_a
+        )
+        assert await search_chunks(client, vector, "about_me", model_b) == []
+        await replace_document_vectors(
+            client,
+            [],
+            [
+                (ids[1], "about_me", packed, "new.md", 2),
+                (ids[2], "about_me", packed, "newer.md", 3),
+            ],
+            model_b,
+        )
+        assert {
+            item["chunk_id"] for item in await search_chunks(client, vector, "about_me", model_b)
+        } == set(ids[1:])
+        assert {
+            item["chunk_id"] for item in await search_chunks(client, vector, "about_me", model_a)
+        } == {ids[0]}
+    finally:
+        await client.delete(*(f"chunk:{chunk_id}" for chunk_id in ids))
+        await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -278,6 +320,7 @@ async def test_real_job_publishes_chunks_and_is_acked(integration_stack, isolate
         if seeded_chunk is None:
             pytest.skip("Phase 1a about_me chunks are not present")
         embedding = list(struct.unpack("512f", seeded_chunk.embedding))
+        embedding_model = seeded_chunk.embedding_model
     try:
         await client.ping()
     except Exception as exc:
@@ -293,6 +336,7 @@ async def test_real_job_publishes_chunks_and_is_acked(integration_stack, isolate
             question="What is this project about?",
             corpus="about_me",
             embedding=embedding,
+            embedding_model=embedding_model,
             request_start_ts=request_start_ts,
         )
         message_id = (await client.xrevrange(isolated_stream, count=1))[0][0]

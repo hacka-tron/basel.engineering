@@ -133,7 +133,9 @@ async def test_ingest_happy_path_idempotency_and_quarantine(tmp_path, integratio
     try:
         first = await ingest(tmp_path, engine=engine, redis_client=client)
         assert first.docs_changed == 1
-        assert int(await client.get("corpus:ver:about_me")) == starting_version + 1
+        first_version = int(await client.get("corpus:ver:about_me"))
+        # A pre-model-tag index also gets one version bump during migration.
+        assert first_version in {starting_version + 1, starting_version + 2}
         assert first.chunks_written == 1
         assert "corpus/about-me/unsafe.md" in first.errors
         with Session(engine) as session:
@@ -153,7 +155,7 @@ async def test_ingest_happy_path_idempotency_and_quarantine(tmp_path, integratio
 
         second = await ingest(tmp_path, engine=engine, redis_client=client)
         assert second.docs_changed == 0
-        assert int(await client.get("corpus:ver:about_me")) == starting_version + 1
+        assert int(await client.get("corpus:ver:about_me")) == first_version
         assert second.chunks_written == 0
         with engine.connect() as connection:
             assert (
@@ -168,7 +170,7 @@ async def test_ingest_happy_path_idempotency_and_quarantine(tmp_path, integratio
         (about_me / fixture_name).write_text("# Fixture updated\n\nNew body.\n")
         third = await ingest(tmp_path, engine=engine, redis_client=client)
         assert third.docs_changed == 1
-        assert int(await client.get("corpus:ver:about_me")) == starting_version + 2
+        assert int(await client.get("corpus:ver:about_me")) == first_version + 1
         assert third.chunks_written == 1
         assert not await client.exists(redis_key)
         with Session(engine) as session:
