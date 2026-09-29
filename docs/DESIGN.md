@@ -306,6 +306,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `corpus:ver:{corpus}` | integer | Corpus version for cache invalidation | none |
 | `retrieval:jobs` (group `workers`) | Stream | Job queue | trimmed with `MAXLEN ~ 10000` |
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
+| `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
 | `rl:{ip_hash}` | token bucket | 10 questions per 10 minutes per IP | 10 minutes |
 | `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today (default cap 100) | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
@@ -326,6 +327,8 @@ Invalidation uses **versioned keys**: ingestion bumps `corpus:ver:{corpus}`, and
 ## 8. Trace event contract
 
 The `POST /api/ask` response is an SSE stream. The frontend maps `node` to diagram node IDs.
+
+The API writes `request_start_ts` as epoch milliseconds in each `retrieval:jobs` payload. Both the API and worker allocate each trace event's `seq` with Redis `INCR seq:{request_id}` and refresh that key's TTL with `EXPIRE seq:{request_id} 300` after each increment. The worker computes `t_ms` from the job's `request_start_ts`; `duration_ms` remains the elapsed time of the individual worker stage.
 
 ```ts
 type NodeId =
