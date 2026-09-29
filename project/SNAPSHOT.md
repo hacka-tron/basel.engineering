@@ -2,11 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-29
+**Last updated:** 2026-09-29 (Phase 2 review-fix worktree)
 
 ## Latest local checkpoint
 
-The current local demo at `http://localhost:5173` uses Vite, Docker MySQL/Redis, a host retrieval worker, and a host API at `127.0.0.1:8000` with `GLASSBOX_PROVIDER=bedrock` and `BEDROCK_LLM_MODEL_ID=us.amazon.nova-lite-v1:0`. Docker `api` is stopped. Ingestion changed 69 documents and wrote 317 Titan-embedded chunks (6 About Basel, 311 About This System), with one secret-scanner test fixture quarantined. A live Vite-proxied About Basel request returned a complete answer with citation markers and retrieved sources; 96 Python tests, Ruff, frontend lint, and build pass. The retrieved-source panel retains title, path, and score but no longer renders the raw chunk-text preview beginning with `##`, per the owner's clarification; the original DD1 design is otherwise intact. The answer cache is scoped to embedding model, LLM model, and prompt version. A live About This System answer incorrectly treated planned Google Drive/Git ingestion as current; review source ranking and current-versus-planned grounding. Nothing is deployed to `basel.engineering`.
+The `phase2-fixes` worktree now addresses Claude's four Phase 2 review findings. The Redis chunk index tags and filters embeddings by model, including a backfill path for existing hashes; the API uses a bounded answer-cache lock, validates configuration during lifespan startup, and labels the future DD3 ingestion design as planned in its grounded prompt. The local test suite passes (106 tests) and Ruff passes. A worktree API at `127.0.0.1:8001` with a worktree worker and real Nova Lite/Redis/MySQL answered the Google Drive/Git question as planned M4 work, then returned a cited About Basel answer and a cache hit on repeat. The older main-checkout API remains at port 8000; Docker `api` is stopped. The original 317 Titan-embedded chunks remain in MySQL/Redis; existing Redis hashes have model tags. Nothing is deployed to `basel.engineering`, and the review-fix branch has not been merged.
 
 ## What exists right now
 
