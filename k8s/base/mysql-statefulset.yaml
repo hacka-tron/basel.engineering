@@ -17,6 +17,18 @@ spec:
       containers:
         - name: mysql
           image: mysql:8.0
+          # Defaults OOMKilled at a 250Mi limit (innodb_buffer_pool_size
+          # alone defaults to 128MB, before other buffers/threads). Tuned
+          # down for a memory-constrained single node rather than just
+          # raising the limit - see docs/DESIGN.md 9.7.
+          args:
+            - mysqld
+            - --innodb-buffer-pool-size=96M
+            - --innodb-log-buffer-size=4M
+            - --key-buffer-size=8M
+            - --max-connections=20
+            - --table-open-cache=64
+            - --performance-schema=OFF
           ports:
             - name: mysql
               containerPort: 3306
@@ -38,9 +50,9 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 150Mi
+              memory: 200Mi
             limits:
-              memory: 250Mi
+              memory: 350Mi
           startupProbe:
             tcpSocket:
               port: mysql

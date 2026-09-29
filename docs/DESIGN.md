@@ -502,12 +502,12 @@ The endpoint only forwards pod name, phase and readiness for pods labeled `app=r
 | KEDA | 150 Mi |
 | Flux | 150 Mi |
 | Redis | 60 to 100 Mi |
-| MySQL | 150 to 250 Mi |
+| MySQL | 200 to 350 Mi (tuned down via mysqld flags - default config OOMKilled at 250Mi during the actual first deploy) |
 | API | 120 Mi |
 | Workers (5 at peak) | 450 Mi |
-| **Total at peak** | **about 1.8 to 1.9 Gi** |
+| **Total at peak** | **about 1.9 to 2.0 Gi** |
 
-Tight but workable. Mitigations: a 1 GiB swap file created in user data, embeddings offloaded to Bedrock (no local model), and a documented upgrade path to `t4g.medium` (4 GiB) if memory pressure shows up.
+Tight, and confirmed tight in practice, not just on paper — MySQL's real memory needs pushed the earlier 150-250Mi estimate up during the first live deploy. Mitigations: a 1 GiB swap file created in user data, embeddings offloaded to Bedrock (no local model), MySQL's own memory tuned down explicitly (`innodb_buffer_pool_size`, `key_buffer_size`, `performance_schema=OFF`, etc. - see `k8s/base/mysql-statefulset.yaml`) rather than just raising its limit, and a documented upgrade path to `t4g.medium` (4 GiB) if memory pressure shows up despite that.
 
 ---
 
