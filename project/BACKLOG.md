@@ -10,7 +10,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 **Next: DD1 Phase 2** (`docs/DESIGN.md` §17) — real Bedrock providers (replacing the fake `EmbeddingProvider`/`LLMProvider`), the three cache layers (semantic answer, embedding, retrieval/chunk — DD1 §7.3), rate limiting + daily LLM budget (DD1 §7.2), and a retrieval eval harness with a recorded baseline (DD1 §15).
 
-**Deliberately paused here rather than starting Phase 2 unsupervised** — real Bedrock calls need actual AWS credentials and cost real money (small, but real), and two things in the "Open decisions" section below are still unresolved: AWS CLI isn't configured locally yet, and the Free-vs-Paid account-plan decision is still open. Phase 2 shouldn't start until at least AWS CLI is configured and Bedrock model access is enabled in the console (M0 checklist, `docs/DESIGN-004-action-plan.md` §4) — those are owner actions. Once that's done, the cache layers/rate-limiting/eval-harness work can proceed the same way Phase 1 did (Codex implements against fake providers where possible, real Bedrock wiring last).
+**Phase 2 prerequisites updated after the last Claude session:** AWS CLI authentication now works. A Bedrock Claude Haiku invocation succeeded in `us-east-1`; the 512-dimension Titan embedding request was the next check, but Claude hit its session limit before recording the result or writing the Phase 2 provider spec. A `$20/month` AWS budget named `Glassbox-Monthly` exists. The temporary EC2, RDS, and Lambda resources created for AWS credit activities were deleted; a read-only check found no active EC2 instances, RDS instances, or `glassbox-hello` Lambda function in `us-east-1`. Credit tracker confirmation remains separate from resource creation. The Free-vs-Paid plan decision is needed before M2 deployment, not before local Phase 2. Next: verify Titan 512-dimension access, write the Phase 2 implementation plan, then implement and test the providers, caches, limits, and eval harness. Ask before making additional paid Bedrock calls.
 
 **Gemini quota exhausted** as of 2026-09-30 ~2:33am (`RESOURCE_EXHAUSTED`, resets ~2026-10-07). Reviews are running through a Claude subagent (`superpowers:code-reviewer`) instead until it resets — see `project/orchestration/README.md`.
 
@@ -88,4 +88,4 @@ Documented as known limitations directly in code (docstrings) — not yet fixed,
 
 ## Ideas
 
-_(none yet)_
+- Keep **separate chat conversations for About Basel and About This System**. Switching the corpus toggle should restore that corpus's own messages instead of mixing the two histories. DD2 §5.5 already specifies one localStorage key per corpus for the later conversational chat milestone; preserve this requirement in the frontend implementation.

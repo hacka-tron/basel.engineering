@@ -19,7 +19,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
   - Design tokens in `frontend/src/index.css` (`@theme`): dark theme, one accent color (`cyan`, reserved for "active" states), JetBrains Mono throughout. Two Tailwind v4 gotchas documented there in comments: `@theme inline` var-to-var aliasing resolves empty (hardcode hex values instead), and custom color tokens must avoid Tailwind's reserved scale keys (`base` collided with `--text-base`, renamed to `canvas`).
   - Verified in a real browser against the real running backend (desktop, mobile, both corpora, a synchronous double-submit race) via `claude-in-chrome` — no console errors, no bugs found on the wiring pass.
 - **Real `about_me` corpus content exists** (`corpus/about-me/*.md`: `bio.md`, `microsoft.md`, `google.md`, `projects.md`, `skills.md`), sourced from Basel's actual resumes. No `bullet-bank.md` (no source doc to export from) and no Glassbox entry in `projects.md` yet (not deployed).
-- **No AWS resources provisioned.** No Terraform written. AWS CLI not yet configured locally.
+- **AWS CLI configured locally; no production AWS resources provisioned.** Bedrock Claude Haiku was invoked successfully in `us-east-1`; Titan 512-dimension embedding access has not yet been recorded. A `$20/month` budget named `Glassbox-Monthly` exists. Temporary EC2, RDS, and Lambda resources used for AWS credit activities were deleted; a read-only check found no active EC2 instances, RDS instances, or `glassbox-hello` Lambda function in `us-east-1`. No Terraform written.
 - **Domain:** `basel.engineering`, DNS on Cloudflare (proxied). Nothing deployed there yet.
 - **Skills installed in this repo** (`.agents/skills/`): the `claude-mem`, `impeccable`, `task-observer`, and `omniroute` suites, plus the built-in `superpowers` set used to write the design docs and plans.
 - **Multi-model orchestration pipeline in active use:** Claude (architect/orchestrator, writes blueprints + reviews), Codex CLI (`gpt-6-sol` under a ChatGPT Pro login — implementation), review via Gemini (`gemini-3.8-flash-medium` through `agy`) **or a Claude subagent** — Gemini's quota is currently exhausted (resets ~2026-10-07), so reviews are running through Claude in the meantime. See `project/BACKLOG.md` for what worked and what didn't.
@@ -32,7 +32,7 @@ Browser → Cloudflare (TLS/proxy) → Traefik on a single EC2 `t4g.small` (k3s)
 
 | Milestone | Status |
 |---|---|
-| M0 — accounts/tooling setup | In progress — see `project/BACKLOG.md` |
+| M0 — accounts/tooling setup | In progress — AWS CLI, Bedrock Claude Haiku access, and the $20/month budget are confirmed; see `project/BACKLOG.md` for the remaining checks. |
 | M1 — DD1 Phases 0–3, full system running locally (Docker Compose) | Phase 0, Phase 1 (data layer + API/worker/SSE), and Phase 3 (frontend, wired to the local backend) all done and verified end to end. Phase 2 (real Bedrock providers, 3 cache layers, rate limiting, retrieval eval) not started — the only thing left before M1 is fully complete. |
 | M2 — DD1 Phases 4–7, live on AWS at basel.engineering | Not started |
 | M3 — DD2: self-healing, conversational memory, chat UX | Deferred |

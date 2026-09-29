@@ -46,10 +46,10 @@ The short version: Traefik on the EC2 node serves both the built frontend and `/
 
 Owner tasks — manual, console/CLI work that can't be delegated to Claude Code.
 
-- [ ] Commit the three existing DESIGN docs to git (they're currently untracked in the repo) and this one alongside them.
-- [ ] Install and configure the AWS CLI locally (`aws configure` or SSO) — not currently installed. Needed for local Bedrock calls in M1 Phase 2 and for Terraform later.
-- [ ] In the Bedrock console (us-east-1), enable model access for Amazon Titan Text Embeddings V2 and a Claude Haiku-class model. One-time, a few clicks, usually instant.
-- [ ] Set up AWS Budgets now, even before any resources exist: monthly budget ~$40, alerts at 50/80/100% actual and 100% forecasted. Do this before M2, not after — it's your safety net on a Free-plan account.
+- [x] Commit the DESIGN docs to git.
+- [x] Install and configure the AWS CLI locally. Authentication was verified; needed for local Bedrock calls in M1 Phase 2 and for Terraform later.
+- [ ] Confirm 512-dimension Titan Text Embeddings V2 access in `us-east-1`. A Claude Haiku-class Bedrock invocation succeeded; the Titan check was interrupted before its result was recorded.
+- [x] Set up AWS Budgets before deploying resources: `Glassbox-Monthly` is set to $20/month, per the owner's updated limit. The previous session recorded actual-spend alerts at 50/80/100% and a forecast alert; the budget amount was verified again by CLI.
 - [ ] **Decision checkpoint before M2**: AWS account is currently on the Free plan, which auto-closes the account after 6 months or when credits run out — this would take the live site down mid-search with no warning beyond the budget alerts. Decide Free vs. Paid before the first `terraform apply` against real AWS resources in M2.
 - [ ] Confirm Cloudflare proxy mode (orange-cloud/proxied) is intentional for `basel.engineering`, and that DNS is otherwise untouched (no conflicting records).
 - [ ] Local tooling: Docker (for Compose), Node.js, Python 3.12. No Kubernetes tooling needed locally (decided in section 6).
