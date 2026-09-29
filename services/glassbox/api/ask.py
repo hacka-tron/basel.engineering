@@ -37,6 +37,10 @@ LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _PROMPT_VERSION = "v11"
+# Keyword-based, not tense-aware: once Phase 4/5 actually ships Terraform/KEDA/k3s,
+# this will start mislabeling genuinely-current infrastructure content as "planned"
+# (it can't tell "Terraform provisions X" apart from "Terraform will provision X").
+# Revisit this heuristic (or move to doc-level status metadata) when those phases land.
 _PLANNED_SOURCE_SIGNAL = re.compile(
     r"\b(?:planned|deferred|not (?:yet )?(?:started|built|implemented)|"
     r"stretch ideas?|future (?:milestones?|path|work|features?|plans?)|"
