@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Page-load DNS cause confirmed — Codex, 2026-09-29
+
+The owner provided a screenshot of all nine Cloudflare DNS records. It shows **two proxied apex A records**: `184.192.61.245` (the Terraform-managed EC2 origin, keep) and `162.255.119.182` (extra, unmanaged). A direct HTTP request pinned to `162.255.119.182` returned `302`, `X-Served-By: Namecheap URL Forward`, and `Location: http://www.basel.engineering/readyz`, confirming the extra record is the legacy forwarding origin. A fresh public HTTPS `/readyz` request still took **19.60s** to first byte and returned 200; public HTTP `/readyz` returned the Namecheap 302 in **0.07s**. This confirms the split origin routing behind the incident.
+
+A fresh headless Chrome navigation measured HTML first byte at 20.04s, DOM content loaded at 20.22s, and the load event at 39.79s. Two uncached JetBrains Mono font requests each waited ~19.5s; cached CSS and JavaScript loaded in 55ms and 104ms. This explains the owner's additional ~23s "Processing" interval: the browser waited for fonts, rather than spending that time executing JavaScript. After the DNS correction, repeat a cold browser load as well as curl checks.
+
+The current shell has no Cloudflare API token or dashboard control. The owner was asked to delete **only** the proxied apex A record pointing to `162.255.119.182`, keeping the `184.192.61.245` A record and all MX/TXT records. **No DNS change has been made or verified yet.** Once the owner saves the deletion, repeat public HTTPS and HTTP checks for `/`, `/readyz`, and a cold asset, then update the incident status. The `www` CNAME still points to `parkingpage.namecheap.com`; changing that is a separate decision and is not needed to isolate the apex page-load fix.
+
 ## Page-load investigation — Codex, 2026-09-29
 
 The live page still has a reproducible ~19.5–19.9 second time to first byte. Fresh measurements: `/` 19.93s, `/readyz` 19.65s, `/favicon.svg` 19.54s, and a cold JavaScript asset 19.55s. A warm repeat of that asset was 0.13s to first byte with `cf-cache-status: HIT`. DNS, client TCP, and client TLS together took under 0.2s. An AWS-hosted client routed through Cloudflare's IAD location saw the same 19.58s delay; the local client used ATL. The EC2 node's direct local HTTPS `/readyz` response took 0.02s.
