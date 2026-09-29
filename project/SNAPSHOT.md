@@ -2,11 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-29 (Phase 4 Kubernetes MVP worktree checkpoint)
+**Last updated:** 2026-09-29 (first live deploy — site is up, one open issue)
 
 ## Latest local checkpoint
 
-The `phase4-k8s` worktree now has uncommitted Kubernetes MVP manifests, a manual SSM Secret bootstrap and bring-up guide, a combined frontend/API container image definition, and FastAPI static serving. These are locally validated but not built, published, applied to a cluster, or reviewed by Claude yet. Terraform modules for the single-node cluster are already on `main`. See `project/AGENT_HANDOFF.md` for precise verification. Phase 5 KEDA/demo load/RBAC and Phase 6 Flux remain future work.
+**`https://basel.engineering` is live for real** — Terraform bootstrap and `envs/prod` both applied (not just written), EC2 instance `i-0a66b8e39e13e96fe` running k3s, Kubernetes workloads deployed (`api`, `retrieval-worker` x2, `mysql-0`, `redis-0` all healthy; `migrate`/`ingest` Jobs completed, 294 real Titan-embedded chunks ingested). One open, actively-debugged issue remains: a consistent ~19.9s delay before any request reaches the origin, precisely isolated (via timestamp correlation between client and API pod logs) to the Cloudflare-to-origin network path, not the app/DB/CPU. Full detail, what's been ruled out, and what to try next: `project/AGENT_HANDOFF.md`'s "Phase 4 first live deploy" section — read that before doing anything else. Phase 5 (KEDA/demo load/RBAC) and Phase 6 (Flux/GitOps, CI automation) remain future work, deliberately not started.
 
 **DD1 Phase 2 is complete and merged to `main`.** Claude reviewed the original Phase 2 implementation, found one Critical gap (no embedding-model isolation in the live retrieval index) and three Important gaps (answer-cache stampede, missing startup config validation, a confirmed real hallucination from a missing current-vs-planned grounding instruction), dispatched fixes for all four in a worktree (per the new `CODEX.md` policy), reviewed the fixes, caught and closed one more gap (the grounding fix was hardcoded to a single source file — generalized to a corpus-wide heuristic), and ran the real Titan retrieval eval baseline that had been the last outstanding plan requirement: recall@5 **0.8667**, MRR **0.6917** (About Me 0.9333/0.7944, About System 0.8/0.5889) — well above the earlier fake-v1 smoke baseline (0.4667/0.3078), as expected with real semantic embeddings. All fixes independently verified (113 tests, ruff clean, live before/after checks for the hallucination fix). See `project/AGENT_HANDOFF.md` for the full findings-and-fix history.
 

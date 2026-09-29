@@ -1,5 +1,47 @@
 # Agent handoff
 
+## Phase 4 first live deploy — Claude session ending, handing to Codex (2026-09-29)
+
+**The site is live at `https://basel.engineering` and mostly working.** Bootstrap and `envs/prod` Terraform have both been applied for real (not just written) — actual AWS resources exist. Kubernetes workloads are deployed and healthy. There is one open, actively-being-debugged issue: a consistent ~19.9s delay before any request reaches the origin, isolated to the Cloudflare-to-origin network path (not the app). See "Open issue" below — this is the next thing to pick up.
+
+### Current live infrastructure (real, applied, costing real but near-zero money — see `docs/DESIGN.md` §14)
+
+- AWS account `404379474987`, region `us-east-1`. EC2 instance `i-0a66b8e39e13e96fe` (`t4g.small`), Elastic IP `184.192.61.245`. State bucket `glassbox-tfstate-404379474987-ab88985b66efc96f`.
+- k3s running on the node (v1.36.4+k3s1), Flux CLI installed but **not bootstrapped** (no GitOps yet — Phase 6).
+- Kubernetes state: `app` namespace has `api` (1 replica), `retrieval-worker` (2 replicas) — both `Running`/healthy. `migrate` and `ingest` Jobs both `Completed` successfully (294 chunks ingested, real Titan embeddings). `data` namespace has `mysql-0` and `redis-0`, both `Running`/healthy.
+- Image: `ghcr.io/hacka-tron/basel.engineering:9c03c06-secfix` (also tagged `:latest`) — this is what's actually deployed. **Do not reference the earlier `:9c03c06` tag or `:phase4-k8s`** — `:9c03c06` was deleted from GHCR (see incident below); `:phase4-k8s` never existed as a real push.
+- Cloudflare: DNS `A` record for `basel.engineering` → `184.192.61.245` (proxied), managed by the `edge` Terraform module. SSL/TLS mode is **Full** (confirmed via the dashboard). Cache Rule bypassing `/api/*` is applied.
+- Access: SSM Session Manager only (no SSH). `aws ssm send-command` with `AWS-RunShellScript` is how this session drove `kubectl`/`docker`/etc. on the node — no direct shell was opened. `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml` on the node for `kubectl`.
+- GHCR: package `ghcr.io/hacka-tron/basel.engineering` is **public** (deliberate — see `project/BACKLOG.md` Ideas). `gh auth token | docker login ghcr.io -u hacka-tron --password-stdin` was the auth pattern used; needed `write:packages`+`delete:packages` scopes added via `gh auth refresh -s ...` (the account's default token didn't have them).
+
+### Real incidents hit and fixed during this first deploy (all already committed — read the commits for full detail, don't re-derive)
+
+1. **MySQL OOMKilled at the originally-budgeted 250Mi limit** (`100763b`). Fixed with explicit low-memory `mysqld` flags + a bumped 350Mi limit. `docs/DESIGN.md` §9.7 updated with real numbers.
+2. **`.dockerignore` did not actually exclude nested `.tfstate` files** (`ac30bf0`) — a real secret-adjacent incident: `infra/bootstrap/terraform.tfstate` got baked into the first pushed image and was briefly live on the public GHCR registry. Confirmed (by grepping the file inside the running container) that it did **not** contain the MySQL password or IP-hash salt — those live in a separate, S3-remote-backed state with no local file — so this was information disclosure (account/resource ARNs, IAM policy structure already implicit from the public source), not a credential leak. Fixed the glob patterns, rebuilt, verified the fixed image is clean, pushed `:9c03c06-secfix`, and **deleted** the compromised `:9c03c06` version and its sub-manifests from GHCR via the API (not just overwritten). No rotation of the MySQL password/salt was done since nothing sensitive was confirmed exposed — revisit only if new evidence emerges.
+3. **StatefulSet spec updates don't retroactively affect already-running pods** — deleting the pod once, before the spec update lands, recreates it with the *old* spec. Had to delete `mysql-0` a second time after the fix actually applied. General lesson for anyone iterating on a StatefulSet: `kubectl apply` first, confirm the new spec is live (`kubectl get pod ... -o jsonpath=...`), *then* delete the pod.
+4. **A fresh MySQL init that gets OOMKilled mid-init leaves a partially-initialized PVC** — the *next* pod boot sees existing data and skips first-run setup (never creates the app user), producing a confusing `Host '...' is not allowed to connect` error that looks unrelated to the original OOM. Diagnosed by checking for the absence of "Initializing database"/"Creating user" log lines. Fixed by deleting the PVC too, not just the pod, for a genuinely clean re-init.
+5. **`migrate`/`ingest` Jobs applied simultaneously with a not-yet-ready MySQL both exhaust their `backoffLimit` and land in `Failed`** — Job pod templates are immutable, so a failed Job must be deleted and recreated (not patched) once the dependency is actually ready. Applied `migrate` alone, waited for `Complete`, then applied `ingest` — correct dependency ordering, not the batch-apply-everything-at-once approach used the first time.
+
+### CPU credit note (real finding, not the cause of the open issue below)
+
+`t4g.small`'s CPU credit balance dropped to ~1.8 during the deploy burst (instance boot + image pulls + MySQL crash-loop cycles + real ingestion embedding calls), confirmed via CloudWatch `CPUCreditBalance`. It was recovering on its own (verified back over ~7 within 15-20 minutes) and pod-level CPU usage is now negligible (1-2m per pod, node ~5% utilized). This was initially suspected as the cause of slow page loads but was **ruled out** by the timestamp-correlation check below — don't re-chase this for the open issue, though it's worth knowing it happened and is a real, documented, expected trade-off of `cpu_credits = "standard"` (see `docs/DESIGN.md` §14's cost-lever notes).
+
+### Open issue — consistent ~19.9s delay before requests reach the origin
+
+**Reproducible, not random.** `curl https://basel.engineering/readyz` (or any path) consistently takes ~19.6-19.9s total, every time, with `time_connect` (client→Cloudflare) under 50ms — the delay is entirely in time-to-first-byte.
+
+**Isolated precisely, don't re-derive**: timestamped a curl request's start/end wall-clock time, then cross-referenced `kubectl logs -n app deploy/api --timestamps` for the corresponding request line (matched by source IP `10.42.0.8`, which is Traefik's pod IP). The API received and answered the request in milliseconds, at a timestamp matching the *end* of the curl's ~19.9s window, not the start. This proves the delay happens entirely between Cloudflare's edge and the origin — before Traefik, before the API, before anything in this Kubernetes cluster. Every internal test (SSM-driven curl from the node itself to `localhost:80`/`:443`, `kubectl exec` calls, pod resource usage) is fast every time.
+
+**Leading hypothesis, unconfirmed**: Cloudflare doing a cold TCP/TLS connection establishment to a brand-new origin (this EC2 instance is under 2 hours old with almost no real traffic) rather than reusing a warm pooled connection. Consistent with the delay being fixed and connection-layer rather than random or request-processing-related.
+
+**Ruled out**: app/DB/CPU (proven by the timestamp correlation above), security group misconfiguration (verified the live rules exactly match Cloudflare's current published IPv4 ranges on both 80/443), stale/wrong DNS record (verified via the Cloudflare API directly — `content: "184.192.61.245"`, matches the real Elastic IP), Cloudflare-side challenge/bot-protection (checked response headers — no challenge indicators, `cf-cache-status: DYNAMIC`, plain `cf-ray`/`nel` headers only).
+
+**Not yet tried**:
+- Waiting longer and re-testing periodically (cold-connection theory would predict this improves as real traffic accumulates — hasn't been confirmed either way yet, only a few minutes of testing happened before this session ended).
+- Asking the owner to check Cloudflare's dashboard (Analytics & Logs → Traffic, or Speed tab) for an origin-response-time-specific metric, which would confirm or refute the cold-connection theory from Cloudflare's own side — was asked but not yet answered when this session ended.
+- Checking whether Cloudflare's own status page shows anything about the `ATL` colo (from the `cf-ray` header, e.g. `a42e0a3e3def53be-ATL`) specifically.
+- Consider whether `Full (strict)` vs `Full` SSL mode, or a proper trusted origin certificate (cert-manager + Let's Encrypt via DNS-01, since the origin isn't publicly reachable outside Cloudflare for HTTP-01) instead of Traefik's self-signed default, could be relevant — currently on `Full` with Traefik's self-signed cert, which the `k8s/README.md` already flagged as a known simplification, though the TLS handshake itself was confirmed fast and successful in local/internal testing, so this seems like a less likely culprit than connection pooling.
+
 ## Phase 4 Kubernetes MVP handoff (Codex, `phase4-k8s` worktree)
 
 Claude remains project lead. This branch has uncommitted, unmerged Phase 4 Kubernetes MVP work for Claude to review: a multi-stage ARM64-ready application Dockerfile, FastAPI static frontend mount, namespaces/data workloads/application workloads/Ingress/NetworkPolicies, SSM-to-Kubernetes Secret bootstrap script, manual bring-up README, and the matching DD1 §10.3/§12 wording. No infrastructure was applied, no image was built or pushed, and no cluster exists yet to verify live behavior. The image references `ghcr.io/hacka-tron/basel.engineering:phase4-k8s`; publish that image before manual bring-up.
