@@ -1,5 +1,9 @@
 # Agent handoff
 
+## Page-load incident resolved — Codex, 2026-09-29
+
+The owner deleted the extra proxied apex A record `basel.engineering → 162.255.119.182` in Cloudflare, leaving the Terraform-managed `184.192.61.245` record and all other DNS records alone. Public verification immediately afterward: HTTPS `/readyz` returned 200 with first byte in **0.32s** (repeat **0.24s**), `/` returned 200 with first byte in **0.41s**, and a cache-busted JavaScript asset returned 200 with first byte in **0.34s**. Cache-busted JetBrains Mono 400/600 font files returned 200 with first bytes in **0.30s/0.22s**. Public HTTP `/readyz` now returns the EC2 application's 404 in **0.04s**, rather than Namecheap's 302. The earlier ~19.6s origin wait and the browser's slow font requests are resolved by these direct checks; a fresh browser waterfall was not run. Next planned work: the Terraform plan-on-PR/apply-on-merge workflow, under the project's review/approval process.
+
 ## Page-load DNS cause confirmed — Codex, 2026-09-29
 
 The owner provided a screenshot of all nine Cloudflare DNS records. It shows **two proxied apex A records**: `184.192.61.245` (the Terraform-managed EC2 origin, keep) and `162.255.119.182` (extra, unmanaged). A direct HTTP request pinned to `162.255.119.182` returned `302`, `X-Served-By: Namecheap URL Forward`, and `Location: http://www.basel.engineering/readyz`, confirming the extra record is the legacy forwarding origin. A fresh public HTTPS `/readyz` request still took **19.60s** to first byte and returned 200; public HTTP `/readyz` returned the Namecheap 302 in **0.07s**. This confirms the split origin routing behind the incident.
