@@ -1,6 +1,7 @@
 """Provider-neutral request and generation limits backed by atomic Redis scripts."""
 
 import hashlib
+import hmac
 import ipaddress
 import os
 import time
@@ -98,4 +99,4 @@ def client_ip_hash(request: Request) -> str:
         except ValueError:
             pass
     salt = os.getenv("GLASSBOX_IP_HASH_SALT", "").encode() or _LOCAL_SALT
-    return hashlib.sha256(salt + peer.encode()).hexdigest()
+    return hmac.new(salt, peer.encode(), hashlib.sha256).hexdigest()
