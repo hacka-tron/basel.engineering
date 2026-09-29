@@ -4,7 +4,9 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-Phase 1a is done (merged to `main`, pushed to origin, commit `3cc3fb6`). Next action: **Phase 1b** — API + worker with the full SSE contract (`docs/DESIGN.md` §8, §17 Phase 1's `curl -N` done-when criterion). This is the remaining half of DD1 Phase 1: Redis Streams job queue, retrieval worker (vector search against the now-real `idx:chunks` index), API `/api/ask` endpoint streaming `stage`/`retrieval`/`token`/`done` SSE events, using the fake `LLMProvider`/`EmbeddingProvider` from Phase 1a (real Bedrock is Phase 2). Write the plan the same way as `docs/superpowers/plans/2026-09-29-phase1a-ingestion.md`, execute via the same Codex/Gemini pipeline, verify against the real `docker-compose` stack.
+**Phase 1b in progress** (plan: `docs/superpowers/plans/2026-09-30-phase1b-sse.md`, worktree/branch `phase1b-sse`). Task 1 (`queries` table) done and committed. Task 2 (Redis Streams queue + retrieval worker) implemented, independently verified against real MySQL/Redis, review in progress. Task 3 (`/api/ask` SSE endpoint — the literal Phase 1 done-when criterion) not started. If resuming a new session mid-Phase-1b: check `git log --oneline phase1b-sse` and this file's task list state to see exactly where things left off; the worktree's `docker-compose` stack may need restarting (`docker compose up -d mysql redis` from `.worktrees/phase1b-sse`, then re-run `python -m services.glassbox.ingest.run` to repopulate real corpus data if the containers were recreated).
+
+**Gemini quota exhausted** as of 2026-09-30 ~2:33am (`RESOURCE_EXHAUSTED`, resets in ~7 days). Reviews are running through a Claude subagent (`superpowers:code-reviewer`) instead until it resets — see `project/orchestration/README.md`.
 
 Not blocked on anything — M1 local work is independent of the M0 AWS-account items below.
 
