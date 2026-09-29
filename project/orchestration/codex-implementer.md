@@ -43,6 +43,8 @@ shouldn't modify, a file another task owns, etc).]
 - **Sandbox flag required:** `-s workspace-write` (default is `read-only`, which can't write files at all).
 - **Working directory:** `-C <path>` to target a specific directory; add `--skip-git-repo-check` if the target isn't a git repo.
 - **Git worktrees:** Codex's sandbox cannot write `.git/worktrees/<name>/` (outside the worktree dir). Have Codex create/edit files only; the orchestrator runs `git add`/`git commit` afterward.
+- **No network access at all, not even loopback.** Codex can't reach `127.0.0.1:<port>` even if `docker compose` is running on the host with ports published — this isn't just "can't pip install," it's zero network. Tell Codex explicitly in the dispatch when a task needs a real DB/service connection to test: ask it to implement everything, run what's unit-testable without a live service, and report `DONE_WITH_CONCERNS` for the parts it can't verify rather than guessing. The orchestrator then runs those integration tests independently against the real `docker compose` stack.
+- **Behavioral specs (prose + edge cases + expected report) work well for algorithmic logic**, not just literal code-to-reproduce. Don't feel obligated to hand-write every implementation detail — a clear spec with edge cases gets good results and saves authoring time. This makes the two-stage review *more* important, not less: give Codex latitude on *how*, but always verify *what* it built, independently, every time (see `gemini-reviewer.md`) — self-tests passing does not mean the logic is right, even from a strong implementer.
 - **Command:**
   ```bash
   codex exec -m gpt-6-sol -s workspace-write -C <dir> "$(cat <prompt-file>)"
