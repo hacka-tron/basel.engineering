@@ -55,6 +55,13 @@ function App() {
       <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-3 md:h-[72px] md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         <h1 className="w-full text-base font-semibold tracking-tight md:w-auto">Basel Abdel-Rahman</h1>
 
+        <a
+          href="mailto:baselmabdelrahman@gmail.com"
+          className="text-xs text-muted transition-colors hover:text-primary md:ml-4"
+        >
+          Contact me
+        </a>
+
         <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-auto">
           <button
             type="button"
