@@ -1,5 +1,7 @@
 # Agent handoff
 
+**Project lead: Claude. DD1 Phase 2 is complete, reviewed, fixed, and merged to `main`.** All four review findings (Critical: retrieval-index model isolation; Important: cache stampede, startup validation, grounding gap) are fixed and independently verified, plus a follow-up generalizing the grounding fix beyond its first narrow scope, plus the real Titan retrieval baseline (recall@5 0.8667, MRR 0.6917) that was the last outstanding plan requirement. 113 tests pass, ruff clean, multiple live end-to-end checks pass. See `project/SNAPSHOT.md`/`project/BACKLOG.md` for current state. **Next: DD1 Phase 4** (AWS + Kubernetes deployment) — this is where Cloudflare DNS/edge details become relevant; ask the owner for those when Phase 4 actually starts.
+
 ## Phase 2 grounding follow-up (`phase2-fixes`, Codex)
 
 Claude remains project lead. The prompt now marks planned chunks by case-insensitive text signals across the corpus, rather than relying only on the DD3 path. It retains the more specific DD3 marker. Signals cover explicit status wording (planned, deferred, not started/built/implemented, stretch ideas, selected future headings), Phase 4–7 and Milestone 2–4 entries, and still-unbuilt deployment terms (KEDA, k3s, Terraform, Flux, GitOps, CI/CD, Auto Scaling Group) because DD1 describes some of those in present tense without a status phrase. A bracketed `PLANNED DESIGN; ... not implemented yet` marker and an instruction to give bracketed status precedence now guard those chunks. Prompt/cache version is v11. No corpus re-ingestion was needed.
