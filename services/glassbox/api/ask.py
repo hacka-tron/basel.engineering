@@ -1,12 +1,14 @@
 """Stream the API and retrieval worker trace for a question."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import time
 from collections.abc import AsyncIterator
 from typing import Literal
+from uuid import uuid4
 
 import redis.asyncio as redis
 from fastapi import APIRouter, Request
@@ -33,7 +35,15 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_PROMPT_VERSION = "v5"
+_PROMPT_VERSION = "v7"
+_ANSWER_LOCK_TTL_MS = 15000
+_ANSWER_LOCK_WAIT_S = 3.0
+_ANSWER_LOCK_RELEASE = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 
 class AskRequest(BaseModel):
@@ -100,10 +110,23 @@ def _ulid() -> str:
 
 
 def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
-    sources = "\n".join(f"[{chunk.n}] {chunk.source_path}: {chunk.text}" for chunk in chunks)
+    def source_line(chunk: WorkerChunk) -> str:
+        status = (
+            " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
+            if chunk.source_path == "docs/DESIGN-003-ingestion.md"
+            else ""
+        )
+        return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
+
+    sources = "\n".join(source_line(chunk) for chunk in chunks)
     return (
         "Answer the question using only the following numbered sources. "
         "Use two or three concise sentences and cite the supporting sources by number. "
+        "Only describe a feature as working now when a source says it is implemented or current. "
+        "If a source says it is planned, future, on a roadmap, or not yet built, "
+        "say so explicitly. "
+        "A design document describes intended behavior, not proof that code is running. "
+        "When asked whether a feature exists today, check its source status and implemented code. "
         "Do not list every detail unless the question asks for a list.\n\n"
         f"{sources}\n\nQuestion: {question}"
     )
@@ -117,6 +140,23 @@ def _public_chunk(chunk: WorkerChunk) -> dict:
 
 def get_answer_cache(client) -> AnswerCache:
     return RedisAnswerCache(client)
+
+
+def _answer_lock_key(corpus: str, version: int, model_id: str, question: str) -> str:
+    identity = f"{corpus}\0{version}\0{model_id}\0{normalize_question(question)}"
+    return f"lock:answer:{hashlib.sha256(identity.encode()).hexdigest()}"
+
+
+async def _wait_for_answer(
+    cache: AnswerCache, corpus: str, version: int, model_id: str, embedding: list[float]
+) -> dict | None:
+    deadline = time.monotonic() + _ANSWER_LOCK_WAIT_S
+    while time.monotonic() < deadline:
+        await asyncio.sleep(0.1)
+        answer = await cache.get(corpus, version, model_id, embedding)
+        if answer:
+            return answer
+    return None
 
 
 def _save_query(
@@ -154,6 +194,8 @@ async def _stream(
 ) -> AsyncIterator[str]:
     client = redis.from_url(os.environ["REDIS_URL"])
     timings: dict[str, int] = {}
+    lock_key = None
+    lock_token = None
 
     async def stage(
         node: str,
@@ -211,6 +253,23 @@ async def _stream(
         answer_hit = await answer_cache.get(
             request.corpus, corpus_version, answer_model_id, embedding
         )
+        if not answer_hit:
+            key = _answer_lock_key(
+                request.corpus, corpus_version, answer_model_id, request.question
+            )
+            token = uuid4().hex
+            acquired = await client.set(key, token, nx=True, px=_ANSWER_LOCK_TTL_MS)
+            if acquired:
+                lock_key, lock_token = key, token
+                # The first writer may have filled the cache between our read and SET.
+                answer_hit = await answer_cache.get(
+                    request.corpus, corpus_version, answer_model_id, embedding
+                )
+            else:
+                answer_hit = await _wait_for_answer(
+                    answer_cache, request.corpus, corpus_version, answer_model_id, embedding
+                )
+                # Bounded fallback: answer independently if the writer is slow or failed.
         yield await stage("answer_cache", "end", cache="hit" if answer_hit else "miss")
         if answer_hit:
             chunks = [WorkerChunk.model_validate(item) for item in answer_hit["chunks"]]
@@ -313,6 +372,34 @@ async def _stream(
                 else:
                     raise ValueError(f"unknown worker trace type: {kind}")
 
+        if not chunks:
+            # A new embedding model can temporarily have no indexed chunks. Avoid
+            # sending an empty-source prompt or spending an LLM budget slot.
+            answer = "I don't know from what I have."
+            yield frame("token", {"text": answer})
+            total_ms = elapsed_ms(request_start_ts)
+            await asyncio.to_thread(
+                _save_query,
+                request_id=request_id,
+                request=request,
+                chunks=chunks,
+                timings=timings,
+                total_ms=total_ms,
+                tokens_in=0,
+                tokens_out=0,
+            )
+            yield frame(
+                "done",
+                {
+                    "total_ms": total_ms,
+                    "mode": "full",
+                    "answer_cache": "miss",
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                },
+            )
+            return
+
         if not await get_daily_budget(client).reserve():
             total_ms = elapsed_ms(request_start_ts)
             await asyncio.to_thread(
@@ -387,6 +474,11 @@ async def _stream(
         LOGGER.exception("Ask request %s failed", request_id)
         yield frame("error", {"code": "internal", "message": "The request could not be completed"})
     finally:
+        if lock_key is not None:
+            try:
+                await client.eval(_ANSWER_LOCK_RELEASE, 1, lock_key, lock_token)
+            except Exception:
+                LOGGER.warning("Answer lock release failed for %s", request_id, exc_info=True)
         await client.aclose()
 
 
