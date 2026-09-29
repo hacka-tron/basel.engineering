@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node (for later frontend work)
+node_modules/
+dist/
+.expo/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Installed agent skills (regenerable from skills-lock.json via `npx skills`)
+.agents/
+.claude/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
