@@ -26,6 +26,8 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 
 
 class FakeLLMProvider(LLMProvider):
+    model_id = "fake-llm-v1"
+
     async def generate(self, prompt: str, *, max_tokens: int) -> AsyncIterator[str]:
         response = "This is a fake response for local development."
         for index, word in enumerate(response.split()[: max(0, max_tokens)]):

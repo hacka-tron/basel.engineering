@@ -14,6 +14,9 @@ class EmbeddingProvider(ABC):
 
 
 class LLMProvider(ABC):
+    # Included in answer-cache identity; changing models must not replay old answers.
+    model_id: str
+
     @abstractmethod
     async def generate(self, prompt: str, *, max_tokens: int) -> AsyncIterator[str]:
         """Stream generated text chunks for a prompt."""

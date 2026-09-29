@@ -33,6 +33,7 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_PROMPT_VERSION = "v5"
 
 
 class AskRequest(BaseModel):
@@ -102,7 +103,9 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
     sources = "\n".join(f"[{chunk.n}] {chunk.source_path}: {chunk.text}" for chunk in chunks)
     return (
         "Answer the question using only the following numbered sources. "
-        f"Cite sources by number.\n\n{sources}\n\nQuestion: {question}"
+        "Use two or three concise sentences and cite the supporting sources by number. "
+        "Do not list every detail unless the question asks for a list.\n\n"
+        f"{sources}\n\nQuestion: {question}"
     )
 
 
@@ -189,6 +192,8 @@ async def _stream(
             )
             return
         provider = get_embedding_provider()
+        llm_provider = get_llm_provider()
+        answer_model_id = f"{provider.model_id}|{llm_provider.model_id}|{_PROMPT_VERSION}"
         cache: EmbeddingCache = RedisEmbeddingCache(client)
         cache_key = embedding_cache_key(request.question, provider.model_id)
         embedding = await cache.get(cache_key)
@@ -204,7 +209,7 @@ async def _stream(
         corpus_version = await RedisRetrievalCache(client).version(request.corpus)
         answer_cache = get_answer_cache(client)
         answer_hit = await answer_cache.get(
-            request.corpus, corpus_version, provider.model_id, embedding
+            request.corpus, corpus_version, answer_model_id, embedding
         )
         yield await stage("answer_cache", "end", cache="hit" if answer_hit else "miss")
         if answer_hit:
@@ -337,7 +342,7 @@ async def _stream(
         llm_started = time.monotonic()
         yield await stage("llm", "start")
         response_parts = []
-        async for part in get_llm_provider().generate(prompt, max_tokens=400):
+        async for part in llm_provider.generate(prompt, max_tokens=400):
             response_parts.append(part)
             yield frame("token", {"text": part})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
@@ -349,7 +354,7 @@ async def _stream(
                 await answer_cache.put(
                     request.corpus,
                     corpus_version,
-                    provider.model_id,
+                    answer_model_id,
                     embedding,
                     {
                         "answer": "".join(response_parts),

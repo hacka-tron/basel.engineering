@@ -241,7 +241,7 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
 
         async def reserve(self):
             self.calls += 1
-            return self.calls == 1
+            return self.calls <= 2
 
     budget = OneSlotBudget()
     monkeypatch.setenv("REDIS_URL", "redis://unused")
@@ -264,6 +264,11 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
     assert "".join(data["text"] for name, data in first if name == "token") == "".join(
         data["text"] for name, data in second if name == "token"
     )
+    llm.model_id = "fake-llm-v2"
+    third = events(http.post("/api/ask", json=body))
+    assert llm.calls == 2
+    assert budget.calls == 2
+    assert next(data for name, data in third if name == "done")["answer_cache"] == "miss"
 
 
 def test_rate_limited_request_returns_retry_without_retrieval(monkeypatch):
