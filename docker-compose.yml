@@ -35,6 +35,11 @@ services:
       MYSQL_PASSWORD: glassbox
       MYSQL_DATABASE: glassbox
       REDIS_URL: redis://redis:6379/0
+      GLASSBOX_PROVIDER: ${GLASSBOX_PROVIDER:-fake}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_EMBEDDING_MODEL_ID: ${BEDROCK_EMBEDDING_MODEL_ID:-amazon.titan-embed-text-v2:0}
+      BEDROCK_LLM_MODEL_ID: ${BEDROCK_LLM_MODEL_ID:-us.anthropic.claude-haiku-4-5-20251001-v1:0}
+      GLASSBOX_DAILY_LLM_CAP: ${GLASSBOX_DAILY_LLM_CAP:-100}
     ports:
       - "8000:8000"
     depends_on:
