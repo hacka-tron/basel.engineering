@@ -1,5 +1,11 @@
 # Agent handoff
 
+## Phase 4 Kubernetes MVP handoff (Codex, `phase4-k8s` worktree)
+
+Claude remains project lead. This branch has uncommitted, unmerged Phase 4 Kubernetes MVP work for Claude to review: a multi-stage ARM64-ready application Dockerfile, FastAPI static frontend mount, namespaces/data workloads/application workloads/Ingress/NetworkPolicies, SSM-to-Kubernetes Secret bootstrap script, manual bring-up README, and the matching DD1 §10.3/§12 wording. No infrastructure was applied, no image was built or pushed, and no cluster exists yet to verify live behavior. The image references `ghcr.io/hacka-tron/basel.engineering:phase4-k8s`; publish that image before manual bring-up.
+
+Verification in this worktree: `../../.venv/bin/python -m pytest services/tests -q` → 113 passed; a temporary `frontend/dist/index.html` smoke check returned HTTP 200 at `/` and the original `/healthz` response; `kubectl kustomize k8s/base` rendered the base; every base YAML parsed with PyYAML; local ConfigMap/Secret reference checks, `bash -n k8s/bootstrap-secrets.sh`, `git diff --check`, and Ruff on `services/glassbox/api/main.py` passed. `kubectl apply --dry-run=client` could not discover resources because there is no reachable Kubernetes API. Real image build, cluster apply, network-policy behavior, and live Cloudflare/Traefik routing remain unverified. KEDA, cluster-view RBAC, nightly ingest, and Flux are deferred per the task scope. Claude should review this uncommitted worktree before any merge.
+
 **Project lead: Claude. DD1 Phase 2 is complete, reviewed, fixed, and merged to `main`.** All four review findings (Critical: retrieval-index model isolation; Important: cache stampede, startup validation, grounding gap) are fixed and independently verified, plus a follow-up generalizing the grounding fix beyond its first narrow scope, plus the real Titan retrieval baseline (recall@5 0.8667, MRR 0.6917) that was the last outstanding plan requirement. 113 tests pass, ruff clean, multiple live end-to-end checks pass. See `project/SNAPSHOT.md`/`project/BACKLOG.md` for current state. **Next: DD1 Phase 4** (AWS + Kubernetes deployment) — this is where Cloudflare DNS/edge details become relevant; ask the owner for those when Phase 4 actually starts.
 
 ## Phase 2 grounding follow-up (`phase2-fixes`, Codex)

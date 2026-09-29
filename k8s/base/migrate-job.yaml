@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: app
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/hacka-tron/basel.engineering:phase4-k8s
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: glassbox-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glassbox-mysql
+                  key: mysql-password
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 192Mi

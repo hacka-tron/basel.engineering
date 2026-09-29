@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**DD1 Phases 0, 1, 2, and 3 are all fully done and merged to `main`.** M1 (full system running locally) is complete. **Next: DD1 Phase 4 (AWS + Kubernetes deployment)** — Terraform modules (network, compute/k3s, database, edge, secrets), Kubernetes base manifests, first manual deploy. This is the point where Cloudflare DNS/edge details are actually needed (Terraform-managed DNS records, possibly an API token for automation) — ask the owner for those when starting Phase 4, not before.
+**DD1 Phases 0, 1, 2, and 3 are all fully done and merged to `main`.** M1 (full system running locally) is complete. **Next: Claude reviews the uncommitted Phase 4 Kubernetes MVP in `.worktrees/phase4-k8s`, then the owner publishes the image and performs the first manual bring-up using `k8s/README.md`.** Terraform for Phase 4 is already on `main`; no production infrastructure has been applied. KEDA/demo load and cluster-view RBAC are Phase 5; Flux/GitOps is Phase 6.
 
 **DD1 Phase 1** (merged to `main`, pushed to origin, commit `4433243`) — schema, providers, chunkers, ingestion, job queue, retrieval worker, and the `/api/ask` SSE endpoint, all verified end to end with a real `curl -N` against a live worker + API for both corpora. Plans: `docs/superpowers/plans/2026-09-29-phase1a-ingestion.md` and `docs/superpowers/plans/2026-09-30-phase1b-sse.md`.
 

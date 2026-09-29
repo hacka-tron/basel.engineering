@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-from-app
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: app
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [api, retrieval-worker, migrate, ingest]
+      ports:
+        - protocol: TCP
+          port: 3306
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-from-app
+  namespace: data
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: app
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [api, retrieval-worker, ingest]
+      ports:
+        - protocol: TCP
+          port: 6379
