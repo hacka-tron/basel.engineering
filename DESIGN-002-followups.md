@@ -1,0 +1,433 @@
+# Glassbox Design Doc 002: Follow-up Features
+
+| | |
+|---|---|
+| **Status** | Draft v1 |
+| **Owner** | Basel |
+| **Last updated** | 2026-09-28 |
+| **Builds on** | `DESIGN.md` (referred to below as "DD1") |
+
+---
+
+## 1. Summary
+
+This document adds five features to the base design:
+
+1. **Self-healing node recovery** with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies.
+2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index.
+3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups.
+4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll.
+5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production.
+
+Plus one small network change: a free **S3 gateway endpoint**.
+
+Section 8 lists every change to DD1's contracts and schema in one place. Section 9 maps the work onto DD1's build phases.
+
+---
+
+## 2. Goals and non-goals
+
+### Goals
+
+- **Recovery without a human:** if the node is terminated, the site returns on its own within 10 minutes, with no data loss.
+- **Follow-up questions work:** "tell me more about that" retrieves the right documents and answers in context.
+- **Stopping means stopping:** pressing Stop ends LLM token spend within about a second.
+- **Streaming in production matches local:** time to first token through Cloudflare is within 300 ms of local.
+- **Content quality is enforced:** badly structured corpus files produce warnings in CI, not silently bad answers.
+
+### Non-goals
+
+- A highly available control plane (options documented in 3.6, not built).
+- Server-side chat sessions or stored conversation history per visitor.
+- WebSockets. SSE remains the transport (see 7.1).
+
+---
+
+## 3. Feature 1: Self-healing node recovery
+
+### 3.1 Problem
+
+DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. The design already keeps all durable state outside the node (RDS for data, Git for configuration), so the node itself is replaceable. Recovery just needs to be automatic.
+
+### 3.2 Design
+
+Replace the standalone `aws_instance` with:
+
+- **`aws_launch_template`**: the instance definition (AMI, `t4g.small`, root volume, IAM instance profile, security group, `credit_specification = standard`, user data).
+- **`aws_autoscaling_group`** with `min_size = max_size = desired_capacity = 1`, spanning both public subnets. If the instance is unhealthy or terminated, the group launches a replacement, possibly in the other availability zone.
+
+The Elastic IP from DD1 is kept, because Cloudflare's DNS record points at it. A replacement instance gets a new address by default, so the boot script re-attaches the Elastic IP to itself (see 3.3).
+
+### 3.3 Boot sequence (user data)
+
+Every instance, first boot or replacement, runs the same script:
+
+1. Create a 1 GiB swap file.
+2. Read its own instance ID from instance metadata (IMDSv2).
+3. **Associate the Elastic IP** to itself (`aws ec2 associate-address --allow-reassociation`).
+4. Read the k3s cluster token and the Flux deploy key from SSM Parameter Store.
+5. Install k3s (pinned version).
+6. Create the Kubernetes Secrets from SSM (DB password, origin-verify header value).
+7. Bootstrap Flux against the repo. Flux then applies everything in `k8s/overlays/prod`: Redis, API, workers, KEDA, and the jobs.
+8. The `reindex` Job sees an empty Redis vector index and rebuilds it from MySQL.
+
+Nothing in this script is specific to first boot, which is the whole point: a fresh machine and a replacement follow the identical path.
+
+### 3.4 Health detection
+
+EC2 status checks only catch hardware and OS failures. A machine can pass them while k3s is broken. Add an application-level check:
+
+- A systemd timer on the node runs every 60 seconds and checks `k3s` readiness plus `http://localhost/readyz` through Traefik.
+- After 5 consecutive failures, it calls `aws autoscaling set-instance-health --health-status Unhealthy`, and the group replaces the instance.
+- Grace period of 600 seconds after launch so a booting node isn't killed before it's ready.
+
+### 3.5 IAM additions (instance role)
+
+| Action | Resource | Why |
+|---|---|---|
+| `ec2:AssociateAddress` | the Elastic IP allocation and instances tagged `project=glassbox` | Reattach the public IP on boot |
+| `autoscaling:SetInstanceHealth` | the Glassbox Auto Scaling group | Self-report unhealthy |
+| `ssm:GetParameter` | `/glassbox/k3s/*`, `/glassbox/flux/*` (added to existing `/glassbox/*`) | Cluster token and deploy key |
+
+### 3.6 Documented future path: control plane HA (not built)
+
+Recorded here as the production answer, with trade-offs:
+
+| Option | How it works | Cost impact |
+|---|---|---|
+| 3 k3s servers with embedded etcd | Replicated state with leader election; survives losing 1 of 3 | 3x node cost |
+| k3s with an external datastore | k3s stores cluster state in MySQL; 2+ stateless servers behind a load balancer. Could use a separate database on the existing RDS instance | 2x node cost + load balancer |
+| EKS | AWS runs a multi-AZ control plane | Control plane fee + nodes |
+
+### 3.7 Verification ("game day")
+
+1. Note the current site state and a few test questions.
+2. Terminate the instance from the console.
+3. Measure time until the site answers questions again. Target: under 10 minutes.
+4. Confirm answers match, query logs survived, and the vector index was rebuilt.
+5. Record the measured recovery time in the README.
+
+### 3.8 Cost
+
+No change. Auto Scaling groups and launch templates are free; there is still one instance.
+
+---
+
+## 4. Feature 2: Corpus authoring guide and ingest validation
+
+### 4.1 How content is organized
+
+The only required labeling is **location**. Folder decides corpus:
+
+| Location | Corpus |
+|---|---|
+| `corpus/about-me/**/*.md` | `about_me` |
+| Allowlisted repo paths (DD1 6.4): `infra/`, `k8s/`, `services/`, `frontend/src/architecture.ts`, `docs/`, `DESIGN*.md` | `about_system` |
+
+The ingest job derives everything else automatically: source path, title (nearest heading), line range, chunk type (by extension), and GitHub URL at the deployed commit.
+
+### 4.2 Recommended `about_me` file set
+
+```
+corpus/about-me/
+  bio.md           # who you are, what you're looking for, in 3 to 5 short sections
+  microsoft.md     # one file per role
+  youtube.md
+  fitbit.md
+  projects.md      # one heading per project, including Glassbox itself
+  skills.md        # grouped by area, each with where it was used
+  bullet-bank.md   # exported from the bullet bank doc
+```
+
+### 4.3 Writing rules (the chunker rewards structure)
+
+1. **Use headings generously.** Markdown is split at headings; each heading becomes a chunk's title and citation label.
+2. **Make every section self-contained.** Name the subject in each section ("At YouTube, I built...", not "There, I built..."). Retrieval pulls sections out of context.
+3. **One topic per section.** Mixed sections get retrieved for either topic and answer both badly.
+4. **Aim for 100 to 400 words per section.** Much shorter chunks lack context; much longer ones get split at arbitrary points.
+5. **Only public-safe content.** Everything in the corpus can be quoted to any visitor.
+
+### 4.4 Optional front matter
+
+Files may start with a small YAML block. Nothing requires it; it enables filtering and boosting later.
+
+```yaml
+---
+type: role            # role | project | skills | bio | other
+tags: [kubernetes, distributed-systems]
+priority: normal      # normal | high (high gets a small ranking boost)
+---
+```
+
+Stored in a new `documents.metadata` JSON column and copied to the Redis chunk hashes as tag fields so vector search can filter on them.
+
+### 4.5 Ingest validation
+
+A `validate` step runs in CI on every pull request and at the start of every ingest Job. It never sends content anywhere; it only inspects files.
+
+| Check | Level |
+|---|---|
+| Secret scanner match or denylisted path | **Error** (fails CI and the Job) |
+| Invalid front matter | **Error** |
+| Markdown section over 800 words with no subheadings | Warning |
+| Chunk under 40 tokens after splitting | Warning |
+| Section starting with a dangling reference ("As mentioned above", "There,", "This") | Warning |
+| Duplicate headings within one file | Warning |
+
+Warnings are printed as a PR comment with file and line, so content problems get fixed the same way code problems do.
+
+---
+
+## 5. Feature 3: Conversational chat
+
+### 5.1 Conversation memory
+
+The server stays stateless. The browser keeps the conversation, persists it in `localStorage` so it survives refreshes and return visits (5.5), and sends recent history with each question:
+
+```json
+{
+  "question": "tell me more about that",
+  "corpus": "about_me",
+  "history": [
+    { "role": "user", "content": "What did Basel do at YouTube?" },
+    { "role": "assistant", "content": "At YouTube, Basel worked on ..." }
+  ]
+}
+```
+
+Server-side limits (enforced, not trusted from the client):
+
+- At most the last **6 messages** (3 exchanges).
+- At most **4,000 characters** total; older messages are dropped first.
+- History is treated as untrusted user input. The system prompt states that prior assistant messages may be inaccurate and the retrieved context wins.
+- Each corpus has its own conversation. Switching the toggle swaps to that corpus's saved conversation instead of mixing the two.
+
+### 5.2 Follow-up question rewriting
+
+"Tell me more about that" embeds into a vector that matches nothing useful. When history is present, the API first rewrites the question into a standalone query:
+
+- **Input:** the last few messages + the new question.
+- **Output:** a standalone question, e.g. "What else did Basel work on at YouTube beyond the ingestion pipeline?"
+- **Model:** the same Haiku-class model, max 60 output tokens.
+- **Skipped** when history is empty (first question), so the common recruiter path pays nothing extra.
+- The rewrite is used for **retrieval**. The **answer** prompt gets the original question plus history, so the reply still sounds conversational.
+- The rewrite appears as its own stage (`rewrite`) on the diagram, and the rewritten query is shown in small text under the sources, which makes the mechanism visible to engineers.
+
+### 5.3 Cache behavior for follow-ups
+
+| Cache | First question | Follow-up |
+|---|---|---|
+| Semantic answer cache | Read and write | **Skipped both ways.** The answer depends on the conversation, not just the words. |
+| Embedding cache | Keyed on the question | Keyed on the rewritten query |
+| Retrieval cache | Keyed on the question | Keyed on the rewritten query |
+
+### 5.4 Budget
+
+A rewrite counts as 0.25 of a generated answer against the daily cap (DD1 7.2), since it is a much smaller call.
+
+### 5.5 Persistence in localStorage
+
+Conversations are saved in the browser's `localStorage`, so a refresh or a return visit restores the chat. Nothing about conversations is stored server-side beyond the anonymous query log (DD1 7.1).
+
+**Storage shape** (one key per corpus):
+
+```ts
+// key: "glassbox:conv:v1:about_me" and "glassbox:conv:v1:about_system"
+type StoredConversation = {
+  version: 1;
+  updatedAt: number;            // epoch ms
+  messages: {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    state?: "done" | "stopped" | "retrieval_only";  // assistant only
+    sources?: { source_path: string; title: string; url?: string }[];
+    createdAt: number;
+  }[];
+};
+```
+
+**Rules:**
+
+- **Save on settle, not per token.** Write after a message reaches `done`, `stopped` or `retrieval_only`, and after each user message. Messages in `thinking`, `streaming` or `error` are never saved, so a refresh mid-answer never restores a half-written reply as if it were complete.
+- **Display vs. send.** Keep up to the last 50 messages for display; only the last 6 are sent as `history` (5.1 limits still apply server-side).
+- **Expiry.** On load, discard a conversation whose `updatedAt` is older than 7 days, so a returning visitor weeks later starts fresh.
+- **Versioned key.** The `v1` in the key lets a future format change ignore old data instead of crashing on it.
+- **Fail safe.** Every read and write is wrapped in `try/catch`. If storage is unavailable, full, blocked (some private browsing modes), or holds data that fails validation, the app falls back to in-memory only and works normally.
+- **New chat.** A "New chat" button clears the current corpus's key and resets the view. Suggested-question chips reappear when a conversation is empty.
+- **Multiple tabs.** Last write wins. Optional stretch: listen for the `storage` event to refresh a conversation changed in another tab.
+- **Privacy note.** Data stays in the visitor's own browser. A small line under the input ("Chats are saved in this browser. New chat clears it.") keeps that transparent, which matters on shared computers.
+
+**Restored-state behavior:** restored assistant messages render with their sources, but the architecture panel starts idle (traces are not persisted; they describe a past request, and replaying them would be misleading).
+
+---
+
+## 6. Feature 4: Live chat UX
+
+### 6.1 Message states
+
+Each assistant message moves through explicit states:
+
+```
+idle -> thinking -> streaming -> done
+                 \-> stopped
+                 \-> error
+                 \-> retrieval_only
+```
+
+| State | Shown when | UI |
+|---|---|---|
+| `thinking` | Request sent, no tokens yet | Animated typing dots; diagram animating through stages |
+| `streaming` | First `token` event arrived | Text grows; blinking caret at the end; Stop button visible |
+| `done` | `done` event | Caret removed; sources and timing shown |
+| `stopped` | Visitor pressed Stop | Partial text kept, muted "Stopped" label |
+| `error` | `error` event or network failure | Inline message with Retry |
+| `retrieval_only` | Daily budget reached | Sources with snippets, explanatory banner |
+
+### 6.2 Stop button that stops server-side
+
+The browser side is simple: an `AbortController` cancels the `fetch`. The important part is the server:
+
+- The token relay loop checks for client disconnect (`await request.is_disconnected()`) between chunks.
+- On disconnect, the API closes the Bedrock response stream, which stops generation and therefore token billing.
+- The query is logged with `mode = 'stopped'` and the tokens actually generated.
+- Stopped answers are **not** written to the semantic answer cache.
+
+Acceptance: after pressing Stop, no further output tokens are billed beyond about 1 second of generation (verified by comparing logged `tokens_out` with the visible text).
+
+### 6.3 Auto-scroll
+
+- Follow new content while the visitor is at the bottom (within 80 px).
+- If they scroll up, stop following and show a small "Jump to latest" pill.
+- Clicking the pill, or sending a new question, resumes following.
+
+### 6.4 Input behavior
+
+- Enter sends; Shift+Enter adds a new line.
+- The input stays enabled while streaming; sending a new question stops the current one first.
+- Up arrow in an empty input recalls the previous question.
+
+### 6.5 Accessibility
+
+- The message list is an ARIA live region, but announcements happen once on `done`, not per token (per-token announcements are unusable with screen readers).
+- The diagram respects `prefers-reduced-motion`: nodes change color without pulsing or edge animation.
+- Stop, Retry and the corpus toggle are reachable and operable by keyboard.
+
+---
+
+## 7. Feature 5: Streaming delivery hardening
+
+### 7.1 Transport decision (recorded)
+
+**SSE over a single `POST /api/ask` response**, not WebSockets. The interaction is one question in, one streamed answer out; SSE handles it over plain HTTP, passes through Cloudflare and Traefik without special configuration, and needs no connection management between questions. WebSockets would be warranted only for continuous two-way traffic, which this product does not have.
+
+### 7.2 Why streams break in production
+
+Any layer that buffers or compresses the response delays tokens until the buffer flushes, so the visitor sees the whole answer arrive at once. Locally there are no such layers, so this bug typically appears only after deploy.
+
+### 7.3 Required settings, layer by layer
+
+| Layer | Setting |
+|---|---|
+| **Cloudflare** (`/api/*` route) | Cache Rule: bypass cache; Auto Minify and Rocket Loader disabled on this route |
+| **Cloudflare origin timeout** | Free-tier edge timeout is 100 s; no single stage (including a cold Bedrock call) may exceed it |
+| **Traefik** | No buffering middleware on the API route (the default) |
+| **API response headers** | `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no` |
+| **API server** | Flush after every event; no response compression middleware on streaming routes |
+
+### 7.4 Heartbeats
+
+The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is open. Browsers ignore comment lines, but they keep the connection active through proxies during slow stages, such as a cold Bedrock call.
+
+### 7.5 Verification
+
+- **Scripted check:** `curl -N` against `https://basel.engineering/api/ask` (through Cloudflare), recording the arrival time of each event. Tokens must arrive spread over time, not in one burst at the end.
+- **Metric:** time to first token (TTFT), measured in the browser and logged. Target: production TTFT within 300 ms of local TTFT.
+- Run the check in CI after every deploy (Phase 6) so a Cloudflare setting change can't silently break streaming.
+
+---
+
+## 8. Network: S3 gateway endpoint
+
+- Add `aws_vpc_endpoint` (type `Gateway`, service `com.amazonaws.us-east-1.s3`) associated with the public and private route tables.
+- **Free**, and any S3 traffic from inside the VPC then stays on the AWS network.
+- Honest note: the node currently makes little S3 traffic (the frontend is uploaded from GitHub Actions). It is included because it costs nothing and is a prerequisite for the private-subnet production path in DD1 section 20.
+
+---
+
+## 9. Changes to DD1 contracts and schema
+
+### 9.1 API request
+
+```ts
+type AskRequest = {
+  question: string;
+  corpus: "about_me" | "about_system";
+  history?: { role: "user" | "assistant"; content: string }[]; // new
+};
+```
+
+### 9.2 Trace events
+
+- New `NodeId`: `"rewrite"`.
+- `DoneEvent.mode` gains `"stopped"`.
+- New optional field on `RetrievalEvent`: `rewritten_query?: string`.
+- Heartbeat comments (`: ping`) may appear anywhere in the stream; parsers must ignore them.
+
+### 9.3 MySQL
+
+```sql
+ALTER TABLE documents ADD COLUMN metadata JSON NULL;
+
+ALTER TABLE queries
+  MODIFY COLUMN mode ENUM('full','retrieval_only','stopped') NOT NULL,
+  ADD COLUMN turn_index      TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0 = first question
+  ADD COLUMN rewritten_query VARCHAR(1000) NULL,
+  ADD COLUMN ttft_ms         INT NULL;
+```
+
+### 9.4 Redis
+
+- Chunk hashes gain optional tag fields from front matter (`type`, `tags`) for filtered search.
+- Budget counter increments by 0.25 for rewrites (store as integer quarter-units).
+
+### 9.5 Terraform
+
+- `modules/compute`: `aws_instance` replaced by `aws_launch_template` + `aws_autoscaling_group`; new IAM statements (3.5); new SSM parameters for the k3s token and Flux deploy key.
+- `modules/network`: S3 gateway endpoint.
+- Cloudflare zone: Cache Rule for `/api/*` (7.3) — managed via the Cloudflare dashboard or API, not Terraform's `modules/edge` (removed; see `DESIGN-004-action-plan.md`).
+
+---
+
+## 10. Build plan integration
+
+| DD1 phase | Adds from this doc |
+|---|---|
+| Phase 0: Scaffold | Corpus validation step in CI (4.5) |
+| Phase 1: Backend locally | History in request, rewrite stage, follow-up cache rules, disconnect handling (5, 6.2) |
+| Phase 2: Real models + eval | Add 10 follow-up question pairs to the eval set, scored after rewriting |
+| Phase 3: Frontend | Message states, Stop, auto-scroll, input behavior, accessibility (6); localStorage persistence and New chat (5.5) |
+| Phase 4: AWS + Kubernetes | Launch template + ASG, boot script, health timer, S3 endpoint, Cloudflare streaming settings (3, 7.3, 8) |
+| Phase 5: Autoscaling demo | No change |
+| Phase 6: CI/CD | Post-deploy streaming check (7.5) |
+| Phase 7: Polish | Game day recovery test with measured time in README (3.7) |
+
+---
+
+## 11. Additional resume bullets
+
+Fill in numbers only after measuring.
+
+- Designed self-healing infrastructure for a single-node Kubernetes cluster (Auto Scaling group, application-level health checks, GitOps rebuild), restoring service in [X] minutes after instance termination with no data loss.
+- Implemented multi-turn RAG with LLM-based query rewriting, raising follow-up question recall@5 from [X] to [Y].
+- Built token-streaming chat over Server-Sent Events through Cloudflare with server-side cancellation, keeping time to first token at [X] ms.
+
+---
+
+## 12. Open questions
+
+| Question | Options | Leaning |
+|---|---|---|
+| Rewrite model | Same Haiku-class model vs. a smaller, cheaper one | Same model; volume is tiny |
+| History length | 3 exchanges vs. 5 | 3; recruiters rarely go deeper |
+| Game day cadence | Once vs. monthly | Once before sharing the site, again after major infra changes |
