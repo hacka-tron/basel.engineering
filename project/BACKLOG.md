@@ -4,11 +4,13 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**Phase 1b in progress** (plan: `docs/superpowers/plans/2026-09-30-phase1b-sse.md`, worktree/branch `phase1b-sse`). Task 1 (`queries` table) done and committed. Task 2 (Redis Streams queue + retrieval worker) implemented, independently verified against real MySQL/Redis, review in progress. Task 3 (`/api/ask` SSE endpoint — the literal Phase 1 done-when criterion) not started. If resuming a new session mid-Phase-1b: check `git log --oneline phase1b-sse` and this file's task list state to see exactly where things left off; the worktree's `docker-compose` stack may need restarting (`docker compose up -d mysql redis` from `.worktrees/phase1b-sse`, then re-run `python -m services.glassbox.ingest.run` to repopulate real corpus data if the containers were recreated).
+**DD1 Phase 1 is fully done** (merged to `main`, pushed to origin, commit `4433243`) — schema, providers, chunkers, ingestion, job queue, retrieval worker, and the `/api/ask` SSE endpoint, all verified end to end with a real `curl -N` against a live worker + API for both corpora. Plans: `docs/superpowers/plans/2026-09-29-phase1a-ingestion.md` and `docs/superpowers/plans/2026-09-30-phase1b-sse.md`.
 
-**Gemini quota exhausted** as of 2026-09-30 ~2:33am (`RESOURCE_EXHAUSTED`, resets in ~7 days). Reviews are running through a Claude subagent (`superpowers:code-reviewer`) instead until it resets — see `project/orchestration/README.md`.
+**Next: DD1 Phase 2** (`docs/DESIGN.md` §17) — real Bedrock providers (replacing the fake `EmbeddingProvider`/`LLMProvider`), the three cache layers (semantic answer, embedding, retrieval/chunk — DD1 §7.3), rate limiting + daily LLM budget (DD1 §7.2), and a retrieval eval harness with a recorded baseline (DD1 §15).
 
-Not blocked on anything — M1 local work is independent of the M0 AWS-account items below.
+**Deliberately paused here rather than starting Phase 2 unsupervised** — real Bedrock calls need actual AWS credentials and cost real money (small, but real), and two things in the "Open decisions" section below are still unresolved: AWS CLI isn't configured locally yet, and the Free-vs-Paid account-plan decision is still open. Phase 2 shouldn't start until at least AWS CLI is configured and Bedrock model access is enabled in the console (M0 checklist, `docs/DESIGN-004-action-plan.md` §4) — those are owner actions. Once that's done, the cache layers/rate-limiting/eval-harness work can proceed the same way Phase 1 did (Codex implements against fake providers where possible, real Bedrock wiring last).
+
+**Gemini quota exhausted** as of 2026-09-30 ~2:33am (`RESOURCE_EXHAUSTED`, resets ~2026-10-07). Reviews are running through a Claude subagent (`superpowers:code-reviewer`) instead until it resets — see `project/orchestration/README.md`.
 
 ## Multi-model pipeline notes (from the Phase 1b pilot, 2026-09-30)
 
