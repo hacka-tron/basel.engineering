@@ -5,7 +5,7 @@ Instructions for Claude Code when working in this repository.
 ## Repo layout
 
 - `docs/` — design docs (`DESIGN.md` core architecture, `DESIGN-002-followups.md` resilience/chat features, `DESIGN-003-ingestion.md` content pipeline, `DESIGN-004-action-plan.md` build sequencing) and `docs/superpowers/plans/` implementation plans.
-- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below). Kept out of the repo root to keep it readable; the root `CLAUDE.md` is a one-line stub that imports this file, so it still auto-loads.
+- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below), and `orchestration/` (dispatch templates for delegating implementation to Codex and review to Gemini — use these instead of writing dispatch prompts from scratch). Kept out of the repo root to keep it readable; the root `CLAUDE.md` is a one-line stub that imports this file, so it still auto-loads.
 - `services/` — application code.
 
 Read the relevant design doc before implementing a feature. If an implementation needs to diverge from what's written, update the doc in the same change rather than letting it drift.
