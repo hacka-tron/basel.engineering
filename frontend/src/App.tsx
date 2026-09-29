@@ -4,12 +4,76 @@ import ArchitecturePanel from './components/ArchitecturePanel'
 import PipelineStrip from './components/PipelineStrip'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import type { NodeId } from './architecture'
+import { askQuestion, type RetrievalChunk } from './lib/sse'
 
 export type Corpus = 'basel' | 'system'
 
 function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
   const [architectureOpen, setArchitectureOpen] = useState(false)
+  const [activeNode, setActiveNode] = useState<NodeId | null>(null)
+  const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
+  const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [lastStats, setLastStats] = useState<{ totalMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
+  const [queriesServed, setQueriesServed] = useState(0)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const requestInFlightRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => abortControllerRef.current?.abort(), [])
+
+  function handleAsk(question: string) {
+    if (requestInFlightRef.current || isStreaming) return
+    requestInFlightRef.current = true
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    setNodeCacheStatus({})
+    setRetrievedChunks([])
+    setErrorMessage(null)
+    setActiveNode(null)
+    setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: '' }])
+    setIsStreaming(true)
+
+    void askQuestion(question, corpus === 'basel' ? 'about_me' : 'about_system', {
+      onStage: (event) => {
+        setActiveNode((current) => event.status === 'start'
+          ? event.node
+          : current === event.node ? null : current)
+        if (event.cache) {
+          setNodeCacheStatus((current) => ({ ...current, [event.node]: event.cache }))
+        }
+      },
+      onRetrieval: (event) => setRetrievedChunks(event.chunks),
+      onToken: (event) => setMessages((current) => current.map((message, index) =>
+        index === current.length - 1 && message.role === 'assistant'
+          ? { ...message, text: message.text + event.text }
+          : message)),
+      onDone: (event) => {
+        if (event.mode === 'retrieval_only') {
+          setMessages((current) => current.map((message, index) =>
+            index === current.length - 1 && message.role === 'assistant' && !message.text
+              ? { ...message, text: 'Sources retrieved — no generated answer for this request.' }
+              : message))
+        }
+        setLastStats({ totalMs: event.total_ms, cacheStatus: event.answer_cache, tokensOut: event.tokens_out })
+        setQueriesServed((current) => current + 1)
+        setIsStreaming(false)
+        setActiveNode(null)
+        requestInFlightRef.current = false
+        abortControllerRef.current = null
+      },
+      onError: (event) => {
+        setErrorMessage(event.message || 'Something went wrong — try again.')
+        setIsStreaming(false)
+        setActiveNode(null)
+        requestInFlightRef.current = false
+        abortControllerRef.current = null
+      },
+    }, controller.signal)
+  }
   // Matches Tailwind's `md` breakpoint. Drives which ArchitecturePanel /
   // React Flow instance is mounted so only one ever exists at a time — see
   // the comment above the desktop panel render below.
@@ -95,8 +159,13 @@ function App() {
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[40%_60%]">
         <Chat
           corpus={corpus}
+          messages={messages}
+          isStreaming={isStreaming}
+          onAsk={handleAsk}
+          errorMessage={errorMessage}
           inputAccessory={
             <PipelineStrip
+              activeNode={activeNode}
               triggerRef={triggerButtonRef}
               onViewArchitecture={() => setArchitectureOpen(true)}
             />
@@ -110,10 +179,10 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel />}
+        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} />}
       </main>
 
-      <StatsBar />
+      <StatsBar lastStats={lastStats} queriesServed={queriesServed} />
 
       {showArchitectureSheet && (
         <div role="dialog" aria-modal="true" aria-label="Architecture" className="fixed inset-0 z-50 md:hidden">
@@ -137,7 +206,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} />
             </div>
           </div>
         </div>
