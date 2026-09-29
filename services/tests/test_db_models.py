@@ -1,16 +1,16 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, MEDIUMTEXT, TIMESTAMP
+from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP
 from sqlalchemy.dialects.mysql import dialect as mysql_dialect
-from sqlalchemy.schema import CreateTable
+from sqlalchemy.schema import CreateIndex, CreateTable
 
-from services.glassbox.db.models import Base, Chunk, Document, IngestionRun
+from services.glassbox.db.models import Base, Chunk, Document, IngestionRun, Query
 from services.glassbox.db.session import get_database_url
 
 
 def test_schema_columns_and_constraints():
-    assert set(Base.metadata.tables) == {"documents", "chunks", "ingestion_runs"}
+    assert set(Base.metadata.tables) == {"documents", "chunks", "ingestion_runs", "queries"}
 
     documents = Document.__table__
     assert [column.name for column in documents.columns] == [
@@ -102,6 +102,55 @@ def test_schema_columns_and_constraints():
     assert runs.c.status.type.enums == ["running", "succeeded", "failed"]
     assert not runs.c.status.nullable
 
+    queries = Query.__table__
+    assert [column.name for column in queries.columns] == [
+        "id",
+        "request_id",
+        "corpus",
+        "question",
+        "cache_status",
+        "mode",
+        "chunk_ids",
+        "stage_timings_ms",
+        "total_ms",
+        "tokens_in",
+        "tokens_out",
+        "created_at",
+    ]
+    assert isinstance(queries.c.id.type, BigInteger)
+    assert queries.c.id.primary_key and queries.c.id.autoincrement
+    assert isinstance(queries.c.request_id.type, CHAR)
+    assert queries.c.request_id.type.length == 26
+    assert isinstance(queries.c.corpus.type, ENUM)
+    assert queries.c.corpus.type.enums == ["about_me", "about_system"]
+    assert isinstance(queries.c.question.type, String)
+    assert queries.c.question.type.length == 1000
+    assert isinstance(queries.c.cache_status.type, ENUM)
+    assert queries.c.cache_status.type.enums == ["answer_hit", "miss"]
+    assert isinstance(queries.c.mode.type, ENUM)
+    assert queries.c.mode.type.enums == ["full", "retrieval_only"]
+    assert all(
+        not queries.c[name].nullable
+        for name in ("request_id", "corpus", "question", "cache_status", "mode")
+    )
+    assert all(isinstance(queries.c[name].type, JSON) for name in ("chunk_ids", "stage_timings_ms"))
+    assert all(
+        isinstance(queries.c[name].type, Integer)
+        for name in ("total_ms", "tokens_in", "tokens_out")
+    )
+    assert all(
+        queries.c[name].nullable
+        for name in ("chunk_ids", "stage_timings_ms", "total_ms", "tokens_in", "tokens_out")
+    )
+    assert isinstance(queries.c.created_at.type, TIMESTAMP)
+    assert queries.c.created_at.nullable
+    assert str(queries.c.created_at.server_default.arg) == "CURRENT_TIMESTAMP"
+    assert not queries.foreign_keys
+    assert len(queries.indexes) == 1
+    index = next(iter(queries.indexes))
+    assert index.name == "idx_created"
+    assert [column.name for column in index.columns] == ["created_at"]
+
 
 def test_models_construct_without_database():
     document = Document(corpus="about_me", source_path="bio.md", content_hash="a" * 64)
@@ -113,10 +162,21 @@ def test_models_construct_without_database():
         embedding_model="test-model",
     )
     run = IngestionRun(started_at=datetime(2026, 9, 29), status="running")
+    query = Query(
+        request_id="01K6AA0XX5S4PX8J2C1W39VQ9M",
+        corpus="about_me",
+        question="Who is Basel?",
+        cache_status="miss",
+        mode="full",
+        chunk_ids=[1, 2],
+        stage_timings_ms={"retrieval": 12},
+    )
 
     assert document.source_path == "bio.md"
     assert chunk.embedding == b"\x00" * 2048
     assert run.status == "running"
+    assert query.chunk_ids == [1, 2]
+    assert query.stage_timings_ms == {"retrieval": 12}
 
 
 def test_mysql_ddl_contains_required_schema_clauses():
@@ -124,7 +184,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
         name: str(CreateTable(table).compile(dialect=mysql_dialect()))
         for name, table in Base.metadata.tables.items()
     }
-    assert set(ddl) == {"documents", "chunks", "ingestion_runs"}
+    assert set(ddl) == {"documents", "chunks", "ingestion_runs", "queries"}
     assert "AUTO_INCREMENT" in ddl["documents"]
     assert "ENUM('about_me','about_system')" in ddl["documents"]
     assert "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" in ddl["documents"]
@@ -135,6 +195,18 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "uq_chunk" in ddl["chunks"]
     assert "ENUM('running','succeeded','failed')" in ddl["ingestion_runs"]
     assert "DEFAULT 0" in ddl["ingestion_runs"]
+    assert "AUTO_INCREMENT" in ddl["queries"]
+    assert "CHAR(26) NOT NULL" in ddl["queries"]
+    assert "ENUM('about_me','about_system') NOT NULL" in ddl["queries"]
+    assert "VARCHAR(1000) NOT NULL" in ddl["queries"]
+    assert "ENUM('answer_hit','miss') NOT NULL" in ddl["queries"]
+    assert "ENUM('full','retrieval_only') NOT NULL" in ddl["queries"]
+    assert ddl["queries"].count("JSON") == 2
+    assert "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP" in ddl["queries"]
+    index = next(iter(Query.__table__.indexes))
+    assert str(CreateIndex(index).compile(dialect=mysql_dialect())) == (
+        "CREATE INDEX idx_created ON queries (created_at)"
+    )
 
 
 def test_database_url_uses_required_environment_and_default_port(monkeypatch):

@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Response
 
+from services.glassbox.api.ask import router as ask_router
 from services.glassbox.api.cache import ping_redis
 from services.glassbox.api.db import ping_mysql
 
 app = FastAPI(title="glassbox-api")
+app.include_router(ask_router)
 
 
 @app.get("/healthz")
