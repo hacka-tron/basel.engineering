@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Chat from './components/Chat'
+import ArchitecturePanel from './components/ArchitecturePanel'
 import StatsBar from './components/StatsBar'
 
 export type Corpus = 'basel' | 'system'
@@ -44,9 +45,7 @@ function App() {
 
       <main className="grid min-h-0 flex-1 grid-cols-[40%_60%]">
         <Chat corpus={corpus} />
-        <div className="flex min-h-0 items-center justify-center border border-hairline text-sm text-muted">
-          Architecture panel
-        </div>
+        <ArchitecturePanel />
       </main>
 
       <StatsBar />
