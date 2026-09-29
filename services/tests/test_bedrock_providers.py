@@ -83,7 +83,7 @@ async def test_haiku_streams_deltas_with_bounded_tokens_and_grounding_instructio
     assert request["modelId"] == provider.model_id
     assert request["inferenceConfig"]["maxTokens"] == 50
     assert request["messages"] == [{"role": "user", "content": [{"text": "Source [1]: text"}]}]
-    assert "cite" in request["system"][0]["text"].lower()
+    assert "bracketed citation markers" in request["system"][0]["text"].lower()
 
 
 @pytest.mark.asyncio

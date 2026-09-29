@@ -66,7 +66,7 @@ def test_prompt_marks_future_design_as_planned():
     assert "PLANNED M4 DESIGN" in prompt
     assert "not implemented yet" in prompt
     assert "design document describes intended behavior" in prompt
-    assert "Never cite a source number that is not listed" in prompt
+    assert "Do not include bracketed citation markers" in prompt
     assert "answer No when its bracketed status says not implemented yet" in prompt
 
 

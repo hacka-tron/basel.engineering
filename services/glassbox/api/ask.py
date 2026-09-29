@@ -36,7 +36,7 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_PROMPT_VERSION = "v11"
+_PROMPT_VERSION = "v12"
 # Keyword-based, not tense-aware: once Phase 4/5 actually ships Terraform/KEDA/k3s,
 # this will start mislabeling genuinely-current infrastructure content as "planned"
 # (it can't tell "Terraform provisions X" apart from "Terraform will provision X").
@@ -135,8 +135,9 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
     sources = "\n".join(source_line(chunk) for chunk in chunks)
     return (
         "Answer the question using only the following numbered sources. "
-        "Use two or three concise sentences and cite the supporting sources by number. "
-        "Never cite a source number that is not listed below. "
+        "Use two or three concise sentences. Do not include bracketed citation "
+        "markers like [1] or [2] in your answer text — the sources are shown "
+        "separately, so just answer in plain prose. "
         "Only describe a feature as working now when a source says it is implemented or current. "
         "If a source says it is planned, future, on a roadmap, or not yet built, "
         "say so explicitly. "
