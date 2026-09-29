@@ -56,6 +56,13 @@ class MemoryRedis:
         self.channel = None
         self.subscription = MemoryPubsub(self)
         self.enqueued = None
+        self.cache = {}
+
+    async def get(self, key):
+        return self.cache.get(key)
+
+    async def set(self, key, value, *, ex):
+        self.cache[key] = value
 
     async def incr(self, key):
         self.sequence += 1
@@ -138,6 +145,44 @@ def test_stream_handles_worker_message_published_during_enqueue(monkeypatch):
     assert saved[0]["tokens_out"] > 0
     assert len(client.enqueued["embedding"]) == 2048
     assert client.expirations == [(f"seq:{stages[0]['request_id']}", 300)] * client.sequence
+
+
+def test_second_question_uses_embedding_cache(monkeypatch):
+    from services.glassbox.api import ask
+    from services.glassbox.providers.fake import FakeEmbeddingProvider
+
+    class CountingProvider(FakeEmbeddingProvider):
+        calls = 0
+
+        async def embed(self, texts):
+            self.calls += 1
+            return await super().embed(texts)
+
+    client = MemoryRedis()
+    provider = CountingProvider()
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_embedding_provider", lambda: provider)
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: None)
+    http = TestClient(app)
+    first = events(http.post("/api/ask", json={"question": "Who is Basel?", "corpus": "about_me"}))
+    second = events(
+        http.post("/api/ask", json={"question": "  who  is BASEL? ", "corpus": "about_me"})
+    )
+    assert provider.calls == 1
+    assert (
+        next(data for name, data in first if name == "stage" and data["node"] == "embed_cache")[
+            "cache"
+        ]
+        == "miss"
+    )
+    assert (
+        next(data for name, data in second if name == "stage" and data["node"] == "embed_cache")[
+            "cache"
+        ]
+        == "hit"
+    )
+    assert all(data.get("node") != "embed" for name, data in second if name == "stage")
 
 
 def test_worker_error_ends_stream_before_llm(monkeypatch):

@@ -14,6 +14,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.glassbox.api.sse import frame
+from services.glassbox.cache.embedding import (
+    EmbeddingCache,
+    RedisEmbeddingCache,
+    embedding_cache_key,
+    normalize_question,
+)
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
@@ -156,13 +162,19 @@ async def _stream(
 
     try:
         yield await stage("api", "start", t_ms=0)
-        yield await stage("embed_cache", "end", cache="miss")
-        embed_started = time.monotonic()
-        yield await stage("embed", "start")
-        embedding = (await get_embedding_provider().embed([request.question]))[0]
-        yield await stage(
-            "embed", "end", duration_ms=round((time.monotonic() - embed_started) * 1000)
-        )
+        provider = get_embedding_provider()
+        cache: EmbeddingCache = RedisEmbeddingCache(client)
+        cache_key = embedding_cache_key(request.question, provider.model_id)
+        embedding = await cache.get(cache_key)
+        yield await stage("embed_cache", "end", cache="hit" if embedding is not None else "miss")
+        if embedding is None:
+            embed_started = time.monotonic()
+            yield await stage("embed", "start")
+            embedding = (await provider.embed([normalize_question(request.question)]))[0]
+            await cache.put(cache_key, embedding)
+            yield await stage(
+                "embed", "end", duration_ms=round((time.monotonic() - embed_started) * 1000)
+            )
         yield await stage("answer_cache", "end", cache="miss")
 
         async with client.pubsub() as pubsub:
