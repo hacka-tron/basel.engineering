@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-Phase 0 is done (merged to `main`, pushed to origin, commit `43f3807`). Next action: start DD1 Phase 1 (`docs/DESIGN.md` §17) — schema + migrations, ingestion for both corpora (files-in-repo approach, not yet DD3's pipeline), and the full SSE contract on the API/worker.
+Phase 1a is done (merged to `main`, pushed to origin, commit `3cc3fb6`). Next action: **Phase 1b** — API + worker with the full SSE contract (`docs/DESIGN.md` §8, §17 Phase 1's `curl -N` done-when criterion). This is the remaining half of DD1 Phase 1: Redis Streams job queue, retrieval worker (vector search against the now-real `idx:chunks` index), API `/api/ask` endpoint streaming `stage`/`retrieval`/`token`/`done` SSE events, using the fake `LLMProvider`/`EmbeddingProvider` from Phase 1a (real Bedrock is Phase 2). Write the plan the same way as `docs/superpowers/plans/2026-09-29-phase1a-ingestion.md`, execute via the same Codex/Gemini pipeline, verify against the real `docker-compose` stack.
 
 Not blocked on anything — M1 local work is independent of the M0 AWS-account items below.
 
@@ -45,7 +45,17 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs / stubs
 
-_(none yet — no application code has been implemented)_
+Deferred from Phase 1a's ingestion script review (`services/glassbox/ingest/run.py`) — acceptable at current scale (174 chunks, local dev, single-worker batch script), worth revisiting if this ever runs under real concurrent load or against a much larger corpus:
+
+- An `await` on the Redis write happens inside an open synchronous SQLAlchemy transaction — holds DB locks across network I/O, and if Redis writes succeed but the MySQL commit then fails, the two stores diverge for that document.
+- N+1 query pattern: one `SELECT Document` per scanned file for the incremental hash check, plus a `session.flush()` per chunk insert instead of batching.
+- The run-failure status update (marking `ingestion_runs.status='failed'`) isn't itself wrapped in error handling — if the failure was a MySQL disconnect, the status-update write will also fail and obscure the original error (though Python's exception chaining keeps the root cause in `__context__`, and the process still exits non-zero either way).
+
+Documented as known limitations directly in code (docstrings) — not yet fixed, not urgent:
+
+- `services/glassbox/ingest/chunkers/terraform.py`: brace-depth counting doesn't strip string literals/comments first, so an unbalanced `{`/`}` inside a Terraform string or comment would throw off block boundaries. No real `.tf` files exist yet (Milestone 2).
+- `services/glassbox/ingest/chunkers/code.py`: decorator grouping only handles single-line decorators (a multi-line `@app.get(\n  "/x",\n)` would get orphaned); TypeScript matching doesn't cover typed arrow functions (`const f: Handler = (...) =>`) or generic type parameters. No real `.ts` files exist yet (frontend is a later phase).
+- `services/glassbox/ingest/scanner.py`'s secret heuristic doesn't recognize GitHub/Slack/other provider-specific token formats, only AWS keys, private-key headers, and generic high-entropy assignments.
 
 ## Ideas
 
