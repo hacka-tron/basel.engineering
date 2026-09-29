@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, UniqueConstraint, text
-from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, MEDIUMTEXT, TIMESTAMP
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -52,3 +52,23 @@ class IngestionRun(Base):
     docs_changed: Mapped[int | None] = mapped_column(Integer, server_default=text("0"))
     chunks_written: Mapped[int | None] = mapped_column(Integer, server_default=text("0"))
     status: Mapped[str] = mapped_column(ENUM("running", "succeeded", "failed"), nullable=False)
+
+
+class Query(Base):
+    __tablename__ = "queries"
+    __table_args__ = (Index("idx_created", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(CHAR(26), nullable=False)
+    corpus: Mapped[str] = mapped_column(ENUM("about_me", "about_system"), nullable=False)
+    question: Mapped[str] = mapped_column(String(1000), nullable=False)
+    cache_status: Mapped[str] = mapped_column(ENUM("answer_hit", "miss"), nullable=False)
+    mode: Mapped[str] = mapped_column(ENUM("full", "retrieval_only"), nullable=False)
+    chunk_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    stage_timings_ms: Mapped[dict[str, int] | None] = mapped_column(JSON)
+    total_ms: Mapped[int | None] = mapped_column(Integer)
+    tokens_in: Mapped[int | None] = mapped_column(Integer)
+    tokens_out: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP")
+    )
