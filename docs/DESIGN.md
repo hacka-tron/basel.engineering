@@ -543,7 +543,7 @@ infra/
 
 - No CloudFront, no S3, no ACM. Cloudflare (already the domain's DNS) is the TLS/edge layer, proxied (orange-cloud) in front of the EC2 node's Elastic IP.
 - **Cloudflare DNS is Terraform-managed** via the official `cloudflare/cloudflare` provider (the `edge/` module) — the A record tracks the EC2 instance's Elastic IP automatically on every apply, no manual dashboard step after the first setup. Requires a Cloudflare API token scoped to `Zone:DNS:Edit` + `Zone:Zone:Read` on just the `basel.engineering` zone (not the global API key), supplied via a Terraform variable (`TF_VAR_cloudflare_api_token` locally, a GitHub Actions secret in CI) — never committed to the repo.
-- Traefik on the node serves both the built frontend (static files) and `/api/*` directly — a single origin, no split by path across two backends.
+- Traefik routes the site and `/api/*` to one Kubernetes `api` Service. The API image contains the built frontend, and FastAPI mounts its `frontend/dist` at `/` after the API and health routes. This gives the site and API one origin without a separate static-file server.
 - The EC2 security group allows port 80/443 **only** from Cloudflare's published IP ranges (https://www.cloudflare.com/ips/).
 - The `edge/` module also manages a Cloudflare Cache Rule bypassing caching for `/api/*` so the SSE stream is never buffered; static assets use the default cached behavior.
 - No CloudFront-style secret-header origin check by default; origin protection relies on the security group's IP allowlist. A Cloudflare Worker injecting a secret header is a documented stretch for defense-in-depth, not required for launch.
@@ -604,8 +604,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 - On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment), retrieval eval (section 15).
 - On merge to `main`:
-  - Build multi-arch (arm64) images for `services` and push to GitHub Container Registry (free for public repos), tagged with the commit SHA.
-  - Build the frontend and get it onto the node so Traefik serves the new files (e.g. baked into the API/Traefik image, or synced to the node); no CDN invalidation step needed.
+  - Build the single multi-stage application image for arm64 and push to GitHub Container Registry, tagged with the commit SHA. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed.
   - Update the image tag in `k8s/overlays/prod` (commit by the workflow).
   - `terraform apply` for infra changes (manual approval via GitHub environment protection).
 

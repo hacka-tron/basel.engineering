@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ingest
+  namespace: app
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: ingest
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingest
+          image: ghcr.io/hacka-tron/basel.engineering:phase4-k8s
+          command: ["python", "-m", "services.glassbox.ingest.run"]
+          envFrom:
+            - configMapRef:
+                name: glassbox-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glassbox-mysql
+                  key: mysql-password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi

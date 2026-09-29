@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Response
+from fastapi.staticfiles import StaticFiles
 
 from services.glassbox.api.ask import router as ask_router
 from services.glassbox.api.cache import ping_redis
@@ -31,3 +33,8 @@ async def readyz(response: Response) -> dict[str, bool]:
     if not ready:
         response.status_code = 503
     return {"mysql": mysql_ok, "redis": redis_ok, "ready": ready}
+
+
+_frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
