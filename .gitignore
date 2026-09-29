@@ -21,6 +21,9 @@ dist/
 .agents/
 .claude/
 
+# Git worktrees for isolated task execution
+.worktrees/
+
 # OS / editor
 .DS_Store
 .vscode/
