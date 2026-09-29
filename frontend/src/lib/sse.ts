@@ -17,6 +17,7 @@ export type RetrievalChunk = {
   source_path: string
   title: string
   score: number
+  snippet?: string
   start_line?: number
   end_line?: number
   url?: string

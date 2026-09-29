@@ -350,7 +350,8 @@ type StageEvent = {
 
 type RetrievalEvent = {
   chunks: { n: number; chunk_id: number; source_path: string; title: string;
-            score: number; start_line?: number; end_line?: number; url?: string }[];
+            score: number; start_line?: number; end_line?: number; url?: string;
+            snippet?: string }[];
 };
 
 type TokenEvent = { text: string };

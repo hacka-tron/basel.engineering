@@ -108,6 +108,16 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
 
     monkeypatch.setattr(ask, "enqueue_retrieval_job", simulated_retrieval)
     monkeypatch.setattr(ask, "get_llm_provider", lambda: CountingLLM())
+
+    class AllowAll:
+        async def allow(self, client_hash):
+            return True, 0
+
+        async def reserve(self):
+            return True
+
+    monkeypatch.setattr(ask, "get_rate_limiter", lambda client: AllowAll())
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: AllowAll())
     question = f"What did Basel build? {uuid4().hex}"
     body = {"question": question, "corpus": "about_me"}
     request_ids = []

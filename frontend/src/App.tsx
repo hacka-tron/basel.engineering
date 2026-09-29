@@ -66,7 +66,12 @@ function App() {
         abortControllerRef.current = null
       },
       onError: (event) => {
-        setErrorMessage(event.message || 'Something went wrong — try again.')
+        setErrorMessage(event.code === 'rate_limited' && event.retry_after_s
+          ? `${event.message} Try again in ${event.retry_after_s} seconds.`
+          : event.message || 'Something went wrong — try again.')
+        setMessages((current) => current.at(-1)?.role === 'assistant' && !current.at(-1)?.text
+          ? current.slice(0, -1)
+          : current)
         setIsStreaming(false)
         setActiveNode(null)
         requestInFlightRef.current = false

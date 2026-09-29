@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Literal
 
 import redis.asyncio as redis
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,7 @@ from services.glassbox.cache.embedding import (
 from services.glassbox.cache.retrieval import RedisRetrievalCache
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
+from services.glassbox.limits import client_ip_hash, get_daily_budget, get_rate_limiter
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
@@ -105,6 +106,12 @@ def _prompt(question: str, chunks: list[WorkerChunk]) -> str:
     )
 
 
+def _public_chunk(chunk: WorkerChunk) -> dict:
+    payload = chunk.model_dump(exclude={"text"}, exclude_none=True)
+    payload["snippet"] = " ".join(chunk.text.split())[:180]
+    return payload
+
+
 def get_answer_cache(client) -> AnswerCache:
     return RedisAnswerCache(client)
 
@@ -119,6 +126,7 @@ def _save_query(
     tokens_in: int,
     tokens_out: int,
     cache_status: str = "miss",
+    mode: str = "full",
 ) -> None:
     with get_session_factory()() as session:
         session.add(
@@ -127,7 +135,7 @@ def _save_query(
                 corpus=request.corpus,
                 question=request.question,
                 cache_status=cache_status,
-                mode="full",
+                mode=mode,
                 chunk_ids=[chunk.chunk_id for chunk in chunks],
                 stage_timings_ms=timings,
                 total_ms=total_ms,
@@ -139,7 +147,7 @@ def _save_query(
 
 
 async def _stream(
-    request: AskRequest, request_id: str, request_start_ts: int
+    request: AskRequest, request_id: str, request_start_ts: int, client_hash: str
 ) -> AsyncIterator[str]:
     client = redis.from_url(os.environ["REDIS_URL"])
     timings: dict[str, int] = {}
@@ -169,6 +177,17 @@ async def _stream(
 
     try:
         yield await stage("api", "start", t_ms=0)
+        allowed, retry_after_s = await get_rate_limiter(client).allow(client_hash)
+        if not allowed:
+            yield frame(
+                "error",
+                {
+                    "code": "rate_limited",
+                    "message": "Too many questions. Please try again soon.",
+                    "retry_after_s": retry_after_s,
+                },
+            )
+            return
         provider = get_embedding_provider()
         cache: EmbeddingCache = RedisEmbeddingCache(client)
         cache_key = embedding_cache_key(request.question, provider.model_id)
@@ -193,11 +212,7 @@ async def _stream(
             answer = answer_hit["answer"]
             yield frame(
                 "retrieval",
-                {
-                    "chunks": [
-                        chunk.model_dump(exclude={"text"}, exclude_none=True) for chunk in chunks
-                    ]
-                },
+                {"chunks": [_public_chunk(chunk) for chunk in chunks]},
             )
             yield frame("token", {"text": answer})
             total_ms = elapsed_ms(request_start_ts)
@@ -288,15 +303,35 @@ async def _stream(
                     chunks = event.chunks
                     yield frame(
                         "retrieval",
-                        {
-                            "chunks": [
-                                chunk.model_dump(exclude={"text"}, exclude_none=True)
-                                for chunk in chunks
-                            ]
-                        },
+                        {"chunks": [_public_chunk(chunk) for chunk in chunks]},
                     )
                 else:
                     raise ValueError(f"unknown worker trace type: {kind}")
+
+        if not await get_daily_budget(client).reserve():
+            total_ms = elapsed_ms(request_start_ts)
+            await asyncio.to_thread(
+                _save_query,
+                request_id=request_id,
+                request=request,
+                chunks=chunks,
+                timings=timings,
+                total_ms=total_ms,
+                tokens_in=0,
+                tokens_out=0,
+                mode="retrieval_only",
+            )
+            yield frame(
+                "done",
+                {
+                    "total_ms": total_ms,
+                    "mode": "retrieval_only",
+                    "answer_cache": "miss",
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                },
+            )
+            return
 
         prompt = _prompt(request.question, chunks)
         llm_started = time.monotonic()
@@ -351,11 +386,11 @@ async def _stream(
 
 
 @router.post("/api/ask")
-async def ask(request: AskRequest) -> StreamingResponse:
+async def ask(request: AskRequest, http_request: Request) -> StreamingResponse:
     request_id = _ulid()
     request_start_ts = int(time.time() * 1000)
     return StreamingResponse(
-        _stream(request, request_id, request_start_ts),
+        _stream(request, request_id, request_start_ts, client_ip_hash(http_request)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

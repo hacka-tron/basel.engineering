@@ -96,6 +96,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [] }
                   )}
                 </p>
                 <p className="truncate text-muted">{chunk.source_path} · {chunk.score.toFixed(2)}</p>
+                {chunk.snippet && <p className="mt-1 line-clamp-2 text-muted">{chunk.snippet}</p>}
               </li>
             ))}
           </ol>

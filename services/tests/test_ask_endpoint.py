@@ -26,7 +26,16 @@ def isolated_answer_cache(monkeypatch):
         async def put(self, *args):
             pass
 
+    class AllowAll:
+        async def allow(self, client_hash):
+            return True, 0
+
+        async def reserve(self):
+            return True
+
     monkeypatch.setattr(ask, "get_answer_cache", lambda client: NoopAnswerCache())
+    monkeypatch.setattr(ask, "get_rate_limiter", lambda client: AllowAll())
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: AllowAll())
 
 
 def events(response):
@@ -226,10 +235,20 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
     cache = MemoryAnswerCache()
     llm = CountingLLM()
     saved = []
+
+    class OneSlotBudget:
+        calls = 0
+
+        async def reserve(self):
+            self.calls += 1
+            return self.calls == 1
+
+    budget = OneSlotBudget()
     monkeypatch.setenv("REDIS_URL", "redis://unused")
     monkeypatch.setattr(ask.redis, "from_url", lambda url: redis_client)
     monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
     monkeypatch.setattr(ask, "get_llm_provider", lambda: llm)
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: budget)
     monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
     http = TestClient(app)
     body = {"question": "Who is Basel?", "corpus": "about_me"}
@@ -237,6 +256,7 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
     enqueued = redis_client.enqueued
     second = events(http.post("/api/ask", json=body))
     assert llm.calls == 1
+    assert budget.calls == 1
     assert redis_client.enqueued is enqueued
     assert next(data for name, data in second if name == "done")["answer_cache"] == "hit"
     assert saved[0].get("cache_status", "miss") == "miss"
@@ -244,6 +264,55 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
     assert "".join(data["text"] for name, data in first if name == "token") == "".join(
         data["text"] for name, data in second if name == "token"
     )
+
+
+def test_rate_limited_request_returns_retry_without_retrieval(monkeypatch):
+    from services.glassbox.api import ask
+
+    class Deny:
+        async def allow(self, client_hash):
+            return False, 37
+
+    client = MemoryRedis()
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_rate_limiter", lambda client: Deny())
+    stream = events(
+        TestClient(app).post("/api/ask", json={"question": "Who is Basel?", "corpus": "about_me"})
+    )
+    assert stream[-1] == (
+        "error",
+        {
+            "code": "rate_limited",
+            "message": "Too many questions. Please try again soon.",
+            "retry_after_s": 37,
+        },
+    )
+    assert client.enqueued is None
+
+
+def test_daily_budget_exhaustion_returns_sources_without_llm(monkeypatch):
+    from services.glassbox.api import ask
+
+    class Deny:
+        async def reserve(self):
+            return False
+
+    client = MemoryRedis()
+    saved = []
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: Deny())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
+    stream = events(
+        TestClient(app).post("/api/ask", json={"question": "Who is Basel?", "corpus": "about_me"})
+    )
+    done = next(data for name, data in stream if name == "done")
+    retrieval = next(data for name, data in stream if name == "retrieval")
+    assert done["mode"] == "retrieval_only"
+    assert retrieval["chunks"][0]["snippet"] == "Basel builds software."
+    assert all(name != "token" for name, _ in stream)
+    assert saved[0]["mode"] == "retrieval_only"
 
 
 def test_worker_error_ends_stream_before_llm(monkeypatch):
