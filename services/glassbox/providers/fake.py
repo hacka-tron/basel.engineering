@@ -7,6 +7,8 @@ from services.glassbox.providers.base import EmbeddingProvider, LLMProvider
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):
+    model_id = "fake-v1"
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         vectors = []
         for text in texts:

@@ -159,7 +159,9 @@ def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    # The long-lived local worker consumes DB 0. Keep this simulated-worker
+    # test's real enqueue on a separate Stream so it cannot steal the job.
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/15")
     get_session_factory.cache_clear()
     engine = create_db_engine()
     try:
@@ -170,7 +172,7 @@ def integration_stack(monkeypatch):
         pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
 
     async def check_redis():
-        client = redis.from_url("redis://127.0.0.1:6379/0")
+        client = redis.from_url("redis://127.0.0.1:6379/15")
         try:
             await client.ping()
         finally:
@@ -286,7 +288,7 @@ def test_full_stream_and_query_row_with_simulated_worker(integration_stack, monk
         if enqueued:
 
             async def remove_job():
-                client = redis.from_url("redis://127.0.0.1:6379/0")
+                client = redis.from_url("redis://127.0.0.1:6379/15")
                 try:
                     assert await client.xdel(STREAM_NAME, enqueued["message_id"]) == 1
                 finally:

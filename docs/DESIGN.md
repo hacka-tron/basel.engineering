@@ -188,6 +188,8 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - `GET /healthz`, `GET /readyz`
 - **Responsibilities:** rate limiting, answer cache, enqueue, trace forwarding, prompt building, LLM streaming, budget enforcement, query logging.
 - **Providers behind interfaces:** `EmbeddingProvider` and `LLMProvider` with a Bedrock implementation and a deterministic fake for tests and offline dev.
+- **Swappable runtime boundary:** API and ingestion select both providers through one factory. The fake stays the local default; production may select Bedrock, and another model vendor can implement the same interfaces. Persist each embedding model identity with its chunks and re-embed both corpora when switching vector spaces. The worker receives vectors in a provider-neutral 512-float format.
+- **Cloud portability boundary:** MySQL, Redis, HTTP/SSE, and the container image are protocol-level dependencies. Cache and rate-limit implementations should sit behind focused interfaces when added. AWS-specific credentials, Bedrock calls, Terraform resources, IAM, and deployment manifests live at the edge; moving clouds requires a new model adapter and infrastructure deployment, not just a configuration toggle.
 
 ### 6.3 Retrieval worker
 
@@ -210,7 +212,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - YAML: one chunk per document (`---`).
   - Python/TypeScript: one chunk per top-level function or class.
   - Every chunk keeps `source_path`, `start_line`, `end_line`.
-- **Incremental:** skips documents whose `content_hash` is unchanged. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates caches, see 7.3).
+- **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates caches, see 7.3).
 
 ### 6.5 Redis
 

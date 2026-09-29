@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.retrieval.search import search_chunks
+from services.glassbox.worker import main as worker_module
 from services.glassbox.worker.main import (
     GROUP_NAME,
     STREAM_NAME,
@@ -41,6 +42,14 @@ def integration_stack(monkeypatch):
         pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
     yield engine
     engine.dispose()
+
+
+@pytest.fixture
+def isolated_stream(monkeypatch):
+    # A live development worker may consume retrieval:jobs concurrently.
+    stream_name = f"retrieval:jobs:test:{uuid4().hex}"
+    monkeypatch.setattr(worker_module, "STREAM_NAME", stream_name)
+    return stream_name
 
 
 async def next_trace_message(pubsub, expected_type):
@@ -206,7 +215,7 @@ async def test_run_worker_uses_pod_hostname_or_random_consumer(monkeypatch, host
 
 
 @pytest.mark.asyncio
-async def test_real_job_publishes_chunks_and_is_acked(integration_stack):
+async def test_real_job_publishes_chunks_and_is_acked(integration_stack, isolated_stream):
     engine = integration_stack
     client = redis.from_url(os.environ["REDIS_URL"])
     request_id = uuid4().hex
@@ -236,7 +245,7 @@ async def test_real_job_publishes_chunks_and_is_acked(integration_stack):
             embedding=embedding,
             request_start_ts=request_start_ts,
         )
-        message_id = (await client.xrevrange(STREAM_NAME, count=1))[0][0]
+        message_id = (await client.xrevrange(isolated_stream, count=1))[0][0]
         try:
             assert await process_one_message(
                 client, sessionmaker(bind=engine), consumer_name=consumer, block_ms=100
@@ -265,15 +274,16 @@ async def test_real_job_publishes_chunks_and_is_acked(integration_stack):
             assert retrieval["chunks"][0]["title"]
             assert retrieval["chunks"][0]["n"] == 1
             assert (
-                await client.xpending_range(STREAM_NAME, GROUP_NAME, message_id, message_id, 1)
+                await client.xpending_range(isolated_stream, GROUP_NAME, message_id, message_id, 1)
                 == []
             )
         finally:
+            await client.delete(isolated_stream)
             await client.aclose()
 
 
 @pytest.mark.asyncio
-async def test_bad_embedding_publishes_error_and_is_acked(integration_stack):
+async def test_bad_embedding_publishes_error_and_is_acked(integration_stack, isolated_stream):
     engine = integration_stack
     client = redis.from_url(os.environ["REDIS_URL"])
     request_id = uuid4().hex
@@ -281,7 +291,7 @@ async def test_bad_embedding_publishes_error_and_is_acked(integration_stack):
         await pubsub.subscribe(f"trace:{request_id}")
         await ensure_consumer_group(client)
         message_id = await client.xadd(
-            STREAM_NAME,
+            isolated_stream,
             {
                 "request_id": request_id,
                 "question": "Bad vector",
@@ -301,8 +311,9 @@ async def test_bad_embedding_publishes_error_and_is_acked(integration_stack):
             assert error["code"] == "internal"
             assert "embedding" in error["message"]
             assert (
-                await client.xpending_range(STREAM_NAME, GROUP_NAME, message_id, message_id, 1)
+                await client.xpending_range(isolated_stream, GROUP_NAME, message_id, message_id, 1)
                 == []
             )
         finally:
+            await client.delete(isolated_stream)
             await client.aclose()

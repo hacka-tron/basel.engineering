@@ -19,6 +19,7 @@ from services.glassbox.ingest.scanner import (
     secret_reason,
     strip_front_matter,
 )
+from services.glassbox.providers.fake import FakeEmbeddingProvider
 
 
 def test_front_matter_and_dispatch(tmp_path):
@@ -251,4 +252,63 @@ async def test_chunker_exception_quarantines_document_and_continues(
                 )
         if redis_keys:
             await client.delete(*redis_keys)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_unchanged_document_is_reembedded_when_model_changes(
+    tmp_path, integration_stack, monkeypatch
+):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real Redis unavailable: {exc}")
+    about_me = tmp_path / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    source_path = f"corpus/about-me/{tmp_path.name}.md"
+    (tmp_path / source_path).write_text("# Stable content\n\nThe content does not change.\n")
+
+    class NewModel(FakeEmbeddingProvider):
+        model_id = "test-embedding-v2"
+
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+    document_id = None
+    vector_keys = []
+    try:
+        first = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert first.docs_changed == 1
+        with Session(engine) as session:
+            document = session.scalar(select(Document).where(Document.source_path == source_path))
+            document_id = document.id
+            old_chunk = session.scalar(select(DbChunk).where(DbChunk.document_id == document_id))
+            vector_keys.append(f"chunk:{old_chunk.id}")
+            assert old_chunk.embedding_model == "fake-v1"
+
+        monkeypatch.setattr(ingest_run, "get_embedding_provider", NewModel)
+        second = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert second.docs_changed == 1
+        with Session(engine) as session:
+            new_chunk = session.scalar(select(DbChunk).where(DbChunk.document_id == document_id))
+            vector_keys.append(f"chunk:{new_chunk.id}")
+            assert new_chunk.id != old_chunk.id
+            assert new_chunk.embedding_model == "test-embedding-v2"
+            assert len(new_chunk.embedding) == 2048
+        assert not await client.exists(vector_keys[0])
+        assert await client.exists(vector_keys[1])
+
+        third = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert third.docs_changed == 0
+    finally:
+        if document_id is not None:
+            with engine.begin() as connection:
+                connection.execute(Document.__table__.delete().where(Document.id == document_id))
+                new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+                if new_run_ids:
+                    connection.execute(
+                        IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                    )
+        if vector_keys:
+            await client.delete(*vector_keys)
         await client.aclose()

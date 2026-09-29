@@ -5,6 +5,9 @@ from collections.abc import AsyncIterator
 
 
 class EmbeddingProvider(ABC):
+    # Persisted with every chunk; changing this identity requires re-embedding.
+    model_id: str
+
     @abstractmethod
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Return a 512-float vector for each input text in order."""

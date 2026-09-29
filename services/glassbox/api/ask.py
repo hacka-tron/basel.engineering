@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from services.glassbox.api.sse import frame
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
-from services.glassbox.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
 
@@ -159,7 +159,7 @@ async def _stream(
         yield await stage("embed_cache", "end", cache="miss")
         embed_started = time.monotonic()
         yield await stage("embed", "start")
-        embedding = (await FakeEmbeddingProvider().embed([request.question]))[0]
+        embedding = (await get_embedding_provider().embed([request.question]))[0]
         yield await stage(
             "embed", "end", duration_ms=round((time.monotonic() - embed_started) * 1000)
         )
@@ -242,7 +242,7 @@ async def _stream(
         llm_started = time.monotonic()
         yield await stage("llm", "start")
         response_parts = []
-        async for part in FakeLLMProvider().generate(prompt, max_tokens=400):
+        async for part in get_llm_provider().generate(prompt, max_tokens=400):
             response_parts.append(part)
             yield frame("token", {"text": part})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))

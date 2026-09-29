@@ -23,7 +23,7 @@ from services.glassbox.ingest.chunkers.terraform import chunk_terraform
 from services.glassbox.ingest.chunkers.yaml_doc import chunk_yaml
 from services.glassbox.ingest.redis_index import ensure_index, replace_document_vectors
 from services.glassbox.ingest.scanner import scan_file, scan_sources, strip_front_matter
-from services.glassbox.providers.fake import FakeEmbeddingProvider
+from services.glassbox.providers.factory import get_embedding_provider
 
 LOGGER = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -81,7 +81,7 @@ async def ingest(
             session.flush()
             run_id = run.id
         await ensure_index(redis_client)
-        provider = FakeEmbeddingProvider()
+        provider = get_embedding_provider()
         for source in scan_sources(root):
             scanned = scan_file(source)
             if scanned.error:
@@ -101,7 +101,15 @@ async def ingest(
                     )
                 )
                 if existing is not None and existing.content_hash == scanned.content_hash:
-                    continue
+                    models = set(
+                        session.scalars(
+                            select(DbChunk.embedding_model)
+                            .where(DbChunk.document_id == existing.id)
+                            .distinct()
+                        )
+                    )
+                    if models == {provider.model_id}:
+                        continue
 
             content = (
                 strip_front_matter(scanned.content)
@@ -155,7 +163,7 @@ async def ingest(
                         end_line=chunk.end_line,
                         token_count=chunk.token_count,
                         embedding=packed,
-                        embedding_model="fake-v1",
+                        embedding_model=provider.model_id,
                     )
                     session.add(row)
                     session.flush()
