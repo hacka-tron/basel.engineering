@@ -202,7 +202,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - Kubernetes Job built from the repo; the image contains the repo snapshot at that commit (image tag equals commit SHA), so no Git credentials are needed in the cluster.
 - **Sources:**
   - `about_me`: curated Markdown in `corpus/about-me/` (bio, projects, and an export of the resume bullet bank). Only public-safe content.
-  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `frontend/src/architecture.ts`, `docs/`, `DESIGN.md`.
+  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `frontend/src/architecture.ts`, `docs/`.
 - **Denylist (always enforced):** `*.tfvars`, `*.tfstate*`, `.env*`, `**/secrets/**`, anything matching a secret-scanner pattern. The job fails if the scanner finds a match.
 - **Chunking:**
   - Markdown: split by headings, target 300 to 500 tokens, 50 token overlap.
@@ -659,7 +659,8 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 
 ```
 glassbox/
-  DESIGN.md
+  docs/DESIGN.md              # this doc, plus DESIGN-002/003/004
+  project/                    # CLAUDE.md, SNAPSHOT.md, BACKLOG.md
   README.md                  # screenshots, live link, architecture summary, "how to run locally"
   frontend/
     src/

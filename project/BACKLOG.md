@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-Phase 0 is done (merged to `main`, pushed to origin, commit `43f3807`). Next action: start DD1 Phase 1 (`DESIGN.md` §17) — schema + migrations, ingestion for both corpora (files-in-repo approach, not yet DD3's pipeline), and the full SSE contract on the API/worker.
+Phase 0 is done (merged to `main`, pushed to origin, commit `43f3807`). Next action: start DD1 Phase 1 (`docs/DESIGN.md` §17) — schema + migrations, ingestion for both corpora (files-in-repo approach, not yet DD3's pipeline), and the full SSE contract on the API/worker.
 
 Not blocked on anything — M1 local work is independent of the M0 AWS-account items below.
 
@@ -17,8 +17,6 @@ Set up: Claude = architect/orchestrator (writes blueprints, does final judgment 
 - **Codex needs `--dangerously-skip-permissions`-equivalent flags for read-only too, and `agy` needs `--mode plan --dangerously-skip-permissions` for headless review** — neither CLI's non-interactive mode has a native structured status protocol (DONE/BLOCKED/etc.) the way Claude subagents do; that has to be spelled out in every prompt.
 - **Static review (even a good one) doesn't catch integration bugs.** Codex + two separate Gemini reviews all missed that MySQL 8's default auth (`caching_sha2_password`) needs the `cryptography` package for `aiomysql` — only found by actually running `docker compose up` and hitting `/readyz` for real. The lesson: the pipeline still needs an orchestrator-run, real end-to-end verification step; review agents (of any vendor) reading code is not a substitute for running it.
 - **Gemini's reviews (via `agy`) were genuinely thorough** — caught nothing wrong, but gave real file:line-cited reasoning and independently re-ran tests/lint rather than trusting the brief.
-
-## Open decisions (owner-only, can't be delegated to an agent)
 
 ## Open decisions (owner-only, can't be delegated to an agent)
 
