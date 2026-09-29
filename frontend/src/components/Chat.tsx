@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 
 const questions: Record<Corpus, string[]> = {
@@ -17,9 +17,10 @@ const questions: Record<Corpus, string[]> = {
 
 type ChatProps = {
   corpus: Corpus
+  inputAccessory?: ReactNode
 }
 
-function Chat({ corpus }: ChatProps) {
+function Chat({ corpus, inputAccessory }: ChatProps) {
   const [question, setQuestion] = useState('')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -28,7 +29,7 @@ function Chat({ corpus }: ChatProps) {
   }
 
   return (
-    <section aria-label="Chat" className="flex min-h-0 flex-col border-r border-hairline bg-panel">
+    <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col bg-panel md:border-r md:border-hairline">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div aria-label="Messages" className="min-h-0 flex-1" />
 
@@ -48,6 +49,8 @@ function Chat({ corpus }: ChatProps) {
           </div>
         </div>
       </div>
+
+      {inputAccessory}
 
       <form onSubmit={handleSubmit} className="flex shrink-0 gap-2 px-7 pb-7">
         <input
