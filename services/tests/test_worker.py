@@ -70,6 +70,7 @@ class RecordingRedis:
 
     async def xadd(self, stream, fields, **kwargs):
         self.enqueued = (stream, fields, kwargs)
+        return b"1-0"
 
     async def xreadgroup(self, *args, **kwargs):
         return [(STREAM_NAME.encode(), [(b"1-0", self.fields)])]
@@ -105,7 +106,7 @@ async def test_search_uses_existing_index_and_converts_distance_to_similarity():
 async def test_enqueue_packs_float32_embedding():
     client = RecordingRedis()
     request_start_ts = int(time.time() * 1000)
-    await enqueue_retrieval_job(
+    message_id = await enqueue_retrieval_job(
         client,
         request_id="test-id",
         question="Why?",
@@ -114,6 +115,7 @@ async def test_enqueue_packs_float32_embedding():
         request_start_ts=request_start_ts,
     )
     stream, fields, _ = client.enqueued
+    assert message_id == b"1-0"
     assert stream == STREAM_NAME
     assert fields["request_id"] == "test-id"
     assert fields["question"] == "Why?"

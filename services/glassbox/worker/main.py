@@ -16,6 +16,7 @@ from sqlalchemy import select
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.retrieval.search import VECTOR_DIMENSIONS, search_chunks
+from services.glassbox.trace import elapsed_ms, next_seq
 
 STREAM_NAME = "retrieval:jobs"
 GROUP_NAME = "workers"
@@ -38,10 +39,10 @@ async def enqueue_retrieval_job(
     corpus: str,
     embedding: list[float],
     request_start_ts: int,
-) -> None:
+) -> bytes:
     if len(embedding) != VECTOR_DIMENSIONS:
         raise ValueError(f"embedding must have {VECTOR_DIMENSIONS} float32 values")
-    await redis_client.xadd(
+    return await redis_client.xadd(
         STREAM_NAME,
         {
             "request_id": request_id,
@@ -118,10 +119,8 @@ async def process_one_message(
     request_start_ts = None
 
     async def emit(event_type: str, data: dict) -> None:
-        seq_key = f"seq:{request_id}"
-        seq = await redis_client.incr(seq_key)
-        await redis_client.expire(seq_key, 300)
-        t_ms = int(time.time() * 1000) - request_start_ts if request_start_ts is not None else 0
+        seq = await next_seq(redis_client, request_id)
+        t_ms = elapsed_ms(request_start_ts) if request_start_ts is not None else 0
         await _publish(
             redis_client,
             channel,
