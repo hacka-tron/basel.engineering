@@ -1,4 +1,6 @@
-# Gemini reviewer dispatch template
+# Gemini reviewer dispatch template (fallback)
+
+Fallback reviewer only — use when Codex (`codex-reviewer.md`) is unavailable. If both are unavailable, use a Claude subagent with the same brief; never skip review.
 
 Combines spec-compliance and code-quality review in one pass (this worked well in practice — no need to split into two calls the way Claude subagent review does). Fill in the bracketed sections, run via `agy`. See `README.md` in this folder for the full command form and known constraints.
 
