@@ -33,3 +33,6 @@ dist/
 **/.terraform/
 **/terraform.tfstate*
 **/*.tfplan
+**/*.tfvars
+**/*.tfvars.json
+!**/*.tfvars.example
