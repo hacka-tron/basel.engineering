@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**README and favicon update awaits review:** PRs #30 and #31 merged; the unused GHCR package was deleted and verified absent. At the owner's request, `feature/readme-favicon` in `.worktrees/readme-package-cleanup` expands the README to useful, visually structured sections and replaces the generic browser-tab icon with a wrench. Review/merge that branch when convenient. The feature-branch priorities below are unchanged.
+**Architecture inspection feature awaits review:** PRs #30–32 merged the README and wrench favicon work. At the owner's request, `feature/architecture-inspection` in `.worktrees/architecture-inspection` lets visitors hover or focus architecture components to see their concrete implementation, and click or tap to ask about them in About This System. Review and merge after CI; earlier feature-branch priorities below remain open.
 
 **Flux Task 5 is closed — GitOps deploys are fully hands-off, verified with a real release (2026-09-30).** Merging to `main` now reaches production with no manual step: GitHub Actions builds/pushes → Flux's `ImagePolicy` picks the tag → `ImageUpdateAutomation` commits it to `deploy` → the Kustomization applies it, including auto-recreating the `ingest`/`migrate` Jobs (Kubernetes Jobs can't have their image patched in place, so Flux deletes and recreates them — this now actually works, see PR #26). Full bug history and the eventual root cause (a wrong annotation *value*, not a missing feature) are in `project/AGENT_HANDOFF.md`'s top two checkpoints — read those before touching this pipeline again, especially before assuming "Flux reconciled" means the right thing actually rolled out.
 
