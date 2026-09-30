@@ -101,7 +101,7 @@ The nodes can also be inspected directly. Hovering or keyboard-focusing one show
 
 ### 4.5 Stress test button
 
-Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. Global cooldown of 5 minutes, shown as a countdown on the button.
+Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. A tiger icon beside the button means the node has room for a real burst; a bunny means it doesn't, and a click plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
 
 ### 4.6 Citations
 

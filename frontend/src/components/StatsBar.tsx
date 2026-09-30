@@ -8,6 +8,7 @@ type StatsBarProps = {
   stressTestCooldownSeconds?: number | null
   stressTestSubmitting?: boolean
   stressTestCapacity?: DemoCapacity
+  stressTestRealCooldownSeconds?: number | null
 }
 
 /**
@@ -35,13 +36,19 @@ function StatsBar({
   stressTestCooldownSeconds = null,
   stressTestSubmitting = false,
   stressTestCapacity = { sufficient: false, reason: 'Checking cluster capacity…' },
+  stressTestRealCooldownSeconds = null,
 }: StatsBarProps) {
   const onCooldown = stressTestCooldownSeconds !== null
   // The API's `reason` (memory estimate vs. node allocatable) is for
   // debugging/logs; visitors only need to know which kind of demo they'll get.
+  const realCooldownMinutes = stressTestRealCooldownSeconds === null
+    ? null
+    : Math.max(1, Math.ceil(stressTestRealCooldownSeconds / 60))
   const capacityLabel = stressTestCapacity.sufficient
     ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 5 to drain them. Watch the pods and backlog on the Worker node.'
-    : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
+    : stressTestCapacity.realCooldown
+      ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued.`
+      : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
 
   return (

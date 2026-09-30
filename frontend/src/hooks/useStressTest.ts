@@ -7,7 +7,12 @@ type DemoLoadResponse = {
   reason?: string
 }
 
-export type DemoCapacity = { sufficient: boolean; reason: string }
+export type DemoCapacity = {
+  sufficient: boolean
+  reason: string
+  /** Set while a real burst's server-side cooldown runs: clicks are simulated until it ends. */
+  realCooldown?: boolean
+}
 
 const unknownCapacity: DemoCapacity = { sufficient: false, reason: 'Checking cluster capacity…' }
 
@@ -26,19 +31,25 @@ async function fetchCapacity(): Promise<DemoCapacity> {
 export type StressTestState = {
   /** Seconds remaining before the button can be pressed again, or null when idle. */
   cooldownSeconds: number | null
+  /** Seconds left on a real burst's server-side cooldown, or null when none is running. */
+  realCooldownSeconds: number | null
   isSubmitting: boolean
   capacity: DemoCapacity
   trigger: () => Promise<void>
 }
 
-/** Drives the "Stress test" button: calls POST /api/demo/load and counts
- * down the cooldown it returns, whether this request started the burst or
- * found one already in flight (DESIGN.md §9.4). */
-export function useStressTest(onVisual?: () => void): StressTestState {
+/** Drives the "Stress test" button (DESIGN.md §9.4). With enough capacity a
+ * click calls POST /api/demo/load for a real burst; otherwise — or while a
+ * real burst's 5-minute server-side cooldown runs — it plays the simulated
+ * version. `onReal` fires when a real burst starts so the page can show its
+ * worker visualization. */
+export function useStressTest(onVisual?: () => void, onReal?: () => void): StressTestState {
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [capacity, setCapacity] = useState<DemoCapacity>(unknownCapacity)
+  const [realCooldownSeconds, setRealCooldownSeconds] = useState<number | null>(null)
   const intervalRef = useRef<number | null>(null)
+  const realIntervalRef = useRef<number | null>(null)
   const busyRef = useRef(false)
 
   useEffect(() => {
@@ -64,8 +75,30 @@ export function useStressTest(onVisual?: () => void): StressTestState {
     }, 1000)
   }, [])
 
+  // A real burst holds the server's demo lock for its cooldown. Until it
+  // expires, show the bunny and simulate; afterwards recheck capacity so the
+  // tiger comes back only if there's still room.
+  const startRealCooldown = useCallback((seconds: number) => {
+    if (realIntervalRef.current !== null) window.clearInterval(realIntervalRef.current)
+    setRealCooldownSeconds(seconds)
+    realIntervalRef.current = window.setInterval(() => {
+      setRealCooldownSeconds((current) => {
+        if (current === null || current <= 1) {
+          if (realIntervalRef.current !== null) {
+            window.clearInterval(realIntervalRef.current)
+            realIntervalRef.current = null
+          }
+          void fetchCapacity().then(setCapacity)
+          return null
+        }
+        return current - 1
+      })
+    }, 1000)
+  }, [])
+
   useEffect(() => () => {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current)
+    if (realIntervalRef.current !== null) window.clearInterval(realIntervalRef.current)
   }, [])
 
   const trigger = useCallback(async () => {
@@ -73,6 +106,11 @@ export function useStressTest(onVisual?: () => void): StressTestState {
     busyRef.current = true
     setIsSubmitting(true)
     try {
+      if (realCooldownSeconds !== null) {
+        onVisual?.()
+        startCountdown(9)
+        return
+      }
       // Recheck at click time; the status displayed before the click may be stale.
       const currentCapacity = await fetchCapacity()
       setCapacity(currentCapacity)
@@ -90,7 +128,12 @@ export function useStressTest(onVisual?: () => void): StressTestState {
         startCountdown(9)
         return
       }
-      if (body.retry_after_s > 0) startCountdown(body.retry_after_s)
+      // Started now, or another visitor's real burst already holds the lock:
+      // either way show the workers, then simulate until the cooldown ends.
+      if (body.started) onReal?.()
+      else onVisual?.()
+      if (body.retry_after_s > 0) startRealCooldown(body.retry_after_s)
+      startCountdown(9)
     } catch {
       setCapacity({ sufficient: false, reason: 'Cluster capacity is unavailable.' })
       onVisual?.()
@@ -99,7 +142,10 @@ export function useStressTest(onVisual?: () => void): StressTestState {
       setIsSubmitting(false)
       busyRef.current = false
     }
-  }, [cooldownSeconds, startCountdown, onVisual])
+  }, [cooldownSeconds, realCooldownSeconds, startCountdown, startRealCooldown, onVisual, onReal])
 
-  return { cooldownSeconds, isSubmitting, capacity, trigger }
+  const shownCapacity: DemoCapacity = realCooldownSeconds !== null
+    ? { sufficient: false, realCooldown: true, reason: 'A real stress test just ran.' }
+    : capacity
+  return { cooldownSeconds, realCooldownSeconds, isSubmitting, capacity: shownCapacity, trigger }
 }

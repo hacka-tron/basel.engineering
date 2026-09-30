@@ -117,7 +117,17 @@ function App() {
     })
   }, [])
 
-  const stressTest = useStressTest(startVisualStressTest)
+  // A real burst's pods come from the cluster stream. Where there's no
+  // cluster view (local dev, or the stream is down), play the same worker
+  // animation as the simulated run so a real click never looks like nothing
+  // happened.
+  const clusterViewRef = useRef(false)
+  clusterViewRef.current = podsById !== undefined
+  const startRealStressTest = useCallback(() => {
+    if (!clusterViewRef.current) startVisualStressTest()
+  }, [startVisualStressTest])
+
+  const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
     : Array.from({ length: simulatedPodCount }, (_, index) => ({ name: `demo-worker-${index}`, ready: true }))
@@ -399,6 +409,7 @@ function App() {
         stressTestCooldownSeconds={stressTest.cooldownSeconds}
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
+        stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
       />
 
       {showArchitectureSheet && (
