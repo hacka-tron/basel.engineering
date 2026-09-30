@@ -99,6 +99,20 @@ data "aws_iam_policy_document" "ci" {
     }
   }
 
+  # infra/envs/prod's `registry` module manages the ECR repository as a real
+  # resource in that state, so every apply refreshes it - not just infra
+  # changes that touch it directly. glassbox-ci-plan (read-only) already has
+  # narrower describe-only access; this is the actual apply role, so it
+  # needs full lifecycle management, not just reads. Found the hard way: the
+  # first real automated apply after adding the registry module failed with
+  # AccessDeniedException on ecr:DescribeRepositories.
+  statement {
+    sid       = "ManageGlassboxEcrRepository"
+    effect    = "Allow"
+    actions   = ["ecr:*"]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/glassbox"]
+  }
+
   statement {
     sid    = "RegionalParameterStore"
     effect = "Allow"
