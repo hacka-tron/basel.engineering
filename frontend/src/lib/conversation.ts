@@ -40,6 +40,9 @@ export const MAX_HISTORY_MESSAGES = 6
 // Matches the server's per-message and total limits (api/ask.py).
 const MAX_HISTORY_CHARS = 4000
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
+// Tolerates small clock adjustments; anything further ahead is corrupt or skewed
+// and would otherwise dodge the expiry indefinitely.
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 const SETTLED_STATES: ReadonlySet<string> = new Set(['done', 'stopped', 'retrieval_only'])
 
 export function storageKey(corpus: ApiCorpus): string {
@@ -71,6 +74,7 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
   const stored = data as Record<string, unknown>
   if (stored.version !== 1 || typeof stored.updatedAt !== 'number' || !Array.isArray(stored.messages)) return null
   if (now - stored.updatedAt > EXPIRY_MS) return null
+  if (stored.updatedAt - now > MAX_FUTURE_SKEW_MS) return null
   const messages: ChatMessage[] = []
   for (const item of stored.messages as unknown[]) {
     if (!item || typeof item !== 'object') return null
