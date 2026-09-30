@@ -1,6 +1,5 @@
 import type { DemoCapacity } from '../hooks/useStressTest'
-import type { ReactNode } from 'react'
-import { RabbitIcon, TigerIcon } from './capacityIcons'
+import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
@@ -16,22 +15,14 @@ type StatsBarProps = {
  * `group` parent, matching the header's GitHub mark. Tiger = room for a real
  * stress test; bunny = simulated demo only.
  */
-function Avatar({ children }: { children: ReactNode }) {
+function Avatar({ paths }: { paths: string[] }) {
   return (
     <span
       aria-hidden="true"
       className="flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus:text-primary"
     >
-      <svg
-        viewBox="0 0 24 24"
-        className="size-8 sm:size-9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {children}
+      <svg viewBox="0 0 32 32" className="size-8 sm:size-9" fill="currentColor">
+        {paths.map((d) => <path key={d.slice(0, 24)} d={d} />)}
       </svg>
     </span>
   )
@@ -74,7 +65,7 @@ function StatsBar({
           role="status"
           aria-label={capacityLabel}
         >
-          <Avatar>{stressTestCapacity.sufficient ? <TigerIcon /> : <RabbitIcon />}</Avatar>
+          <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} />
           <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-60 sm:w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
             {capacityLabel}
           </span>
