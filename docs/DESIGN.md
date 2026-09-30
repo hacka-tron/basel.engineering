@@ -568,6 +568,7 @@ infra/
 - IAM instance role with least privilege: `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the two model ARNs, `ssm:GetParameter` on `/glassbox/*`, SSM Session Manager for shell access (no SSH port open).
 - `user_data`: create swap, install k3s, install Flux bootstrap prerequisites.
 - Elastic IP so the Cloudflare-proxied origin address survives stop/start.
+- **AMI is pinned after first launch** (`lifecycle { ignore_changes = [ami] }`): the AMI comes from the SSM "latest" parameter, and k3s/MySQL/Redis state lives on the root volume, so a newly published AL2023 image must not force a replacement. Patch in place with `dnf`; to intentionally roll to a new AMI, take a backup and, with owner approval, run `terraform apply -replace=module.compute.aws_instance.glassbox`.
 
 ### 10.5 Database
 
