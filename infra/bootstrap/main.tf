@@ -37,6 +37,21 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 }
 
+# This account has GitHub's "immutable subject" OIDC feature on by default
+# (confirmed via `gh api repos/hacka-tron/basel.engineering/actions/oidc/customization/sub`,
+# which returned use_immutable_subject: true) - the sub claim bakes in the
+# permanent numeric owner/repo IDs instead of the plain "owner/repo" name,
+# specifically so a repo rename or a name later reused by a different repo
+# can't collide with an old trust policy. Confirmed empirically: a real
+# workflow run's decoded OIDC token showed
+# "repo:hacka-tron@14956857/basel.engineering@1394092219:environment:release",
+# not the plain-name format every trust condition below originally assumed
+# (and which silently never worked, since nothing had actually exercised
+# these roles via a real Actions run until this was discovered).
+locals {
+  github_oidc_subject_prefix = "repo:hacka-tron@14956857/basel.engineering@1394092219"
+}
+
 data "aws_iam_policy_document" "ci_trust" {
   statement {
     effect  = "Allow"
@@ -56,7 +71,7 @@ data "aws_iam_policy_document" "ci_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:hacka-tron/basel.engineering:ref:refs/heads/main"]
+      values   = ["${local.github_oidc_subject_prefix}:ref:refs/heads/main"]
     }
   }
 }
@@ -215,7 +230,7 @@ data "aws_iam_policy_document" "release_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:hacka-tron/basel.engineering:environment:release"]
+      values   = ["${local.github_oidc_subject_prefix}:environment:release"]
     }
   }
 }
