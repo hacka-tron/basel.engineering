@@ -2,11 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-30 (architecture visibility fix ready for review)
+**Last updated:** 2026-09-30 (architecture arrows fix ready for review)
 
 ## Latest local checkpoint
 
-**Architecture component inspection:** PRs #33–34 merged interactive diagram nodes and distinct hover, selected, and running highlights. Hover or keyboard focus shows a node's technology and role without changing the chat topic or making an API request. Click or tap switches to About This System and asks a component-specific question; a click during an existing response queues that question. Branch `fix/mobile-architecture-answer` (review pending) keeps the mobile architecture sheet open after selection and displays the answer below the diagram. It also gives React Flow the known node dimensions, preventing all nodes from becoming hidden during desktop trace updates. This latest fix is not merged or live yet.
+**Architecture component inspection:** PRs #33–35 merged interactive nodes, distinct hover/selected/running highlights, and a mobile architecture sheet that stays open with the answer below the diagram. `build-19` deployed PR #35 and gives React Flow known node dimensions, preventing node visibility flicker on trace updates. Branch `fix/architecture-edge-visibility` (review pending) additionally supplies fixed connection-handle positions, preventing all nine arrows from disappearing for individual frames on each trace update. This latest arrow fix is not merged or live yet.
 
 **README and favicon:** PRs #30–32 merged the visitor-facing README revisions and the wrench browser-tab icon. The legacy GHCR package remains deleted; production uses ECR.
 
