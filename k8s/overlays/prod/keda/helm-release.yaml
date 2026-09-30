@@ -48,3 +48,11 @@ spec:
           memory: 32Mi
         limits:
           memory: 100Mi
+      # The admission webhooks default to 100Mi requested / 1000Mi limit in
+      # chart 2.21.0, which alone would break the 150Mi KEDA budget.
+      webhooks:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi

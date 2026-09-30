@@ -13,7 +13,19 @@ spec:
   minReplicaCount: 1
   maxReplicaCount: 5
   pollingInterval: 5 # seconds
-  cooldownPeriod: 60 # seconds before scaling back down
+  # cooldownPeriod only governs scaling to zero; with minReplicaCount: 1 the
+  # 5→1 scale-down is the HPA's, whose default 300s stabilization window
+  # would keep five pods up for ~5 minutes. DESIGN.md §4.5 wants them gone
+  # about a minute after the backlog drains.
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 45
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
   triggers:
     - type: redis-streams
       metadata:

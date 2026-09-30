@@ -438,7 +438,12 @@ spec:
   minReplicaCount: 1
   maxReplicaCount: 5
   pollingInterval: 5        # seconds
-  cooldownPeriod: 60        # seconds before scaling back down
+  advanced:                 # 5→1 is the HPA's scale-down, not cooldownPeriod
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 45
+          policies: [{type: Percent, value: 100, periodSeconds: 15}]
   triggers:
     - type: redis-streams
       metadata:
@@ -455,7 +460,7 @@ spec:
 3. API adds 300 synthetic jobs to `retrieval:jobs` (flag `synthetic=1`, about 200 ms simulated work each). No LLM calls, no Bedrock calls (embeddings come from cache).
 4. Backlog exceeds the KEDA target; workers scale up toward 5 within 10 to 20 seconds.
 5. Frontend watches `/api/cluster/stream`; pod dots appear on the worker node, with a live backlog counter.
-6. Backlog drains; after the cooldown, KEDA scales back to 1 and the dots disappear.
+6. Backlog drains; after the HPA's 45-second scale-down stabilization window, workers drop back to 1 and the dots disappear (about a minute).
 
 ### 9.5 Cluster view and RBAC
 

@@ -70,9 +70,9 @@ The "Stress test" demo is made of:
   `api-deployment.yaml` via `serviceAccountName: api`) with a namespaced
   Role for get/list/watch on `pods` in `app` (backs `GET /api/cluster/stream`),
   plus a ClusterRole that can only `list` `nodes` (backs
-  `GET /api/demo/capacity`). The capacity check also reads live node usage
-  from metrics-server (`metrics.k8s.io` `nodes`); until the API is granted
-  that read, the check fails closed and the site runs the visual-only demo.
+  `GET /api/demo/capacity`), plus `list` on `nodes` in `metrics.k8s.io` for
+  live node usage from metrics-server. If either read fails, the check fails
+  closed and the site runs the visual-only demo.
 - `k8s/overlays/prod/keda/` — KEDA itself, installed via a Flux
   `HelmRepository`/`HelmRelease` (not Terraform's helm provider — Flux owns
   all live cluster config, so a second install path would risk drift).
