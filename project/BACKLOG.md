@@ -4,7 +4,9 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**Terraform CI plan role needs one policy fix (Codex, 2026-09-30):** The owner approved the first protected `terraform-plan` job, which successfully assumed AWS credentials and opened production state, then failed on denied reads for the public AL2023 AMI SSM parameter and the project ECR repository (run `36674696537`). Draft PR #13 now contains a narrowly scoped policy fix. Local validation passed; bootstrap plan is **0 add, 1 IAM policy update, 0 destroy**. This new AWS change requires the owner's explicit approval before apply. Then rerun the protected plan and verify its PR comment.
+**Plan role fix applied; protected PR plan awaits review (Codex, 2026-09-30):** The owner approved the policy update; Terraform applied exactly one in-place IAM policy change, and the next bootstrap plan reports no changes. Live IAM simulation allows the needed SSM/ECR reads and denies ECR writes. Draft PR #13's current run `36675476076` has passed validate and waits at the `terraform-plan` environment gate. After owner approval, inspect the plan job and PR comment. The fix is still unmerged; do not treat Terraform CI as proven until the plan job succeeds.
+
+**First protected plan failure (resolved at IAM level, 2026-09-30):** Run `36674696537` successfully assumed AWS credentials and opened production state, then failed on denied reads for the public AL2023 AMI SSM parameter and the project ECR repository. The owner approved the narrowly scoped policy fix; the current PR run above will determine whether the full production refresh now succeeds.
 
 **Terraform CI bootstrap applied (Codex, 2026-09-30):** The owner set both Cloudflare environment secrets and explicitly approved the saved initial bootstrap plan. AWS apply completed with 2 additions, 1 IAM trust update, 0 destroys; a subsequent plan reported no changes before the read-policy fix above was proposed. The live `terraform-prod` apply path is still unproven. See the latest `project/AGENT_HANDOFF.md` checkpoint.
 

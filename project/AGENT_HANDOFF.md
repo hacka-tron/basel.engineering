@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Codex checkpoint — Plan role read fix applied, 2026-09-30
+
+The owner explicitly approved the separate IAM policy fix for the first protected Terraform plan failure. Codex saved and applied a fresh local bootstrap plan after asserting its only change was `aws_iam_role_policy.plan` in-place. Terraform reported **0 added, 1 changed, 0 destroyed**. IAM simulation of the live role now allows public AMI `ssm:GetParameter` and project ECR `DescribeRepositories`, `GetLifecyclePolicy`, and `ListTagsForResource`; it still denies `ecr:PutImage`. A fresh bootstrap plan against the retained state reports **No changes**. The root workspace file was restored after applying the committed PR branch version; `git status --short` is clean.
+
+Draft PR #13's current Terraform run `36675476076` passed validation and is waiting for the owner's required `terraform-plan` environment review. Have the owner approve this exact run, then inspect the plan result and PR comment. The code is still unmerged, so future bootstrap plans from `main` would propose reverting the policy until PR #13 is reviewed and merged. Flux blockers remain unresolved.
+
+---
+
 ## Codex checkpoint — First protected Terraform plan failed, fix prepared, 2026-09-30
 
 The owner approved draft PR #13's `terraform-plan` environment job in run `36674696537`. OIDC role assumption and production state initialization succeeded; the plan failed on two `AccessDeniedException`s: `ssm:GetParameter` for the public AL2023 arm64 AMI parameter and `ecr:DescribeRepositories` for `glassbox`. AWS IAM simulation confirmed the plan role denies these actions; its policy only covered project SSM parameters and had no ECR reads. This is a policy omission, not a Cloudflare token failure.

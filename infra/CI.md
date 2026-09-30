@@ -11,8 +11,10 @@ zone ID variables, and the bootstrap IAM roles are configured. The owner
 approved the initial bootstrap apply. The first protected `terraform-plan` job
 then reached the AWS role and production state, but failed because the plan
 role lacked reads for the public Amazon Linux AMI parameter and the project's
-ECR repository. The read-only policy fix is in draft PR #13; it has not been
-applied. Rerun the protected plan after owner approval of that IAM update.
+ECR repository. The owner approved and applied the read-only policy fix in
+draft PR #13. A fresh bootstrap plan reported no changes. The protected PR
+plan is waiting for the owner's environment review before it can verify the
+full production refresh.
 
 ## One-time setup before merging the workflow
 
