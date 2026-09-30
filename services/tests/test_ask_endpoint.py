@@ -59,9 +59,11 @@ def isolated_answer_cache(monkeypatch):
 
 
 def events(response):
+    """Parse SSE event frames, ignoring heartbeat comments (DESIGN-002 §9.2)."""
     return [
         (name.removeprefix("event: "), json.loads(data.removeprefix("data: ")))
         for frame in response.text.strip().split("\n\n")
+        if not frame.startswith(":")
         for name, data in [frame.splitlines()]
     ]
 
