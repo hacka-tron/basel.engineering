@@ -4,6 +4,8 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
+**README and Packages cleanup awaits review:** `docs/readme-package-cleanup` in `.worktrees/readme-package-cleanup` adds the requested visitor-facing README. The unused GHCR package was deleted from GitHub and verified absent; production still pulls from ECR. Review/merge the README branch when convenient. The feature-branch priorities below are unchanged.
+
 **Flux Task 5 is closed — GitOps deploys are fully hands-off, verified with a real release (2026-09-30).** Merging to `main` now reaches production with no manual step: GitHub Actions builds/pushes → Flux's `ImagePolicy` picks the tag → `ImageUpdateAutomation` commits it to `deploy` → the Kustomization applies it, including auto-recreating the `ingest`/`migrate` Jobs (Kubernetes Jobs can't have their image patched in place, so Flux deletes and recreates them — this now actually works, see PR #26). Full bug history and the eventual root cause (a wrong annotation *value*, not a missing feature) are in `project/AGENT_HANDOFF.md`'s top two checkpoints — read those before touching this pipeline again, especially before assuming "Flux reconciled" means the right thing actually rolled out.
 
 **Next concrete step: review and merge two feature branches, both built and verified this session, neither merged yet:**
@@ -106,7 +108,6 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 
 - **Security audit of automatic Terraform previews:** Before granting anyone else repository write access or accepting privileged previews from new PR sources, review whether a PR can change workflow/Terraform code to read or leak the `terraform-plan` Cloudflare token, AWS read-role credentials, SSM parameters, or production state. Recheck the same-repository/fork guard, GitHub environment protection, OIDC trust and IAM scope, plan logs/comments/artifacts, and whether restoring a preview approval gate is warranted. Record the findings and any changes before broadening access; revisit at the next infrastructure security review even if access stays unchanged.
 - **Security pass before going live**: audit for any exposed secrets/keys — check logs (API/worker output, CloudWatch once deployed), error messages returned to the client, the frontend bundle (nothing server-side should ever ship to the browser), and git history for anything that shouldn't be there. Worth doing once before the first real Phase 4 deploy, and again as a final check right before DNS cutover.
-- **Lock down the GHCR container image (private + pull secret) if the repo itself is ever made private.** The `ghcr.io/hacka-tron/basel.engineering` package is currently public — deliberate, matches the already-public source repo, and nothing secret is baked into the image (verified: no credentials, app auth is all via the EC2 instance's IAM role). If the source repo is ever locked down, switch the package back to private and add a `read:packages`-scoped GitHub token as a Kubernetes `imagePullSecret` (`dockerconfigjson`) referenced by each Deployment/Job — otherwise the cluster can't pull a private image at all.
 
 ## Infrastructure & reliability
 

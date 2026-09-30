@@ -2,9 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-30 (Flux Task 5 verified end-to-end; two feature branches pending review)
+**Last updated:** 2026-09-30 (Flux Task 5 verified end-to-end; README and GitHub Packages cleanup drafted)
 
 ## Latest local checkpoint
+
+**README and GitHub Packages cleanup:** Codex's `docs/readme-package-cleanup` worktree contains a new visitor-facing root README with an accurate live/deferred feature split and local run instructions. The legacy public GHCR container package `ghcr.io/hacka-tron/basel.engineering` was deleted at the owner's request; GitHub's package API now lists no active container packages for `hacka-tron`. Production uses ECR and was unaffected. README branch still needs review and merge.
 
 **Flux GitOps + Image Update Automation is bootstrapped, live, and proven end-to-end — merging to `main` now deploys to production hands-off, no manual step.** This had previously been marked "bootstrap succeeded" without ever being forced through a real reconcile; this session did that for real and found six real, compounding bugs before it actually worked (IMDS hop limit — a red herring; missing ECR IAM reads; `ImageRepository` missing `spec.provider: aws`, the actual 401 cause; a removed Flux template field breaking the commit step; stale immutable Jobs; and a wrong image reaching production because `ImagePolicy`'s tag filter matched a coincidentally-all-digits git SHA alongside real build numbers). All fixed (PRs #20-25). See `project/AGENT_HANDOFF.md` for the full blow-by-blow.
 
