@@ -10,6 +10,13 @@ spec:
   # group lag. Leaving a fixed `replicas` here would have kubectl/Flux
   # reassert it on every apply, fighting the HPA. Baseline is
   # minReplicaCount: 1 there, matching DESIGN.md §9.2's steady state.
+  # Same memory-over-overlap trade-off as the api: never run an extra
+  # worker pod during a rollout; replace one replica at a time.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: retrieval-worker
@@ -20,6 +27,29 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      initContainers:
+        # Same gate as the api: wait until the migrate Job has brought the
+        # database to this image's Alembic head. See api-deployment.yaml.
+        - name: wait-for-migrations
+          image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
+          command: ["python", "-m", "services.glassbox.db.wait_for_migrations", "--timeout", "300"]
+          envFrom:
+            - configMapRef:
+                name: glassbox-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glassbox-mysql
+                  key: mysql-password
+          resources:
+            # Measured peak RSS ~57 MiB. The pod's effective request is
+            # max(init, main), so this adds nothing to the node's request total.
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
       containers:
         - name: worker
           image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest

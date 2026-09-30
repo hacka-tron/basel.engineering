@@ -27,4 +27,4 @@ COPY --from=frontend-build /app/frontend/dist frontend/dist
 
 USER glassbox
 EXPOSE 8000
-CMD ["uvicorn", "services.glassbox.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "services.glassbox.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "25"]
