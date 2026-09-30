@@ -1,8 +1,11 @@
 # Glassbox Terraform bootstrap
 
-Creates the S3 Terraform state bucket and the GitHub Actions OIDC provider +
-`glassbox-ci` deploy role that `infra/envs/prod` and CI use. **Already
-applied to the real AWS account** (`404379474987`) — this is not a
+Creates the S3 Terraform state bucket, the GitHub Actions OIDC provider, and
+three roles: `glassbox-ci` (production apply, trusts the protected
+`terraform-prod` environment), `glassbox-ci-plan` (read-only Terraform plan,
+trusts the protected `terraform-plan` environment), and `glassbox-ci-release`
+(pushes the application image to ECR, trusts the `release` environment).
+**Already applied to the real AWS account** (`404379474987`) — this is not a
 placeholder module.
 
 This root has no remote backend; its own `terraform.tfstate` stays local
@@ -18,14 +21,34 @@ terraform plan
 terraform apply
 terraform output state_bucket_name
 terraform output ci_role_arn
+terraform output plan_role_arn
+terraform output release_role_arn
 ```
 
 The owner applies changes to this module manually with their own AWS CLI
-credentials — CI cannot bootstrap itself, since the role it would assume
-doesn't exist until this module has already run. `infra/envs/prod/backend.tf`
+credentials — CI cannot bootstrap itself, since the roles it would assume
+don't exist until this module has already run. `infra/envs/prod/backend.tf`
 already references the real bucket this module created; `state_bucket_name`
 only needs re-checking if this module is ever re-run against a fresh
 account.
+
+After a bootstrap code change, the owner must review and apply this
+local-state root manually before merging a workflow that depends on the
+changed roles. `glassbox-ci-plan` can read production state and project SSM
+parameters, and can write only the production state lockfile.
+`glassbox-ci-release` can only push to the `glassbox` ECR repository.
+`glassbox-ci` can apply infrastructure changes. GitHub environment approval
+must be configured before any of these roles is used; see `infra/CI.md`.
+
+All three roles' OIDC trust conditions use this account's actual `sub` claim
+format (`repo:hacka-tron@14956857/basel.engineering@1394092219:...`), not the
+plain `repo:owner/repo:...` format GitHub's docs lead with — this account has
+GitHub's "immutable subject" feature on by default
+(`gh api repos/hacka-tron/basel.engineering/actions/oidc/customization/sub`).
+Confirmed the hard way: a real workflow run's first `AssumeRoleWithWebIdentity`
+call failed until this was corrected. Any new OIDC-trusted role added here
+must use `local.github_oidc_subject_prefix`, not a hardcoded plain-format
+string.
 
 Future project IAM roles, policies, and instance profiles managed by CI must
 use the `glassbox-` name prefix to match the CI role's permissions scope. CI

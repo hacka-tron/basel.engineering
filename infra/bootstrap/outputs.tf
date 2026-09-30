@@ -4,8 +4,13 @@ output "state_bucket_name" {
 }
 
 output "ci_role_arn" {
-  description = "GitHub Actions role ARN for infrastructure changes."
+  description = "GitHub Actions role ARN for the protected production apply job."
   value       = aws_iam_role.ci.arn
+}
+
+output "plan_role_arn" {
+  description = "GitHub Actions role ARN for protected Terraform plan jobs."
+  value       = aws_iam_role.plan.arn
 }
 
 output "release_role_arn" {

@@ -1,0 +1,128 @@
+name: Terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - infra/**
+      - .github/workflows/terraform.yml
+  push:
+    branches: [main]
+    paths:
+      - infra/**
+      - .github/workflows/terraform.yml
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Check formatting
+        run: terraform fmt -check -recursive infra
+      - name: Validate bootstrap
+        run: |
+          terraform -chdir=infra/bootstrap init -backend=false -lockfile=readonly
+          terraform -chdir=infra/bootstrap validate
+      - name: Validate production
+        run: |
+          terraform -chdir=infra/envs/prod init -backend=false -lockfile=readonly
+          terraform -chdir=infra/envs/prod validate
+
+  plan:
+    needs: validate
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: terraform-plan
+    concurrency:
+      group: terraform-prod-state
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    outputs:
+      result: ${{ steps.plan.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Assume read-only plan role
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::404379474987:role/glassbox-ci-plan
+          role-session-name: terraform-plan-${{ github.run_id }}
+      - name: Initialize production state
+        run: terraform -chdir=infra/envs/prod init -lockfile=readonly
+      - name: Plan production changes
+        id: plan
+        env:
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+        run: |
+          test -n "$TF_VAR_cloudflare_api_token"
+          test -n "$TF_VAR_cloudflare_zone_id"
+          set +e
+          terraform -chdir=infra/envs/prod plan -detailed-exitcode -no-color
+          result=$?
+          set -e
+          case "$result" in
+            0) echo 'result=no changes' >> "$GITHUB_OUTPUT" ;;
+            2) echo 'result=changes proposed' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'result=failed' >> "$GITHUB_OUTPUT"; exit "$result" ;;
+          esac
+      - name: Comment on pull request
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_RESULT: ${{ steps.plan.outputs.result }}
+        run: |
+          result="${PLAN_RESULT:-failed before plan}"
+          gh pr comment '${{ github.event.pull_request.number }}' --body "Terraform plan: **${result}**. [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). No plan file was uploaded because it can contain secrets."
+
+  apply:
+    needs: plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: terraform-prod
+    concurrency:
+      group: terraform-prod-state
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Assume production apply role
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::404379474987:role/glassbox-ci
+          role-session-name: terraform-apply-${{ github.run_id }}
+      - name: Initialize production state
+        run: terraform -chdir=infra/envs/prod init -lockfile=readonly
+      - name: Apply production changes
+        env:
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+        run: |
+          test -n "$TF_VAR_cloudflare_api_token"
+          test -n "$TF_VAR_cloudflare_zone_id"
+          terraform -chdir=infra/envs/prod apply -no-color -auto-approve
