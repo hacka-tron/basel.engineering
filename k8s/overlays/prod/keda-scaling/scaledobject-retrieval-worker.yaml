@@ -1,6 +1,7 @@
 # Queue-driven autoscaling for the stress-test demo (DESIGN.md §9.3/§9.4).
 # Requires KEDA (k8s/overlays/prod/keda/) to be installed and its CRDs
-# registered before this can reconcile.
+# registered before this can reconcile — enforced by the `keda-scaling` Flux
+# Kustomization's dependsOn in k8s/overlays/prod/flux/kustomization-keda.yaml.
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
