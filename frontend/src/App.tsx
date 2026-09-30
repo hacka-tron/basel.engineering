@@ -8,6 +8,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
+import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
@@ -59,7 +60,7 @@ function App() {
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
+  const [lastStats, setLastStats] = useState<LastStats | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
   // The last friendly failure reply shown, so the next one is never the same.
   const lastErrorReplyRef = useRef<string | null>(null)
@@ -361,10 +362,12 @@ function App() {
               : message.content,
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
+          // No token (sources only): keep firstTokenMs null so the footer
+          // labels the whole-request time as total, not as a first token.
           setLastStats({
-            latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
+            firstTokenMs: firstTokenLatencyRef.current,
+            totalMs: event.total_ms,
             cacheStatus: event.answer_cache,
-            tokensOut: event.tokens_out,
           })
           setQueriesServed((current) => current + 1)
           finishRequest()

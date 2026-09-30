@@ -1,8 +1,9 @@
 import type { DemoCapacity } from '../hooks/useStressTest'
+import { lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
-  lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
+  lastStats?: LastStats | null
   queriesServed?: number
   onStressTest?: () => void
   stressTestCooldownSeconds?: number | null
@@ -50,6 +51,7 @@ function StatsBar({
       ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued.`
       : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
+  const latency = lastStatsParts(lastStats ?? null)
 
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
@@ -59,8 +61,12 @@ function StatsBar({
     // since that's the single biggest chunk of text width at this size.
     <footer className="flex min-h-[58px] shrink-0 items-center pb-[env(safe-area-inset-bottom)] justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
-        <span>last {lastStats ? `${lastStats.latencyMs}ms` : '—ms'}</span>
-        <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
+        {/* Below sm, "cached" drops to a second line so the row still fits at
+            360-375px with a four-digit time. */}
+        <span className="flex flex-col leading-tight sm:flex-row sm:leading-normal">
+          <span>{latency.timing}</span>
+          {latency.cached && <span className="sm:ml-1"><span className="hidden sm:inline">· </span>cached</span>}
+        </span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
