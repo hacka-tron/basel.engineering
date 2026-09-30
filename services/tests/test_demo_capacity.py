@@ -82,16 +82,28 @@ def _capacity(monkeypatch, node, *, stub_lock=True):
 
 
 def test_capacity_allows_node_with_enough_live_free_memory(monkeypatch):
-    node = FakeNodeClient("2Gi", used="1000Mi")  # 1048 MiB free >= 768 required
+    node = FakeNodeClient("2Gi", used="1000Mi")  # 1048 MiB free >= 512 required
 
     assert _capacity(monkeypatch, node)["sufficient"] is True
     assert sorted(node.paths) == ["/api/v1/nodes", "/apis/metrics.k8s.io/v1beta1/nodes"]
     assert node.closed
 
 
+def test_capacity_free_memory_boundary_is_512_mib(monkeypatch):
+    # 2 extra workers x 128Mi + 256Mi margin = 512 MiB required.
+    just_under = FakeNodeClient("2Gi", used="1537Mi")  # 511 MiB free
+    assert _capacity(monkeypatch, just_under)["sufficient"] is False
+    exactly = FakeNodeClient("2Gi", used="1536Mi")  # 512 MiB free
+    assert _capacity(monkeypatch, exactly)["sufficient"] is True
+    just_over = FakeNodeClient("2Gi", used="1535Mi")  # 513 MiB free
+    body = _capacity(monkeypatch, just_over)
+    assert body["sufficient"] is True
+    assert "512 MiB" in body["reason"]
+
+
 def test_capacity_denies_busy_node_even_when_allocatable_is_large(monkeypatch):
     # Codex review: total allocatable alone approved a heavily occupied node.
-    assert _capacity(monkeypatch, FakeNodeClient("4Gi", used="3500Mi"))["sufficient"] is False
+    assert _capacity(monkeypatch, FakeNodeClient("4Gi", used="3700Mi"))["sufficient"] is False
 
 
 def test_capacity_denies_memory_pressure_or_missing_condition(monkeypatch):

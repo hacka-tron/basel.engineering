@@ -77,7 +77,7 @@ The "Stress test" demo is made of:
   `HelmRepository`/`HelmRelease` (not Terraform's helm provider — Flux owns
   all live cluster config, so a second install path would risk drift).
 - `k8s/overlays/prod/keda-scaling/` — the `ScaledObject` scaling
-  `retrieval-worker` 1→5 on `retrieval:jobs`' consumer-group lag.
+  `retrieval-worker` 1→3 on `retrieval:jobs`' consumer-group lag.
 - **Install order:** the root overlay doesn't apply those two directories
   directly. `k8s/overlays/prod/flux/kustomization-keda.yaml` defines two Flux
   Kustomizations: `keda` (`wait: true`, so it's Ready only once the
@@ -92,7 +92,7 @@ The "Stress test" demo is made of:
 
 **Removing KEDA later:** deleting the `ScaledObject`/HPA does not reset the
 worker count — the Deployment keeps whatever replica count KEDA last set
-(up to 5). Scale it back explicitly (`kubectl -n app scale
+(up to 3). Scale it back explicitly (`kubectl -n app scale
 deploy/retrieval-worker --replicas=1`) or re-add `replicas: 1` to
 `worker-deployment.yaml` in the same change that removes KEDA.
 

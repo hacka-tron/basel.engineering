@@ -101,7 +101,7 @@ function App() {
 
   const startVisualStressTest = useCallback(() => {
     if (simulationTimerRef.current !== null) window.clearInterval(simulationTimerRef.current)
-    const podCounts = [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
+    const podCounts = [1, 2, 3, 3, 3, 3, 3, 2, 2, 1]
     let frame = 0
     setSimulatedPodCount(podCounts[0])
     setSimulatedBacklog(300)
