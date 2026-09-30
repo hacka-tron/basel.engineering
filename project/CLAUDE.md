@@ -5,7 +5,7 @@ Instructions for Claude Code when working in this repository.
 ## Repo layout
 
 - `docs/` — design docs (`DESIGN.md` core architecture, `DESIGN-002-followups.md` resilience/chat features, `DESIGN-003-ingestion.md` content pipeline, `DESIGN-004-action-plan.md` build sequencing) and `docs/superpowers/plans/` implementation plans.
-- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below), `MOBILE_DESIGN.md` (responsive/typography rules and the screenshot verification checklist — required reading before any `frontend/` change), and `orchestration/` (model roles and the Codex review-gate template — Claude orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and parallelizing across worktrees; Codex reviews and validates every change before check-in. Use the templates instead of writing dispatch prompts from scratch). Kept out of the repo root to keep it readable; the root `CLAUDE.md` is a one-line stub that imports this file, so it still auto-loads.
+- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below), `status/` (owner-facing feature reports, see below), `MOBILE_DESIGN.md` (responsive/typography rules and the screenshot verification checklist — required reading before any `frontend/` change), and `orchestration/` (model roles and the Codex review-gate template — Claude orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and parallelizing across worktrees; Codex reviews and validates every change before check-in. Use the templates instead of writing dispatch prompts from scratch). Kept out of the repo root to keep it readable; the root `CLAUDE.md` is a one-line stub that imports this file, so it still auto-loads.
 - `services/` — application code.
 
 Read the relevant design doc before implementing a feature. If an implementation needs to diverge from what's written, update the doc in the same change rather than letting it drift.
@@ -16,6 +16,10 @@ Read the relevant design doc before implementing a feature. If an implementation
 - **`project/BACKLOG.md`** holds the `> RESUME HERE` pointer to the next action, open decisions only the owner can make, deferred milestones, bugs, and ideas.
 - **When a task or phase completes**, update `project/SNAPSHOT.md` (what now exists), `project/BACKLOG.md` (move the resume point forward, log anything new), and this file if the working process itself changed. This is what keeps future sessions cheap — they orient from these three files instead of re-deriving context from the full repo and design docs every time.
 - On long scoping/planning sessions, `/compact` periodically to keep context costs down.
+
+## Status reports (owner preference)
+
+After each substantial feature or change, write or update a report in `project/status/` (`YYYY-MM-DD-<slug>.md`) and add it to the index in `project/status/README.md`. Write it when the PR opens, then update its status at merge and again at deploy. The reader is the owner, a technical boss who wants a strong grasp of the system: TL;DR, visitor-visible change, architecture with a small Mermaid diagram, design decisions and why, what review caught, operational risks, how to verify, open items. `project/status/README.md` has the format. Delegating the writing to a subagent is fine. Never put account IDs, IPs or tokens in a report.
 
 ## Commit discipline
 
