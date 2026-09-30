@@ -76,7 +76,7 @@ function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
         onFocus={() => data.onPreview(data.id)}
         onBlur={data.onLeave}
         onClick={() => data.onInspect(data.id)}
-        className="nopan nodrag relative flex h-full w-full after:absolute after:-inset-[9px] after:content-[''] cursor-pointer flex-col items-center justify-center px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
+        className="nopan nodrag relative flex h-full w-full after:absolute after:-inset-[11px] after:content-[''] cursor-pointer flex-col items-center justify-center px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
       >
         {data.label}
         {data.cache && <span className={`text-[11px] ${data.active ? 'text-canvas/80' : 'text-muted'}`}>{data.cache}</span>}

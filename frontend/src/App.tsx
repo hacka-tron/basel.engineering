@@ -444,6 +444,30 @@ function App() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [showArchitectureSheet])
 
+  // Rendered before the Contact group at md+ and after it below md so DOM/tab
+  // order matches the visual order at both layouts (visual order via `order-*`).
+  const topicNav = (
+      <nav aria-label="Question topic" className="order-3 flex w-full items-center gap-2 text-xs md:order-2 md:ml-4 md:w-auto">
+        <button
+          type="button"
+          aria-pressed={corpus === 'basel'}
+          onClick={() => { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }}
+          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+        >
+          About Basel
+        </button>
+        <span aria-hidden="true" className="text-hairline">|</span>
+        <button
+          type="button"
+          aria-pressed={corpus === 'system'}
+          onClick={() => setCorpus('system')}
+          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
+        >
+          About This System
+        </button>
+      </nav>
+  )
+
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <header className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
@@ -454,25 +478,7 @@ function App() {
           [h1, nav ... Contact + GitHub].
         */}
         <h1 className="order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight">Basel Abdel-Rahman</h1>
-          <nav aria-label="Question topic" className="order-3 flex w-full items-center gap-2 text-xs md:order-2 md:ml-4 md:w-auto">
-            <button
-              type="button"
-              aria-pressed={corpus === 'basel'}
-              onClick={() => { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }}
-              className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
-            >
-              About Basel
-            </button>
-            <span aria-hidden="true" className="text-hairline">|</span>
-            <button
-              type="button"
-              aria-pressed={corpus === 'system'}
-              onClick={() => setCorpus('system')}
-              className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-            >
-              About This System
-            </button>
-          </nav>
+          {isDesktop && topicNav}
 
         <div className="order-2 flex flex-wrap items-center gap-x-4 gap-y-0 md:order-3 md:ml-auto md:gap-3 md:flex-nowrap">
           <ContactReveal />
@@ -488,6 +494,7 @@ function App() {
             </svg>
           </a>
         </div>
+        {!isDesktop && topicNav}
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[40%_60%]">
@@ -514,7 +521,7 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel fitMinZoom={0.75} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
+        {isDesktop && <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
       </main>
 
       <StatsBar
