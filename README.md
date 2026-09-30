@@ -35,3 +35,7 @@ The frontend is built with React, and the API is built with Python and FastAPI. 
 - [The portfolio content](corpus/about-me/) is the source material for questions about my work.
 - [The application](frontend/) and [backend](services/glassbox/) show how the conversation and live diagram work.
 - [The design notes](docs/DESIGN.md) explain the architecture and the choices behind it.
+
+## Credits
+
+Lion and rabbit status icons are from [game-icons.net](https://game-icons.net), licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).

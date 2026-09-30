@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
+import { LION_PATHS, RABBIT_HEAD_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
@@ -11,54 +11,21 @@ type StatsBarProps = {
 }
 
 /**
- * Capacity-status avatar frame: dim like the header's GitHub mark at rest,
- * brightens on hover/focus of its `group` parent. Both animals share it so
- * the lion and bunny read as one set.
+ * Capacity-status avatar: a white animal head in a round frame, dim at rest
+ * and brightening on hover/focus of its `group` parent (like the header's
+ * GitHub mark, but visible enough at rest to read as a status). Lion = room
+ * for a real scale-up; bunny = visual demo only.
  */
-function Avatar({ children }: { children: ReactNode }) {
+function Avatar({ paths }: { paths: string[] }) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 items-center justify-center rounded-full border border-hairline bg-panel text-muted transition-colors group-hover:border-primary group-hover:text-primary group-focus:border-primary group-focus:text-primary"
+      className="flex size-8 items-center justify-center rounded-full border border-hairline bg-panel text-primary/75 transition-colors group-hover:border-primary group-hover:text-primary group-focus:border-primary group-focus:text-primary sm:size-9"
     >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-        {children}
+      <svg viewBox="0 0 512 512" className="size-5 sm:size-6" fill="currentColor">
+        {paths.map((d) => <path key={d.slice(0, 24)} d={d} />)}
       </svg>
     </span>
-  )
-}
-
-function BunnyAvatar() {
-  return (
-    <Avatar>
-      <ellipse cx="8.5" cy="6" rx="2.2" ry="5" transform="rotate(-8 8.5 6)" />
-      <ellipse cx="15.5" cy="6" rx="2.2" ry="5" transform="rotate(8 15.5 6)" />
-      <ellipse cx="12" cy="15" rx="6.5" ry="6" />
-      <circle cx="9.6" cy="14" r="0.9" className="fill-panel" />
-      <circle cx="14.4" cy="14" r="0.9" className="fill-panel" />
-      <path d="M11 16.3h2l-1 1.1z" className="fill-panel" />
-    </Avatar>
-  )
-}
-
-// Twelve tufts around the face make the scalloped mane.
-const MANE_TUFTS = Array.from({ length: 12 }, (_, i) => {
-  const angle = (i / 12) * 2 * Math.PI
-  return { cx: 12 + 7.6 * Math.cos(angle), cy: 12 + 7.6 * Math.sin(angle) }
-})
-
-function LionAvatar() {
-  return (
-    <Avatar>
-      <g opacity="0.55">
-        <circle cx="12" cy="12" r="7.6" />
-        {MANE_TUFTS.map(({ cx, cy }) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="2.6" />)}
-      </g>
-      <circle cx="12" cy="12.4" r="5.6" />
-      <circle cx="9.9" cy="11.4" r="0.85" className="fill-panel" />
-      <circle cx="14.1" cy="11.4" r="0.85" className="fill-panel" />
-      <path d="M10.8 13.6h2.4l-1.2 1.3z" className="fill-panel" />
-    </Avatar>
   )
 }
 
@@ -94,7 +61,7 @@ function StatsBar({
           role="status"
           aria-label={stressTestCapacity.reason}
         >
-          {stressTestCapacity.sufficient ? <LionAvatar /> : <BunnyAvatar />}
+          <Avatar paths={stressTestCapacity.sufficient ? LION_PATHS : RABBIT_HEAD_PATHS} />
           <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
             {stressTestCapacity.sufficient ? 'There is room for a real worker scale-up. ' : 'Visual demo only; no jobs will be queued. '}
             {stressTestCapacity.reason}
