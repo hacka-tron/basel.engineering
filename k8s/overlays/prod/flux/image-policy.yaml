@@ -1,0 +1,16 @@
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: glassbox
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: glassbox
+  # Every image also gets a short git-SHA tag and :latest, neither of which
+  # sorts meaningfully - restrict to the purely-numeric build-number tag
+  # (release.yml's github.run_number) and pick the highest one.
+  filterTags:
+    pattern: '^\d+$'
+  policy:
+    numerical:
+      order: asc

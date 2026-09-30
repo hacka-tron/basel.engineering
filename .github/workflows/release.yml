@@ -32,7 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: tag
-        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        # Also tags with the run number: short git SHAs have no inherent
+        # ordering, but Flux's ImagePolicy needs to pick "the newest" tag
+        # by sorting something. github.run_number is a plain, always-
+        # increasing integer per workflow, giving Flux a sortable tag
+        # alongside the human-readable/git-traceable SHA one.
+        run: |
+          echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           aws-region: us-east-1
@@ -58,6 +65,7 @@ jobs:
           cache-to: type=gha,mode=max
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.build_number }}
             ${{ steps.ecr-login.outputs.registry }}/glassbox:latest
 
 # No bump-manifest job. Flux's own image automation (bootstrapped

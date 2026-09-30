@@ -1,0 +1,12 @@
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: glassbox
+  namespace: flux-system
+spec:
+  image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
+  interval: 1m
+  # No secretRef: image-reflector-controller runs on the EC2 node and
+  # authenticates to ECR using the node's own IAM instance role (the same
+  # one k8s/refresh-ecr-pull-secret.sh uses), via the AWS SDK's default
+  # credential chain - the same access already granted for pulling images.
