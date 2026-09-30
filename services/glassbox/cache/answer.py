@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from redis.exceptions import ResponseError
 
-from services.glassbox.providers.base import is_abstention
+from services.glassbox.cache.cacheability import uncacheable_reason
 
 INDEX_NAME = "idx:answers"
 ANSWER_TTL_S = 86400
@@ -23,24 +23,6 @@ class AnswerCache(Protocol):
     async def put(
         self, corpus: str, version: int, model_id: str, vector: list[float], payload: dict
     ) -> None: ...
-
-
-def uncacheable_reason(answer: object, chunks: list | None) -> str | None:
-    """Why an answer must not be cached, or None when it may be.
-
-    Only a real answer grounded in retrieved sources is worth replaying for 24h.
-    An abstention ("I don't know from what I have.") is never cached: a one-off
-    refusal would otherwise be served to every similar question until the TTL.
-    The answer prompt asks for plain prose without citation markers, so a missing
-    [n] marker is not a signal here.
-    """
-    if not isinstance(answer, str) or not answer.strip():
-        return "empty"
-    if not chunks:
-        return "no_sources"
-    if is_abstention(answer):
-        return "abstention"
-    return None
 
 
 def _model_tag(model_id: str) -> str:

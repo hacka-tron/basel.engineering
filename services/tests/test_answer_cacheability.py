@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.glassbox.api.main import app
-from services.glassbox.cache.answer import RedisAnswerCache, uncacheable_reason
+from services.glassbox.cache.answer import RedisAnswerCache
+from services.glassbox.cache.cacheability import uncacheable_reason
 from services.glassbox.providers.base import ABSTENTION_ANSWER, is_abstention
 from services.glassbox.providers.fake import FAKE_ABSTAIN_MARKER, FakeLLMProvider
 from services.tests.test_ask_endpoint import MemoryRedis, events
@@ -209,3 +210,11 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
     )
     assert next(data for name, data in stream if name == "done")["answer_cache"] == "miss"
     assert cache.model_ids[-1].endswith("|v12")
+
+
+def test_grounding_rules_ask_for_the_exact_abstention_sentence():
+    from services.glassbox.providers.base import GROUNDING_RULES
+
+    assert f'exactly "{ABSTENTION_ANSWER}" and nothing else' in GROUNDING_RULES
+    assert "Design prose alone is not evidence" not in GROUNDING_RULES
+    assert "services/, k8s/, or infra/" in GROUNDING_RULES

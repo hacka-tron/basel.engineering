@@ -17,7 +17,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.glassbox.api.sse import frame
-from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache, uncacheable_reason
+from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache
+from services.glassbox.cache.cacheability import uncacheable_reason
 from services.glassbox.cache.embedding import (
     EmbeddingCache,
     RedisEmbeddingCache,
