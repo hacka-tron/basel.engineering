@@ -12,11 +12,8 @@
 # HelmRelease alongside the existing flux/ImageRepository-style manifests
 # keeps KEDA on the same GitOps path as everything else in this namespace.
 #
-# This assumes `flux bootstrap`'s default component set is active
-# (source-controller, kustomize-controller, helm-controller,
-# notification-controller — helm-controller is on by default unless a prior
-# bootstrap explicitly restricted --components; verify with
-# `kubectl get deploy -n flux-system helm-controller` before relying on this).
+# Confirmed live (2026-09-30): `kubectl get deploy -n flux-system
+# helm-controller` shows 1/1 ready — this cluster's bootstrap included it.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:

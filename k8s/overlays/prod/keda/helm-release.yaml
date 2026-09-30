@@ -2,12 +2,10 @@
 # Flux's helm-controller performs the actual `helm install`/`upgrade` once
 # this is synced — nothing here is applied by this branch's author.
 #
-# IMPORTANT for whoever reviews/applies this: `chart.spec.version` below is a
-# placeholder pin, not independently re-verified against the current latest
-# KEDA release at review time (this branch was built without live internet
-# access to the chart repo's index). Confirm the latest stable 2.x chart
-# version before merging, and update the pin — Flux will otherwise install
-# whatever was current as of this writing rather than "latest".
+# Chart version confirmed live against artifacthub.io/packages/helm/kedacore/keda
+# at review time (2026-09-30): 2.21.0 is current stable, released 2026-09-23.
+# This is a fresh install, not an upgrade from an older KEDA version, so
+# 2.21.0's breaking changes (relative to 2.20) don't apply here.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -20,7 +18,7 @@ spec:
   chart:
     spec:
       chart: keda
-      version: "2.16.x" # placeholder — pin an exact version before applying, see note above
+      version: "2.21.0"
       sourceRef:
         kind: HelmRepository
         name: kedacore
