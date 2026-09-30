@@ -1,7 +1,7 @@
 # Conversational chat: follow-ups with history, separate chats per tab
 
-**PR:** [#41](https://github.com/hacka-tron/basel.engineering/pull/41) · **Branch:** `feature/chat-context` (stacked on #40, to be retargeted to `main` after #40 merges) · **Spec:** `docs/DESIGN-002-followups.md` §5, §9.3–9.4
-**Status:** In review. Codex approved in round 3. Includes a DB migration (`0003`).
+**PR:** [#41](https://github.com/hacka-tron/basel.engineering/pull/41) · **Branch:** `feature/chat-context` (was stacked on #40; retargeted to `main` and merged) · **Spec:** `docs/DESIGN-002-followups.md` §5, §9.3–9.4
+**Status:** Merged to `main` 2026-09-30 (Codex approved in round 3). Includes a DB migration (`0003`), run by the `migrate` Job on deploy; live rollout being verified.
 
 ## TL;DR
 

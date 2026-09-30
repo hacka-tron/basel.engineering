@@ -1,7 +1,7 @@
 # Orchestration change: Claude orchestrates and implements, Codex is the review gate
 
 **PRs:** [#39](https://github.com/hacka-tron/basel.engineering/pull/39) (merged 2026-09-30) · [#42](https://github.com/hacka-tron/basel.engineering/pull/42) (follow-up, in review)
-**Status:** #39 is merged and in effect. It governed #40, #41 and the typography pass. #42 is a small docs follow-up (scoping via subagents, keep a pipeline moving) that is waiting on merge. Docs only: no code, infra or cluster changes.
+**Status:** #39 is merged and in effect. It governed #40, #41 and the typography pass. #42 (merged) is a small docs follow-up (scoping via subagents, keep a pipeline moving) that is waiting on merge. Docs only: no code, infra or cluster changes.
 
 ## TL;DR
 

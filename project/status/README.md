@@ -11,10 +11,10 @@ Briefings for the project owner. After each substantial feature or change, the a
 
 | Date | Report | Summary | Status |
 |---|---|---|---|
-| 2026-09-30 | [Typography + mobile layout pass](2026-09-30-typography-mobile.md) | Fixes a CSS bug that forced every button/input to 16px; dvh shell, 44px tap targets, readable mobile diagram zoom. | In review (Codex round 1: changes needed; no PR yet) |
-| 2026-09-30 | [Conversational chat](2026-09-30-conversational-chat.md) | Follow-up questions with history, rewritten into standalone search queries; separate persisted chats per tab. | In review ([#41](https://github.com/hacka-tron/basel.engineering/pull/41), stacked on #40; Codex approved) |
-| 2026-09-30 | [Stress test with KEDA + capacity gate](2026-09-30-stress-test-keda.md) | A button bursts 300 synthetic jobs and KEDA scales workers 1→5 live, but only if the node has the memory. Otherwise it plays a simulation. | In review ([#40](https://github.com/hacka-tron/basel.engineering/pull/40); Codex approved; needs owner go-ahead, since merging installs KEDA live) |
-| 2026-09-30 | [Orchestration: Codex review gate](2026-09-30-orchestration-codex-gate.md) | Claude orchestrates and implements. Codex reviews and validates every change before check-in. Mobile design rules added. | [#39](https://github.com/hacka-tron/basel.engineering/pull/39) merged; follow-up [#42](https://github.com/hacka-tron/basel.engineering/pull/42) in review |
+| 2026-09-30 | [Typography + mobile layout pass](2026-09-30-typography-mobile.md) | Fixes a CSS bug that forced every button/input to 16px; dvh shell, 44px tap targets, readable mobile diagram zoom. | In review (round-1 findings fixed in 743edec; Codex round 2 running; no PR yet) |
+| 2026-09-30 | [Conversational chat](2026-09-30-conversational-chat.md) | Follow-up questions with history, rewritten into standalone search queries; separate persisted chats per tab. | Merged ([#41](https://github.com/hacka-tron/basel.engineering/pull/41), 2026-09-30); live rollout being verified |
+| 2026-09-30 | [Stress test with KEDA + capacity gate](2026-09-30-stress-test-keda.md) | A button bursts 300 synthetic jobs and KEDA scales workers 1→5 live, but only if the node has the memory. Otherwise it plays a simulation. | Merged ([#40](https://github.com/hacka-tron/basel.engineering/pull/40), 2026-09-30, owner-approved); live rollout being verified |
+| 2026-09-30 | [Orchestration: Codex review gate](2026-09-30-orchestration-codex-gate.md) | Claude orchestrates and implements. Codex reviews and validates every change before check-in. Mobile design rules added. | [#39](https://github.com/hacka-tron/basel.engineering/pull/39) and follow-up [#42](https://github.com/hacka-tron/basel.engineering/pull/42) merged |
 
 ## System at a glance
 

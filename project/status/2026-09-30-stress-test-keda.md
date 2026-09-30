@@ -1,7 +1,7 @@
 # Stress test with KEDA autoscaling + live capacity gate
 
 **PR:** [#40](https://github.com/hacka-tron/basel.engineering/pull/40) · **Branch:** `feature/stress-test-keda` · **Spec:** `docs/DESIGN.md` §4.5, §9.2–9.7
-**Status:** In review. Codex approved after 5 rounds. **Needs your explicit go-ahead to merge**, because merging installs KEDA on the live cluster and grants new RBAC.
+**Status:** Merged to `main` 2026-09-30 with the owner's go-ahead (Codex approved after 5 rounds). Merging makes Flux install KEDA and the new RBAC on the live cluster; the release build succeeded, live rollout is being verified.
 
 ## TL;DR
 
