@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**README and Packages cleanup awaits review:** `docs/readme-package-cleanup` in `.worktrees/readme-package-cleanup` adds the requested visitor-facing README. The unused GHCR package was deleted from GitHub and verified absent; production still pulls from ECR. Review/merge the README branch when convenient. The feature-branch priorities below are unchanged.
+**README copy revision awaits review:** PR #30 merged the README and the unused GHCR package was deleted and verified absent. At the owner's request, `docs/readme-personal-tone` in `.worktrees/readme-package-cleanup` shortens the README to a site link, project description, and first-person account of why it was built. Review/merge that branch when convenient. The feature-branch priorities below are unchanged.
 
 **Flux Task 5 is closed — GitOps deploys are fully hands-off, verified with a real release (2026-09-30).** Merging to `main` now reaches production with no manual step: GitHub Actions builds/pushes → Flux's `ImagePolicy` picks the tag → `ImageUpdateAutomation` commits it to `deploy` → the Kustomization applies it, including auto-recreating the `ingest`/`migrate` Jobs (Kubernetes Jobs can't have their image patched in place, so Flux deletes and recreates them — this now actually works, see PR #26). Full bug history and the eventual root cause (a wrong annotation *value*, not a missing feature) are in `project/AGENT_HANDOFF.md`'s top two checkpoints — read those before touching this pipeline again, especially before assuming "Flux reconciled" means the right thing actually rolled out.
 
