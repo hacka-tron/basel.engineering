@@ -4,7 +4,7 @@ metadata:
   name: ingest
   namespace: app
   annotations:
-    # See migrate-job.yaml - Job pod templates are immutable, so any image
+    # See k8s/base/migrate-job.yaml - Job pod templates are immutable, so any image
     # tag change needs Flux to delete and recreate rather than patch. This
     # annotation's value is a string enum ("enabled"/"disabled"), NOT a
     # boolean - Flux's Kustomization.spec.force field is a real boolean, but

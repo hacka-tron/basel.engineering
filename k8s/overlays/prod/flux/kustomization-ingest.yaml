@@ -1,0 +1,73 @@
+# Ordered ingestion: the `ingest` Job runs only after the new `api` and
+# `retrieval-worker` are Ready, so it no longer adds to the rollout's memory
+# spike on the 2 GiB node. (Ingestion is content-hash incremental, so the
+# per-release run only embeds changed docs.)
+#
+# The api/worker Deployments are applied by the root `flux-system`
+# Kustomization (path ./k8s/overlays/prod, created by `flux bootstrap`, not in
+# this repo), which does not wait for them. So the chain is:
+#
+# 1. `app-ready` dependsOn `flux-system`. Flux only treats a same-source
+#    dependency as ready once it is Ready *at the current source revision*, so
+#    this cannot run until the root has applied this revision's Deployment
+#    specs (and pruned anything it no longer owns). Without it, `app-ready`
+#    could health-check the *old* Deployments before the root applied the new
+#    ones and pass immediately.
+# 2. `app-ready` applies nothing (empty path) and health-checks the two
+#    Deployments; kstatus reports a Deployment Current only once its rollout
+#    has finished (observedGeneration caught up, all replicas updated and
+#    available), so it turns Ready only when the new pods are Ready.
+# 3. `ingest` dependsOn `app-ready` (again at the current revision), then
+#    applies the Job and, via `wait: true`, turns Ready only when it completes.
+#    The Job keeps `kustomize.toolkit.fluxcd.io/force: enabled` so a new image
+#    tag deletes and recreates it.
+#
+# Caveat: this relies on the root `flux-system` Kustomization NOT having
+# `wait: true` or health checks covering these objects - it would then wait
+# on `ingest`, which waits on it (deadlock until timeout). The default
+# `flux bootstrap` root has neither.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-ready
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: flux-system
+  interval: 10m
+  retryInterval: 1m
+  # Covers a slow rollout: up to 5m of wait-for-migrations plus a 150s
+  # startupProbe window per pod.
+  timeout: 10m
+  path: ./k8s/overlays/prod/app-ready
+  prune: true
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: api
+      namespace: app
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: retrieval-worker
+      namespace: app
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: ingest
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: app-ready
+  interval: 10m
+  retryInterval: 2m
+  timeout: 15m
+  path: ./k8s/overlays/prod/ingest
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

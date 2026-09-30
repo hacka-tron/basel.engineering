@@ -634,7 +634,7 @@ publishing a binary plan, which may contain cleartext secrets. See
 
 - Watches `k8s/overlays/prod` in the repo and applies changes.
 - Pull-based: the cluster reaches out to GitHub, so the Kubernetes API never needs to be exposed to CI.
-- Order: Flux applies everything in one pass. The `migrate` Job is recreated per image tag; the `api` and worker pods' `wait-for-migrations` initContainer holds them until it finishes. The `ingest` Job is not yet ordered after the rollout (planned follow-up: a separate, dependent Flux Kustomization).
+- Order: the root `flux-system` Kustomization applies `k8s/overlays/prod` in one pass. The `migrate` Job is recreated per image tag; the `api` and worker pods' `wait-for-migrations` initContainer holds them until it finishes. The `ingest` Job is not in that pass: child Kustomization `app-ready` dependsOn `flux-system` (so it runs only after the root has applied the current revision) and health-checks the `api` and `retrieval-worker` Deployments; `ingest` dependsOn `app-ready` and applies the Job from `k8s/overlays/prod/ingest` with `wait: true`. So ingestion starts only once the new pods are Ready and never overlaps the rollout's memory peak. Its kustomization carries its own `$imagepolicy` setter, which the ImageUpdateAutomation (`update.path: ./k8s/overlays/prod`) bumps in the same commit. Constraint: the root must not `wait` on its children, or it would deadlock with `ingest`.
 - Rollout: `maxSurge: 0, maxUnavailable: 1` on `api` and `retrieval-worker`, so a rollout never adds an extra pod on the 2 GiB node: each old pod stops before its replacement starts. (The single api replica therefore has no old/new overlap; a scaled-out worker replaces replicas one at a time, so old- and new-image workers briefly coexist.) This is a deliberate trade: a few seconds of downtime per release in exchange for memory headroom. Uvicorn drains for up to 25s (`--timeout-graceful-shutdown 25`, `terminationGracePeriodSeconds: 30`), and probes use 5s timeouts plus a `startupProbe` so swap pressure during a rollout doesn't trigger restarts.
 
 ---
@@ -718,8 +718,8 @@ glassbox/
     questions.yaml
     run_eval.py
   k8s/
-    base/                    # api, worker, redis, jobs, rbac, networkpolicy, keda
-    overlays/prod/
+    base/                    # api, worker, mysql, redis, migrate job, rbac, networkpolicy
+    overlays/prod/           # image tag, Flux objects, keda/, keda-scaling/, app-ready/, ingest/
   infra/                     # see 10.1
   docker-compose.yml         # local dev: mysql, redis, api, worker
   .github/workflows/
