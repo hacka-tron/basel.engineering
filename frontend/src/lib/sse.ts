@@ -1,4 +1,5 @@
 import type { NodeId } from '../architecture'
+import type { ApiCorpus, HistoryTurn } from './conversation'
 
 export type StageEvent = {
   request_id: string
@@ -23,7 +24,8 @@ export type RetrievalChunk = {
   url?: string
 }
 
-export type RetrievalEvent = { chunks: RetrievalChunk[] }
+// `rewritten_query` is present when a follow-up was rewritten for retrieval.
+export type RetrievalEvent = { chunks: RetrievalChunk[]; rewritten_query?: string }
 export type TokenEvent = { text: string }
 export type DoneEvent = {
   total_ms: number
@@ -48,15 +50,17 @@ export type AskCallbacks = {
 
 export async function askQuestion(
   question: string,
-  corpus: 'about_me' | 'about_system',
+  corpus: ApiCorpus,
   callbacks: AskCallbacks,
   signal?: AbortSignal,
+  history: HistoryTurn[] = [],
 ): Promise<void> {
   try {
     const response = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, corpus }),
+      // `history` is omitted for a first question so the server skips the rewrite.
+      body: JSON.stringify(history.length > 0 ? { question, corpus, history } : { question, corpus }),
       signal,
     })
 
