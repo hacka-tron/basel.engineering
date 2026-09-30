@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Codex checkpoint — Bootstrap IAM applied, 2026-09-30
+
+**Active coordinator: Codex.** The owner added `CLOUDFLARE_API_TOKEN` to both `terraform-plan` and `terraform-prod` GitHub environments; `gh secret list` verified both names without exposing values. The owner explicitly approved applying the bootstrap plan. Codex saved a fresh plan to `/private/tmp/glassbox-bootstrap-approved.tfplan` and applied that exact file. Terraform reported **2 added, 1 changed, 0 destroyed**: new `glassbox-ci-plan` role and inline policy, plus `glassbox-ci` trust changed to the protected `terraform-prod` environment. A fresh `terraform plan -detailed-exitcode` returned 0 with **No changes**, and `aws iam get-role` verified the plan role's immutable GitHub OIDC subject. No production stack or cluster changes were made.
+
+Draft PR #13 (`feature/flux-prerequisites`, `.worktrees/flux-prerequisites`) records the Cloudflare permission correction and Flux preflight blockers. Its backend, frontend, and Terraform validate jobs passed. Its Terraform plan job in run `36673561180` is waiting for the owner's required `terraform-plan` environment review. After approval, verify the plan job succeeds and posts its PR comment. Flux bootstrap remains blocked by the Git write and ECR pull issues below.
+
+---
+
 ## Codex continuation — Terraform CI setup and Flux preflight, 2026-09-30
 
 Both protected GitHub environments exist. Codex set nonsecret `CLOUDFLARE_ZONE_ID=0d20c987878c222aaea75af989c8f460` in `terraform-plan` and `terraform-prod`, using the value in the live Terraform state; both were verified via `gh variable list`. Neither environment has `CLOUDFLARE_API_TOKEN` yet. The owner was asked to create zone-scoped tokens and set the secrets directly in GitHub, without pasting them into chat. Correct plan-token permissions are Zone Read, DNS Read, and Cache Rules Read; prod needs Zone Read, DNS Edit, and Cache Rules Edit. The instructions in `infra/CI.md` are corrected in this branch.
