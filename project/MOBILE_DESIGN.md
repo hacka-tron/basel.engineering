@@ -4,7 +4,7 @@ Rules for any frontend change in `frontend/`. The desktop layout has been decent
 
 ## Before starting UI work
 
-- Load the `impeccable` skill (tracked at `.agents/skills/impeccable`, mirrored to `.claude/skills/impeccable` locally) for any design/layout/typography change. Its "verify in bounded passes" rule applies here.
+- Load the `impeccable` skill (installed locally from `skills-lock.json` into the gitignored `.agents/skills/impeccable`, symlinked at `.claude/skills/impeccable`; a fresh worktree or clone won't have it — load it from the main checkout's install, or reinstall from the lockfile if missing) for any design/layout/typography change. Its "verify in bounded passes" rule applies here.
 - Design tokens live in `frontend/src/index.css` `@theme`. Read the comments there first — two Tailwind v4 pitfalls are documented (no var()-to-var() aliasing; never name a token after a reserved scale key like `base`/`sm`/`xl`).
 
 ## Layout
@@ -22,7 +22,8 @@ JetBrains Mono is wide (~0.6em per character), so everything wraps sooner than a
 
 | Role | Size | Notes |
 | --- | --- | --- |
-| Chat messages, answers, input | `text-sm` (14px) mobile → `md:text-[15px]`/`text-base` | Primary reading text. Never below 14px. Inputs must be ≥16px on iOS to prevent zoom-on-focus. |
+| Chat messages and answers | `text-sm` (14px) mobile → `md:text-[15px]`/`text-base` | Primary reading text. Never below 14px. |
+| Text inputs and textareas (chat ask box) | `text-base` (16px) at every width | iOS Safari zooms the page on focus for any input under 16px. |
 | Secondary UI (nav, buttons, suggested questions, Contact) | `text-xs` (12px) minimum | Only for short labels, not paragraphs. |
 | Metadata (stats bar, diagram captions, tooltips) | 11px minimum | `text-[10px]` is not allowed — it's unreadable on a phone. |
 | Headings | `clamp()`, e.g. `text-[clamp(1rem,0.9rem+0.5vw,1.25rem)]` | Scale smoothly instead of jumping at `md`. |
