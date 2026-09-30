@@ -4,6 +4,11 @@ output "state_bucket_name" {
 }
 
 output "ci_role_arn" {
-  description = "GitHub Actions role ARN for the future CI workflow."
+  description = "GitHub Actions role ARN for infrastructure changes."
   value       = aws_iam_role.ci.arn
+}
+
+output "release_role_arn" {
+  description = "GitHub Actions role ARN for pushing the application image to ECR."
+  value       = aws_iam_role.release.arn
 }

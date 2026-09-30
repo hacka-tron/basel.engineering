@@ -187,3 +187,70 @@ resource "aws_iam_role_policy" "ci" {
   role   = aws_iam_role.ci.id
   policy = data.aws_iam_policy_document.ci.json
 }
+
+# Pushes the application image to ECR on every merge to main. Scoped to a
+# dedicated "release" GitHub environment (not the terraform-plan/prod ones -
+# this never touches infrastructure, only an already-tested image), using
+# the newer environment-scoped trust condition rather than ci_trust's
+# ref:refs/heads/main pattern above. The ECR repository itself lives in
+# infra/envs/prod (a separate Terraform root/state), but its ARN is fully
+# deterministic from account ID, region, and name, so no cross-state
+# reference is needed here.
+data "aws_iam_policy_document" "release_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:hacka-tron/basel.engineering:environment:release"]
+    }
+  }
+}
+
+resource "aws_iam_role" "release" {
+  name               = "glassbox-ci-release"
+  assume_role_policy = data.aws_iam_policy_document.release_trust.json
+}
+
+data "aws_iam_policy_document" "release" {
+  statement {
+    sid       = "EcrAuth"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"] # ECR requires this action to be unscoped
+  }
+
+  statement {
+    sid    = "PushGlassboxImage"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages",
+      "ecr:InitiateLayerUpload",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/glassbox"]
+  }
+}
+
+resource "aws_iam_role_policy" "release" {
+  name   = "glassbox-ci-release"
+  role   = aws_iam_role.release.id
+  policy = data.aws_iam_policy_document.release.json
+}
