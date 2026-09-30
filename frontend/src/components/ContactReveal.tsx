@@ -1,69 +1,74 @@
 import { useEffect, useRef, useState } from 'react'
 
+// Lives in the JS bundle only (never in the static HTML), so a naive scraper
+// of index.html doesn't see it.
 const EMAIL = 'baselmabdelrahman@gmail.com'
 
+type Status = 'idle' | 'copied' | 'shown'
+
+/** Legacy copy path for when the async Clipboard API is missing or denied. */
+function legacyCopy(text: string): boolean {
+  const previouslyFocused = document.activeElement as HTMLElement | null
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, text.length)
+  try {
+    return document.execCommand('copy')
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(textarea)
+    // Selecting the textarea stole focus; hand it back (keyboard users).
+    previouslyFocused?.focus?.()
+  }
+}
+
 /**
- * "Contact me" used to be a bare `mailto:` link, which immediately hands
- * control to the visitor's mail client — jarring if they don't have one
- * configured, or just want to read the address. Clicking now reveals the
- * address as plain text in place, with a copy affordance, instead — and a
- * small close button retracts it back to the "Contact me" trigger, so the
- * reveal isn't a one-way trip.
+ * "Contact me" is a single button: click/tap copies the email address and
+ * flashes "Copied!" (announced via aria-live). If both the Clipboard API and
+ * the execCommand fallback fail, the address is shown briefly instead so the
+ * visitor can still read it.
  */
 function ContactReveal() {
-  const [revealed, setRevealed] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const copiedTimeoutRef = useRef<number | null>(null)
+  const [status, setStatus] = useState<Status>('idle')
+  const timeoutRef = useRef<number | null>(null)
 
   useEffect(() => () => {
-    if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current)
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current)
   }, [])
 
-  async function handleCopy() {
+  async function handleClick() {
+    let ok = false
     try {
       await navigator.clipboard.writeText(EMAIL)
-      setCopied(true)
-      if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current)
-      copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1500)
+      ok = true
     } catch {
-      // Clipboard access can be denied (permissions, insecure context); the
-      // address is already visible as selectable text, so this is a
-      // graceful no-op rather than an error state.
+      ok = legacyCopy(EMAIL)
     }
-  }
-
-  if (!revealed) {
-    return (
-      <button
-        type="button"
-        onClick={() => setRevealed(true)}
-        className="inline-flex min-h-11 items-center text-sm text-muted transition-colors hover:text-primary md:min-h-0"
-      >
-        Contact me
-      </button>
-    )
+    setStatus(ok ? 'copied' : 'shown')
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current)
+    timeoutRef.current = window.setTimeout(() => setStatus('idle'), ok ? 2000 : 5000)
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-x-1.5 text-sm">
-      <button
-        type="button"
-        onClick={() => setRevealed(false)}
-        aria-label="Hide email address"
-        className="-ml-2.5 inline-flex min-h-11 min-w-11 items-center justify-center text-sm leading-none text-muted transition-colors hover:text-primary md:ml-0 md:min-h-0 md:min-w-0 md:px-1"
-      >
-        →
-      </button>
-      <span className="select-all text-primary">{EMAIL}</span>
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label="Copy email address"
-        className="inline-flex min-h-11 items-center rounded-[3px] border border-hairline px-2 text-sm text-muted transition-colors hover:text-primary md:min-h-0 md:py-1"
-      >
-        {copied ? 'Copied' : 'Copy'}
-      </button>
-    </span>
+    <button
+      type="button"
+      onClick={handleClick}
+      className={`inline-flex min-h-11 items-center px-2 text-sm transition-colors hover:text-primary md:min-h-0 md:px-0 ${
+        status === 'idle' ? 'text-muted' : 'text-primary'
+      }`}
+    >
+      <span aria-live="polite">
+        {status === 'copied' ? 'Copied!' : status === 'shown' ? EMAIL : 'Contact me'}
+      </span>
+    </button>
   )
 }
 
