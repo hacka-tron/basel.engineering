@@ -12,6 +12,46 @@ is bootstrapped (status in `project/AGENT_HANDOFF.md`), it applies that
 overlay to the live cluster automatically — no manual step needed for a
 routine release.
 
+### What a release does to the running site
+
+Flux applies the whole overlay in one pass, so the recreated `migrate` and
+`ingest` Jobs and the new `api`/`retrieval-worker` pods all start together.
+The Deployments are set up so that is safe on a 2 GiB node:
+
+- **Brief downtime by design.** `api` and `retrieval-worker` use
+  `RollingUpdate` with `maxSurge: 0, maxUnavailable: 1`: a rollout never adds
+  an extra pod, so the old pod is stopped *before* its replacement starts
+  (the owner chose memory headroom over zero downtime). For the single api
+  replica that means no old/new overlap at all; when KEDA has scaled the
+  worker above one replica, old- and new-image workers coexist while
+  replicas are replaced one at a time, but never more pods than replicas. Expect the site to be
+  unavailable for a few seconds per release — the time for the new api pod to
+  start and pass `/readyz` — and longer if a migration is running.
+- **Migrations gate the new pods.** Both Deployments have a
+  `wait-for-migrations` initContainer
+  (`python -m services.glassbox.db.wait_for_migrations`) that polls the
+  database's Alembic revision (read-only) until it equals the head baked into
+  the image, i.e. until this tag's `migrate` Job has finished. It gives up
+  after 5 minutes with an `ERROR ... timed out` log line (each read is capped
+  at 5s with its own connection and socket timeouts, so a stalled MySQL can't
+  stretch the wait past that bound); the pod then shows
+  `Init:Error`/`Init:CrashLoopBackOff` and the kubelet retries it. Check
+  `kubectl -n app logs deploy/api -c wait-for-migrations` and
+  `kubectl -n app logs job/migrate`. Rolling *back* to an image older than the
+  database's schema also blocks here (the revisions no longer match), which is
+  deliberate: it refuses to run code against a schema it doesn't know.
+- **Graceful shutdown.** Uvicorn runs with `--timeout-graceful-shutdown 25`
+  (Dockerfile `CMD`) inside the api's `terminationGracePeriodSeconds: 30`, so
+  in-flight requests and SSE streams get up to 25s to finish before SIGKILL.
+- **Probes tolerate swap pressure.** Readiness and liveness use
+  `timeoutSeconds: 5`; liveness needs 6 consecutive failures (2 minutes at a
+  20s period) before a restart. A `startupProbe` on `/healthz` (every 5s, up
+  to 30 failures = 150s) holds off liveness until the process first answers,
+  so a slow boot isn't killed mid-start.
+- **Not yet ordered:** the `ingest` Job still runs alongside the rollout
+  rather than after it (a planned follow-up splits it into its own Flux
+  Kustomization).
+
 ## Manual apply / disaster recovery
 
 The node has no SSH and no public Kubernetes API — access is AWS SSM Session
