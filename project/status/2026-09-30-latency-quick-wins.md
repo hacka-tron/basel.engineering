@@ -1,6 +1,6 @@
 # Latency quick wins
 
-**PR:** PR_LINK · **Branch:** `feature/latency-quick-wins` (stacked on #48's `feature/chat-stream-resilience`; retargets to `main` once #48 merges) · **Spec:** `docs/DESIGN.md` §6.1, §7.3, §9.2, §9.6, `k8s/README.md`
+**PR:** [#54](https://github.com/hacka-tron/basel.engineering/pull/54) · **Branch:** `feature/latency-quick-wins` (stacked on #48's `feature/chat-stream-resilience`; retargets to `main` once #48 merges) · **Spec:** `docs/DESIGN.md` §6.1, §7.3, §9.2, §9.6, `k8s/README.md`
 **Status:** In review. Not merged, not live. Nothing was changed on the live cluster.
 
 ## TL;DR
