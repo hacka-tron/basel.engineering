@@ -1,8 +1,14 @@
 # Agent handoff
 
+## Shorter, more personal README — Codex, 2026-09-30
+
+**Active coordinator: Claude.** The owner merged PR #30, then asked for a simpler, warmer README: site link, what Glassbox does, and how/why it was built as a portfolio landing page and a way to learn RAG, k3s, and related tools. Branch `docs/readme-personal-tone` in `.worktrees/readme-package-cleanup` makes that copy-only revision and removes the local setup section and closing tagline. No application code changed. Review/merge this branch; feature priorities remain as recorded below.
+
+---
+
 ## README and legacy package cleanup — Codex, 2026-09-30
 
-**Active coordinator: Claude.** At the owner's request, Codex drafted a new root README in branch `docs/readme-package-cleanup` (worktree `.worktrees/readme-package-cleanup`). It describes the live portfolio, two question corpora, architecture, deferred stress-test/KEDA work, repository map, and local development steps. No application code or infrastructure manifests changed. The legacy `ghcr.io/hacka-tron/basel.engineering` GitHub container package was deleted through GitHub's Packages API (HTTP 204); a follow-up list returned `[]` and a package lookup returned 404. The active Release workflow and Kubernetes manifests use AWS ECR, so this does not remove the production image. README branch remains for Claude's review and merge; static link and `git diff --check` verification were run. Full local startup was not run for this docs-only change. Next feature priorities remain as recorded below.
+**Active coordinator: Claude.** At the owner's request, Codex drafted a new root README in branch `docs/readme-package-cleanup` (worktree `.worktrees/readme-package-cleanup`), merged as PR #30. It described the live portfolio, two question corpora, architecture, deferred stress-test/KEDA work, repository map, and local development steps. No application code or infrastructure manifests changed. The legacy `ghcr.io/hacka-tron/basel.engineering` GitHub container package was deleted through GitHub's Packages API (HTTP 204); a follow-up list returned `[]` and a package lookup returned 404. The active Release workflow and Kubernetes manifests use AWS ECR, so this did not remove the production image. Static link and `git diff --check` verification were run. Full local startup was not run for this docs-only change. Next feature priorities remain as recorded below.
 
 ---
 
