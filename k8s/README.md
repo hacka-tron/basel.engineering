@@ -1,56 +1,32 @@
-# Manual Glassbox bring-up (Phase 4 MVP)
+# Kubernetes manifests
 
-Run these steps from the repository root. The cluster runs on the one EC2 node
-provisioned by `infra/`; there is no public Kubernetes API endpoint. Flux and
-GitOps automation of this sequence belong to Phase 6.
+Glassbox runs on a single k3s node (see `docs/DESIGN.md` §10 for the full
+architecture). `k8s/base` holds every workload; `k8s/overlays/prod` layers on
+top of it to pin the deployed image tag in one place.
 
-1. Apply `infra/bootstrap` first. Follow its README, including replacing the
-   placeholder S3 backend bucket in `infra/envs/prod/backend.tf`. Then set the
-   zone-scoped Cloudflare credentials and apply production infrastructure:
+## Normal operation
 
-   ```sh
-   cd infra/envs/prod
-   terraform init
-   terraform plan
-   terraform apply
-   terraform output instance_id
-   terraform output elastic_ip
-   ```
+`.github/workflows/release.yml` builds and pushes a new image on every merge
+to `main`, then bumps `k8s/overlays/prod/kustomization.yaml`'s tag. Once Flux
+is bootstrapped (status in `project/AGENT_HANDOFF.md`), it applies that
+overlay to the live cluster automatically — no manual step needed for a
+routine release.
 
-   The required Terraform variables are `TF_VAR_cloudflare_api_token` and
-   `TF_VAR_cloudflare_zone_id`. Review the plan before applying. Return to the
-   repository root before continuing.
+## Manual apply / disaster recovery
 
-2. Build and publish the application image for Linux ARM64 to the registry
-   named in the Deployment and Job manifests. The image must be readable by
-   the node (for example, publish the GHCR package publicly). From a machine
-   with Docker and GHCR write access:
+The node has no SSH and no public Kubernetes API — access is AWS SSM Session
+Manager only. Use this sequence to rebuild the cluster from scratch or
+recover after a manual intervention:
 
-   ```sh
-   docker buildx build --platform linux/arm64 \
-     -t ghcr.io/hacka-tron/basel.engineering:phase4-k8s --push .
-   ```
-
-   For later releases, use a new immutable tag and update all four image
-   references before applying. Do not rerun an old Job by changing only its
-   image: delete the completed Job and apply its manifest again.
-
-3. Start an AWS SSM Session Manager shell on the node using the production
-   `instance_id` output. Clone this repository at the same revision used to
-   build the image. On the node, `sudo -i` if needed so k3s's kubeconfig is
-   available, then from the repository root run:
-
-   ```sh
-   bash k8s/bootstrap-secrets.sh
-   ```
-
-   The script reads `/glassbox/mysql/password` through the instance role and
-   creates or updates `glassbox-mysql` in both namespaces. It also creates a
-   stable private `glassbox-app` rate-limit salt in `app` on first run.
-
-4. Apply in dependency order. The base Kustomization lists every resource for
-   future overlays, but applying it in one command would start the Jobs and
-   Deployments before migrations finish. For this first manual deploy, run:
+1. Start an SSM session on the production instance (`terraform output
+   instance_id` from `infra/envs/prod`). Clone this repo at the revision you
+   want; `sudo -i` if needed so k3s's kubeconfig is available.
+2. `bash k8s/bootstrap-secrets.sh` — reads `/glassbox/mysql/password` via the
+   instance role and creates/updates the `glassbox-mysql` Secret in both
+   namespaces, plus a stable `glassbox-app` rate-limit salt on first run.
+3. Apply in dependency order. The base Kustomization lists every resource,
+   but applying it all in one command starts Jobs/Deployments before
+   migrations finish:
 
    ```sh
    kubectl apply -f k8s/base/namespace-app.yaml -f k8s/base/namespace-data.yaml
@@ -69,34 +45,25 @@ GitOps automation of this sequence belong to Phase 6.
    kubectl -n app wait --for=condition=complete job/ingest --timeout=15m
    ```
 
-   If a Job fails, inspect `kubectl -n app logs job/migrate` or `job/ingest`.
-   To retry, delete that Job and apply its manifest again. Ingestion can take
-   time because it calls Bedrock to embed the corpus.
+   `kubectl kustomize k8s/overlays/prod` renders the exact manifests
+   (including the currently pinned image tag) if you'd rather apply that
+   directly once past initial bring-up. If a Job fails, check `kubectl -n
+   app logs job/migrate` or `job/ingest`, then delete and re-apply it — Job
+   pod templates are immutable and can't be patched in place.
+4. Verify: `kubectl get pods -A`, then from the node `curl -H 'Host:
+   basel.engineering' http://127.0.0.1/readyz` should return `"ready":true`.
+   Publicly, check `https://basel.engineering/readyz`.
 
-5. Verify `kubectl get pods -A`. From the node, check the Ingress with
-   `curl -H 'Host: basel.engineering' http://127.0.0.1/readyz`; expect
-   `"ready":true`. Once Cloudflare DNS resolves, check
-   `https://basel.engineering/readyz` and load the site in a browser.
+## Networking
 
-Traefik serves HTTP and HTTPS through two Ingress routes to one API Service. The
-HTTPS route uses Traefik's default origin certificate; Cloudflare's encryption
-mode must accept that certificate (Full). Full (strict) requires a trusted
-origin certificate and a corresponding TLS Secret, a separate certificate
-setup task. No Kubernetes LoadBalancer is used.
+Traefik serves HTTP and HTTPS through two Ingress routes to one API Service;
+no Kubernetes LoadBalancer is used. The HTTPS route uses Traefik's default
+self-signed certificate, so Cloudflare's SSL/TLS mode must stay on **Full**
+(not "Full (strict)", which would need a trusted origin certificate and a
+TLS Secret this cluster doesn't have yet).
 
-KEDA autoscaling, the demo load flow, cluster-view RBAC, and nightly
-ingestion are separate later phases. When KEDA is installed, the Redis
-NetworkPolicy must also allow its operator pods.
+## Not yet built
 
-## Image tag overlay
-
-`k8s/overlays/prod/kustomization.yaml` layers on `k8s/base` and pins the
-deployed application image tag in one place via kustomize's `images:`
-transformer, instead of the four hardcoded `image:` lines in the base
-manifests. `.github/workflows/release.yml` bumps this file's `newTag` on
-every merge to `main` after a successful image build/push; once Flux is
-bootstrapped (see `project/AGENT_HANDOFF.md`), it is the only thing that
-applies this overlay to the live cluster. The manual bring-up steps above
-still apply the individual base files directly, for the initial cluster
-setup and for manual recovery — `kubectl kustomize k8s/overlays/prod` is
-the way to inspect exactly what Flux will apply at any point.
+KEDA autoscaling, cluster-view RBAC, and nightly ingestion are future work
+(see `project/BACKLOG.md`). When KEDA is installed, the Redis NetworkPolicy
+will also need to allow its operator pods.
