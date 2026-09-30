@@ -9,6 +9,25 @@ type StatsBarProps = {
   stressTestCapacity?: DemoCapacity
 }
 
+/** White bunny avatar; dim like the header's GitHub mark at rest, brightens on hover/focus of its `group` parent. */
+function BunnyAvatar() {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-6 items-center justify-center rounded-full border border-hairline bg-panel text-muted transition-colors group-hover:border-primary group-hover:text-primary group-focus:border-primary group-focus:text-primary"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+        <ellipse cx="8.5" cy="6" rx="2.2" ry="5" transform="rotate(-8 8.5 6)" />
+        <ellipse cx="15.5" cy="6" rx="2.2" ry="5" transform="rotate(8 15.5 6)" />
+        <ellipse cx="12" cy="15" rx="6.5" ry="6" />
+        <circle cx="9.6" cy="14" r="0.9" className="fill-panel" />
+        <circle cx="14.4" cy="14" r="0.9" className="fill-panel" />
+        <path d="M11 16.3h2l-1 1.1z" className="fill-panel" />
+      </svg>
+    </span>
+  )
+}
+
 function StatsBar({
   lastStats,
   queriesServed = 0,
@@ -36,8 +55,17 @@ function StatsBar({
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="group relative inline-flex cursor-help" tabIndex={0} role="status" aria-label={stressTestCapacity.reason}>
-          <span aria-hidden="true" className="text-base">{stressTestCapacity.sufficient ? '🦁' : '🐰'}</span>
+        <span
+          className="group relative inline-flex cursor-help rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan"
+          tabIndex={0}
+          role="status"
+          aria-label={stressTestCapacity.reason}
+        >
+          {stressTestCapacity.sufficient ? (
+            <span aria-hidden="true" className="text-base">🦁</span>
+          ) : (
+            <BunnyAvatar />
+          )}
           <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
             {stressTestCapacity.sufficient ? 'There is room for a real worker scale-up. ' : 'Visual demo only; no jobs will be queued. '}
             {stressTestCapacity.reason}
