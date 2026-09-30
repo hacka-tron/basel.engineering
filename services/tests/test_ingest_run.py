@@ -93,6 +93,18 @@ def test_secret_heuristic_catches_temporary_aws_key():
     assert secret_reason("key = ASIA1234567890ABCDEF") == "possible AWS access key at line 1"
 
 
+def test_architecture_deep_dive_is_ingested_into_about_system():
+    repo_root = Path(__file__).resolve().parents[2]
+    deep_dive = "docs/architecture/deep-dive.md"
+    sources = {source.source_path: source for source in scan_sources(repo_root)}
+
+    assert sources[deep_dive].corpus == "about_system"
+    scanned = scan_file(sources[deep_dive])
+    assert scanned.error is None
+    assert scanned.content is not None
+    assert len(chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)) > 1
+
+
 @pytest.fixture
 def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
