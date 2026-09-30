@@ -4,13 +4,23 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
+    # Every path the Dockerfile COPYs into the image, plus build inputs. The
+    # image carries corpus/ docs/ infra/ k8s/ as the ingest Job's content
+    # snapshot, so a docs- or corpus-only merge must still build a release,
+    # or the new content never reaches the RAG index. Flux's tag bumps go to
+    # the `deploy` branch, not main, so k8s/** here cannot loop.
     paths:
       - services/**
       - frontend/**
+      - corpus/**
+      - docs/**
+      - infra/**
+      - k8s/**
+      - alembic.ini
       - pyproject.toml
       - Dockerfile
+      - .dockerignore
       - docker-compose.yml
-      - k8s/base/**
       - .github/workflows/release.yml
 
 concurrency:
