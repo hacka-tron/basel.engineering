@@ -1,12 +1,14 @@
 # Agent handoff
 
-## Stress-test branch paused at owner's request — Codex, 2026-09-30
+## Stress test ready for merge — Claude, 2026-09-30
 
-**Active coordinator: Codex; work paused before review or deployment.** Worktree `.worktrees/stress-test-keda`, branch `feature/stress-test-keda`, rebased onto `origin/main` after PR #38. The rebase combined Claude's stress-test UI with the newer architecture inspection and fixed handle metadata; frontend lint and build passed. The existing backend and KEDA manifests remain unmerged and unapplied.
+**Active coordinator: Claude.** `feature/stress-test-keda` (PR #40) finished Codex's paused work and passed the Codex review gate over five rounds: live-free-memory capacity gate (metrics-server) that fails closed, owner-approved RBAC (pods in `app`; `list` on nodes and `metrics.k8s.io` nodes), KEDA installed via ordered Flux Kustomizations (`keda` wait → `keda-scaling`), HPA scale-down back to 1 in about a minute, KEDA memory within the 150Mi budget, tiger/rabbit capacity icons with descriptive tooltips, simulated runs during any real burst's shared cooldown. 134 backend tests, lint/build, and `kubectl kustomize` renders pass; browser-checked locally at 1440px and 375px. **Merging installs KEDA on the live cluster** — needs the owner's go-ahead. Stacked on it: PR #41 (conversational chat) and `feature/typography-mobile` (in review).
 
-**Partial implementation committed here:** `GET /api/demo/capacity` reads the single node's allocatable memory through the in-cluster API and conservatively compares it with the documented baseline, four additional workers, and a margin (2060 MiB total). It denies a tight node, memory pressure, or unavailable cluster. `POST /api/demo/load` checks capacity again before acquiring the Redis lock or enqueueing jobs. The frontend shows a lion/bunny status with a visible hover/focus tooltip; insufficient or unknown capacity runs a client-side pod/backlog animation without calling `/api/demo/load`. The backend focused tests passed (7); frontend lint/build passed. This is **not feature-complete or ready to merge**.
+---
 
-**Resume work before review:** add the narrowly scoped node-read `ClusterRole` and `ClusterRoleBinding` for the API ServiceAccount; separate KEDA Helm installation from `ScaledObject` with ordered Flux Kustomizations and a HelmRelease readiness health check; verify those manifests render and reconcile safely; browser-test real and visual-only click paths, tooltip, pod animation, and preservation of diagram arrows/selection on desktop and mobile; inspect the memory estimator against live node allocatable/conditions without running a burst; run the full backend suite and final lint/build. The older typography task in `.worktrees/typography-pass` was not started. No live AWS/Kubernetes changes were made.
+## Roles changed — Claude, 2026-09-30
+
+**Active coordinator: Claude (Max plan).** Claude now orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and running independent streams in parallel worktrees. Codex (`gpt-6-sol`, full permissions) is the review-and-validation gate before check-in. See `project/orchestration/README.md` and `codex-reviewer.md`. Mobile/typography rules for frontend work are in `project/MOBILE_DESIGN.md`. Claude resumed Codex's paused `feature/stress-test-keda` work (see that branch's handoff).
 
 ---
 
@@ -293,7 +295,7 @@ Next: Claude reviews this worktree/commit, then decides whether the broader Tita
 
 Next action: fix findings 1–4 (in a worktree, per the new `CODEX.md` policy), re-verify live, then Phase 2 can be marked complete in `SNAPSHOT.md`/`BACKLOG.md`.
 
-When the owner switches to Codex because Claude has run out of tokens, Claude's design remains the architecture, Codex implements, and Gemini validates through `agy` when available. See `project/CODEX.md`; Claude's original guide is unchanged.
+As of 2026-09-30 Claude orchestrates and implements (Max plan) and Codex is the review gate (`project/orchestration/codex-reviewer.md`). If the owner explicitly hands implementation back to Codex, Claude's design remains the architecture, Codex implements per `project/CODEX.md`, and Gemini validates through `agy` when available.
 
 ## Taking over as the brain
 
