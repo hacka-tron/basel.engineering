@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
+import type { ChatMessage } from '../lib/conversation'
 
 const questions: Record<Corpus, string[]> = {
   basel: [
@@ -17,14 +18,15 @@ const questions: Record<Corpus, string[]> = {
 
 type ChatProps = {
   corpus: Corpus
-  messages: { role: 'user' | 'assistant'; text: string }[]
+  messages: ChatMessage[]
   isStreaming: boolean
   onAsk: (question: string) => void
+  onNewChat: () => void
   errorMessage: string | null
   inputAccessory?: ReactNode
 }
 
-function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccessory }: ChatProps) {
+function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, inputAccessory }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
 
@@ -40,7 +42,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccesso
   // announcements) and becomes non-empty in a single mutation once
   // `isStreaming` flips false, which a screen reader announces once.
   const lastMessage = messages[messages.length - 1]
-  const announcement = !isStreaming && lastMessage?.role === 'assistant' ? lastMessage.text : ''
+  const announcement = !isStreaming && lastMessage?.role === 'assistant' ? lastMessage.content : ''
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -56,20 +58,44 @@ function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccesso
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div ref={messagesRef} aria-label="Messages" aria-live="off" className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
           <div className="flex flex-col gap-4">
-            {messages.map((message, index) => (
-              (message.text || message.role === 'user' || (isStreaming && index === messages.length - 1)) && (
-                <div
-                  key={index}
-                  className={`max-w-[90%] whitespace-pre-wrap break-words rounded-[3px] border border-hairline px-4 py-3 text-sm leading-relaxed text-primary ${message.role === 'user' ? 'self-end bg-canvas' : 'self-start bg-panel'}`}
-                >
-                  {message.text || (isStreaming ? '…' : '')}
+            {messages.map((message) => {
+              const pending = message.state === 'pending'
+              if (message.role === 'assistant' && !message.content && !pending) return null
+              const showSources = message.role === 'assistant' && !pending && (message.sources?.length ?? 0) > 0
+              return (
+                <div key={message.id} className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end' : 'self-start'}`}>
+                  <div
+                    className={`whitespace-pre-wrap break-words rounded-[3px] border border-hairline px-4 py-3 text-sm leading-relaxed text-primary ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'}`}
+                  >
+                    {message.content || '…'}
+                  </div>
+                  {showSources && (
+                    <p className="break-words px-1 text-[10px] leading-relaxed text-muted">
+                      <span>Sources: </span>
+                      {message.sources!.map((source, index) => (
+                        <span key={source.source_path}>
+                          {index > 0 && ' · '}
+                          {source.url ? (
+                            <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-primary">{source.title}</a>
+                          ) : (
+                            <span title={source.source_path}>{source.title}</span>
+                          )}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                  {/* Follow-ups show the standalone query retrieval actually used (DESIGN-002 §5.2). */}
+                  {message.rewrittenQuery && !pending && (
+                    <p className="break-words px-1 text-[10px] leading-relaxed text-muted">Searched for: {message.rewrittenQuery}</p>
+                  )}
                 </div>
               )
-            ))}
+            })}
           </div>
         </div>
 
-        <div className="shrink-0 px-7 pb-6">
+        {/* Suggested questions return whenever this tab's conversation is empty. */}
+        {messages.length === 0 && <div className="shrink-0 px-7 pb-6">
           <p className="mb-3 text-xs text-muted">Suggested questions</p>
           {/*
             A wrapping grid of these chips can run to 3+ full rows on a
@@ -93,7 +119,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccesso
               </button>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
 
       {inputAccessory}
@@ -118,6 +144,18 @@ function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccesso
             →
           </button>
         </form>
+        <p className="mt-2 text-[10px] text-muted">
+          Chats are saved in this browser.{' '}
+          <button
+            type="button"
+            onClick={onNewChat}
+            disabled={isStreaming || messages.length === 0}
+            className="rounded-[3px] underline underline-offset-2 transition-colors hover:text-primary disabled:cursor-not-allowed disabled:no-underline"
+          >
+            New chat
+          </button>{' '}
+          clears it.
+        </p>
       </div>
     </section>
   )

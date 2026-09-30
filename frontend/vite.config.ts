@@ -7,7 +7,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // Override for a second local API (e.g. another worktree on :8001):
+      // GLASSBOX_API_PROXY=http://localhost:8001 npm run dev -- --port 5174
+      '/api': process.env.GLASSBOX_API_PROXY ?? 'http://localhost:8000',
     },
   },
 })

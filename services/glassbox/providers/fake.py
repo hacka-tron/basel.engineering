@@ -3,7 +3,12 @@
 import hashlib
 from collections.abc import AsyncIterator
 
-from services.glassbox.providers.base import EmbeddingProvider, LLMProvider
+from services.glassbox.providers.base import (
+    REWRITE_FOLLOW_UP_PREFIX,
+    REWRITE_PROMPT_SUFFIX,
+    EmbeddingProvider,
+    LLMProvider,
+)
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):
@@ -28,7 +33,20 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 class FakeLLMProvider(LLMProvider):
     model_id = "fake-llm-v1"
 
-    async def generate(self, prompt: str, *, max_tokens: int) -> AsyncIterator[str]:
+    async def generate(
+        self, prompt: str, *, max_tokens: int, system: str | None = None
+    ) -> AsyncIterator[str]:
+        if prompt.rstrip().endswith(REWRITE_PROMPT_SUFFIX):
+            # Follow-up rewrite: an identity rewrite keeps local retrieval and the
+            # displayed "searched for" text meaningful instead of a canned sentence.
+            follow_ups = [
+                line.removeprefix(REWRITE_FOLLOW_UP_PREFIX).strip()
+                for line in prompt.splitlines()
+                if line.startswith(REWRITE_FOLLOW_UP_PREFIX)
+            ]
+            if follow_ups:
+                yield follow_ups[-1]
+                return
         response = "This is a fake response for local development."
         for index, word in enumerate(response.split()[: max(0, max_tokens)]):
             yield word if index == 0 else f" {word}"

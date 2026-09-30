@@ -9,8 +9,37 @@ import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import { connectClusterStream } from './lib/clusterStream'
+import {
+  historyForRequest,
+  loadConversation,
+  MAX_DISPLAY_MESSAGES,
+  newMessageId,
+  serializeConversation,
+  storageKey,
+  writeConversation,
+  type ApiCorpus,
+  type ChatMessage,
+  type MessageSource,
+} from './lib/conversation'
 
 export type Corpus = 'basel' | 'system'
+
+const CORPORA: Corpus[] = ['basel', 'system']
+
+function apiCorpus(corpus: Corpus): ApiCorpus {
+  return corpus === 'basel' ? 'about_me' : 'about_system'
+}
+
+function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
+  const seen = new Set<string>()
+  const sources: MessageSource[] = []
+  for (const chunk of chunks) {
+    if (seen.has(chunk.source_path)) continue
+    seen.add(chunk.source_path)
+    sources.push({ source_path: chunk.source_path, title: chunk.title, ...(chunk.url ? { url: chunk.url } : {}) })
+  }
+  return sources
+}
 
 function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
@@ -19,11 +48,28 @@ function App() {
   const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
+  // One conversation per corpus tab (DESIGN-002 §5.1): switching the toggle
+  // swaps which conversation is shown instead of mixing the two. Restored
+  // from localStorage on load; the architecture panel still starts idle.
+  const [conversations, setConversations] = useState<Record<Corpus, ChatMessage[]>>(() => ({
+    basel: loadConversation('about_me'),
+    system: loadConversation('about_system'),
+  }))
+  const messages = conversations[corpus]
+  const conversationsRef = useRef(conversations)
   const [isStreaming, setIsStreaming] = useState(false)
   const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // Errors belong to the conversation whose request failed.
+  const [chatError, setChatError] = useState<{ corpus: Corpus; message: string } | null>(null)
+  const errorMessage = chatError?.corpus === corpus ? chatError.message : null
+  // Which conversation and assistant message the in-flight request writes to;
+  // it stays fixed even if the visitor switches tabs mid-answer.
+  const streamTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
+  // Last persisted form per corpus, so writes happen only when the settled
+  // conversation changes (after a user message or a settled answer), never
+  // per streamed token.
+  const savedSignatureRef = useRef<Partial<Record<Corpus, string | null>>>({})
   const requestInFlightRef = useRef(false)
   const pendingComponentRef = useRef<NodeId | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -153,6 +199,49 @@ function App() {
   // and it self-adjusts (revealing a larger fraction of a bigger backlog per
   // tick) so a genuinely slow, naturally-paced real stream is shown at
   // essentially the same speed it arrives, while a burst reads out visibly.
+  useEffect(() => {
+    conversationsRef.current = conversations
+    for (const key of CORPORA) {
+      const signature = serializeConversation(conversations[key], 0)
+      if (!(key in savedSignatureRef.current)) {
+        // First run: this is what was just loaded; rewriting it would only
+        // push its expiry forward without any new activity.
+        savedSignatureRef.current[key] = signature
+        continue
+      }
+      if (savedSignatureRef.current[key] === signature) continue
+      savedSignatureRef.current[key] = signature
+      writeConversation(apiCorpus(key), signature === null ? null : serializeConversation(conversations[key]))
+    }
+  }, [conversations])
+
+  // Multiple browser tabs: last write wins, and a change saved in another
+  // tab refreshes that conversation here unless this tab is streaming into it.
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      const changed = CORPORA.find((key) => event.key === storageKey(apiCorpus(key)))
+      if (!changed || streamTargetRef.current?.corpus === changed) return
+      const loaded = loadConversation(apiCorpus(changed))
+      savedSignatureRef.current[changed] = serializeConversation(loaded, 0)
+      setConversations((current) => ({ ...current, [changed]: loaded }))
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  function updateStreamingMessage(update: (message: ChatMessage) => ChatMessage | null) {
+    const target = streamTargetRef.current
+    if (!target) return
+    setConversations((current) => ({
+      ...current,
+      [target.corpus]: current[target.corpus].flatMap((message) => {
+        if (message.id !== target.messageId) return [message]
+        const next = update(message)
+        return next ? [next] : []
+      }),
+    }))
+  }
+
   const revealBufferRef = useRef('')
   const revealTimerRef = useRef<number | null>(null)
   const revealFinalizeRef = useRef<(() => void) | null>(null)
@@ -165,10 +254,7 @@ function App() {
       if (pending.length > 0) {
         const take = Math.max(2, Math.ceil(pending.length / 12))
         revealBufferRef.current = pending.slice(take)
-        setMessages((current) => current.map((message, index) =>
-          index === current.length - 1 && message.role === 'assistant'
-            ? { ...message, text: message.text + pending.slice(0, take) }
-            : message))
+        updateStreamingMessage((message) => ({ ...message, content: message.content + pending.slice(0, take) }))
         return
       }
       if (revealFinalizeRef.current) {
@@ -193,28 +279,44 @@ function App() {
     setActiveNode(null)
     requestInFlightRef.current = false
     abortControllerRef.current = null
+    streamTargetRef.current = null
     const pendingComponent = pendingComponentRef.current
     pendingComponentRef.current = null
-    if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system')
+    if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system', { sendHistory: false })
   }
 
-  function handleAsk(question: string, targetCorpus: Corpus = corpus) {
+  function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true } = {}) {
     if (requestInFlightRef.current) return
     requestInFlightRef.current = true
     const controller = new AbortController()
     abortControllerRef.current = controller
+    // Recent settled turns of this tab's conversation, read before the new
+    // question is appended. Component questions are self-contained, so they
+    // skip history (and so keep their answer-cache eligibility), but they are
+    // still recorded in About This System's conversation for later follow-ups.
+    const history = sendHistory ? historyForRequest(conversationsRef.current[targetCorpus]) : []
+    const now = Date.now()
+    const assistantId = newMessageId()
+    streamTargetRef.current = { corpus: targetCorpus, messageId: assistantId }
     setNodeCacheStatus({})
     setRetrievedChunks([])
-    setErrorMessage(null)
+    setChatError(null)
     setActiveNode(null)
-    setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: '' }])
+    setConversations((current) => ({
+      ...current,
+      [targetCorpus]: [
+        ...current[targetCorpus],
+        { id: newMessageId(), role: 'user', content: question, createdAt: now },
+        { id: assistantId, role: 'assistant', content: '', state: 'pending', createdAt: now },
+      ].slice(-MAX_DISPLAY_MESSAGES) as ChatMessage[],
+    }))
     setIsStreaming(true)
     revealBufferRef.current = ''
     revealFinalizeRef.current = null
     requestStartRef.current = performance.now()
     firstTokenLatencyRef.current = null
 
-    void askQuestion(question, targetCorpus === 'basel' ? 'about_me' : 'about_system', {
+    void askQuestion(question, apiCorpus(targetCorpus), {
       onStage: (event) => {
         setActiveNode((current) => event.status === 'start'
           ? event.node
@@ -223,7 +325,14 @@ function App() {
           setNodeCacheStatus((current) => ({ ...current, [event.node]: event.cache }))
         }
       },
-      onRetrieval: (event) => setRetrievedChunks(event.chunks),
+      onRetrieval: (event) => {
+        setRetrievedChunks(event.chunks)
+        updateStreamingMessage((message) => ({
+          ...message,
+          sources: messageSources(event.chunks),
+          ...(event.rewritten_query ? { rewrittenQuery: event.rewritten_query } : {}),
+        }))
+      },
       onToken: (event) => {
         if (firstTokenLatencyRef.current === null && requestStartRef.current !== null) {
           firstTokenLatencyRef.current = Math.round(performance.now() - requestStartRef.current)
@@ -233,12 +342,13 @@ function App() {
       },
       onDone: (event) => {
         revealFinalizeRef.current = () => {
-          if (event.mode === 'retrieval_only') {
-            setMessages((current) => current.map((message, index) =>
-              index === current.length - 1 && message.role === 'assistant' && !message.text
-                ? { ...message, text: 'Sources retrieved — no generated answer for this request.' }
-                : message))
-          }
+          updateStreamingMessage((message) => ({
+            ...message,
+            content: event.mode === 'retrieval_only' && !message.content
+              ? 'Sources retrieved — no generated answer for this request.'
+              : message.content,
+            state: event.mode === 'retrieval_only' ? 'retrieval_only' : 'done',
+          }))
           setLastStats({
             latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
             cacheStatus: event.answer_cache,
@@ -251,17 +361,29 @@ function App() {
       },
       onError: (event) => {
         revealFinalizeRef.current = () => {
-          setErrorMessage(event.code === 'rate_limited' && event.retry_after_s
-            ? `${event.message} Try again in ${event.retry_after_s} seconds.`
-            : event.message || 'Something went wrong — try again.')
-          setMessages((current) => current.at(-1)?.role === 'assistant' && !current.at(-1)?.text
-            ? current.slice(0, -1)
-            : current)
+          setChatError({
+            corpus: targetCorpus,
+            message: event.code === 'rate_limited' && event.retry_after_s
+              ? `${event.message} Try again in ${event.retry_after_s} seconds.`
+              : event.message || 'Something went wrong — try again.',
+          })
+          // An empty reply is dropped; partial text stays visible but is
+          // marked `error`, so it is never saved or sent back as history.
+          updateStreamingMessage((message) => message.content ? { ...message, state: 'error' } : null)
           finishRequest()
         }
         ensureRevealLoop()
       },
-    }, controller.signal)
+    }, controller.signal, history)
+  }
+
+  function handleNewChat() {
+    if (requestInFlightRef.current) return
+    setConversations((current) => ({ ...current, [corpus]: [] }))
+    if (chatError?.corpus === corpus) setChatError(null)
+    setRetrievedChunks([])
+    setNodeCacheStatus({})
+    if (corpus === 'system') setSelectedNode(null)
   }
 
   function handleInspectComponent(id: NodeId) {
@@ -271,7 +393,7 @@ function App() {
     if (requestInFlightRef.current) {
       pendingComponentRef.current = id
     } else {
-      handleAsk(questionForComponent(id), 'system')
+      handleAsk(questionForComponent(id), 'system', { sendHistory: false })
     }
   }
   // Matches Tailwind's `md` breakpoint. Drives which ArchitecturePanel /
@@ -285,9 +407,12 @@ function App() {
   // panel below.
   const showArchitectureSheet = architectureOpen && !isDesktop
   const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
-  const selectedAnswer = selectedNode && errorMessage ? errorMessage
-    : selectedQuestion && messages.at(-2)?.text === selectedQuestion && messages.at(-1)?.role === 'assistant'
-      ? messages.at(-1)?.text || ''
+  // Component questions always go to About This System's conversation.
+  const systemMessages = conversations.system
+  const systemError = chatError?.corpus === 'system' ? chatError.message : null
+  const selectedAnswer = selectedNode && systemError ? systemError
+    : selectedQuestion && systemMessages.at(-2)?.content === selectedQuestion && systemMessages.at(-1)?.role === 'assistant'
+      ? systemMessages.at(-1)?.content || ''
       : selectedNode ? 'Waiting for the current answer…' : null
 
   // Focus management for the mobile bottom sheet: it declares
@@ -382,6 +507,7 @@ function App() {
           messages={messages}
           isStreaming={isStreaming}
           onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
+          onNewChat={handleNewChat}
           errorMessage={errorMessage}
           inputAccessory={
             <PipelineStrip
