@@ -39,7 +39,7 @@ function App() {
   const revealBufferRef = useRef('')
   const revealTimerRef = useRef<number | null>(null)
   const revealFinalizeRef = useRef<(() => void) | null>(null)
-  const REVEAL_TICK_MS = 20
+  const REVEAL_TICK_MS = 30
 
   function ensureRevealLoop() {
     if (revealTimerRef.current !== null) return
@@ -176,38 +176,51 @@ function App() {
   return (
     <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary">
       <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-3 md:h-[72px] md:flex-nowrap md:gap-0 md:px-8 md:py-0">
-        <h1 className="w-full text-base font-semibold tracking-tight md:w-auto">Basel Abdel-Rahman</h1>
+        {/*
+          Below md, the header wraps to two rows. Grouping [h1 + Contact]
+          and [nav + GitHub] each in their own non-wrapping row keeps every
+          item legible — without these wrappers, h1 claimed a whole row by
+          itself (via w-full) and left Contact/nav/GitHub to compete for the
+          next one, pushing GitHub (ml-auto) onto a third row of its own.
+          `md:contents` removes the wrapper from layout at md+, so desktop
+          spacing is unchanged - h1/nav/GitHub become direct header children
+          again there, exactly as before.
+        */}
+        <div className="flex items-center gap-4 md:contents">
+          <h1 className="text-base font-semibold tracking-tight">Basel Abdel-Rahman</h1>
+          <ContactReveal />
+        </div>
 
-        <ContactReveal />
+        <div className="flex w-full items-center justify-between gap-2 md:contents md:w-auto">
+          <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-auto">
+            <button
+              type="button"
+              aria-pressed={corpus === 'basel'}
+              onClick={() => setCorpus('basel')}
+              className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+            >
+              About Basel
+            </button>
+            <span aria-hidden="true" className="text-hairline">|</span>
+            <button
+              type="button"
+              aria-pressed={corpus === 'system'}
+              onClick={() => setCorpus('system')}
+              className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
+            >
+              About This System
+            </button>
+          </nav>
 
-        <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-auto">
-          <button
-            type="button"
-            aria-pressed={corpus === 'basel'}
-            onClick={() => setCorpus('basel')}
-            className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+          <a
+            href="https://github.com/hacka-tron"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted transition-colors hover:text-primary md:ml-12"
           >
-            About Basel
-          </button>
-          <span aria-hidden="true" className="text-hairline">|</span>
-          <button
-            type="button"
-            aria-pressed={corpus === 'system'}
-            onClick={() => setCorpus('system')}
-            className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-          >
-            About This System
-          </button>
-        </nav>
-
-        <a
-          href="https://github.com/hacka-tron"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto text-xs text-muted transition-colors hover:text-primary md:ml-12"
-        >
-          GitHub ↗
-        </a>
+            GitHub ↗
+          </a>
+        </div>
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[40%_60%]">
