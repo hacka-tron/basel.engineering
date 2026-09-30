@@ -1,24 +1,15 @@
 name: CI
 
+# No path filters: backend-tests and frontend-checks are required status
+# checks on main, and a docs/config-only PR with no matching-path commit
+# would otherwise never get a check run to satisfy that requirement. Both
+# jobs are fast (well under a minute combined), so running unconditionally
+# is cheap.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - services/**
-      - frontend/**
-      - pyproject.toml
-      - Dockerfile
-      - docker-compose.yml
-      - .github/workflows/ci.yml
   push:
     branches: [main]
-    paths:
-      - services/**
-      - frontend/**
-      - pyproject.toml
-      - Dockerfile
-      - docker-compose.yml
-      - .github/workflows/ci.yml
 
 permissions:
   contents: read
