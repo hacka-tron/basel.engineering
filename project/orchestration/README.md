@@ -1,20 +1,33 @@
 # Multi-model orchestration
 
-Templates for dispatching implementation to Codex (backend) or a Sonnet subagent (frontend), and review to Gemini, so Claude (the orchestrator) fills in a template instead of re-deriving the boilerplate each time. Background and full findings from the pilot that produced these: `project/BACKLOG.md`.
+How work is split between models on this project, plus the dispatch template for the Codex review gate, so Claude (the orchestrator) fills in a template instead of re-deriving the boilerplate each time.
 
-- `codex-implementer.md` — dispatch template + known CLI constraints for Codex.
-- `gemini-reviewer.md` — dispatch template + known CLI constraints for Gemini (via `agy`).
+- `codex-reviewer.md` — dispatch template + CLI constraints for the Codex review gate. **Every change goes through it before being checked in.**
+- `gemini-reviewer.md` — fallback reviewer (via `agy`) if Codex is unavailable.
 
-## Roles
+## Roles (as of 2026-09-30 — owner moved Claude to a Max plan)
 
-- **Claude Opus (orchestrator):** writes the blueprint (exact spec, no placeholders), dispatches implementation, dispatches the diff for review, and directs real end-to-end verification before considering anything done. **Does not do hands-on implementation, debugging, or verification legwork itself** — that's what the roles below are for. Opus's job is architecture, judgment calls, and reading reports, not running dev servers or chasing down CSS bugs by hand.
-- **Backend implementer (Codex, `gpt-6-sol`):** implementation from an exact spec. Sandboxed (`workspace-write`), no network access — any step needing network (package installs, binding ports, real DB/service connections) has to be done by whoever is verifying, not Codex itself.
-- **Frontend — two-step, both delegated away from Opus:**
-  1. **Codex** still writes the initial component/CSS code where it can (no network needed for that part) — same as backend.
-  2. **A Claude Sonnet subagent** (`Agent` tool, `model: "sonnet"` — confirmed 2026-09-30 to genuinely route to Sonnet, self-identified as `claude-sonnet-5`) does everything Codex's sandbox can't: `npm install`/scaffold setup, running the dev server, real browser verification via `claude-in-chrome` (screenshots, live DOM inspection), and fixing whatever it finds. This is the delegation Opus was skipping — e.g. the Task 1 token-collision bug (see `project/BACKLOG.md`) was root-caused and fixed by Opus directly the first time, which is exactly the pattern to avoid going forward: hand that loop to Sonnet instead.
-- **Gemini (`gemini-3.8-flash-medium` via `agy`):** spec-compliance + code-quality review, combined in one pass. **Fallback:** if Gemini's quota/tokens run out, run the same review via a Claude subagent instead (`superpowers:code-reviewer` or a general-purpose Agent dispatch with the same review brief) rather than blocking — don't skip review.
-  - **Status as of 2026-09-30, ~2:33am:** Gemini's individual quota hit `RESOURCE_EXHAUSTED` (429), resets in ~7 days (~165h). **Reviews from here forward use a Claude subagent** with the same review-brief format/rigor until Gemini's quota resets — revert back to `agy` once it does (cheaper/separate quota from Claude's own usage).
+- **Claude Opus (orchestrator + implementer):** owns the blueprint, the plan, and the implementation. Opus decides per task which model does the hands-on work:
+  - **Opus itself** — small or judgment-heavy changes where writing the spec would take longer than the change.
+  - **Opus subagent** (`Agent` tool, `model: "opus"`) — larger features with real design/correctness risk (e.g. cache semantics, concurrency, security-relevant code).
+  - **Sonnet subagent** (`model: "sonnet"`) — well-specified implementation, browser/dev-server verification loops (`claude-in-chrome` screenshots, DOM inspection), test/lint/build legwork.
+  - **Haiku subagent** (`model: "haiku"`) — mechanical, low-risk edits and searches.
+  - **Parallelize by default.** Independent work streams each get their own git worktree under `.worktrees/` and their own subagent, dispatched in the same turn. Give each concurrent stream distinct local ports (e.g. API 8000/8001, Vite 5173/5174) and tell them not to stop/recreate a shared `docker compose` stack.
+- **Codex (`gpt-6-sol`) — reviewer and check-in gate, not implementer.** Before anything is committed to a PR branch for merge (or a PR is marked ready), Codex reviews the change against its requirements and **validates** it: reads the diff and the spec, re-runs tests/lint/build itself, and can bring up services to exercise the change. Runs in agentic mode with full permissions (`--dangerously-bypass-approvals-and-sandbox`) so it has network, can run `docker compose`, bind ports and write git metadata in worktrees. It still must not edit files, commit, push, or touch live AWS/Kubernetes — its output is a verdict, not changes. See `codex-reviewer.md`.
+- **Fix loop:** Opus (or the implementing subagent) fixes every Critical/Important finding, then re-runs Codex on the updated diff. Two review rounds is the normal ceiling; if a third is needed, stop and bring the disagreement to the owner.
+
+## What "checked in" means
+
+1. Implementation + tests committed on a feature branch in its worktree.
+2. Codex review returns **APPROVED** (or CHANGES NEEDED → fixed → APPROVED).
+3. Real end-to-end verification done (review-by-reading doesn't catch integration bugs — see `gemini-reviewer.md`).
+4. PR opened with the Codex verdict summarized in the description; merge after CI passes.
+5. Anything that changes the live cluster on merge (Flux applies `k8s/overlays/prod` from the `deploy` branch) or grants new permissions (RBAC, IAM) needs the owner's explicit go-ahead before merge.
 
 ## Division of labor for git
 
-In a worktree, only the orchestrator commits (Codex's sandbox can't write worktree git metadata). Elsewhere, Codex can commit if explicitly instructed to.
+Only Claude (orchestrator or its implementing subagents) commits and pushes. Codex has full permissions for validation but is instructed not to commit, push, or modify files.
+
+## History
+
+Until 2026-09-30 the roles were reversed: Codex (`workspace-write` sandbox, no network) implemented from exact specs, a Sonnet subagent did frontend verification, and Gemini reviewed. The pilot findings behind that setup are in `project/BACKLOG.md`; the Codex CLI constraints learned then (model choice, headless behavior) still apply and are carried into `codex-reviewer.md`.

@@ -1,5 +1,7 @@
 # Codex guide
 
+> **Current role (since 2026-09-30): reviewer.** The owner moved Claude to a Max plan; Claude now orchestrates and implements, and Codex is the review-and-validation gate every change passes before check-in (`project/orchestration/codex-reviewer.md`). As reviewer: read the diff and requirements, re-run tests/lint/build, validate end to end with full permissions, report a verdict — do not edit files, commit, push, or touch live AWS/Kubernetes. The rest of this guide applies only if the owner explicitly hands implementation back to Codex; its lessons (worktrees, fail-closed shared state, no unrequested features) remain good review criteria.
+
 This guide applies when Codex is implementing or coordinating. `project/AGENT_HANDOFF.md` names the current project lead and executor. Claude's original operating guide remains in `project/CLAUDE.md` and `project/orchestration/README.md`.
 
 ## Start a session
