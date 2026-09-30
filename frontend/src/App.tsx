@@ -5,7 +5,7 @@ import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import type { NodeId } from './architecture'
+import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 
 export type Corpus = 'basel' | 'system'
@@ -14,6 +14,7 @@ function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
   const [architectureOpen, setArchitectureOpen] = useState(false)
   const [activeNode, setActiveNode] = useState<NodeId | null>(null)
+  const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
@@ -22,6 +23,7 @@ function App() {
   const [queriesServed, setQueriesServed] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const requestInFlightRef = useRef(false)
+  const pendingComponentRef = useRef<NodeId | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   // `done.total_ms` (server-measured) spans the entire request, including
   // however long the LLM took to generate and stream the whole answer -
@@ -80,8 +82,18 @@ function App() {
     if (revealTimerRef.current !== null) window.clearInterval(revealTimerRef.current)
   }, [])
 
-  function handleAsk(question: string) {
-    if (requestInFlightRef.current || isStreaming) return
+  function finishRequest() {
+    setIsStreaming(false)
+    setActiveNode(null)
+    requestInFlightRef.current = false
+    abortControllerRef.current = null
+    const pendingComponent = pendingComponentRef.current
+    pendingComponentRef.current = null
+    if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system')
+  }
+
+  function handleAsk(question: string, targetCorpus: Corpus = corpus) {
+    if (requestInFlightRef.current) return
     requestInFlightRef.current = true
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -96,7 +108,7 @@ function App() {
     requestStartRef.current = performance.now()
     firstTokenLatencyRef.current = null
 
-    void askQuestion(question, corpus === 'basel' ? 'about_me' : 'about_system', {
+    void askQuestion(question, targetCorpus === 'basel' ? 'about_me' : 'about_system', {
       onStage: (event) => {
         setActiveNode((current) => event.status === 'start'
           ? event.node
@@ -127,10 +139,7 @@ function App() {
             tokensOut: event.tokens_out,
           })
           setQueriesServed((current) => current + 1)
-          setIsStreaming(false)
-          setActiveNode(null)
-          requestInFlightRef.current = false
-          abortControllerRef.current = null
+          finishRequest()
         }
         ensureRevealLoop()
       },
@@ -142,14 +151,23 @@ function App() {
           setMessages((current) => current.at(-1)?.role === 'assistant' && !current.at(-1)?.text
             ? current.slice(0, -1)
             : current)
-          setIsStreaming(false)
-          setActiveNode(null)
-          requestInFlightRef.current = false
-          abortControllerRef.current = null
+          finishRequest()
         }
         ensureRevealLoop()
       },
     }, controller.signal)
+  }
+
+  function handleInspectComponent(id: NodeId) {
+    setSelectedNode(id)
+    setCorpus('system')
+    setArchitectureOpen(false)
+    if (!isDesktop) window.requestAnimationFrame(() => triggerButtonRef.current?.focus())
+    if (requestInFlightRef.current) {
+      pendingComponentRef.current = id
+    } else {
+      handleAsk(questionForComponent(id), 'system')
+    }
   }
   // Matches Tailwind's `md` breakpoint. Drives which ArchitecturePanel /
   // React Flow instance is mounted so only one ever exists at a time — see
@@ -215,7 +233,7 @@ function App() {
             <button
               type="button"
               aria-pressed={corpus === 'basel'}
-              onClick={() => setCorpus('basel')}
+              onClick={() => { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }}
               className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
             >
               About Basel
@@ -253,7 +271,7 @@ function App() {
           corpus={corpus}
           messages={messages}
           isStreaming={isStreaming}
-          onAsk={handleAsk}
+          onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
           errorMessage={errorMessage}
           inputAccessory={
             <PipelineStrip
@@ -271,7 +289,7 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} />}
+        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onPreview={() => setCorpus('system')} onInspect={handleInspectComponent} />}
       </main>
 
       <StatsBar lastStats={lastStats} queriesServed={queriesServed} />
@@ -298,7 +316,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onPreview={() => setCorpus('system')} onInspect={handleInspectComponent} />
             </div>
           </div>
         </div>

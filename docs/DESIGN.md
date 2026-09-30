@@ -97,6 +97,8 @@ The header toggle switches which corpus is queried. Each corpus has 3 to 4 sugge
 
 Driven entirely by trace events from the backend (section 8). For each event the panel highlights the node, animates the edge into it, and shows the duration badge when the stage ends. Below the diagram, a list of retrieved chunks shows source path, title and similarity score.
 
+The nodes can also be inspected directly. Hovering or keyboard-focusing one switches the question topic to **About This System** and shows a short description plus the concrete implementation (for example, Redis Streams for Queue) below the diagram, without making a model request. Selecting a node highlights it and asks a component-specific question in the system chat; if an answer is still streaming, the question starts when that answer finishes. On mobile, selecting a node closes the architecture sheet so the chat answer is visible.
+
 ### 4.5 Stress test button
 
 Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. Global cooldown of 5 minutes, shown as a countdown on the button.
