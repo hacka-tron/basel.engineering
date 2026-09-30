@@ -31,11 +31,16 @@ redis.call('HSET', KEYS[1], 'tokens', tokens, 'ts', ARGV[1])
 redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return {allowed, retry}
 """
+# The daily budget counts integer quarter-units (DESIGN-002 §5.4/§9.4): a generated
+# answer costs 4, a follow-up rewrite (a much smaller call) costs 1.
+ANSWER_BUDGET_UNITS = 4
+REWRITE_BUDGET_UNITS = 1
 _DAILY_BUDGET_SCRIPT = """
 local used = tonumber(redis.call('GET', KEYS[1])) or 0
-if used >= tonumber(ARGV[1]) then return 0 end
-used = redis.call('INCR', KEYS[1])
-if used == 1 then redis.call('EXPIRE', KEYS[1], 172800) end
+local units = tonumber(ARGV[2])
+if used + units > tonumber(ARGV[1]) then return 0 end
+redis.call('INCRBY', KEYS[1], units)
+if redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], 172800) end
 return 1
 """
 
@@ -45,7 +50,9 @@ class RateLimiter(Protocol):
 
 
 class DailyBudget(Protocol):
-    async def reserve(self, *, now: datetime | None = None) -> bool: ...
+    async def reserve(
+        self, *, now: datetime | None = None, units: int = ANSWER_BUDGET_UNITS
+    ) -> bool: ...
 
 
 class RedisRateLimiter:
@@ -65,12 +72,20 @@ class RedisRateLimiter:
 class RedisDailyBudget:
     def __init__(self, client, *, cap: int = 100):
         self.client = client
-        self.cap = cap
+        self.cap = cap  # in generated answers; stored as quarter-units
 
-    async def reserve(self, *, now: datetime | None = None) -> bool:
+    async def reserve(
+        self, *, now: datetime | None = None, units: int = ANSWER_BUDGET_UNITS
+    ) -> bool:
         today = (now or datetime.now(UTC)).astimezone(UTC).date().isoformat()
         return bool(
-            await self.client.eval(_DAILY_BUDGET_SCRIPT, 1, f"budget:llm:{today}", self.cap)
+            await self.client.eval(
+                _DAILY_BUDGET_SCRIPT,
+                1,
+                f"budget:llm:q:{today}",
+                self.cap * ANSWER_BUDGET_UNITS,
+                units,
+            )
         )
 
 

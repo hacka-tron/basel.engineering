@@ -8,7 +8,13 @@ import pytest
 import redis.asyncio as redis
 from starlette.requests import Request
 
-from services.glassbox.limits import RedisDailyBudget, RedisRateLimiter, client_ip_hash
+from services.glassbox.limits import (
+    ANSWER_BUDGET_UNITS,
+    REWRITE_BUDGET_UNITS,
+    RedisDailyBudget,
+    RedisRateLimiter,
+    client_ip_hash,
+)
 
 
 @pytest.mark.asyncio
@@ -47,7 +53,7 @@ async def test_daily_budget_caps_and_rolls_over():
         pytest.skip(f"local Redis unavailable: {exc}")
     today = datetime(2030, 1, 1, tzinfo=UTC)
     tomorrow = today + timedelta(days=1)
-    keys = [f"budget:llm:{day.date().isoformat()}" for day in (today, tomorrow)]
+    keys = [f"budget:llm:q:{day.date().isoformat()}" for day in (today, tomorrow)]
     await client.delete(*keys)
     budget = RedisDailyBudget(client, cap=2)
     try:
@@ -56,8 +62,36 @@ async def test_daily_budget_caps_and_rolls_over():
         assert not await budget.reserve(now=today)
         assert await budget.reserve(now=tomorrow)
         assert 0 < await client.ttl(keys[0]) <= 172800
+        assert int(await client.get(keys[0])) == 8
     finally:
         await client.delete(*keys)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_daily_budget_counts_rewrites_as_quarter_answers():
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis unavailable: {exc}")
+    today = datetime(2030, 2, 1, tzinfo=UTC)
+    key = f"budget:llm:q:{today.date().isoformat()}"
+    await client.delete(key)
+    budget = RedisDailyBudget(client, cap=1)
+    try:
+        assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        # 1 of 4 quarter-units used: a full answer (4 units) no longer fits.
+        assert not await budget.reserve(now=today)
+        assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert int(await client.get(key)) == ANSWER_BUDGET_UNITS
+        assert 0 < await client.ttl(key) <= 172800
+    finally:
+        await client.delete(key)
         await client.aclose()
 
 

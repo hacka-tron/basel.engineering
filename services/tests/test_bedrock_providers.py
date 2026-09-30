@@ -87,6 +87,15 @@ async def test_haiku_streams_deltas_with_bounded_tokens_and_grounding_instructio
 
 
 @pytest.mark.asyncio
+async def test_generate_uses_system_override_when_given():
+    client = StubClient()
+    provider = BedrockLLMProvider(client=client)
+    parts = [part async for part in provider.generate("q", max_tokens=60, system="Rewrite only.")]
+    assert parts == ["Hello", " world"]
+    assert client.generation_requests[0]["system"] == [{"text": "Rewrite only."}]
+
+
+@pytest.mark.asyncio
 async def test_haiku_rejects_more_than_400_output_tokens():
     with pytest.raises(ValueError, match="400"):
         await anext(BedrockLLMProvider(client=StubClient()).generate("prompt", max_tokens=401))
