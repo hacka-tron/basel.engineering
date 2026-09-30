@@ -22,5 +22,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Unit tests run under Node (`npm test`) and are type-checked by tsconfig.node.json.
+  "exclude": ["src/**/*.test.ts"]
 }
