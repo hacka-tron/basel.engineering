@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Resume after diagram arrow fix — Codex, 2026-09-30
+
+**Next work:** Claude's newer handoff from closed PR #36 specifies two branches. Pick up `feature/stress-test-keda` in `.worktrees/stress-test-keda` first (currently `62928de`, not live): implement `GET /api/demo/capacity` using live node allocatable memory and narrowly scoped node-read RBAC; compare it with declared baseline requests, four additional workers, and a safety margin. Add a visible lion/bunny status tooltip. When capacity is insufficient or unknown, run the visual animation without calling `/api/demo/load`. Resolve the first-install KEDA CRD ordering risk by splitting the Helm install and `ScaledObject` into ordered Flux Kustomizations before review and merge. The second task is `fix/typography-consistency` in `.worktrees/typography-pass` (untouched at `e9ee6dc`): rebase on current `main`, then visually tune Contact, suggested questions, the ask box, and diagram labels. Keep the release-time API probe timeout and stalled chat recovery investigation in the backlog. Full specification is in [Claude's PR #36](https://github.com/hacka-tron/basel.engineering/pull/36).
+
+**Diagram fix status:** PR #37 merged at 17:40 UTC. CI, Release, and deploy-branch sync completed successfully. The prior frame-by-frame browser check kept all nine edges visible through both cached and streamed answers. Production Flux reconciliation after this merge was not independently checked here. PR #36, which carried Claude's newer handoff alone, was closed without merging; its actionable next steps are recorded above and in the linked PR.
+
+---
+
 ## Architecture arrows remain visible through trace updates — Codex, 2026-09-30
 
 **Active coordinator: Claude.** The owner merged PR #35, which deployed as `build-19`, then reported that diagram arrows vanished during answers. In `.worktrees/architecture-inspection`, branch `fix/architecture-edge-visibility` now supplies the four fixed handle positions and IDs alongside each node's fixed dimensions. The installed React Flow `adoptUserNodes` resets `handleBounds` when a new user node lacks `measured` dimensions or explicit `handles`; edges therefore disappear until the DOM is measured again. A headless Chrome frame-by-frame test of the mocked cached Queue answer failed before this change: all nine arrows were absent for two frames while nodes remained visible. After the change, all nine arrows remained mounted through that request and through a separately timed, multi-stage stream; the 800px desktop and 375px mobile interaction checks also passed. Frontend lint/build and `git diff --check` passed. Review this branch before merge; it has not been deployed.
