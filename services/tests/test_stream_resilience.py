@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from services.glassbox.api import ask as _ask_module
+from services.glassbox.api import sse
 from services.glassbox.api.main import app
 from services.glassbox.api.sse import PING_FRAME, with_heartbeat
 from services.tests.test_ask_endpoint import TEST_MYSQL_PORT, MemoryRedis, events
@@ -73,6 +74,12 @@ def test_heartbeat_ping_is_an_sse_comment():
     assert PING_FRAME == ": ping\n\n"
 
 
+async def _drain_cleanup():
+    """Wait for with_heartbeat's cleanup tasks instead of guessing with sleeps."""
+    while pending := [task for task in sse._CLEANUP_TASKS if not task.done()]:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 class CountingSource:
     """An endless token source that records how far it got and whether it was closed."""
 
@@ -95,49 +102,101 @@ class CountingSource:
             self.closed = True
 
 
+class GatedSource:
+    """Yields one event, then blocks until released: a known point to stop it at."""
+
+    def __init__(self):
+        self.waiting = asyncio.Event()
+        self.release = asyncio.Event()
+        self.produced = 0
+        self.closed = False
+        self.cancelled = False
+
+    async def __call__(self):
+        try:
+            self.produced += 1
+            yield "event: token\ndata: 1\n\n"
+            self.waiting.set()
+            await self.release.wait()
+            self.produced += 1
+            yield "event: token\ndata: 2\n\n"
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        finally:
+            self.closed = True
+
+
 def test_heartbeat_stops_the_source_when_the_consumer_closes():
-    source = CountingSource()
+    """Closed while the source is suspended at its yield: GeneratorExit closes it."""
 
     async def run():
+        source = GatedSource()
         stream = with_heartbeat(source(), interval_s=10)
         assert (await anext(stream)).startswith("event: token")
         await stream.aclose()
-        await asyncio.sleep(0.1)  # Cleanup runs in its own task.
-        produced = source.produced
-        await asyncio.sleep(0.1)
-        return produced
+        await _drain_cleanup()
+        source.release.set()
+        await asyncio.sleep(0)
+        return source
 
-    produced = asyncio.run(run())
-    assert source.closed
-    assert source.produced == produced
+    source = asyncio.run(run())
+    assert source.closed and not source.cancelled
+    assert source.produced == 1
 
 
-def test_heartbeat_stops_the_source_when_the_consumer_is_cancelled():
-    source = CountingSource()
+def test_heartbeat_cancels_the_source_when_the_consumer_is_cancelled_mid_await():
+    """Cancelled while the source is awaiting its next item: the source is cancelled."""
 
     async def consume(stream):
         async for _ in stream:
             pass
 
     async def run():
+        source = GatedSource()
         task = asyncio.create_task(consume(with_heartbeat(source(), interval_s=10)))
-        await asyncio.sleep(0.1)
+        await source.waiting.wait()  # The source is now blocked inside its await.
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-        await asyncio.sleep(0.1)
-        produced = source.produced
-        await asyncio.sleep(0.1)
-        return produced
+        await _drain_cleanup()
+        source.release.set()
+        await asyncio.sleep(0)
+        return source
 
-    produced = asyncio.run(run())
-    assert source.closed and source.cancelled
+    source = asyncio.run(run())
+    assert source.cancelled and source.closed
+    assert source.produced == 1
+
+
+def test_heartbeat_stops_a_running_source_when_the_consumer_is_cancelled():
+    """Whichever point the cancel lands at, the source ends up closed and stops producing."""
+
+    async def consume(stream):
+        async for _ in stream:
+            pass
+
+    async def run():
+        source = CountingSource(delay=0.001)
+        task = asyncio.create_task(consume(with_heartbeat(source(), interval_s=10)))
+        while source.produced < 5:
+            await asyncio.sleep(0.001)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await _drain_cleanup()
+        produced = source.produced
+        await asyncio.sleep(0.05)
+        return source, produced
+
+    source, produced = asyncio.run(run())
+    assert source.closed
     assert source.produced == produced
 
 
 def test_heartbeat_polls_for_disconnect_and_stops_the_source():
     """Fallback for servers that never cancel the response on disconnect."""
-    source = CountingSource(delay=0.2)
+    source = CountingSource(delay=1.0)
 
     async def run():
         started = time.monotonic()
@@ -150,13 +209,13 @@ def test_heartbeat_polls_for_disconnect_and_stops_the_source():
                 source(), interval_s=10, is_disconnected=is_disconnected, poll_interval_s=0.05
             )
         )
-        await asyncio.sleep(0.05)
+        await _drain_cleanup()
         produced = source.produced
         await asyncio.sleep(0.3)
         return out, produced
 
     out, produced = asyncio.run(run())
-    assert out == []  # Disconnected before the first 0.2 s token.
+    assert out == []  # Disconnected long before the first 1 s token.
     assert source.cancelled and source.closed
     assert source.produced == produced == 0
 
@@ -180,7 +239,7 @@ def test_heartbeat_polls_for_disconnect_even_while_events_flow():
             limit=2000,  # ~10 s of events: reached only if the poll never stops the stream.
         )
         ended = time.monotonic() - started
-        await asyncio.sleep(0.05)
+        await _drain_cleanup()
         produced = source.produced
         await asyncio.sleep(0.2)
         return out, ended, produced
@@ -188,8 +247,9 @@ def test_heartbeat_polls_for_disconnect_even_while_events_flow():
     out, ended, produced = asyncio.run(run())
     assert len(out) > 10, "events were relayed before the disconnect"
     assert len(out) < 2000
-    assert ended < 0.8, f"stream kept running {ended:.2f}s after a 0.2s disconnect"
-    assert polls and polls[-1] < 0.8
+    # Poll interval 0.25 s: expected ~0.25-0.5 s; without the time-based poll it runs ~10 s.
+    assert ended < 1.5, f"stream kept running {ended:.2f}s after a 0.2s disconnect"
+    assert polls and polls[-1] < 1.5
     assert source.closed
     assert source.produced == produced
 
@@ -353,7 +413,7 @@ def _asgi_ask(body, *, disconnect_when):
         }
         await asyncio.wait_for(app(scope, receive, send), timeout=5)
         # Cleanup (cancelling generation, logging the stop) runs in its own task.
-        await asyncio.sleep(0.3)
+        await _drain_cleanup()
         return "".join(sent)
 
     return run
