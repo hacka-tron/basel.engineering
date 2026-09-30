@@ -46,6 +46,14 @@ function ContactReveal() {
 
   return (
     <span className="flex items-center gap-2 text-xs">
+      <button
+        type="button"
+        onClick={() => setRevealed(false)}
+        aria-label="Hide email address"
+        className="px-1 text-sm leading-none text-muted transition-colors hover:text-primary"
+      >
+        →
+      </button>
       <span className="select-all text-primary">{EMAIL}</span>
       <button
         type="button"
@@ -54,14 +62,6 @@ function ContactReveal() {
         className="rounded-[3px] border border-hairline px-2 py-1 text-muted transition-colors hover:text-primary"
       >
         {copied ? 'Copied' : 'Copy'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setRevealed(false)}
-        aria-label="Hide email address"
-        className="px-1 text-sm leading-none text-muted transition-colors hover:text-primary"
-      >
-        ←
       </button>
     </span>
   )

@@ -18,11 +18,20 @@ function App() {
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
-  const [lastStats, setLastStats] = useState<{ totalMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
+  const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const requestInFlightRef = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // `done.total_ms` (server-measured) spans the entire request, including
+  // however long the LLM took to generate and stream the whole answer -
+  // display latency should instead reflect just how fast the server started
+  // responding, not how long the answer was. Measured client-side as
+  // time-to-first-token, which also naturally excludes the reveal
+  // animation's pacing (captured the instant a token event arrives over the
+  // network, not when it's drawn on screen).
+  const requestStartRef = useRef<number | null>(null)
+  const firstTokenLatencyRef = useRef<number | null>(null)
 
   // Real per-token SSE events are the source of truth for *content*, but
   // nothing paces how fast they're *shown*. A short/cached answer (or the
@@ -84,6 +93,8 @@ function App() {
     setIsStreaming(true)
     revealBufferRef.current = ''
     revealFinalizeRef.current = null
+    requestStartRef.current = performance.now()
+    firstTokenLatencyRef.current = null
 
     void askQuestion(question, corpus === 'basel' ? 'about_me' : 'about_system', {
       onStage: (event) => {
@@ -96,6 +107,9 @@ function App() {
       },
       onRetrieval: (event) => setRetrievedChunks(event.chunks),
       onToken: (event) => {
+        if (firstTokenLatencyRef.current === null && requestStartRef.current !== null) {
+          firstTokenLatencyRef.current = Math.round(performance.now() - requestStartRef.current)
+        }
         revealBufferRef.current += event.text
         ensureRevealLoop()
       },
@@ -107,7 +121,11 @@ function App() {
                 ? { ...message, text: 'Sources retrieved — no generated answer for this request.' }
                 : message))
           }
-          setLastStats({ totalMs: event.total_ms, cacheStatus: event.answer_cache, tokensOut: event.tokens_out })
+          setLastStats({
+            latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
+            cacheStatus: event.answer_cache,
+            tokensOut: event.tokens_out,
+          })
           setQueriesServed((current) => current + 1)
           setIsStreaming(false)
           setActiveNode(null)
