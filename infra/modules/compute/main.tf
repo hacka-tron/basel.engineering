@@ -194,6 +194,15 @@ resource "aws_instance" "glassbox" {
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
+    # IMDSv2's default hop limit (1) only allows processes running directly
+    # on the host to reach the instance metadata service - a containerized
+    # process (like Flux's image-reflector-controller, which needs the
+    # node's IAM role to authenticate to ECR) is one network hop further
+    # away and gets nothing back, which surfaces as a confusing 401 from
+    # ECR rather than an obviously-IMDS-related error. Found the hard way:
+    # ImageRepository's first real scan failed with
+    # "401 Unauthorized: Not Authorized" against ECR.
+    http_put_response_hop_limit = 2
   }
 
   tags = { Name = "glassbox" }
