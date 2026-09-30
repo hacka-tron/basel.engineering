@@ -1,7 +1,7 @@
 # Typography + mobile layout pass
 
 **PR:** none yet · **Branch:** `feature/typography-mobile` (stacked on `feature/chat-context` → #41 → #40) · **Rules:** `project/MOBILE_DESIGN.md`
-**Status:** In review. Codex round 1 returned **CHANGES NEEDED** (3 Important, 1 Minor). Fixes are not yet committed. Frontend only: no API, infra or cluster changes.
+**Status:** Merged to `main` 2026-09-30 as PR #46 after three Codex rounds (round 3 approved; two accepted minors: a ~4px handle strip inside enlarged diagram-node tap targets, and focus loss when resizing across 768px).
 
 ## TL;DR
 
