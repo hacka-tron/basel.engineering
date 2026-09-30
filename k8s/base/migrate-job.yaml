@@ -3,6 +3,12 @@ kind: Job
 metadata:
   name: migrate
   namespace: app
+  annotations:
+    # Job pod templates are immutable - any change to the image tag makes a
+    # normal patch fail outright ("field is immutable"), which blocked
+    # Flux's very first reconcile against the pre-existing manually-created
+    # Job. This tells Flux to delete and recreate instead of patching.
+    kustomize.toolkit.fluxcd.io/force: "true"
 spec:
   backoffLimit: 4
   template:
