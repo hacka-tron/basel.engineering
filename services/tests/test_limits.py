@@ -43,17 +43,38 @@ async def test_token_bucket_refills_and_is_atomic():
         await client.aclose()
 
 
-@pytest.mark.asyncio
-async def test_daily_budget_caps_and_rolls_over():
+# The pre-quarter-unit reservation script, verbatim from the base commit (6f0f009).
+# During a rolling deploy, old API pods still run it against budget:llm:{date}.
+OLD_POD_BUDGET_SCRIPT = """
+local used = tonumber(redis.call('GET', KEYS[1])) or 0
+if used >= tonumber(ARGV[1]) then return 0 end
+used = redis.call('INCR', KEYS[1])
+if used == 1 then redis.call('EXPIRE', KEYS[1], 172800) end
+return 1
+"""
+
+
+async def _redis_or_skip():
     client = redis.from_url("redis://127.0.0.1:6379/0")
     try:
         await client.ping()
     except Exception as exc:
         await client.aclose()
         pytest.skip(f"local Redis unavailable: {exc}")
+    return client
+
+
+def _budget_keys(day: datetime) -> tuple[str, str]:
+    date = day.date().isoformat()
+    return f"budget:llm:{date}", f"budget:llm:rw:{date}"
+
+
+@pytest.mark.asyncio
+async def test_daily_budget_caps_and_rolls_over():
+    client = await _redis_or_skip()
     today = datetime(2030, 1, 1, tzinfo=UTC)
     tomorrow = today + timedelta(days=1)
-    keys = [f"budget:llm:q:{day.date().isoformat()}" for day in (today, tomorrow)]
+    keys = [*_budget_keys(today), *_budget_keys(tomorrow)]
     await client.delete(*keys)
     budget = RedisDailyBudget(client, cap=2)
     try:
@@ -61,8 +82,11 @@ async def test_daily_budget_caps_and_rolls_over():
         assert await budget.reserve(now=today)
         assert not await budget.reserve(now=today)
         assert await budget.reserve(now=tomorrow)
-        assert 0 < await client.ttl(keys[0]) <= 172800
-        assert int(await client.get(keys[0])) == 8
+        answers_key, rewrites_key = _budget_keys(today)
+        # Whole answers stay in the original key, counted as whole answers.
+        assert int(await client.get(answers_key)) == 2
+        assert 0 < await client.ttl(answers_key) <= 172800
+        assert await client.get(rewrites_key) is None
     finally:
         await client.delete(*keys)
         await client.aclose()
@@ -70,15 +94,10 @@ async def test_daily_budget_caps_and_rolls_over():
 
 @pytest.mark.asyncio
 async def test_daily_budget_counts_rewrites_as_quarter_answers():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
-    try:
-        await client.ping()
-    except Exception as exc:
-        await client.aclose()
-        pytest.skip(f"local Redis unavailable: {exc}")
+    client = await _redis_or_skip()
     today = datetime(2030, 2, 1, tzinfo=UTC)
-    key = f"budget:llm:q:{today.date().isoformat()}"
-    await client.delete(key)
+    answers_key, rewrites_key = _budget_keys(today)
+    await client.delete(answers_key, rewrites_key)
     budget = RedisDailyBudget(client, cap=1)
     try:
         assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
@@ -88,61 +107,72 @@ async def test_daily_budget_counts_rewrites_as_quarter_answers():
         assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
         assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
         assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
-        assert int(await client.get(key)) == ANSWER_BUDGET_UNITS
-        assert 0 < await client.ttl(key) <= 172800
+        assert int(await client.get(rewrites_key)) == ANSWER_BUDGET_UNITS
+        assert 0 < await client.ttl(rewrites_key) <= 172800
+        assert await client.get(answers_key) is None
     finally:
-        await client.delete(key)
+        await client.delete(answers_key, rewrites_key)
         await client.aclose()
 
 
 @pytest.mark.asyncio
-async def test_daily_budget_counts_legacy_whole_answer_key_on_transition_day():
-    """Usage recorded under the pre-quarter-unit key must still count that day."""
-    client = redis.from_url("redis://127.0.0.1:6379/0")
-    try:
-        await client.ping()
-    except Exception as exc:
-        await client.aclose()
-        pytest.skip(f"local Redis unavailable: {exc}")
-    today = datetime(2030, 3, 1, tzinfo=UTC)
-    day = today.date().isoformat()
-    legacy, key = f"budget:llm:{day}", f"budget:llm:q:{day}"
-    await client.delete(legacy, key)
-    budget = RedisDailyBudget(client, cap=100)
-    try:
-        await client.set(legacy, 100)
-        assert not await budget.reserve(now=today)
-        assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
-        assert await client.get(key) is None
-    finally:
-        await client.delete(legacy, key)
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_daily_budget_combines_partial_legacy_and_quarter_usage():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
-    try:
-        await client.ping()
-    except Exception as exc:
-        await client.aclose()
-        pytest.skip(f"local Redis unavailable: {exc}")
+async def test_daily_budget_combines_answers_and_rewrites():
+    client = await _redis_or_skip()
     today = datetime(2030, 3, 2, tzinfo=UTC)
-    day = today.date().isoformat()
-    legacy, key = f"budget:llm:{day}", f"budget:llm:q:{day}"
-    await client.delete(legacy, key)
+    answers_key, rewrites_key = _budget_keys(today)
+    await client.delete(answers_key, rewrites_key)
     budget = RedisDailyBudget(client, cap=3)
     try:
-        await client.set(legacy, 2)  # 2 whole answers = 8 of 12 quarter-units
+        await client.set(answers_key, 2)  # 2 whole answers = 8 of 12 quarter-units
         assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)  # 9
         assert not await budget.reserve(now=today)  # 9 + 4 > 12
-        assert await budget.reserve(now=today, units=3)  # 12
+        for _ in range(3):
+            assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)  # 12
         assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
-        assert int(await client.get(key)) == 4
-        assert int(await client.get(legacy)) == 2  # legacy key is read, never written
+        assert int(await client.get(answers_key)) == 2
+        assert int(await client.get(rewrites_key)) == 4
     finally:
-        await client.delete(legacy, key)
+        await client.delete(answers_key, rewrites_key)
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_new_pod_answers_are_visible_to_old_pod_script():
+    """Rolling deploy: an answer reserved by new code must count for an old pod."""
+    client = await _redis_or_skip()
+    today = datetime(2030, 3, 1, tzinfo=UTC)
+    answers_key, rewrites_key = _budget_keys(today)
+    await client.delete(answers_key, rewrites_key)
+    budget = RedisDailyBudget(client, cap=1)
+    try:
+        assert await budget.reserve(now=today)
+        assert not await client.eval(OLD_POD_BUDGET_SCRIPT, 1, answers_key, 1)
+    finally:
+        await client.delete(answers_key, rewrites_key)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_old_pod_answers_are_visible_to_new_code():
+    client = await _redis_or_skip()
+    today = datetime(2030, 3, 3, tzinfo=UTC)
+    answers_key, rewrites_key = _budget_keys(today)
+    await client.delete(answers_key, rewrites_key)
+    budget = RedisDailyBudget(client, cap=1)
+    try:
+        assert await client.eval(OLD_POD_BUDGET_SCRIPT, 1, answers_key, 1)
+        assert not await budget.reserve(now=today)
+        assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert await client.get(rewrites_key) is None
+    finally:
+        await client.delete(answers_key, rewrites_key)
+        await client.aclose()
+
+
+def test_daily_budget_rejects_unknown_unit_sizes():
+    budget = RedisDailyBudget(client=None, cap=1)
+    with pytest.raises(ValueError):
+        asyncio.run(budget.reserve(units=3))
 
 
 def _request(peer: str, forwarded: str) -> Request:

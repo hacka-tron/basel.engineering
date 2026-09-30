@@ -31,22 +31,31 @@ redis.call('HSET', KEYS[1], 'tokens', tokens, 'ts', ARGV[1])
 redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return {allowed, retry}
 """
-# The daily budget counts integer quarter-units (DESIGN-002 §5.4/§9.4): a generated
-# answer costs 4, a follow-up rewrite (a much smaller call) costs 1.
+# The daily budget is enforced in integer quarter-units (DESIGN-002 §5.4/§9.4): a
+# generated answer costs 4, a follow-up rewrite (a much smaller call) costs 1.
 #
-# Transition: before quarter-units the counter was `budget:llm:{date}` in whole answers.
-# KEYS[2] reads that legacy key (x4) inside the same script so usage recorded earlier on
-# the deploy day still counts. It is only read, never written. Remove KEYS[2] in a later
-# cleanup once no legacy key can be within its 48 h TTL.
+# Whole answers stay counted, one per answer, in the original key budget:llm:{date}
+# (KEYS[1]), exactly as pre-rewrite code counts them, so old and new API pods share one
+# answer counter during a rolling deploy. Rewrites are counted in quarter-units in
+# budget:llm:rw:{date} (KEYS[2]). A reservation checks 4*answers + rewrites + units
+# against 4*cap atomically, then increments the matching key. Accepted residual: an old
+# pod only compares answers with the cap, so it cannot see rewrite usage during the
+# brief overlap of a rolling deploy.
 ANSWER_BUDGET_UNITS = 4
 REWRITE_BUDGET_UNITS = 1
 _DAILY_BUDGET_SCRIPT = """
-local legacy = tonumber(redis.call('GET', KEYS[2])) or 0
-local used = (tonumber(redis.call('GET', KEYS[1])) or 0) + 4 * legacy
+local answers = tonumber(redis.call('GET', KEYS[1])) or 0
+local rewrites = tonumber(redis.call('GET', KEYS[2])) or 0
 local units = tonumber(ARGV[2])
-if used + units > tonumber(ARGV[1]) then return 0 end
-redis.call('INCRBY', KEYS[1], units)
-if redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], 172800) end
+if 4 * answers + rewrites + units > tonumber(ARGV[1]) then return 0 end
+local key = KEYS[2]
+if ARGV[3] == 'answer' then
+  key = KEYS[1]
+  redis.call('INCR', key)
+else
+  redis.call('INCRBY', key, units)
+end
+if redis.call('TTL', key) < 0 then redis.call('EXPIRE', key, 172800) end
 return 1
 """
 
@@ -78,20 +87,27 @@ class RedisRateLimiter:
 class RedisDailyBudget:
     def __init__(self, client, *, cap: int = 100):
         self.client = client
-        self.cap = cap  # in generated answers; stored as quarter-units
+        self.cap = cap  # in generated answers
 
     async def reserve(
         self, *, now: datetime | None = None, units: int = ANSWER_BUDGET_UNITS
     ) -> bool:
+        if units == ANSWER_BUDGET_UNITS:
+            kind = "answer"
+        elif units == REWRITE_BUDGET_UNITS:
+            kind = "rewrite"
+        else:
+            raise ValueError(f"unsupported budget reservation size: {units}")
         today = (now or datetime.now(UTC)).astimezone(UTC).date().isoformat()
         return bool(
             await self.client.eval(
                 _DAILY_BUDGET_SCRIPT,
                 2,
-                f"budget:llm:q:{today}",
-                f"budget:llm:{today}",  # legacy whole-answer key; see _DAILY_BUDGET_SCRIPT
+                f"budget:llm:{today}",
+                f"budget:llm:rw:{today}",
                 self.cap * ANSWER_BUDGET_UNITS,
                 units,
+                kind,
             )
         )
 
