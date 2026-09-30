@@ -7,8 +7,12 @@ metadata:
     # Job pod templates are immutable - any change to the image tag makes a
     # normal patch fail outright ("field is immutable"), which blocked
     # Flux's very first reconcile against the pre-existing manually-created
-    # Job. This tells Flux to delete and recreate instead of patching.
-    kustomize.toolkit.fluxcd.io/force: "true"
+    # Job. This tells Flux to delete and recreate instead of patching. The
+    # value is a string enum ("enabled"/"disabled"), NOT a boolean - Flux's
+    # Kustomization.spec.force field is a real boolean, but this per-resource
+    # annotation is not the same knob and silently no-ops on "true"
+    # (confirmed: https://fluxcd.io/flux/components/kustomize/kustomizations/).
+    kustomize.toolkit.fluxcd.io/force: enabled
 spec:
   backoffLimit: 4
   template:
