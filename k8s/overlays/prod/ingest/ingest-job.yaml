@@ -17,6 +17,9 @@ spec:
     metadata:
       labels:
         app: ingest
+        # Lets the warm-up at the end of this Job reach the api
+        # (base/networkpolicy-app.yaml, api-from-answer-warmer).
+        glassbox/answer-warmer: "true"
     spec:
       restartPolicy: OnFailure
       imagePullSecrets:
@@ -24,7 +27,16 @@ spec:
       containers:
         - name: ingest
           image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
-          command: ["python", "-m", "services.glassbox.ingest.run"]
+          # After ingesting, refill the suggested questions' answer cache
+          # (a changed corpus invalidates it). A warm-up failure is logged and
+          # never fails the Job, so it can't block or retry ingestion.
+          command:
+            - sh
+            - -c
+            - >-
+              python -m services.glassbox.ingest.run &&
+              { python -m services.glassbox.warm --api-url http://api.app.svc.cluster.local
+              || echo "answer-cache warm-up failed (ignored)"; }
           envFrom:
             - configMapRef:
                 name: glassbox-config

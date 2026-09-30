@@ -69,6 +69,15 @@ Deployments are set up so that is safe on a 2 GiB node:
   not run for that revision. This relies on the root `flux-system`
   Kustomization not having `wait: true` (the `flux bootstrap` default) —
   otherwise it would wait on `ingest`, which waits on it.
+- **Answer-cache warm-up.** After ingesting, the ingest Job runs
+  `python -m services.glassbox.warm`, which asks the suggested questions
+  through the `api` Service so their answers are cached again (a changed
+  corpus invalidates them); a warm-up failure is logged and ignored. The
+  `warm-answers` CronJob (`base/warm-cronjob.yaml`, every 2h, 48Mi limit)
+  does the same between deploys. Both pods carry
+  `glassbox/answer-warmer: "true"`, which the `api-from-answer-warmer`
+  NetworkPolicy admits to the api on port 8000. Check a run with
+  `kubectl -n app logs job/ingest | tail` or the latest `warm-answers-*` Job.
 
 ## Manual apply / disaster recovery
 
