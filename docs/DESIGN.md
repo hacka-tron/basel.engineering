@@ -294,7 +294,7 @@ CREATE TABLE queries (
 );
 ```
 
-Schema migrations managed with Alembic (or plain versioned SQL files run by a Kubernetes Job before the API rolls out).
+Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
 
 Privacy: questions are logged without IP addresses. Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
 
@@ -413,8 +413,8 @@ type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: st
 
 | Namespace | Workload | Kind | Notes |
 |---|---|---|---|
-| `app` | `api` | Deployment (1 replica) | Readiness probe on `/readyz` |
-| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi |
+| `app` | `api` | Deployment (1 replica) | Startup/liveness probes on `/healthz`, readiness on `/readyz` (5s timeouts); `maxSurge: 0` rollout; waits for migrations |
+| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
 | `app` | `ingest` | Job (per deploy) + CronJob (nightly) | Idempotent |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
@@ -634,7 +634,8 @@ publishing a binary plan, which may contain cleartext secrets. See
 
 - Watches `k8s/overlays/prod` in the repo and applies changes.
 - Pull-based: the cluster reaches out to GitHub, so the Kubernetes API never needs to be exposed to CI.
-- Order: `migrate` Job, then `api` and workers, then `ingest` Job.
+- Order: Flux applies everything in one pass. The `migrate` Job is recreated per image tag; the `api` and worker pods' `wait-for-migrations` initContainer holds them until it finishes. The `ingest` Job is not yet ordered after the rollout (planned follow-up: a separate, dependent Flux Kustomization).
+- Rollout: `maxSurge: 0, maxUnavailable: 1` on `api` and `retrieval-worker`, so a rollout never adds an extra pod on the 2 GiB node: each old pod stops before its replacement starts. (The single api replica therefore has no old/new overlap; a scaled-out worker replaces replicas one at a time, so old- and new-image workers briefly coexist.) This is a deliberate trade: a few seconds of downtime per release in exchange for memory headroom. Uvicorn drains for up to 25s (`--timeout-graceful-shutdown 25`, `terminationGracePeriodSeconds: 30`), and probes use 5s timeouts plus a `startupProbe` so swap pressure during a rollout doesn't trigger restarts.
 
 ---
 
