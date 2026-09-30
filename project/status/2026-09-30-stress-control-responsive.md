@@ -1,6 +1,6 @@
 # Stress-test control: labelled button when there is room
 
-**Status:** In review, PR TBD (branch `fix/stress-control-responsive`). Not merged.
+**Status:** In review, PR [#56](https://github.com/hacka-tron/basel.engineering/pull/56) (branch `fix/stress-control-responsive`). Not merged.
 
 ## TL;DR
 The footer's stress-test control now adapts to width. From 640px (`sm`) up there is a labelled "Stress test" button plus the tiger/rabbit icon beside it. Below 640px it is just the icon, as before. Only `frontend/src/components/StatsBar.tsx` changed.
