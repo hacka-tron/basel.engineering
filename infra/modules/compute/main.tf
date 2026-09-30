@@ -111,8 +111,17 @@ data "aws_iam_policy_document" "instance" {
   }
 
   statement {
-    sid       = "PullGlassboxImage"
-    actions   = ["ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer"]
+    sid = "PullGlassboxImage"
+    # DescribeImages/ListImages/DescribeRepositories are what Flux's
+    # image-reflector-controller actually needs: it calls the registry v2
+    # `GET /v2/<repo>/tags/list` API to discover tags, which ECR maps to
+    # these read actions - not the plain docker-pull actions below, which
+    # were already granted but left ImageRepository's scan failing with a
+    # 401 that looked identical to an IMDS/credential problem.
+    actions = [
+      "ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer",
+      "ecr:DescribeImages", "ecr:ListImages", "ecr:DescribeRepositories", "ecr:GetRepositoryPolicy",
+    ]
     resources = [var.ecr_repository_arn]
   }
 
