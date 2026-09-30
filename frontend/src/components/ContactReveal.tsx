@@ -59,9 +59,9 @@ function ContactReveal() {
         type="button"
         onClick={() => setRevealed(false)}
         aria-label="Hide email address"
-        className="px-1 text-base leading-none text-muted transition-colors hover:text-primary"
+        className="px-1 text-sm leading-none text-muted transition-colors hover:text-primary"
       >
-        ×
+        ←
       </button>
     </span>
   )
