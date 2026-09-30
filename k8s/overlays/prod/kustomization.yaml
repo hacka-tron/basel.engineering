@@ -5,6 +5,7 @@ resources:
   - flux/image-repository.yaml
   - flux/image-policy.yaml
   - flux/image-update-automation.yaml
+  - flux/kustomization-keda.yaml
 images:
   - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
     newTag: "build-20" # {"$imagepolicy": "flux-system:glassbox:tag"}

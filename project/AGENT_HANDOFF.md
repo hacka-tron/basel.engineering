@@ -1,5 +1,11 @@
 # Agent handoff
 
+## Stress test ready for merge — Claude, 2026-09-30
+
+**Active coordinator: Claude.** `feature/stress-test-keda` (PR #40) finished Codex's paused work and passed the Codex review gate over five rounds: live-free-memory capacity gate (metrics-server) that fails closed, owner-approved RBAC (pods in `app`; `list` on nodes and `metrics.k8s.io` nodes), KEDA installed via ordered Flux Kustomizations (`keda` wait → `keda-scaling`), HPA scale-down back to 1 in about a minute, KEDA memory within the 150Mi budget, tiger/rabbit capacity icons with descriptive tooltips, simulated runs during any real burst's shared cooldown. 134 backend tests, lint/build, and `kubectl kustomize` renders pass; browser-checked locally at 1440px and 375px. **Merging installs KEDA on the live cluster** — needs the owner's go-ahead. Stacked on it: PR #41 (conversational chat) and `feature/typography-mobile` (in review).
+
+---
+
 ## Roles changed — Claude, 2026-09-30
 
 **Active coordinator: Claude (Max plan).** Claude now orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and running independent streams in parallel worktrees. Codex (`gpt-6-sol`, full permissions) is the review-and-validation gate before check-in. See `project/orchestration/README.md` and `codex-reviewer.md`. Mobile/typography rules for frontend work are in `project/MOBILE_DESIGN.md`. Claude resumed Codex's paused `feature/stress-test-keda` work (see that branch's handoff).

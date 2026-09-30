@@ -101,7 +101,7 @@ The nodes can also be inspected directly. Hovering or keyboard-focusing one show
 
 ### 4.5 Stress test button
 
-Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. Global cooldown of 5 minutes, shown as a countdown on the button.
+Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. A tiger icon beside the button means the node has room for a real burst; a bunny means it doesn't, and a click plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
 
 ### 4.6 Citations
 
@@ -438,7 +438,12 @@ spec:
   minReplicaCount: 1
   maxReplicaCount: 5
   pollingInterval: 5        # seconds
-  cooldownPeriod: 60        # seconds before scaling back down
+  advanced:                 # 5→1 is the HPA's scale-down, not cooldownPeriod
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 45
+          policies: [{type: Percent, value: 100, periodSeconds: 15}]
   triggers:
     - type: redis-streams
       metadata:
@@ -450,12 +455,12 @@ spec:
 
 ### 9.4 Stress test flow
 
-1. Visitor clicks **Stress test**. Frontend calls `POST /api/demo/load`.
+1. Visitor clicks **Stress test**. The frontend rechecks `GET /api/demo/capacity`, which reports the cooldown if `demo:load:lock` is held, or otherwise the node's live free memory. If a cooldown is running or there isn't room, the click plays the simulated animation and sends no load request. Otherwise the frontend calls `POST /api/demo/load`, which rechecks capacity before taking the lock.
 2. API tries `SET demo:load:lock 1 NX EX 300`. If the lock exists, returns the remaining cooldown.
 3. API adds 300 synthetic jobs to `retrieval:jobs` (flag `synthetic=1`, about 200 ms simulated work each). No LLM calls, no Bedrock calls (embeddings come from cache).
 4. Backlog exceeds the KEDA target; workers scale up toward 5 within 10 to 20 seconds.
 5. Frontend watches `/api/cluster/stream`; pod dots appear on the worker node, with a live backlog counter.
-6. Backlog drains; after the cooldown, KEDA scales back to 1 and the dots disappear.
+6. Backlog drains; after the HPA's 45-second scale-down stabilization window, workers drop back to 1 and the dots disappear (about a minute).
 
 ### 9.5 Cluster view and RBAC
 
