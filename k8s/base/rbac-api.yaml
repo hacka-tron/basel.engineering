@@ -32,3 +32,32 @@ roleRef:
   kind: Role
   name: pod-viewer
   apiGroup: rbac.authorization.k8s.io
+---
+# Cluster-scoped read for GET /api/demo/capacity (services/glassbox/api/
+# capacity.py), which lists nodes to compare allocatable memory and the
+# MemoryPressure condition against the stress test's estimated peak. Nodes
+# are cluster-scoped, so a namespaced Role can't grant this. `list` only —
+# the capacity check never gets a node by name, watches, or writes, and
+# resourceNames can't narrow it further since the EC2-assigned node name
+# isn't known ahead of time. Approved by the owner 2026-09-30.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: glassbox-node-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: glassbox-api-node-reader
+subjects:
+  - kind: ServiceAccount
+    name: api
+    namespace: app
+roleRef:
+  kind: ClusterRole
+  name: glassbox-node-reader
+  apiGroup: rbac.authorization.k8s.io
