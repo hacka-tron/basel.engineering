@@ -55,9 +55,14 @@ body {
   overflow: hidden;
 }
 
+/*
+ * font-family only: the `font` shorthand here is unlayered, so it beat
+ * Tailwind's layered `text-*` utilities and silently reset every button's and
+ * input's font-size to the inherited 16px. Size is set per element instead.
+ */
 button,
 input {
-  font: inherit;
+  font-family: inherit;
 }
 
 /*
