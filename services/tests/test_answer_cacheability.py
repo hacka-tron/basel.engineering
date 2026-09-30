@@ -49,6 +49,9 @@ def allow_all_limits(monkeypatch):
         "None of the sources describe the queue.",
         "There is no information about the queue in the sources.",
         "I cannot answer that from the sources.",
+        "I have no information about the queue.",
+        "It is unclear whether the queue is live.",
+        "Unfortunately, I cannot answer that from the sources.",
         # Intentionally an abstention: a hedge that opens with "I don't know".
         "I don't know from what I have learned so far whether the ASG is live.",
     ],
@@ -65,6 +68,11 @@ def test_abstention_variants_are_detected(answer):
         "I know the queue is a Redis Stream.",
         "Workers read the queue; I don't know from what I have is not an answer here.",
         "The sources describe the queue as a Redis Stream.",
+        # A refusal opener that goes on to answer from the sources is an answer.
+        "None of the sources mention X, but they show the queue is a Redis Stream.",
+        "I don't know of any queue failures; Redis Streams is live and workers read it.",
+        "It is unclear from the logs how often it runs. The worker reads retrieval:jobs. "
+        "KEDA scales it from 1 to 3.",
         "Sources show the worker reads retrieval:jobs. It does not say more.",
     ],
 )

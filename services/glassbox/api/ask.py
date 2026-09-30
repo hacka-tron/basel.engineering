@@ -75,10 +75,12 @@ _PLANNED_SOURCE_SIGNAL = re.compile(
 _CODE_SOURCE_PREFIXES = ("services/", "k8s/", "infra/")
 # Labels go on the planned text itself, not the whole chunk: one chunk often mixes a
 # live component with a sentence about future work, and a chunk-wide "not built"
-# label steered answers about the live part toward "No". A heading or list item is
-# one unit; a paragraph or table row is split into sentences.
+# label steered answers about the live part toward "No". A marked heading covers its
+# whole section; a list item is one unit; a paragraph or table row is split into
+# sentences.
 PLANNED_MARK = "[PLANNED, not built yet]"
 _UNIT_LINE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s)")
+_HEADING_LINE = re.compile(r"^\s*(#{1,6})\s")
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=\S)")
 _ANSWER_LOCK_TTL_MS = 15000
 _ANSWER_LOCK_WAIT_S = 3.0
@@ -222,10 +224,25 @@ def _clean_rewrite(raw: str) -> str | None:
 
 
 def _mark_planned(text: str) -> str:
-    """Prefix each heading, list item, or sentence that names planned work."""
+    """Prefix each heading, list item, or sentence that names planned work.
+
+    A marked heading also marks every non-blank line of its section, up to the
+    next heading of the same or a higher level.
+    """
     lines = []
+    planned_level = None  # heading level of the enclosing planned section, if any
     for line in text.split("\n"):
-        if _UNIT_LINE.match(line):
+        heading = _HEADING_LINE.match(line)
+        if heading:
+            level = len(heading.group(1))
+            if planned_level is not None and level <= planned_level:
+                planned_level = None
+            if planned_level is None and _PLANNED_SOURCE_SIGNAL.search(line):
+                planned_level = level
+        if planned_level is not None and line.strip():
+            indent = line[: len(line) - len(line.lstrip())]
+            line = f"{indent}{PLANNED_MARK} {line.lstrip()}"
+        elif _UNIT_LINE.match(line):
             if _PLANNED_SOURCE_SIGNAL.search(line):
                 indent = line[: len(line) - len(line.lstrip())]
                 line = f"{indent}{PLANNED_MARK} {line.lstrip()}"
@@ -264,8 +281,9 @@ def _prompt(
         "say so explicitly. "
         "Bracketed source status overrides present-tense design prose. "
         f"Text prefixed {PLANNED_MARK} describes work that does not exist today: if asked "
-        "whether that feature works now, answer No. The marker applies only to the heading, "
-        "list item, or sentence it prefixes, not to unmarked text in the same source. "
+        "whether that feature works now, answer No. On a heading the marker "
+        "applies to that heading's whole section; otherwise it applies only to the list item "
+        "or sentence it prefixes, not to unmarked text in the same source. "
         "If the sources answer the question even in part, answer from them. Only if they "
         "do not answer it at all, reply with exactly "
         f'"{ABSTENTION_ANSWER}" and nothing else. '

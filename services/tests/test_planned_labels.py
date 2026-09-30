@@ -304,13 +304,32 @@ LIVE_UNITS = [
     ("docs/DESIGN-004-action-plan.md", "## 6. Milestone 2: Live on AWS"),
     ("docs/DESIGN-004-action-plan.md", "| 5 | KEDA, synthetic load endpoint"),
     ("docs/DESIGN-004-action-plan.md", "| M2 |"),
+    ("docs/DESIGN-004-action-plan.md", "| M3 (shipped part) | DD2 | Conversational memory"),
+    (
+        "docs/DESIGN-004-action-plan.md",
+        "Status: the baseline is live, and DD2's conversational chat",
+    ),
+    ("docs/DESIGN-004-action-plan.md", "**Conversational chat + live chat UX (DD2 §5, §6)**"),
+    ("docs/DESIGN-002-followups.md", "## 5. Feature 3: Conversational chat"),
     ("project/SNAPSHOT.md", "Phases 4-6 done: live at `https://basel.engineering`"),
 ]
 
 # (path, text inside a unit that describes work not built yet)
 PLANNED_UNITS = [
     ("docs/DESIGN.md", "## 20. Stretch ideas"),
-    ("docs/DESIGN-004-action-plan.md", "## 7. Milestone 3: DD2 features (deferred)"),
+    ("docs/DESIGN-004-action-plan.md", "| M3 (not built yet) | DD2 | Self-healing (ASG)"),
+    ("docs/DESIGN-004-action-plan.md", "DD2's self-healing node and the DD3 Google Drive"),
+    ("docs/DESIGN-004-action-plan.md", "**Streaming hardening formalized (DD2 §7)**"),
+    ("docs/DESIGN-004-action-plan.md", "**Corpus authoring guide + validation (DD2 §4)**"),
+    # Heading marks cover their section: bullets under DESIGN.md's stretch ideas.
+    ("docs/DESIGN.md", "- **EKS for an afternoon:**"),
+    ("docs/DESIGN.md", "- **Live facts tool:**"),
+    ("docs/DESIGN.md", "- **Hybrid search:**"),
+    # DD2's self-healing proposal, including a chunk that starts mid-feature.
+    ("docs/DESIGN-002-followups.md", "### 3.3 Boot sequence (user data)"),
+    ("docs/DESIGN-002-followups.md", "### 3.4 Health detection"),
+    ("docs/DESIGN-002-followups.md", "| `ec2:AssociateAddress` |"),
+    ("docs/DESIGN-002-followups.md", "2. Terminate the instance from the console."),
     ("docs/DESIGN-004-action-plan.md", "**Self-healing (DD2 §3)**"),
     ("docs/DESIGN-004-action-plan.md", "## 8. Milestone 4: DD3 production ingestion pipeline"),
     ("docs/DESIGN-004-action-plan.md", "| M4 | DD3 |"),
@@ -457,3 +476,20 @@ def test_design_003_keeps_its_whole_document_label():
     assert "also appears in code, manifest, or infrastructure sources" in prompt
     assert 'reply with exactly "I don\'t know from what I have." and nothing else' in prompt
     assert "Do not include bracketed citation markers" in prompt
+
+
+def test_marked_heading_covers_its_section_until_a_sibling_heading():
+    text = (
+        "## Planned work\n"
+        "Workers restart on their own.\n"
+        "- Hybrid search\n"
+        "### Detail\n"
+        "More detail.\n"
+        "## Live today\n"
+        "KEDA scales the workers.\n"
+    )
+    marked = _mark_planned(text)
+    for needle in ("## Planned work", "Workers restart", "- Hybrid search", "### Detail", "More"):
+        assert _is_marked(marked, needle), needle
+    assert not _is_marked(marked, "## Live today")
+    assert not _is_marked(marked, "KEDA scales")

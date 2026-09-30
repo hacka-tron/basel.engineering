@@ -42,34 +42,45 @@ def _normalized_words(text: str) -> list[str]:
 
 
 _ABSTENTION_WORDS_CANONICAL = _normalized_words(ABSTENTION_ANSWER)
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 # Other ways a model opens a refusal, as normalized word prefixes of the answer's
-# first sentence. The prompt asks for the canonical sentence; these catch drift.
+# first sentence (after an optional "unfortunately"/"sorry"). The prompt asks for
+# the canonical sentence; these catch drift.
 _REFUSAL_OPENERS = re.compile(
-    r"^(?:i dont know|i dont have (?:enough |any )?information|i cant (?:answer|tell|say|determine)"
-    r"|i am (?:unable|not able) to|im (?:unable|not able) to"
+    r"^(?:(?:unfortunately|sorry|im sorry|i am sorry) )*"
+    r"(?:i dont know|i have no information|i dont have (?:enough |any )?information"
+    r"|i cant (?:answer|tell|say|determine)|i am (?:unable|not able) to|im (?:unable|not able) to"
     r"|(?:the |these )?(?:provided |numbered |given )?sources? (?:dont|doesnt) "
     r"(?:say|mention|contain|provide|include|answer|cover|specify|describe|explain|address)"
     r"|none of the (?:provided |numbered )?sources|there is no information|theres no information"
-    r"|no information)\b"
+    r"|no information|it is unclear|its unclear)\b"
 )
+# A refusal opener followed by one of these goes on to answer from the sources
+# ("None of the sources mention X, but they show Y"), so it is not an abstention.
+_CONTINUATION = re.compile(r"\b(?:but|however|although|though|except|while)\b|;", re.IGNORECASE)
+_MAX_REFUSAL_SENTENCES = 2
 
 
 def is_abstention(answer: str) -> bool:
-    """True when the answer is, or opens with, a refusal.
+    """True when the answer is a refusal rather than an answer.
 
-    Matches the canonical sentence anywhere at the start (so "I don't know from
-    what I have, but ..." counts) and common refusal openers in the first sentence
-    ("I don't know ...", "The sources don't say ...", "There is no information ...").
-    This deliberately errs toward "abstention": a hedged answer such as "I don't know
-    from what I have learned so far whether ..." is also treated as one. A false
-    positive only costs a cache miss; a false negative caches a refusal for 24h.
+    Primary path: the answer is, or opens with, the canonical sentence the prompt
+    asks for (so "I don't know from what I have, but ..." counts). Fallback: the
+    first sentence opens like a refusal ("I don't know ...", "The sources don't
+    say ...", "It is unclear whether ...") and the answer is a non-answer: at most
+    two sentences and no "but/however/;"-style continuation that goes on to state
+    something. A false positive costs a cache miss; a false negative caches a
+    refusal for 24h.
     """
     words = _normalized_words(answer)
     if words[: len(_ABSTENTION_WORDS_CANONICAL)] == _ABSTENTION_WORDS_CANONICAL:
         return True
-    first_sentence = _SENTENCE_END.split(answer.strip(), maxsplit=1)[0]
-    return bool(_REFUSAL_OPENERS.match(" ".join(_normalized_words(first_sentence))))
+    sentences = [part for part in _SENTENCE_END.split(answer.strip()) if part]
+    if not sentences or len(sentences) > _MAX_REFUSAL_SENTENCES:
+        return False
+    if _CONTINUATION.search(answer):
+        return False
+    return bool(_REFUSAL_OPENERS.match(" ".join(_normalized_words(sentences[0]))))
 
 
 class EmbeddingProvider(ABC):

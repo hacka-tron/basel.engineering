@@ -1,7 +1,7 @@
 # Cached refusals and the planned-design label
 
 **PR:** [#53](https://github.com/hacka-tron/basel.engineering/pull/53) · **Branch:** `fix/cached-refusals` (from `main` at `3555323`)
-**Status:** In review, not merged. Codex round 1 asked for changes; they're addressed in round 2 (see *What review caught*).
+**Status:** In review, not merged. Codex rounds 1 and 2 asked for changes; both are addressed (see *What review caught*). The orchestrator verifies and merges after round 2.
 
 ## TL;DR
 
@@ -48,7 +48,7 @@ flowchart TD
 
 ## What review caught
 
-Codex round 1 (changes needed): the whole-chunk label still hit real chunks about live systems (DESIGN.md's MySQL/LLM section, DESIGN-004's M2 overview, SNAPSHOT's live account), so labeling moved to sentence level and the tests now run the real chunker over `docs/DESIGN.md`, `docs/DESIGN-004-action-plan.md`, `project/SNAPSHOT.md` and verbatim `deep-dive.md` sections. Other refusal wording ("I don't know from the provided sources.", "The sources don't say…") could still be cached, so first-sentence openers are now matched. The no-sources refusal now gets the query-log flags too. (`project/SNAPSHOT.md` isn't in the ingested corpus, which covers only `docs/`, `services/`, `k8s/` and `infra/`, but it's tested anyway.) Before round 1, the draft planned list included a bare "Google Drive". That would have labeled the grounding section of the new `docs/architecture/deep-dive.md` (PR #51) as planned, because it *describes* the DESIGN-003 label. It was narrowed to "Drive connector", and a test pins it.
+Codex round 1 (changes needed): the whole-chunk label still hit real chunks about live systems (DESIGN.md's MySQL/LLM section, DESIGN-004's M2 overview, SNAPSHOT's live account), so labeling moved to sentence level and the tests now run the real chunker over `docs/DESIGN.md`, `docs/DESIGN-004-action-plan.md`, `project/SNAPSHOT.md` and verbatim `deep-dive.md` sections. Other refusal wording ("I don't know from the provided sources.", "The sources don't say…") could still be cached, so first-sentence openers are now matched. The no-sources refusal now gets the query-log flags too. (`project/SNAPSHOT.md` isn't in the ingested corpus, which covers only `docs/`, `services/`, `k8s/` and `infra/`, but it's tested anyway.) Codex round 2 (changes needed): a marked heading didn't cover its bullets (DESIGN.md's stretch ideas, DD2's self-healing details), so a marked heading now marks its whole section. Some rows and items mixed live and unbuilt work (DESIGN-004's M3 row, its "Build order" item and M3 list), so the docs were edited to put shipped and not-built work in separate rows and sentences. DD2's self-healing subsections and §4.5 ingest validation now carry "(not built)". "I have no information…", "It is unclear whether…" and "Unfortunately, I cannot answer…" now count as refusals. A refusal opener only counts when the answer is at most two sentences with no "but/however/;" continuation, so "None of the sources mention X, but they show Y" stays cacheable. Before round 1, the draft planned list included a bare "Google Drive". That would have labeled the grounding section of the new `docs/architecture/deep-dive.md` (PR #51) as planned, because it *describes* the DESIGN-003 label. It was narrowed to "Drive connector", and a test pins it.
 
 ## Operational notes & risks
 
