@@ -136,6 +136,57 @@ data "aws_iam_policy_document" "ci" {
     }
   }
 
+  # infra/modules/compute/zram.tf: the glassbox-zram-swap Command document
+  # and the State Manager association that runs it on the node. Documents
+  # are scoped by the glassbox- name prefix; association IDs are generated
+  # by AWS, so association actions are scoped to this account and region.
+  # CreateAssociation is also authorized against the target instance ARN.
+  statement {
+    sid    = "ManageProjectSsmDocuments"
+    effect = "Allow"
+    actions = [
+      "ssm:CreateDocument",
+      "ssm:DeleteDocument",
+      "ssm:DescribeDocument",
+      "ssm:DescribeDocumentPermission",
+      "ssm:GetDocument",
+      "ssm:ListDocumentVersions",
+      "ssm:ModifyDocumentPermission",
+      "ssm:UpdateDocument",
+      "ssm:UpdateDocumentDefaultVersion",
+    ]
+    resources = ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*"]
+  }
+
+  statement {
+    sid    = "ManageProjectSsmAssociations"
+    effect = "Allow"
+    actions = [
+      "ssm:CreateAssociation",
+      "ssm:DeleteAssociation",
+      "ssm:DescribeAssociation",
+      "ssm:UpdateAssociation",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*",
+      "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*",
+    ]
+  }
+
+  statement {
+    sid       = "ListSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:ListAssociations", "ssm:ListAssociationVersions", "ssm:ListDocuments"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
   statement {
     sid    = "ProjectRolesAndProfiles"
     effect = "Allow"
@@ -294,6 +345,38 @@ data "aws_iam_policy_document" "plan" {
     resources = [
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/glassbox/*",
     ]
+  }
+
+  # Refresh of the glassbox-zram-swap document and its association
+  # (infra/modules/compute/zram.tf), including their tags.
+  statement {
+    sid    = "ReadProjectSsmDocumentsAndAssociations"
+    effect = "Allow"
+    actions = [
+      "ssm:DescribeAssociation",
+      "ssm:DescribeDocument",
+      "ssm:DescribeDocumentPermission",
+      "ssm:GetDocument",
+      "ssm:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*",
+      "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*",
+    ]
+  }
+
+  statement {
+    sid       = "ListSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:ListAssociations", "ssm:ListAssociationVersions", "ssm:ListDocuments"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
   }
 
   statement {
