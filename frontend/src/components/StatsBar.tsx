@@ -57,6 +57,8 @@ function StatsBar({
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
 
   const tooltipId = useId()
+  const wideTooltipId = useId()
+  const [wideTooltipOpen, setWideTooltipOpen] = useState(false)
   const [tooltipOpen, setTooltipOpen] = useState(false)
   const pressTimerRef = useRef<number | null>(null)
   // One gesture state decides whether the release runs the test:
@@ -149,7 +151,7 @@ function StatsBar({
     // (overflow-x-auto would clip the absolutely-positioned capacity
     // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex min-h-[58px] shrink-0 items-center pb-[env(safe-area-inset-bottom)] justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
         <span>last {lastStats ? `${lastStats.latencyMs}ms` : '—ms'}</span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
@@ -157,7 +159,46 @@ function StatsBar({
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center">
+      <div className="flex shrink-0 items-center sm:gap-2">
+        {/* >= sm: a labelled button runs the test; the icon beside it is
+            details-only (hover/focus shows the tooltip, click/tap toggles it),
+            so there is exactly one control per action. Both are display:none
+            below sm, so they leave the tab order and the accessibility tree. */}
+        <button
+          type="button"
+          aria-disabled={disabled}
+          aria-describedby={wideTooltipId}
+          aria-label={onCooldown
+            ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining`
+            : `Run stress test (${stressTestCapacity.sufficient ? 'real' : 'simulated'})`}
+          onClick={() => { if (!disabled) onStressTest?.() }}
+          className={`hidden min-h-11 shrink-0 touch-manipulation rounded-[3px] border px-4 py-2 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-cyan sm:inline-block md:min-h-0 ${
+            disabled
+              ? 'cursor-not-allowed border-hairline text-muted'
+              : 'cursor-pointer border-hairline text-primary hover:border-cyan hover:text-cyan'
+          }`}
+        >
+          {onCooldown ? `Stress test (${stressTestCooldownSeconds}s)` : 'Stress test'}
+        </button>
+        <button
+          type="button"
+          aria-label={`Cluster capacity: ${stressTestCapacity.sufficient ? 'real' : 'simulated'} stress test. Show details`}
+          aria-describedby={wideTooltipId}
+          aria-expanded={wideTooltipOpen}
+          onClick={() => setWideTooltipOpen((v) => !v)}
+          onBlur={() => setWideTooltipOpen(false)}
+          className="group relative hidden size-11 shrink-0 cursor-help select-none items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan sm:flex"
+        >
+          <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={false} />
+          <span
+            id={wideTooltipId}
+            role="tooltip"
+            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${wideTooltipOpen ? 'block' : 'hidden'}`}
+          >
+            {capacityLabel}
+          </span>
+        </button>
+        {/* < sm: the icon IS the button (tap runs, press-and-hold shows details). */}
         <button
           type="button"
           aria-disabled={disabled}
@@ -172,7 +213,7 @@ function StatsBar({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
           onContextMenu={(e) => e.preventDefault()}
-          className={`group relative -mr-2 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:-mr-2.5 md:mr-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:mr-0 sm:hidden ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={disabled} />
           {onCooldown && (
@@ -183,7 +224,7 @@ function StatsBar({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-60 sm:w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${tooltipOpen ? 'block' : 'hidden'}`}
+            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-60 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${tooltipOpen ? 'block' : 'hidden'}`}
           >
             {capacityLabel}
           </span>
