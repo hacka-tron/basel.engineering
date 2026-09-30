@@ -217,6 +217,14 @@ resource "aws_instance" "glassbox" {
   tags = { Name = "glassbox" }
 
   depends_on = [aws_iam_role_policy.instance, aws_iam_role_policy_attachment.ssm_core]
+
+  lifecycle {
+    # The AMI comes from an SSM "latest" parameter; without this, a newly
+    # published AL2023 image would force a replacement on the next apply,
+    # wiping k3s/MySQL/Redis state on the root volume. OS updates happen
+    # in place (dnf) or via a deliberate, planned replacement instead.
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "glassbox" {
