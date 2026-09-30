@@ -16,53 +16,90 @@ class FakeResponse:
         return self.payload
 
 
+_MISSING = object()
+
+
 class FakeNodeClient:
-    def __init__(self, allocatable, pressure="False"):
+    """Serves /api/v1/nodes and the metrics.k8s.io node list for one node."""
+
+    def __init__(self, allocatable, used="600Mi", pressure="False", metrics=True):
         self.allocatable = allocatable
+        self.used = used
         self.pressure = pressure
+        self.metrics = metrics
         self.paths = []
         self.closed = False
 
     async def get(self, path):
         self.paths.append(path)
-        return FakeResponse(
-            {
-                "items": [
-                    {
-                        "status": {
-                            "allocatable": {"memory": self.allocatable},
-                            "conditions": [{"type": "MemoryPressure", "status": self.pressure}],
+        if path == "/api/v1/nodes":
+            conditions = (
+                []
+                if self.pressure is _MISSING
+                else [{"type": "MemoryPressure", "status": self.pressure}]
+            )
+            return FakeResponse(
+                {
+                    "items": [
+                        {
+                            "metadata": {"name": "node-a"},
+                            "status": {
+                                "allocatable": {"memory": self.allocatable},
+                                "conditions": conditions,
+                            },
                         }
-                    }
-                ]
-            }
-        )
+                    ]
+                }
+            )
+        if path == "/apis/metrics.k8s.io/v1beta1/nodes":
+            if not self.metrics:
+                return ForbiddenResponse()
+            return FakeResponse(
+                {"items": [{"metadata": {"name": "node-a"}, "usage": {"memory": self.used}}]}
+            )
+        raise AssertionError(f"unexpected path {path}")
 
     async def aclose(self):
         self.closed = True
 
 
-def test_capacity_uses_live_node_allocatable_and_is_conservative(monkeypatch):
+class ForbiddenResponse:
+    def raise_for_status(self):
+        raise RuntimeError("403 Forbidden")
+
+
+def _capacity(monkeypatch, node):
     from services.glassbox.api import capacity
 
-    node = FakeNodeClient("4Gi")
     monkeypatch.setattr(capacity, "_incluster_client", lambda: (node, "https://fake"))
+    return TestClient(app).get("/api/demo/capacity").json()
 
-    response = TestClient(app).get("/api/demo/capacity")
 
-    assert response.status_code == 200
-    assert response.json()["sufficient"] is True
-    assert node.paths == ["/api/v1/nodes"]
+def test_capacity_allows_node_with_enough_live_free_memory(monkeypatch):
+    node = FakeNodeClient("2Gi", used="1000Mi")  # 1048 MiB free >= 768 required
+
+    assert _capacity(monkeypatch, node)["sufficient"] is True
+    assert sorted(node.paths) == ["/api/v1/nodes", "/apis/metrics.k8s.io/v1beta1/nodes"]
     assert node.closed
 
 
-def test_capacity_denies_tight_node_or_memory_pressure(monkeypatch):
-    from services.glassbox.api import capacity
+def test_capacity_denies_busy_node_even_when_allocatable_is_large(monkeypatch):
+    # Codex review: total allocatable alone approved a heavily occupied node.
+    assert _capacity(monkeypatch, FakeNodeClient("4Gi", used="3500Mi"))["sufficient"] is False
 
-    for node in (FakeNodeClient("2Gi"), FakeNodeClient("4Gi", pressure="True")):
-        monkeypatch.setattr(capacity, "_incluster_client", lambda node=node: (node, "https://fake"))
-        response = TestClient(app).get("/api/demo/capacity")
-        assert response.json()["sufficient"] is False
+
+def test_capacity_denies_memory_pressure_or_missing_condition(monkeypatch):
+    # A missing MemoryPressure condition must fail closed, not count as healthy.
+    for pressure in ("True", "Unknown", _MISSING):
+        node = FakeNodeClient("4Gi", used="100Mi", pressure=pressure)
+        assert _capacity(monkeypatch, node)["sufficient"] is False
+
+
+def test_capacity_denies_when_node_metrics_are_unavailable(monkeypatch):
+    assert (
+        _capacity(monkeypatch, FakeNodeClient("4Gi", used="100Mi", metrics=False))["sufficient"]
+        is False
+    )
 
 
 def test_capacity_denies_unknown_cluster(monkeypatch):

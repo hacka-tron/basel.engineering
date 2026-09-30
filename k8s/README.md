@@ -64,36 +64,41 @@ TLS Secret this cluster doesn't have yet).
 
 ## Stress test / KEDA autoscaling (DESIGN.md §9.3/§9.4)
 
-`feature/stress-test-keda` adds the pieces for the "Stress test" demo:
+The "Stress test" demo is made of:
 
-- `k8s/base/rbac-api.yaml` — a scoped `api` ServiceAccount + Role +
-  RoleBinding (get/list/watch on `pods`, `app` namespace only), wired into
-  `api-deployment.yaml` via `serviceAccountName: api`. Backs
-  `GET /api/cluster/stream`.
+- `k8s/base/rbac-api.yaml` — the `api` ServiceAccount (wired into
+  `api-deployment.yaml` via `serviceAccountName: api`) with a namespaced
+  Role for get/list/watch on `pods` in `app` (backs `GET /api/cluster/stream`),
+  plus a ClusterRole that can only `list` `nodes` (backs
+  `GET /api/demo/capacity`). The capacity check also reads live node usage
+  from metrics-server (`metrics.k8s.io` `nodes`); until the API is granted
+  that read, the check fails closed and the site runs the visual-only demo.
 - `k8s/overlays/prod/keda/` — KEDA itself, installed via a Flux
-  `HelmRepository`/`HelmRelease` (not Terraform's helm provider — this repo
-  has no Terraform-managed Kubernetes resources; Flux already owns every
-  other piece of live cluster config, so a second, Terraform-driven install
-  path would risk exactly the drift Flux was chosen to prevent). Verify the
-  chart version pin in `helm-release.yaml` against the current latest KEDA
-  release before applying — it was written without live access to the chart
-  index.
-- `k8s/overlays/prod/scaledobject-retrieval-worker.yaml` — the `ScaledObject`
-  scaling `retrieval-worker` 1→5 on `retrieval:jobs`' consumer-group lag.
-  `k8s/base/worker-deployment.yaml` no longer pins a fixed `replicas` so KEDA's
-  HPA (not a stray `kubectl apply`/Flux reconcile) owns that field.
-- `k8s/base/networkpolicy-data.yaml`'s `redis-from-app` policy now also
-  allows ingress from the `keda` namespace, since KEDA's redis-streams
-  scaler polls Redis directly from its own operator pod, not through
-  `retrieval-worker`.
+  `HelmRepository`/`HelmRelease` (not Terraform's helm provider — Flux owns
+  all live cluster config, so a second install path would risk drift).
+- `k8s/overlays/prod/keda-scaling/` — the `ScaledObject` scaling
+  `retrieval-worker` 1→5 on `retrieval:jobs`' consumer-group lag.
+- **Install order:** the root overlay doesn't apply those two directories
+  directly. `k8s/overlays/prod/flux/kustomization-keda.yaml` defines two Flux
+  Kustomizations: `keda` (`wait: true`, so it's Ready only once the
+  HelmRelease has installed the chart and registered the `keda.sh` CRDs) and
+  `keda-scaling` (`dependsOn: keda`). A first install therefore never
+  dry-runs the `ScaledObject` before its CRD exists, and a KEDA failure can't
+  block the app workloads.
+- `k8s/base/worker-deployment.yaml` doesn't pin `replicas`, so KEDA's HPA
+  owns that field. A fresh Deployment defaults to 1.
+- `k8s/base/networkpolicy-data.yaml` admits the `keda` namespace to Redis,
+  since the redis-streams scaler polls it from KEDA's operator pod.
 
-**None of this has been applied to the live cluster.** Installing KEDA is a
-new cluster-level component and needs the owner's explicit go-ahead
-immediately before running, per this project's standing rule for live
-cluster changes (see `project/AGENT_HANDOFF.md`). Rendered and validated
-locally only: `kubectl kustomize k8s/base` / `k8s/overlays/prod`, every
-resulting document parses as valid YAML, and `terraform fmt`/`validate` still
-pass across `infra/` (unchanged by this branch — KEDA is Flux/kustomize, not
-Terraform).
+**Removing KEDA later:** deleting the `ScaledObject`/HPA does not reset the
+worker count — the Deployment keeps whatever replica count KEDA last set
+(up to 5). Scale it back explicitly (`kubectl -n app scale
+deploy/retrieval-worker --replicas=1`) or re-add `replicas: 1` to
+`worker-deployment.yaml` in the same change that removes KEDA.
+
+Installing KEDA is a new cluster-level component: merging this to `main`
+(and so to `deploy`) makes Flux install it, which needs the owner's explicit
+go-ahead. Validated locally with `kubectl kustomize` on `k8s/overlays/prod`,
+`keda`, and `keda-scaling`.
 
 Nightly ingestion is still future work (see `project/BACKLOG.md`).
