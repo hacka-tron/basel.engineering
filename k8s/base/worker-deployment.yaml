@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/hacka-tron/basel.engineering:9c03c06-secfix
+          image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
           command: ["python", "-m", "services.glassbox.worker.main"]
           envFrom:
             - configMapRef:
