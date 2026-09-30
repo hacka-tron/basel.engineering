@@ -11,11 +11,11 @@ spec:
   scaleTargetRef:
     name: retrieval-worker
   minReplicaCount: 1
-  maxReplicaCount: 5
+  maxReplicaCount: 3
   pollingInterval: 5 # seconds
   # cooldownPeriod only governs scaling to zero; with minReplicaCount: 1 the
-  # 5→1 scale-down is the HPA's, whose default 300s stabilization window
-  # would keep five pods up for ~5 minutes. DESIGN.md §4.5 wants them gone
+  # 3→1 scale-down is the HPA's, whose default 300s stabilization window
+  # would keep three pods up for ~5 minutes. DESIGN.md §4.5 wants them gone
   # about a minute after the backlog drains.
   advanced:
     horizontalPodAutoscalerConfig:

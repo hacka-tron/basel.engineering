@@ -1,7 +1,7 @@
 """Conservative memory gate for the optional KEDA stress test.
 
-A real burst scales retrieval-worker from 1 to 5 replicas, so the node needs
-enough *currently free* memory for four more workers at their memory limit,
+A real burst scales retrieval-worker from 1 to 3 replicas, so the node needs
+enough *currently free* memory for two more workers at their memory limit,
 plus a margin for rollout Jobs and transient spikes. Free memory is the node's
 allocatable memory minus its live usage from metrics-server (bundled with
 k3s); comparing a static estimate against total allocatable would approve a
@@ -25,9 +25,13 @@ from services.glassbox.api.cluster import _incluster_client
 router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 
-# MiB. Four extra retrieval-worker replicas at their memory *limit*
-# (k8s/base/worker-deployment.yaml), not their request or typical usage.
-EXTRA_WORKERS_MI = 4 * 128
+# Keep in sync with maxReplicaCount in k8s/overlays/prod/keda-scaling/.
+MAX_WORKERS = 3
+WORKER_LIMIT_MI = 128
+
+# MiB. The extra retrieval-worker replicas (beyond the baseline one) at their
+# memory *limit* (k8s/base/worker-deployment.yaml), not request or typical usage.
+EXTRA_WORKERS_MI = (MAX_WORKERS - 1) * WORKER_LIMIT_MI
 SAFETY_MARGIN_MI = 256
 REQUIRED_FREE_MI = EXTRA_WORKERS_MI + SAFETY_MARGIN_MI
 

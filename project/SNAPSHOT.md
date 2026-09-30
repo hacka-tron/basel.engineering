@@ -56,7 +56,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 ## Target architecture (full detail in docs/DESIGN.md)
 
-Browser → Cloudflare (TLS/proxy) → Traefik on a single EC2 `t4g.small` (k3s) → FastAPI `api` (also serves the built frontend) + `retrieval-worker` (KEDA-scaled 1-5 once `feature/stress-test-keda` merges and is applied; fixed-replica until then) ↔ in-cluster Redis (cache/queue/vector index) and MySQL (source of truth) → Amazon Bedrock (embeddings + LLM). GitHub Actions builds/pushes each merge to `main`; Flux's Image Update Automation watches ECR and deploys automatically, no manual step.
+Browser → Cloudflare (TLS/proxy) → Traefik on a single EC2 `t4g.small` (k3s) → FastAPI `api` (also serves the built frontend) + `retrieval-worker` (KEDA-scaled 1-3 once `feature/stress-test-keda` merges and is applied; fixed-replica until then) ↔ in-cluster Redis (cache/queue/vector index) and MySQL (source of truth) → Amazon Bedrock (embeddings + LLM). GitHub Actions builds/pushes each merge to `main`; Flux's Image Update Automation watches ECR and deploys automatically, no manual step.
 
 ## Milestones (docs/DESIGN-004-action-plan.md §2)
 
