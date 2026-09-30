@@ -48,6 +48,12 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list"]
+  # Live node memory usage from metrics-server (bundled with k3s), so the
+  # capacity check compares against free memory, not total allocatable.
+  # Usage numbers only; owner-approved 2026-09-30.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
