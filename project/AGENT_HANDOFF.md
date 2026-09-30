@@ -1,5 +1,11 @@
 # Agent handoff
 
+## README and legacy package cleanup — Codex, 2026-09-30
+
+**Active coordinator: Claude.** At the owner's request, Codex drafted a new root README in branch `docs/readme-package-cleanup` (worktree `.worktrees/readme-package-cleanup`). It describes the live portfolio, two question corpora, architecture, deferred stress-test/KEDA work, repository map, and local development steps. No application code or infrastructure manifests changed. The legacy `ghcr.io/hacka-tron/basel.engineering` GitHub container package was deleted through GitHub's Packages API (HTTP 204); a follow-up list returned `[]` and a package lookup returned 404. The active Release workflow and Kubernetes manifests use AWS ECR, so this does not remove the production image. README branch remains for Claude's review and merge; static link and `git diff --check` verification were run. Full local startup was not run for this docs-only change. Next feature priorities remain as recorded below.
+
+---
+
 ## Task 5 closed for real: root cause of the Job-recreation bug found and fixed, verified with a real hands-off release — Claude, 2026-09-30
 
 **Active coordinator: Claude.** This closes out the "one still pending confirmation" item from the checkpoint immediately below. Two things happened after that checkpoint, in order:
