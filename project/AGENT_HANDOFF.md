@@ -1,8 +1,14 @@
 # Agent handoff
 
+## README structure and wrench favicon — Codex, 2026-09-30
+
+**Active coordinator: Claude.** The owner merged PR #31, then asked for a medium-length, more visually engaging README with useful sections and a wrench icon for the browser tab. Branch `feature/readme-favicon` in `.worktrees/readme-package-cleanup` adds sections for questions to try, motivation, request flow, and code navigation; it removes local setup and the old closing tagline. The Vite starter favicon was replaced with a cyan wrench SVG on the site's dark background, and `frontend/index.html` now explicitly links it. No application logic or infrastructure changed. Verified with `npm ci && npm run build`, `git diff --check`, README link checks, SVG parsing, visual inspection of the rendered icon, and a byte-for-byte check that the built favicon matches the source. Review/merge this branch; feature priorities remain as recorded below.
+
+---
+
 ## Shorter, more personal README — Codex, 2026-09-30
 
-**Active coordinator: Claude.** The owner merged PR #30, then asked for a simpler, warmer README: site link, what Glassbox does, and how/why it was built as a portfolio landing page and a way to learn RAG, k3s, and related tools. Branch `docs/readme-personal-tone` in `.worktrees/readme-package-cleanup` makes that copy-only revision and removes the local setup section and closing tagline. No application code changed. Review/merge this branch; feature priorities remain as recorded below.
+**Active coordinator: Claude.** The owner merged PR #30, then asked for a simpler, warmer README: site link, what Glassbox does, and how/why it was built as a portfolio landing page and a way to learn RAG, k3s, and related tools. Branch `docs/readme-personal-tone` in `.worktrees/readme-package-cleanup` made that copy-only revision and removed the local setup section and closing tagline; it merged as PR #31. No application code changed. Feature priorities remain as recorded below.
 
 ---
 
