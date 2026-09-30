@@ -22,13 +22,17 @@ TEST_MYSQL_PORT = os.environ.get("GLASSBOX_TEST_MYSQL_PORT", "3306")
 
 
 def skip_unless_query_log_migrated(engine) -> None:
-    """Skip when the local queries table predates migration 0003 (DESIGN-002 §9.3)."""
+    """Skip locally (fail in CI) when queries predates migration 0003 (DESIGN-002 §9.3)."""
     with engine.connect() as connection:
         columns = {row[0] for row in connection.exec_driver_sql("SHOW COLUMNS FROM queries")}
     missing = {"turn_index", "rewritten_query"} - columns
     if missing:
         engine.dispose()
-        pytest.skip(f"local MySQL queries table not migrated to head (missing {sorted(missing)})")
+        message = f"MySQL queries table not migrated to head (missing {sorted(missing)})"
+        # CI migrates to head before pytest, so missing columns there are a real failure.
+        if os.environ.get("CI"):
+            pytest.fail(message)
+        pytest.skip(message)
 
 
 @pytest.fixture(autouse=True)
