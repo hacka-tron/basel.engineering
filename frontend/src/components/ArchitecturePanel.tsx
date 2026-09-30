@@ -1,4 +1,4 @@
-import { Handle, MarkerType, Position, ReactFlow, type Node, type NodeProps } from '@xyflow/react'
+import { Handle, MarkerType, Position, ReactFlow, type Node, type NodeHandle, type NodeProps } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, type NodeId } from '../architecture'
@@ -32,6 +32,15 @@ const handleStyle: CSSProperties = {
   background: 'transparent',
   opacity: 0,
 }
+
+const nodeWidth = 124
+const nodeHeight = 42
+const nodeHandles: NodeHandle[] = [
+  { id: 'left', type: 'target', position: Position.Left, x: 0, y: nodeHeight / 2 },
+  { id: 'top', type: 'target', position: Position.Top, x: nodeWidth / 2, y: 0 },
+  { id: 'right', type: 'source', position: Position.Right, x: nodeWidth, y: nodeHeight / 2 },
+  { id: 'bottom', type: 'source', position: Position.Bottom, x: nodeWidth / 2, y: nodeHeight },
+]
 
 const flowStyle = {
   '--xy-background-color': 'var(--color-panel)',
@@ -93,9 +102,10 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   }, [inspectedNode])
   const nodes = useMemo<LiveNode[]>(() => architectureNodes.map((node) => ({
     ...node,
-    // Match the fixed NodeView size so React Flow never hides these nodes to remeasure them.
-    width: 124,
-    height: 42,
+    // Known dimensions and handle positions keep nodes and arrows visible during updates.
+    width: nodeWidth,
+    height: nodeHeight,
+    handles: nodeHandles,
     data: {
       ...node.data,
       id: node.id,
