@@ -1,6 +1,7 @@
 """Scanner checks and real MySQL/Redis ingestion coverage."""
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,69 @@ def test_architecture_deep_dive_is_ingested_into_about_system():
     assert all(chunk.token_count <= 500 for chunk in chunks)
 
 
+def dockerfile_copy_sources(dockerfile: str) -> set[str]:
+    """Top-level repo paths that COPY/ADD instructions take from the build context.
+
+    Joins backslash continuations, skips flags such as --chown and --link, reads the
+    JSON-array form, and ignores copies from another build stage (--from=...).
+    """
+    logical, pending = [], ""
+    for raw in dockerfile.splitlines():
+        line = raw.rstrip()
+        if not pending and (not line.strip() or line.lstrip().startswith("#")):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        logical.append(pending + line)
+        pending = ""
+    if pending:
+        logical.append(pending)
+
+    sources: set[str] = set()
+    for line in logical:
+        instruction, _, rest = line.strip().partition(" ")
+        if instruction.upper() not in {"COPY", "ADD"}:
+            continue
+        rest = rest.strip()
+        flags = []
+        while rest.startswith("--"):
+            flag, _, rest = rest.partition(" ")
+            flags.append(flag)
+            rest = rest.strip()
+        if any(flag.startswith("--from") for flag in flags):
+            continue
+        parts = json.loads(rest) if rest.startswith("[") else rest.split()
+        for source in parts[:-1]:
+            top = source.removeprefix("./").strip("/").split("/", 1)[0]
+            if top and top != ".":
+                sources.add(top)
+    return sources
+
+
+def test_dockerfile_copy_sources_parser_handles_continuations_flags_and_json():
+    dockerfile = """FROM node:22 AS build
+# COPY commented/ out/
+COPY frontend/package.json frontend/package-lock.json ./
+COPY docs/ \\
+    newdir/ /app/
+COPY --chown=app:app --link corpus/ /app/corpus/
+COPY ["infra/", "k8s/base/x.yaml", "/app/"]
+ADD alembic.ini ./
+COPY --from=build /app/frontend/dist frontend/dist
+COPY --from build /tmp/x /tmp/x
+"""
+    assert dockerfile_copy_sources(dockerfile) == {
+        "frontend",
+        "docs",
+        "newdir",
+        "corpus",
+        "infra",
+        "k8s",
+        "alembic.ini",
+    }
+
+
 def test_release_workflow_rebuilds_on_every_path_copied_into_the_image():
     """A docs- or corpus-only merge must build a release, or ingest never sees it."""
     repo_root = Path(__file__).resolve().parents[2]
@@ -124,12 +188,8 @@ def test_release_workflow_rebuilds_on_every_path_copied_into_the_image():
         for line in workflow.split("paths:", 1)[1].split("concurrency:", 1)[0].splitlines()
         if line.strip().startswith("- ")
     }
-    copied = set()
-    for line in (repo_root / "Dockerfile").read_text().splitlines():
-        parts = line.split()
-        if parts[:1] == ["COPY"] and not parts[1].startswith("--from"):
-            copied.update(source.rstrip("/").split("/", 1)[0] for source in parts[1:-1])
-    assert copied, "expected COPY instructions in the Dockerfile"
+    copied = dockerfile_copy_sources((repo_root / "Dockerfile").read_text())
+    assert {"services", "docs", "corpus"} <= copied
     assert copied <= triggers, f"release.yml paths miss: {sorted(copied - triggers)}"
 
 
