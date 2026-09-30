@@ -28,28 +28,35 @@ export const ERROR_REPLIES: readonly string[] = [
   'That answer got stuck in traffic. Could you try again?',
 ]
 
-/** A random generic reply, never equal to `previous` (the last one shown). */
-export function pickErrorReply(previous: string | null = null, random: () => number = Math.random): string {
-  const choices = ERROR_REPLIES.filter((reply) => reply !== previous)
+/** Replies to avoid: the last one shown, or several (e.g. also the one saved above). */
+export type Avoid = string | null | readonly (string | null | undefined)[]
+
+/** A random generic reply, never one of `avoid` (the last one(s) shown). */
+export function pickErrorReply(avoid: Avoid = null, random: () => number = Math.random): string {
+  const excluded = new Set(Array.isArray(avoid) ? avoid : [avoid])
+  const allowed = ERROR_REPLIES.filter((reply) => !excluded.has(reply))
+  const choices = allowed.length > 0 ? allowed : ERROR_REPLIES
   return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
 }
 
 export type FailedRequest = { code: string; retry_after_s?: number }
 
 /** The chat reply for a failed request. */
+// Limits are per client IP, which several visitors can share, so these
+// replies describe the site's state and never suggest the visitor overdid it.
 export function errorReplyFor(
   failure: FailedRequest,
-  previous: string | null = null,
+  avoid: Avoid = null,
   random: () => number = Math.random,
 ): string {
   if (failure.code === 'rate_limited') {
     const wait = failure.retry_after_s && failure.retry_after_s > 0
       ? `about ${failure.retry_after_s} ${failure.retry_after_s === 1 ? 'second' : 'seconds'}`
       : 'a moment'
-    return `Whoa, that's a lot of questions at once! Give me ${wait} to catch my breath, then ask again.`
+    return `The site's getting a lot of questions right now. Give it ${wait}, then ask again and I'll be ready.`
   }
   if (failure.code === 'budget_exhausted') {
-    return "I've used up today's answer budget, so I'm taking a breather. Come back tomorrow and I'll be ready to chat."
+    return "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
   }
-  return pickErrorReply(previous, random)
+  return pickErrorReply(avoid, random)
 }

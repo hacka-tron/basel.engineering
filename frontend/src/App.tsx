@@ -379,7 +379,11 @@ function App() {
         revealFinalizeRef.current = () => {
           // The technical detail is for developers; visitors get a chat reply.
           console.warn(`Ask request failed (${event.code}): ${event.message}`)
-          const reply = errorReplyFor(event, lastErrorReplyRef.current)
+          // Avoid the last reply shown in this session and the latest one saved
+          // in this tab (it may be right above after a reload).
+          const savedReply = conversationsRef.current[targetCorpus]
+            .findLast((message) => message.role === 'assistant' && message.state === 'error')?.content
+          const reply = errorReplyFor(event, [lastErrorReplyRef.current, savedReply])
           lastErrorReplyRef.current = reply
           // The failure becomes an assistant message marked `error`: saved with
           // the conversation, but never sent as history or counted as an answer.
