@@ -21,14 +21,14 @@ function PipelineStrip({ onViewArchitecture, activeNode, triggerRef }: PipelineS
           ref={triggerRef}
           type="button"
           onClick={onViewArchitecture}
-          className="text-xs text-primary underline underline-offset-4 hover:text-cyan"
+          className="-my-3 -mr-2 inline-flex min-h-11 items-center px-2 text-xs text-primary underline underline-offset-4 hover:text-cyan"
         >
           View architecture
         </button>
       </div>
       <ol className="flex gap-4 overflow-x-auto pb-1">
         {architectureNodes.map((node) => (
-          <li key={node.id} className="flex shrink-0 flex-col items-center gap-1 text-center text-[10px] text-muted">
+          <li key={node.id} className="flex shrink-0 flex-col items-center gap-1 text-center text-[11px] text-muted">
             <span aria-hidden="true" className={`h-2 w-2 rounded-full border ${node.id === activeNode ? 'border-cyan bg-cyan' : 'border-muted'}`} />
             <span className="whitespace-nowrap">{node.data.label}</span>
           </li>

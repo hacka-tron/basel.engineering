@@ -57,7 +57,7 @@ function StatsBar({
     // (overflow-x-auto would clip the absolutely-positioned capacity
     // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+    <footer className="flex min-h-[58px] shrink-0 items-center pb-[env(safe-area-inset-bottom)] justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
         <span>last {lastStats ? `${lastStats.latencyMs}ms` : '—ms'}</span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
@@ -82,7 +82,7 @@ function StatsBar({
         disabled={disabled}
         onClick={onStressTest}
         aria-label={onCooldown ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining` : 'Stress test'}
-        className={`shrink-0 rounded-[3px] border px-3 py-2 transition-colors sm:px-4 ${
+        className={`min-h-11 shrink-0 rounded-[3px] border px-3 py-2 transition-colors md:min-h-0 sm:px-4 ${
           disabled
             ? 'cursor-not-allowed border-hairline text-muted'
             : 'border-hairline text-primary hover:border-cyan hover:text-cyan'
