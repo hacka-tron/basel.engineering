@@ -1,6 +1,7 @@
 """Scanner checks and real MySQL/Redis ingestion coverage."""
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -91,6 +92,105 @@ def test_secret_heuristic_catches_quoted_and_unquoted_keys(assignment):
 
 def test_secret_heuristic_catches_temporary_aws_key():
     assert secret_reason("key = ASIA1234567890ABCDEF") == "possible AWS access key at line 1"
+
+
+def test_architecture_deep_dive_is_ingested_into_about_system():
+    repo_root = Path(__file__).resolve().parents[2]
+    deep_dive = "docs/architecture/deep-dive.md"
+    sources = {source.source_path: source for source in scan_sources(repo_root)}
+
+    assert sources[deep_dive].corpus == "about_system"
+    scanned = scan_file(sources[deep_dive])
+    assert scanned.error is None
+    assert scanned.content is not None
+
+    # One retrievable chunk per H2 section: every chunk starts at a heading, no
+    # section is split or merged, and unbuilt work stays in its own last chunk.
+    chunks = chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)
+    sections = [line for line in scanned.content.splitlines() if line.startswith("## ")]
+    assert len(chunks) == len(sections) == 25
+    assert chunks[0].text.startswith("# Glassbox architecture deep dive")
+    for chunk, heading in zip(chunks[1:], sections[1:], strict=True):
+        assert chunk.text.startswith(heading)
+    assert chunks[-1].text.startswith("## Planned / not built yet")
+    assert all(chunk.token_count <= 500 for chunk in chunks)
+
+
+def dockerfile_copy_sources(dockerfile: str) -> set[str]:
+    """Top-level repo paths that COPY/ADD instructions take from the build context.
+
+    Joins backslash continuations, skips flags such as --chown and --link, reads the
+    JSON-array form, and ignores copies from another build stage (--from=...).
+    """
+    logical, pending = [], ""
+    for raw in dockerfile.splitlines():
+        line = raw.rstrip()
+        if not pending and (not line.strip() or line.lstrip().startswith("#")):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        logical.append(pending + line)
+        pending = ""
+    if pending:
+        logical.append(pending)
+
+    sources: set[str] = set()
+    for line in logical:
+        instruction, _, rest = line.strip().partition(" ")
+        if instruction.upper() not in {"COPY", "ADD"}:
+            continue
+        rest = rest.strip()
+        flags = []
+        while rest.startswith("--"):
+            flag, _, rest = rest.partition(" ")
+            flags.append(flag)
+            rest = rest.strip()
+        if any(flag.startswith("--from") for flag in flags):
+            continue
+        parts = json.loads(rest) if rest.startswith("[") else rest.split()
+        for source in parts[:-1]:
+            top = source.removeprefix("./").strip("/").split("/", 1)[0]
+            if top and top != ".":
+                sources.add(top)
+    return sources
+
+
+def test_dockerfile_copy_sources_parser_handles_continuations_flags_and_json():
+    dockerfile = """FROM node:22 AS build
+# COPY commented/ out/
+COPY frontend/package.json frontend/package-lock.json ./
+COPY docs/ \\
+    newdir/ /app/
+COPY --chown=app:app --link corpus/ /app/corpus/
+COPY ["infra/", "k8s/base/x.yaml", "/app/"]
+ADD alembic.ini ./
+COPY --from=build /app/frontend/dist frontend/dist
+COPY --from build /tmp/x /tmp/x
+"""
+    assert dockerfile_copy_sources(dockerfile) == {
+        "frontend",
+        "docs",
+        "newdir",
+        "corpus",
+        "infra",
+        "k8s",
+        "alembic.ini",
+    }
+
+
+def test_release_workflow_rebuilds_on_every_path_copied_into_the_image():
+    """A docs- or corpus-only merge must build a release, or ingest never sees it."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = (repo_root / ".github/workflows/release.yml").read_text()
+    triggers = {
+        line.strip().removeprefix("- ").removesuffix("/**")
+        for line in workflow.split("paths:", 1)[1].split("concurrency:", 1)[0].splitlines()
+        if line.strip().startswith("- ")
+    }
+    copied = dockerfile_copy_sources((repo_root / "Dockerfile").read_text())
+    assert {"services", "docs", "corpus"} <= copied
+    assert copied <= triggers, f"release.yml paths miss: {sorted(copied - triggers)}"
 
 
 @pytest.fixture
