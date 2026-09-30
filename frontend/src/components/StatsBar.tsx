@@ -12,20 +12,19 @@ type StatsBarProps = {
 }
 
 /**
- * Capacity-status avatar: a white animal head in a round frame, dim at rest
- * and brightening on hover/focus of its `group` parent (like the header's
- * GitHub mark, but visible enough at rest to read as a status). Lion = room
- * for a real scale-up; bunny = visual demo only.
+ * Capacity-status icon: muted at rest and brightening on hover/focus of its
+ * `group` parent, matching the header's GitHub mark. Lion = room for a real
+ * scale-up; bunny = visual demo only.
  */
 function Avatar({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-8 items-center justify-center rounded-full border border-hairline bg-panel text-primary/75 transition-colors group-hover:border-primary group-hover:text-primary group-focus:border-primary group-focus:text-primary sm:size-9"
+      className="flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus:text-primary"
     >
       <svg
         viewBox="0 0 24 24"
-        className="size-6 sm:size-7"
+        className="size-8 sm:size-9"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
