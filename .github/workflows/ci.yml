@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - services/**
+      - frontend/**
+      - pyproject.toml
+      - Dockerfile
+      - docker-compose.yml
+      - .github/workflows/ci.yml
+  push:
+    branches: [main]
+    paths:
+      - services/**
+      - frontend/**
+      - pyproject.toml
+      - Dockerfile
+      - docker-compose.yml
+      - .github/workflows/ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: glassbox
+          MYSQL_USER: glassbox
+          MYSQL_PASSWORD: glassbox
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -proot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis/redis-stack-server:7.2.0-v11
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: glassbox
+      MYSQL_PASSWORD: glassbox
+      MYSQL_DATABASE: glassbox
+      REDIS_URL: redis://127.0.0.1:6379/0
+      GLASSBOX_PROVIDER: fake
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r services/requirements-dev.txt
+      - name: Apply database migrations
+        run: alembic upgrade head
+      - name: Ruff
+        run: ruff check services eval
+      - name: Pytest
+        run: pytest services/tests -q
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
