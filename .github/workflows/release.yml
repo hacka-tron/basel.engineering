@@ -56,18 +56,39 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
+    env:
+      # A PAT, deliberately not the default GITHUB_TOKEN: GitHub doesn't
+      # trigger other workflows for a push/PR made with the automatic
+      # token (anti-loop protection), which would leave this PR's checks
+      # never running and `gh pr merge --auto` waiting forever. A real
+      # token identity doesn't have that restriction.
+      GH_TOKEN: ${{ secrets.RELEASE_BOT_PAT }}
+      TAG: ${{ needs.build-and-push.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ secrets.RELEASE_BOT_PAT }}
       - name: Set deployed image tag
         working-directory: k8s/overlays/prod
-        run: |
-          yq -i '.images[0].newTag = "${{ needs.build-and-push.outputs.tag }}"' kustomization.yaml
-      - name: Commit and push
+        run: yq -i '.images[0].newTag = "${{ env.TAG }}"' kustomization.yaml
+      # main requires backend-tests/frontend-checks to pass, and a check run
+      # can only exist for a commit that's already reachable on GitHub - a
+      # raw `git push` straight to main is rejected outright (there's no way
+      # for the checks to have run for a commit before it's been pushed
+      # anywhere). Going through a real PR + auto-merge instead: ci.yml runs
+      # against this PR's commit like any other, and GitHub merges it
+      # automatically once that passes.
+      - name: Open and auto-merge the deploy PR
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "deploy/${TAG}"
           git add k8s/overlays/prod/kustomization.yaml
-          git commit -m "deploy: bump image to ${{ needs.build-and-push.outputs.tag }} [skip ci]"
-          git push origin HEAD:main
+          git commit -m "deploy: bump image to ${TAG}"
+          git push origin "deploy/${TAG}"
+          gh pr create --base main --head "deploy/${TAG}" \
+            --title "deploy: bump image to ${TAG}" \
+            --body "Automated image tag bump from the release workflow."
+          gh pr merge "deploy/${TAG}" --auto --merge --delete-branch
