@@ -4,7 +4,12 @@ metadata:
   name: retrieval-worker
   namespace: app
 spec:
-  replicas: 2
+  # No `replicas` field: KEDA's ScaledObject (k8s/overlays/prod/
+  # scaledobject-retrieval-worker.yaml) manages this Deployment's replica
+  # count via the HPA it creates, scaling 1 to 5 on retrieval:jobs' consumer-
+  # group lag. Leaving a fixed `replicas` here would have kubectl/Flux
+  # reassert it on every apply, fighting the HPA. Baseline is
+  # minReplicaCount: 1 there, matching DESIGN.md §9.2's steady state.
   selector:
     matchLabels:
       app: retrieval-worker

@@ -1,0 +1,38 @@
+# Queue-driven autoscaling for the stress-test demo (DESIGN.md §9.3/§9.4).
+# Requires KEDA (k8s/overlays/prod/keda/) to be installed and its CRDs
+# registered before this can reconcile — enforced by the `keda-scaling` Flux
+# Kustomization's dependsOn in k8s/overlays/prod/flux/kustomization-keda.yaml.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: retrieval-worker
+  namespace: app
+spec:
+  scaleTargetRef:
+    name: retrieval-worker
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  pollingInterval: 5 # seconds
+  # cooldownPeriod only governs scaling to zero; with minReplicaCount: 1 the
+  # 5→1 scale-down is the HPA's, whose default 300s stabilization window
+  # would keep five pods up for ~5 minutes. DESIGN.md §4.5 wants them gone
+  # about a minute after the backlog drains.
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 45
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
+  triggers:
+    - type: redis-streams
+      metadata:
+        address: redis.data.svc.cluster.local:6379
+        stream: retrieval:jobs
+        consumerGroup: workers
+        lagCount: "10" # target backlog per replica (Redis 7+; this cluster's
+        # redis-stack-server:7.2.0 image exposes XINFO GROUPS' `lag` field —
+        # confirmed live against the local dev stack during this branch's
+        # verification, see the backend commit message)

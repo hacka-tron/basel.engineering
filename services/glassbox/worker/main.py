@@ -64,6 +64,46 @@ async def enqueue_retrieval_job(
     )
 
 
+_SYNTHETIC_EMBEDDING = struct.pack(f"{VECTOR_DIMENSIONS}f", *([0.0] * VECTOR_DIMENSIONS))
+
+
+async def enqueue_synthetic_jobs(
+    redis_client,
+    *,
+    count: int = 300,
+    simulated_delay_ms: int = 200,
+) -> int:
+    """Build retrieval-queue backlog for the stress-test demo (DESIGN.md §9.4).
+
+    Synthetic jobs never call an embedding or LLM provider — the embedding is
+    a fixed placeholder vector, never looked up or computed — and
+    `process_one_message` recognizes `synthetic=1` and does a fixed simulated
+    delay instead of any real retrieval/Bedrock work. Their only purpose is to
+    grow `retrieval:jobs`' consumer-group lag so KEDA's ScaledObject scales
+    `retrieval-worker` up; nothing about them is ever published anywhere a
+    real client could observe it (see the synthetic branch below).
+    """
+    now_ts = int(time.time() * 1000)
+    enqueued = 0
+    for _ in range(count):
+        await redis_client.xadd(
+            STREAM_NAME,
+            {
+                "request_id": f"synthetic-{uuid4().hex}",
+                "corpus": "about_me",
+                "request_start_ts": now_ts,
+                "embedding": _SYNTHETIC_EMBEDDING,
+                "embedding_model": "synthetic",
+                "synthetic": "1",
+                "synthetic_delay_ms": simulated_delay_ms,
+            },
+            maxlen=10000,
+            approximate=True,
+        )
+        enqueued += 1
+    return enqueued
+
+
 def _field(fields: dict, name: str):
     return fields.get(name.encode(), fields.get(name))
 
@@ -119,6 +159,25 @@ async def process_one_message(
         return False
     _, messages = streams[0]
     message_id, fields = messages[0]
+
+    synthetic = _field(fields, "synthetic")
+    if isinstance(synthetic, bytes):
+        synthetic = synthetic.decode()
+    if synthetic == "1":
+        # Stress-test job (see enqueue_synthetic_jobs): simulate work with a
+        # fixed delay only. No embedding/LLM/Bedrock call, no MySQL lookup,
+        # and no publish to trace:{request_id} — nothing subscribes to a
+        # synthetic request's channel, and this keeps it that way even if a
+        # real request_id were ever accidentally reused (it can't be here,
+        # since synthetic IDs use their own "synthetic-" prefix).
+        delay_raw = _field(fields, "synthetic_delay_ms") or b"200"
+        delay_ms = int(delay_raw.decode() if isinstance(delay_raw, bytes) else delay_raw)
+        try:
+            await asyncio.sleep(delay_ms / 1000)
+        finally:
+            await redis_client.xack(STREAM_NAME, GROUP_NAME, message_id)
+        return True
+
     request_id = _field(fields, "request_id")
     if isinstance(request_id, bytes):
         request_id = request_id.decode(errors="replace")

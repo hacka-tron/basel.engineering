@@ -1,0 +1,58 @@
+# Installs the KEDA operator + metrics adapter into the `keda` namespace.
+# Flux's helm-controller performs the actual `helm install`/`upgrade` once
+# this is synced — nothing here is applied by this branch's author.
+#
+# Chart version confirmed live against artifacthub.io/packages/helm/kedacore/keda
+# at review time (2026-09-30): 2.21.0 is current stable, released 2026-09-23.
+# This is a fresh install, not an upgrade from an older KEDA version, so
+# 2.21.0's breaking changes (relative to 2.20) don't apply here.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keda
+  namespace: keda
+spec:
+  interval: 30m
+  releaseName: keda
+  targetNamespace: keda
+  chart:
+    spec:
+      chart: keda
+      version: "2.21.0"
+      sourceRef:
+        kind: HelmRepository
+        name: kedacore
+        namespace: flux-system
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Keep KEDA's footprint inside the budget docs/DESIGN.md §9.7 reserves
+    # for it (~150Mi) on this single 2GiB t4g.small node. Only watch the
+    # `app` namespace: this cluster has nothing else for KEDA to scale.
+    watchNamespace: app
+    resources:
+      operator:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 150Mi
+      metricServer:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          memory: 100Mi
+      # The admission webhooks default to 100Mi requested / 1000Mi limit in
+      # chart 2.21.0, which alone would break the 150Mi KEDA budget.
+      webhooks:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
