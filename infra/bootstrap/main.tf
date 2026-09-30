@@ -283,6 +283,22 @@ data "aws_iam_policy_document" "plan" {
   }
 
   statement {
+    sid       = "ReadPublicAmiParameter"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"]
+  }
+
+  statement {
+    sid     = "ReadProjectEcrRepository"
+    effect  = "Allow"
+    actions = ["ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:ListTagsForResource"]
+    resources = [
+      "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/glassbox",
+    ]
+  }
+
+  statement {
     sid       = "DecryptProjectParametersViaSsm"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]

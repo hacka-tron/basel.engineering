@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Codex checkpoint — First protected Terraform plan failed, fix prepared, 2026-09-30
+
+The owner approved draft PR #13's `terraform-plan` environment job in run `36674696537`. OIDC role assumption and production state initialization succeeded; the plan failed on two `AccessDeniedException`s: `ssm:GetParameter` for the public AL2023 arm64 AMI parameter and `ecr:DescribeRepositories` for `glassbox`. AWS IAM simulation confirmed the plan role denies these actions; its policy only covered project SSM parameters and had no ECR reads. This is a policy omission, not a Cloudflare token failure.
+
+Branch `feature/flux-prerequisites` now adds narrowly scoped public AMI SSM read and project ECR `DescribeRepositories`, `GetLifecyclePolicy`, `ListTagsForResource` reads to `infra/bootstrap/main.tf`. `terraform fmt -check` and `terraform validate` passed in the isolated worktree. A fresh local bootstrap plan using the retained state showed **0 adds, 1 in-place policy update, 0 destroys**. IAM simulation of the proposed policy allowed the four needed reads and still denied `ecr:PutImage`. The owner has **not yet approved or applied this new plan**. After review and explicit owner approval, apply the policy, rerun the protected PR plan, and verify its PR comment. Flux blockers remain as recorded below.
+
+---
+
 ## Codex checkpoint — Bootstrap IAM applied, 2026-09-30
 
 **Active coordinator: Codex.** The owner added `CLOUDFLARE_API_TOKEN` to both `terraform-plan` and `terraform-prod` GitHub environments; `gh secret list` verified both names without exposing values. The owner explicitly approved applying the bootstrap plan. Codex saved a fresh plan to `/private/tmp/glassbox-bootstrap-approved.tfplan` and applied that exact file. Terraform reported **2 added, 1 changed, 0 destroyed**: new `glassbox-ci-plan` role and inline policy, plus `glassbox-ci` trust changed to the protected `terraform-prod` environment. A fresh `terraform plan -detailed-exitcode` returned 0 with **No changes**, and `aws iam get-role` verified the plan role's immutable GitHub OIDC subject. No production stack or cluster changes were made.

@@ -8,9 +8,11 @@ validation checks, but do not receive production state or Cloudflare access.
 
 As of 2026-09-30, both protected environments, their Cloudflare secrets and
 zone ID variables, and the bootstrap IAM roles are configured. The owner
-approved the bootstrap apply; a subsequent bootstrap plan reported no changes.
-The first protected `terraform-plan` job still needs the owner's environment
-approval and a successful run before this workflow is considered verified.
+approved the initial bootstrap apply. The first protected `terraform-plan` job
+then reached the AWS role and production state, but failed because the plan
+role lacked reads for the public Amazon Linux AMI parameter and the project's
+ECR repository. The read-only policy fix is in draft PR #13; it has not been
+applied. Rerun the protected plan after owner approval of that IAM update.
 
 ## One-time setup before merging the workflow
 
