@@ -1,5 +1,11 @@
 import type { NodeId } from '../architecture'
 import type { ApiCorpus, HistoryTurn } from './conversation'
+import { createIdleWatchdog } from './idleWatchdog'
+
+// The server pings at least every 15 s (DESIGN-002 §7.4), so 45 s without a
+// single byte means the connection is dead even if the socket never closed.
+export const STREAM_IDLE_TIMEOUT_MS = 45_000
+export const CONNECTION_LOST_MESSAGE = 'Connection lost — try again.'
 
 export type StageEvent = {
   request_id: string
@@ -29,7 +35,9 @@ export type RetrievalEvent = { chunks: RetrievalChunk[]; rewritten_query?: strin
 export type TokenEvent = { text: string }
 export type DoneEvent = {
   total_ms: number
-  mode: 'full' | 'retrieval_only'
+  // `stopped` is part of the §9.2 contract; the server logs it but the client
+  // that stopped is gone, so in practice the browser never receives it.
+  mode: 'full' | 'retrieval_only' | 'stopped'
   answer_cache: 'hit' | 'miss'
   tokens_in?: number
   tokens_out?: number
@@ -54,14 +62,29 @@ export async function askQuestion(
   callbacks: AskCallbacks,
   signal?: AbortSignal,
   history: HistoryTurn[] = [],
+  idleTimeoutMs: number = STREAM_IDLE_TIMEOUT_MS,
 ): Promise<void> {
+  if (signal?.aborted) return
+  // One controller for the fetch: aborted by the caller (Stop, unmount) or by
+  // the idle watchdog when the stream stalls. The watchdog also covers the wait
+  // for response headers.
+  const controller = new AbortController()
+  const forwardAbort = () => controller.abort()
+  signal?.addEventListener('abort', forwardAbort, { once: true })
+  let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null
+  const watchdog = createIdleWatchdog(idleTimeoutMs, () => {
+    controller.abort()
+    // Also cancel the reader directly, so a pending read settles even if the
+    // body stream does not error on abort.
+    activeReader?.cancel().catch(() => { /* Already closed. */ })
+  })
   try {
     const response = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // `history` is omitted for a first question so the server skips the rewrite.
       body: JSON.stringify(history.length > 0 ? { question, corpus, history } : { question, corpus }),
-      signal,
+      signal: controller.signal,
     })
 
     if (!response.ok) {
@@ -72,6 +95,7 @@ export async function askQuestion(
     }
 
     const reader = response.body.getReader()
+    activeReader = reader
     const decoder = new TextDecoder()
     let buffer = ''
     let completed = false
@@ -113,6 +137,9 @@ export async function askQuestion(
     try {
       while (!completed) {
         const { done, value } = await reader.read()
+        // Any bytes count as life, including `: ping` heartbeats (which the
+        // frame parser skips because they carry no `event:` line).
+        if (value && value.byteLength > 0) watchdog.reset()
         if (done) {
           buffer += decoder.decode()
           dispatchFrames()
@@ -131,10 +158,19 @@ export async function askQuestion(
       reader.releaseLock()
     }
   } catch (error) {
+    if (watchdog.fired) {
+      callbacks.onError?.({ code: 'internal', message: CONNECTION_LOST_MESSAGE })
+      return
+    }
     if (signal?.aborted) return
     callbacks.onError?.({
       code: 'internal',
-      message: error instanceof Error ? error.message : 'Something went wrong — try again.',
+      // fetch() and reader.read() reject with a TypeError when the network drops.
+      message: error instanceof TypeError ? CONNECTION_LOST_MESSAGE
+        : error instanceof Error ? error.message : 'Something went wrong — try again.',
     })
+  } finally {
+    watchdog.stop()
+    signal?.removeEventListener('abort', forwardAbort)
   }
 }

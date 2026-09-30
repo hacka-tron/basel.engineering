@@ -34,6 +34,9 @@ class EmbeddingProvider(ABC):
 class LLMProvider(ABC):
     # Included in answer-cache identity; changing models must not replay old answers.
     model_id: str
+    # True when generate() accepts a `usage` dict and fills it with measured
+    # inputTokens/outputTokens; callers otherwise estimate token counts.
+    reports_usage: bool = False
 
     @abstractmethod
     async def generate(
