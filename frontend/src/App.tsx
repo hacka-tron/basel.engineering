@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel from './components/ArchitecturePanel'
+import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -23,7 +24,52 @@ function App() {
   const requestInFlightRef = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => () => abortControllerRef.current?.abort(), [])
+  // Real per-token SSE events are the source of truth for *content*, but
+  // nothing paces how fast they're *shown*. A short/cached answer (or the
+  // local `fake` provider, which has no artificial latency at all) can have
+  // its entire text arrive within a single network read, which React can
+  // even coalesce into one paint — the answer then appears all at once
+  // instead of reading out like a typewriter. This buffer decouples arrival
+  // from reveal: tokens land here immediately, and a fixed-cadence timer
+  // drains them into the visible message a little at a time. It never
+  // fabricates content — it only paces real text that has already arrived —
+  // and it self-adjusts (revealing a larger fraction of a bigger backlog per
+  // tick) so a genuinely slow, naturally-paced real stream is shown at
+  // essentially the same speed it arrives, while a burst reads out visibly.
+  const revealBufferRef = useRef('')
+  const revealTimerRef = useRef<number | null>(null)
+  const revealFinalizeRef = useRef<(() => void) | null>(null)
+  const REVEAL_TICK_MS = 20
+
+  function ensureRevealLoop() {
+    if (revealTimerRef.current !== null) return
+    revealTimerRef.current = window.setInterval(() => {
+      const pending = revealBufferRef.current
+      if (pending.length > 0) {
+        const take = Math.max(2, Math.ceil(pending.length / 12))
+        revealBufferRef.current = pending.slice(take)
+        setMessages((current) => current.map((message, index) =>
+          index === current.length - 1 && message.role === 'assistant'
+            ? { ...message, text: message.text + pending.slice(0, take) }
+            : message))
+        return
+      }
+      if (revealFinalizeRef.current) {
+        const finalize = revealFinalizeRef.current
+        revealFinalizeRef.current = null
+        if (revealTimerRef.current !== null) {
+          window.clearInterval(revealTimerRef.current)
+          revealTimerRef.current = null
+        }
+        finalize()
+      }
+    }, REVEAL_TICK_MS)
+  }
+
+  useEffect(() => () => {
+    abortControllerRef.current?.abort()
+    if (revealTimerRef.current !== null) window.clearInterval(revealTimerRef.current)
+  }, [])
 
   function handleAsk(question: string) {
     if (requestInFlightRef.current || isStreaming) return
@@ -36,6 +82,8 @@ function App() {
     setActiveNode(null)
     setMessages((current) => [...current, { role: 'user', text: question }, { role: 'assistant', text: '' }])
     setIsStreaming(true)
+    revealBufferRef.current = ''
+    revealFinalizeRef.current = null
 
     void askQuestion(question, corpus === 'basel' ? 'about_me' : 'about_system', {
       onStage: (event) => {
@@ -47,35 +95,41 @@ function App() {
         }
       },
       onRetrieval: (event) => setRetrievedChunks(event.chunks),
-      onToken: (event) => setMessages((current) => current.map((message, index) =>
-        index === current.length - 1 && message.role === 'assistant'
-          ? { ...message, text: message.text + event.text }
-          : message)),
+      onToken: (event) => {
+        revealBufferRef.current += event.text
+        ensureRevealLoop()
+      },
       onDone: (event) => {
-        if (event.mode === 'retrieval_only') {
-          setMessages((current) => current.map((message, index) =>
-            index === current.length - 1 && message.role === 'assistant' && !message.text
-              ? { ...message, text: 'Sources retrieved — no generated answer for this request.' }
-              : message))
+        revealFinalizeRef.current = () => {
+          if (event.mode === 'retrieval_only') {
+            setMessages((current) => current.map((message, index) =>
+              index === current.length - 1 && message.role === 'assistant' && !message.text
+                ? { ...message, text: 'Sources retrieved — no generated answer for this request.' }
+                : message))
+          }
+          setLastStats({ totalMs: event.total_ms, cacheStatus: event.answer_cache, tokensOut: event.tokens_out })
+          setQueriesServed((current) => current + 1)
+          setIsStreaming(false)
+          setActiveNode(null)
+          requestInFlightRef.current = false
+          abortControllerRef.current = null
         }
-        setLastStats({ totalMs: event.total_ms, cacheStatus: event.answer_cache, tokensOut: event.tokens_out })
-        setQueriesServed((current) => current + 1)
-        setIsStreaming(false)
-        setActiveNode(null)
-        requestInFlightRef.current = false
-        abortControllerRef.current = null
+        ensureRevealLoop()
       },
       onError: (event) => {
-        setErrorMessage(event.code === 'rate_limited' && event.retry_after_s
-          ? `${event.message} Try again in ${event.retry_after_s} seconds.`
-          : event.message || 'Something went wrong — try again.')
-        setMessages((current) => current.at(-1)?.role === 'assistant' && !current.at(-1)?.text
-          ? current.slice(0, -1)
-          : current)
-        setIsStreaming(false)
-        setActiveNode(null)
-        requestInFlightRef.current = false
-        abortControllerRef.current = null
+        revealFinalizeRef.current = () => {
+          setErrorMessage(event.code === 'rate_limited' && event.retry_after_s
+            ? `${event.message} Try again in ${event.retry_after_s} seconds.`
+            : event.message || 'Something went wrong — try again.')
+          setMessages((current) => current.at(-1)?.role === 'assistant' && !current.at(-1)?.text
+            ? current.slice(0, -1)
+            : current)
+          setIsStreaming(false)
+          setActiveNode(null)
+          requestInFlightRef.current = false
+          abortControllerRef.current = null
+        }
+        ensureRevealLoop()
       },
     }, controller.signal)
   }
@@ -124,12 +178,7 @@ function App() {
       <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-3 md:h-[72px] md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         <h1 className="w-full text-base font-semibold tracking-tight md:w-auto">Basel Abdel-Rahman</h1>
 
-        <a
-          href="mailto:baselmabdelrahman@gmail.com"
-          className="text-xs text-muted transition-colors hover:text-primary md:ml-4"
-        >
-          Contact me
-        </a>
+        <ContactReveal />
 
         <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-auto">
           <button

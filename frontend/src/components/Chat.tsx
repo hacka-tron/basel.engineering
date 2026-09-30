@@ -71,13 +71,23 @@ function Chat({ corpus, messages, isStreaming, onAsk, errorMessage, inputAccesso
 
         <div className="shrink-0 px-7 pb-6">
           <p className="mb-3 text-xs text-muted">Suggested questions</p>
-          <div className="flex flex-wrap gap-2">
+          {/*
+            A wrapping grid of these chips can run to 3+ full rows on a
+            narrow phone (long question text + a 4-row wrapped header above
+            it), squeezing the actual message list — which has to share the
+            same flex column — down to a sliver. Below `md`, this scrolls
+            horizontally as a single row instead (matching PipelineStrip's
+            existing pattern) so the conversation always keeps most of the
+            vertical space; at `md`+ there's room to spare, so it wraps as
+            before.
+          */}
+          <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
             {questions[corpus].map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
                 onClick={() => setQuestion(suggestion)}
-                className="rounded-[3px] border border-hairline px-3 py-2 text-left text-xs leading-relaxed text-muted transition-colors hover:text-primary"
+                className="shrink-0 whitespace-nowrap rounded-[3px] border border-hairline px-3 py-2 text-left text-xs leading-relaxed text-muted transition-colors hover:text-primary md:shrink md:whitespace-normal"
               >
                 {suggestion}
               </button>
