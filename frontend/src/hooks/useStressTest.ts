@@ -97,16 +97,29 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void): Stres
     }, 1000)
   }, [])
 
-  // Another visitor's real burst may already hold the lock when the page loads.
+  // Another visitor's real burst may hold the lock at page load or start
+  // while this page sits open, so poll while no cooldown is running (and on
+  // returning to the tab) rather than only checking on load and on click.
   useEffect(() => {
+    if (realCooldownSeconds !== null) return
     let mounted = true
-    void fetchCapacity().then((result) => {
-      if (!mounted) return
-      setCapacity(result)
-      if (result.retry_after_s) startRealCooldown(result.retry_after_s)
-    })
-    return () => { mounted = false }
-  }, [startRealCooldown])
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return
+      void fetchCapacity().then((result) => {
+        if (!mounted) return
+        setCapacity(result)
+        if (result.retry_after_s) startRealCooldown(result.retry_after_s)
+      })
+    }
+    refresh()
+    const interval = window.setInterval(refresh, 30_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      mounted = false
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [realCooldownSeconds === null, startRealCooldown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current)

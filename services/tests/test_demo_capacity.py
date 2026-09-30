@@ -68,9 +68,15 @@ class ForbiddenResponse:
         raise RuntimeError("403 Forbidden")
 
 
-def _capacity(monkeypatch, node):
+def _capacity(monkeypatch, node, *, stub_lock=True):
     from services.glassbox.api import capacity
 
+    if stub_lock:  # no cooldown lock held; lock-specific tests pass stub_lock=False
+
+        async def no_lock():
+            return 0
+
+        monkeypatch.setattr(capacity, "_cooldown_remaining_s", no_lock)
     monkeypatch.setattr(capacity, "_incluster_client", lambda: (node, "https://fake"))
     return TestClient(app).get("/api/demo/capacity").json()
 
@@ -169,4 +175,21 @@ def test_capacity_falls_through_to_node_check_without_a_lock(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://unused")
     monkeypatch.setattr(capacity.redis, "from_url", lambda _url: _LockRedis(-2))
     node = FakeNodeClient("2Gi", used="1000Mi")
-    assert _capacity(monkeypatch, node)["sufficient"] is True
+    assert _capacity(monkeypatch, node, stub_lock=False)["sufficient"] is True
+
+
+def test_capacity_denies_when_the_cooldown_lock_cannot_be_read(monkeypatch):
+    # Codex review: a failed lock read must not fall through to a node check
+    # that could show the tiger for a burst that can't take the lock.
+    from services.glassbox.api import capacity
+
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+
+    def unreachable(_url):
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(capacity.redis, "from_url", unreachable)
+    node = FakeNodeClient("2Gi", used="100Mi")
+    body = _capacity(monkeypatch, node, stub_lock=False)
+    assert body["sufficient"] is False
+    assert node.paths == []

@@ -92,8 +92,8 @@ async def assess_capacity() -> dict[str, bool | str]:
         return _denied("Cluster capacity is unavailable.")
 
 
-async def _cooldown_remaining_s() -> int:
-    """Seconds left on a real burst's cooldown lock, or 0 (also when Redis is unreachable)."""
+async def _cooldown_remaining_s() -> int | None:
+    """Seconds left on a real burst's cooldown lock (0 if none), or None if Redis is unreachable."""
     try:
         client = redis.from_url(os.environ["REDIS_URL"])
         try:
@@ -102,7 +102,7 @@ async def _cooldown_remaining_s() -> int:
             await client.aclose()
     except Exception:
         LOGGER.warning("Could not read the stress-test cooldown lock", exc_info=True)
-        return 0
+        return None
 
 
 @router.get("/api/demo/capacity")
@@ -111,6 +111,9 @@ async def demo_capacity() -> dict[str, bool | str | int]:
     # another one, so report that instead of the node's headroom: every
     # visitor then sees the simulated-demo state, not just the one who clicked.
     remaining = await _cooldown_remaining_s()
+    if remaining is None:
+        # A real burst needs the Redis lock, so without Redis it can't start.
+        return _denied("The stress-test lock is unavailable.")
     if remaining > 0:
         return {
             "sufficient": False,
