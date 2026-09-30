@@ -608,6 +608,15 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
   - Update the image tag in `k8s/overlays/prod` (commit by the workflow).
   - `terraform apply` for infra changes (manual approval via GitHub environment protection).
 
+The Terraform workflow uses two exact-subject OIDC roles: a read-only
+`glassbox-ci-plan` role for the protected `terraform-plan` environment and the
+existing deploy role for the protected `terraform-prod` environment. Same-repo
+PRs can plan after a reviewer approves access to production state; fork PRs
+only validate. Both roles and the S3 backend are created by the separately
+applied `infra/bootstrap` root. A plan comment links to the run rather than
+publishing a binary plan, which may contain cleartext secrets. See
+`infra/CI.md` for the required environment setup and bootstrap order.
+
 **Flux (GitOps)**
 
 - Watches `k8s/overlays/prod` in the repo and applies changes.

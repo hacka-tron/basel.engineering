@@ -47,11 +47,15 @@ resource "aws_iam_openid_connect_provider" "github" {
 # "repo:hacka-tron@14956857/basel.engineering@1394092219:environment:release",
 # not the plain-name format every trust condition below originally assumed
 # (and which silently never worked, since nothing had actually exercised
-# these roles via a real Actions run until this was discovered).
+# these roles via a real Actions run until this was discovered). Every OIDC
+# trust condition in this file uses this prefix, not a hardcoded plain-name
+# string.
 locals {
   github_oidc_subject_prefix = "repo:hacka-tron@14956857/basel.engineering@1394092219"
 }
 
+# Applies infrastructure changes after approval of the terraform-prod GitHub
+# environment.
 data "aws_iam_policy_document" "ci_trust" {
   statement {
     effect  = "Allow"
@@ -69,9 +73,9 @@ data "aws_iam_policy_document" "ci_trust" {
     }
 
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["${local.github_oidc_subject_prefix}:ref:refs/heads/main"]
+      values   = ["${local.github_oidc_subject_prefix}:environment:terraform-prod"]
     }
   }
 }
@@ -203,14 +207,125 @@ resource "aws_iam_role_policy" "ci" {
   policy = data.aws_iam_policy_document.ci.json
 }
 
+# Terraform plans run only after approval of the terraform-plan GitHub
+# environment. The role can read production resources and state, and can write
+# only the S3 lockfile needed by Terraform's remote backend.
+data "aws_iam_policy_document" "plan_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["${local.github_oidc_subject_prefix}:environment:terraform-plan"]
+    }
+  }
+}
+
+resource "aws_iam_role" "plan" {
+  name               = "glassbox-ci-plan"
+  assume_role_policy = data.aws_iam_policy_document.plan_trust.json
+}
+
+data "aws_iam_policy_document" "plan" {
+  statement {
+    sid       = "DescribeRegionalInfrastructure"
+    effect    = "Allow"
+    actions   = ["ec2:Describe*"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadProjectIam"
+    effect    = "Allow"
+    actions   = ["iam:Get*", "iam:List*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "DescribeParameters"
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  statement {
+    sid     = "ReadProjectParameters"
+    effect  = "Allow"
+    actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:ListTagsForResource"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/glassbox/*",
+    ]
+  }
+
+  statement {
+    sid       = "DecryptProjectParametersViaSsm"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${var.aws_region}.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid       = "ListStateBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [aws_s3_bucket.state.arn]
+  }
+
+  statement {
+    sid       = "ReadProductionState"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.state.arn}/envs/prod/terraform.tfstate"]
+  }
+
+  statement {
+    sid       = "ManageProductionStateLock"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.state.arn}/envs/prod/terraform.tfstate.tflock"]
+  }
+}
+
+resource "aws_iam_role_policy" "plan" {
+  name   = "glassbox-ci-plan"
+  role   = aws_iam_role.plan.id
+  policy = data.aws_iam_policy_document.plan.json
+}
+
 # Pushes the application image to ECR on every merge to main. Scoped to a
 # dedicated "release" GitHub environment (not the terraform-plan/prod ones -
-# this never touches infrastructure, only an already-tested image), using
-# the newer environment-scoped trust condition rather than ci_trust's
-# ref:refs/heads/main pattern above. The ECR repository itself lives in
-# infra/envs/prod (a separate Terraform root/state), but its ARN is fully
-# deterministic from account ID, region, and name, so no cross-state
-# reference is needed here.
+# this never touches infrastructure, only an already-tested image).
 data "aws_iam_policy_document" "release_trust" {
   statement {
     effect  = "Allow"
