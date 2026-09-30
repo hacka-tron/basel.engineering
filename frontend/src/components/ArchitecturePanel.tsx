@@ -18,8 +18,6 @@ type LiveNode = Node<{
   onPreview: (id: NodeId) => void
   onLeave: () => void
   onInspect: (id: NodeId) => void
-  workerPods?: WorkerPod[]
-  backlog?: number | null
 }, 'architecture'>
 
 type ArchitecturePanelProps = {
@@ -29,6 +27,8 @@ type ArchitecturePanelProps = {
   selectedNode?: NodeId | null
   answerText?: string | null
   onInspect: (id: NodeId) => void
+  workerPods?: WorkerPod[]
+  backlog?: number | null
 }
 
 const handleStyle: CSSProperties = {

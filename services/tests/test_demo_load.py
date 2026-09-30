@@ -28,6 +28,9 @@ class FakeRedis:
 def test_first_request_acquires_lock_and_enqueues_synthetic_jobs(monkeypatch):
     from services.glassbox.api import demo
 
+    async def sufficient():
+        return {"sufficient": True, "reason": "Enough headroom"}
+
     client = FakeRedis()
     calls = {}
 
@@ -40,6 +43,7 @@ def test_first_request_acquires_lock_and_enqueues_synthetic_jobs(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://unused")
     monkeypatch.setattr(demo.redis, "from_url", lambda url: client)
     monkeypatch.setattr(demo, "enqueue_synthetic_jobs", fake_enqueue)
+    monkeypatch.setattr(demo, "assess_capacity", sufficient)
 
     response = TestClient(app).post("/api/demo/load")
 
@@ -53,6 +57,9 @@ def test_first_request_acquires_lock_and_enqueues_synthetic_jobs(monkeypatch):
 def test_second_request_within_cooldown_does_not_enqueue(monkeypatch):
     from services.glassbox.api import demo
 
+    async def sufficient():
+        return {"sufficient": True, "reason": "Enough headroom"}
+
     client = FakeRedis()
     client.store[demo.LOCK_KEY] = "1"
     client.ttls[demo.LOCK_KEY] = 214
@@ -63,6 +70,7 @@ def test_second_request_within_cooldown_does_not_enqueue(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://unused")
     monkeypatch.setattr(demo.redis, "from_url", lambda url: client)
     monkeypatch.setattr(demo, "enqueue_synthetic_jobs", fail_enqueue)
+    monkeypatch.setattr(demo, "assess_capacity", sufficient)
 
     response = TestClient(app).post("/api/demo/load")
 

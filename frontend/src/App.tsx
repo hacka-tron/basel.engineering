@@ -49,6 +49,29 @@ function App() {
   const [backlog, setBacklog] = useState<number | null>(null)
   const [shaking, setShaking] = useState(false)
   const shakeTimeoutRef = useRef<number | null>(null)
+  const [simulatedPodCount, setSimulatedPodCount] = useState<number | null>(null)
+  const [simulatedBacklog, setSimulatedBacklog] = useState<number | null>(null)
+  const simulationTimerRef = useRef<number | null>(null)
+
+  const startVisualStressTest = useCallback(() => {
+    if (simulationTimerRef.current !== null) window.clearInterval(simulationTimerRef.current)
+    const podCounts = [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
+    let frame = 0
+    setSimulatedPodCount(podCounts[0])
+    setSimulatedBacklog(300)
+    simulationTimerRef.current = window.setInterval(() => {
+      frame += 1
+      if (frame >= podCounts.length) {
+        if (simulationTimerRef.current !== null) window.clearInterval(simulationTimerRef.current)
+        simulationTimerRef.current = null
+        setSimulatedPodCount(null)
+        setSimulatedBacklog(null)
+        return
+      }
+      setSimulatedPodCount(podCounts[frame])
+      setSimulatedBacklog(Math.max(0, 300 - frame * 35))
+    }, 850)
+  }, [])
 
   useEffect(() => {
     const disconnect = connectClusterStream({
@@ -74,6 +97,7 @@ function App() {
 
   useEffect(() => () => {
     if (shakeTimeoutRef.current !== null) window.clearTimeout(shakeTimeoutRef.current)
+    if (simulationTimerRef.current !== null) window.clearInterval(simulationTimerRef.current)
   }, [])
 
   // The "earthquake" wow-moment: a brief, tasteful-but-noticeable screen
@@ -93,7 +117,11 @@ function App() {
     })
   }, [])
 
-  const stressTest = useStressTest()
+  const stressTest = useStressTest(startVisualStressTest)
+  const shownWorkerPods = simulatedPodCount === null
+    ? podsById && Object.values(podsById)
+    : Array.from({ length: simulatedPodCount }, (_, index) => ({ name: `demo-worker-${index}`, ready: true }))
+  const shownBacklog = simulatedPodCount === null ? backlog : simulatedBacklog
 
   function handleStressTestClick() {
     // Shake on every press, immediately — the click itself is the wow
@@ -361,7 +389,7 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={podsById && Object.values(podsById)} backlog={backlog} />}
+        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
       </main>
 
       <StatsBar
@@ -370,6 +398,7 @@ function App() {
         onStressTest={handleStressTestClick}
         stressTestCooldownSeconds={stressTest.cooldownSeconds}
         stressTestSubmitting={stressTest.isSubmitting}
+        stressTestCapacity={stressTest.capacity}
       />
 
       {showArchitectureSheet && (
@@ -394,7 +423,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} workerPods={podsById && Object.values(podsById)} backlog={backlog} />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />
             </div>
           </div>
         </div>

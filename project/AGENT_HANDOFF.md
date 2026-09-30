@@ -1,5 +1,15 @@
 # Agent handoff
 
+## Stress-test branch paused at owner's request — Codex, 2026-09-30
+
+**Active coordinator: Codex; work paused before review or deployment.** Worktree `.worktrees/stress-test-keda`, branch `feature/stress-test-keda`, rebased onto `origin/main` after PR #38. The rebase combined Claude's stress-test UI with the newer architecture inspection and fixed handle metadata; frontend lint and build passed. The existing backend and KEDA manifests remain unmerged and unapplied.
+
+**Partial implementation committed here:** `GET /api/demo/capacity` reads the single node's allocatable memory through the in-cluster API and conservatively compares it with the documented baseline, four additional workers, and a margin (2060 MiB total). It denies a tight node, memory pressure, or unavailable cluster. `POST /api/demo/load` checks capacity again before acquiring the Redis lock or enqueueing jobs. The frontend shows a lion/bunny status with a visible hover/focus tooltip; insufficient or unknown capacity runs a client-side pod/backlog animation without calling `/api/demo/load`. The backend focused tests passed (7); frontend lint/build passed. This is **not feature-complete or ready to merge**.
+
+**Resume work before review:** add the narrowly scoped node-read `ClusterRole` and `ClusterRoleBinding` for the API ServiceAccount; separate KEDA Helm installation from `ScaledObject` with ordered Flux Kustomizations and a HelmRelease readiness health check; verify those manifests render and reconcile safely; browser-test real and visual-only click paths, tooltip, pod animation, and preservation of diagram arrows/selection on desktop and mobile; inspect the memory estimator against live node allocatable/conditions without running a burst; run the full backend suite and final lint/build. The older typography task in `.worktrees/typography-pass` was not started. No live AWS/Kubernetes changes were made.
+
+---
+
 ## Resume after diagram arrow fix — Codex, 2026-09-30
 
 **Next work:** Claude's newer handoff from closed PR #36 specifies two branches. Pick up `feature/stress-test-keda` in `.worktrees/stress-test-keda` first (currently `62928de`, not live): implement `GET /api/demo/capacity` using live node allocatable memory and narrowly scoped node-read RBAC; compare it with declared baseline requests, four additional workers, and a safety margin. Add a visible lion/bunny status tooltip. When capacity is insufficient or unknown, run the visual animation without calling `/api/demo/load`. Resolve the first-install KEDA CRD ordering risk by splitting the Helm install and `ScaledObject` into ordered Flux Kustomizations before review and merge. The second task is `fix/typography-consistency` in `.worktrees/typography-pass` (untouched at `e9ee6dc`): rebase on current `main`, then visually tune Contact, suggested questions, the ask box, and diagram labels. Keep the release-time API probe timeout and stalled chat recovery investigation in the backlog. Full specification is in [Claude's PR #36](https://github.com/hacka-tron/basel.engineering/pull/36).

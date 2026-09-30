@@ -1,5 +1,7 @@
 # SNAPSHOT
 
+**2026-09-30 pause:** The `feature/stress-test-keda` worktree has a partial, unmerged capacity gate and frontend visual fallback. Nothing from that feature is live. Its RBAC and Flux dependency ordering are still missing, so do not merge it yet. Exact resume steps and verification evidence are in `project/AGENT_HANDOFF.md`.
+
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
 **Last updated:** 2026-09-30 (architecture arrows fix ready for review)

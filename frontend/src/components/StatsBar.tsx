@@ -1,9 +1,12 @@
+import type { DemoCapacity } from '../hooks/useStressTest'
+
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
   queriesServed?: number
   onStressTest?: () => void
   stressTestCooldownSeconds?: number | null
   stressTestSubmitting?: boolean
+  stressTestCapacity?: DemoCapacity
 }
 
 function StatsBar({
@@ -12,6 +15,7 @@ function StatsBar({
   onStressTest,
   stressTestCooldownSeconds = null,
   stressTestSubmitting = false,
+  stressTestCapacity = { sufficient: false, reason: 'Checking cluster capacity…' },
 }: StatsBarProps) {
   const onCooldown = stressTestCooldownSeconds !== null
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
@@ -31,6 +35,14 @@ function StatsBar({
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="group relative inline-flex cursor-help" tabIndex={0} role="status" aria-label={stressTestCapacity.reason}>
+          <span aria-hidden="true" className="text-base">{stressTestCapacity.sufficient ? '🦁' : '🐰'}</span>
+          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
+            {stressTestCapacity.sufficient ? 'There is room for a real worker scale-up. ' : 'Visual demo only; no jobs will be queued. '}
+            {stressTestCapacity.reason}
+          </span>
+        </span>
       <button
         type="button"
         disabled={disabled}
@@ -44,6 +56,7 @@ function StatsBar({
       >
         {onCooldown ? `Stress test (${stressTestCooldownSeconds}s)` : 'Stress test'}
       </button>
+      </div>
     </footer>
   )
 }
