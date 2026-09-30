@@ -13,6 +13,8 @@ spec:
       labels:
         app: retrieval-worker
     spec:
+      imagePullSecrets:
+        - name: regcred
       containers:
         - name: worker
           image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest

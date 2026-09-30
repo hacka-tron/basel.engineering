@@ -11,6 +11,8 @@ spec:
         app: ingest
     spec:
       restartPolicy: OnFailure
+      imagePullSecrets:
+        - name: regcred
       containers:
         - name: ingest
           image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest

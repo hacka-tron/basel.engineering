@@ -19,3 +19,8 @@ variable "aws_account_id" {
   type        = string
   default     = "404379474987"
 }
+
+variable "ecr_repository_arn" {
+  description = "ARN of the glassbox ECR repository, so the node can pull the application image."
+  type        = string
+}
