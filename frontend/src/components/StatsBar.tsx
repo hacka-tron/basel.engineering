@@ -81,7 +81,15 @@ function StatsBar({
             : 'border-hairline text-primary hover:border-cyan hover:text-cyan'
         }`}
       >
-        {onCooldown ? `Stress test (${stressTestCooldownSeconds}s)` : 'Stress test'}
+        {onCooldown ? (
+          <>
+            <span className="hidden sm:inline">Stress test (</span>
+            {stressTestCooldownSeconds}s
+            <span className="hidden sm:inline">)</span>
+          </>
+        ) : (
+          'Stress test'
+        )}
       </button>
       </div>
     </footer>
