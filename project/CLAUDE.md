@@ -10,6 +10,11 @@ Instructions for Claude Code when working in this repository.
 
 Read the relevant design doc before implementing a feature. If an implementation needs to diverge from what's written, update the doc in the same change rather than letting it drift.
 
+## Working style (owner preferences)
+
+- Scope new features with a subagent (see `orchestration/README.md`), not in the main conversation, so the orchestrator's context stays short.
+- When current work is waiting on review or owner approval, pick up the next backlog item instead of idling.
+
 ## Session memory (read this before scanning the repo)
 
 - **`project/SNAPSHOT.md`** is the architecture/repo-state blueprint. Read it first when starting a session instead of scanning the repo tree.
