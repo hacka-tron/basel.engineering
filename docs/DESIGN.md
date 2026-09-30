@@ -512,8 +512,10 @@ The endpoint only forwards pod name, phase and readiness for pods labeled `app=r
 | Redis | 60 to 100 Mi |
 | MySQL | 200 to 350 Mi (tuned down via mysqld flags - default config OOMKilled at 250Mi during the actual first deploy) |
 | API | 120 Mi |
-| Workers (3 at peak) | 270 Mi |
-| **Total at peak** | **about 1.7 to 1.9 Gi** |
+| Workers (3 at peak) | 270 to 384 Mi (projection: ~90 Mi observed per worker, 128 Mi limit each) |
+| **Total at peak** | **about 1.5 to 1.9 Gi** (sum of the rows above; a projection, not a measurement) |
+
+Measured on the live node on 2026-09-30 during a rollout (process RSS, not pod requests): k3s-server ~606 MB, Flux controllers ~195 MB, MySQL ~129 MB resident (more in swap), KEDA ~90 MB, API + worker ~115 MB, with ~440–510 MB of the 1 GiB swap in use — i.e. the node was already running over physical memory before any stress-test burst.
 
 The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at 128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this 2 GiB node, which is staying at 2 GiB; it was 5 workers before that decision.
 
