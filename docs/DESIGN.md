@@ -635,7 +635,7 @@ publishing a binary plan, which may contain cleartext secrets. See
 - Watches `k8s/overlays/prod` in the repo and applies changes.
 - Pull-based: the cluster reaches out to GitHub, so the Kubernetes API never needs to be exposed to CI.
 - Order: Flux applies everything in one pass. The `migrate` Job is recreated per image tag; the `api` and worker pods' `wait-for-migrations` initContainer holds them until it finishes. The `ingest` Job is not yet ordered after the rollout (planned follow-up: a separate, dependent Flux Kustomization).
-- Rollout: `maxSurge: 0, maxUnavailable: 1` on `api` and `retrieval-worker`, so an old and a new pod never coexist on the 2 GiB node. This is a deliberate trade: a few seconds of downtime per release in exchange for memory headroom. Uvicorn drains for up to 25s (`--timeout-graceful-shutdown 25`, `terminationGracePeriodSeconds: 30`), and probes use 5s timeouts plus a `startupProbe` so swap pressure during a rollout doesn't trigger restarts.
+- Rollout: `maxSurge: 0, maxUnavailable: 1` on `api` and `retrieval-worker`, so a rollout never adds an extra pod on the 2 GiB node: each old pod stops before its replacement starts. (The single api replica therefore has no old/new overlap; a scaled-out worker replaces replicas one at a time, so old- and new-image workers briefly coexist.) This is a deliberate trade: a few seconds of downtime per release in exchange for memory headroom. Uvicorn drains for up to 25s (`--timeout-graceful-shutdown 25`, `terminationGracePeriodSeconds: 30`), and probes use 5s timeouts plus a `startupProbe` so swap pressure during a rollout doesn't trigger restarts.
 
 ---
 

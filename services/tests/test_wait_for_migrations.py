@@ -1,4 +1,6 @@
 import logging
+import threading
+import time
 
 import pytest
 
@@ -93,13 +95,100 @@ def test_main_exit_codes(monkeypatch):
     monkeypatch.setattr(wfm, "get_head_revisions", lambda: HEAD)
 
     class FakeEngine:
+        def __init__(self, io_timeout):
+            self.io_timeout = io_timeout
+
         def dispose(self) -> None:
             pass
 
-    monkeypatch.setattr(wfm, "create_db_engine", FakeEngine)
+    monkeypatch.setattr(wfm, "create_check_engine", FakeEngine)
 
     monkeypatch.setattr(wfm, "get_current_revisions", lambda engine: HEAD)
-    assert wfm.main(["--timeout", "0"]) == 0
+    assert wfm.main(["--timeout", "1"]) == 0
 
     monkeypatch.setattr(wfm, "get_current_revisions", lambda engine: OLD)
-    assert wfm.main(["--timeout", "0"]) == 1
+    assert wfm.main(["--timeout", "0.05", "--interval", "0.01"]) == 1
+
+
+def test_attempts_that_time_out_are_bounded_by_the_deadline():
+    """Each attempt gets min(attempt_timeout, remaining); the wait ends exactly at the deadline."""
+    clock = FakeClock()
+    budgets: list[float] = []
+
+    def stalled_call(fn, budget):
+        budgets.append(budget)
+        clock.now += budget  # the read hangs for its whole budget...
+        raise TimeoutError("revision check did not finish")  # ...then is abandoned
+
+    ok = wfm.wait_for_migrations(
+        sequence(HEAD),  # would pass, but never gets to answer
+        HEAD,
+        timeout=12,
+        interval=5,
+        attempt_timeout=5,
+        clock=clock,
+        sleep=clock.sleep,
+        call_with_timeout=stalled_call,
+    )
+    assert ok is False
+    assert budgets == [5, 2]
+    assert clock.now == pytest.approx(12)
+
+
+def test_a_hung_database_read_cannot_block_past_the_timeout(caplog):
+    """Real clock and threads: get_current blocks far longer than the overall timeout."""
+    caplog.set_level(logging.INFO, logger="glassbox.wait_for_migrations")
+    release = threading.Event()
+
+    def hung_get_current():
+        release.wait(30)
+        return HEAD
+
+    start = time.monotonic()
+    try:
+        ok = wfm.wait_for_migrations(
+            hung_get_current, HEAD, timeout=0.5, interval=0.05, attempt_timeout=0.2
+        )
+    finally:
+        release.set()
+    elapsed = time.monotonic() - start
+    assert ok is False
+    assert elapsed < 1.0
+    assert "did not finish within" in caplog.text
+    assert "timed out after" in caplog.text
+
+
+def test_call_with_timeout_returns_raises_and_times_out():
+    assert wfm._call_with_timeout(lambda: HEAD, 1) == HEAD
+
+    def boom():
+        raise ConnectionError("down")
+
+    with pytest.raises(ConnectionError):
+        wfm._call_with_timeout(boom, 1)
+
+    release = threading.Event()
+    try:
+        with pytest.raises(TimeoutError):
+            wfm._call_with_timeout(lambda: release.wait(30), 0.05)
+    finally:
+        release.set()
+
+
+def test_check_engine_sets_driver_timeouts(monkeypatch):
+    for key, value in {
+        "MYSQL_USER": "u",
+        "MYSQL_PASSWORD": "p",
+        "MYSQL_HOST": "h",
+        "MYSQL_DATABASE": "d",
+    }.items():
+        monkeypatch.setenv(key, value)
+    captured = {}
+    monkeypatch.setattr(wfm, "create_engine", lambda url, **kw: captured.update(kw))
+    wfm.create_check_engine(5)
+    assert captured["connect_args"] == {
+        "connect_timeout": 5,
+        "read_timeout": 5,
+        "write_timeout": 5,
+    }
+    assert captured["poolclass"] is wfm.NullPool

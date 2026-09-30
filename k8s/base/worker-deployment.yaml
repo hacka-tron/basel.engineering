@@ -10,8 +10,11 @@ spec:
   # group lag. Leaving a fixed `replicas` here would have kubectl/Flux
   # reassert it on every apply, fighting the HPA. Baseline is
   # minReplicaCount: 1 there, matching DESIGN.md §9.2's steady state.
-  # Same memory-over-overlap trade-off as the api: never run an extra
-  # worker pod during a rollout; replace one replica at a time.
+  # Same memory trade-off as the api: never schedule an *extra* worker pod
+  # during a rollout. Replicas are replaced one at a time, so with more than
+  # one replica, old- and new-image workers do run side by side until the
+  # rollout finishes (fine: both consume the same stream); the pod count
+  # just never exceeds the current replica count.
   strategy:
     type: RollingUpdate
     rollingUpdate:

@@ -19,9 +19,12 @@ Flux applies the whole overlay in one pass, so the recreated `migrate` and
 The Deployments are set up so that is safe on a 2 GiB node:
 
 - **Brief downtime by design.** `api` and `retrieval-worker` use
-  `RollingUpdate` with `maxSurge: 0, maxUnavailable: 1`: the old pod is
-  stopped *before* the new one starts, so the node never holds two copies
-  (the owner chose memory headroom over zero downtime). Expect the site to be
+  `RollingUpdate` with `maxSurge: 0, maxUnavailable: 1`: a rollout never adds
+  an extra pod, so the old pod is stopped *before* its replacement starts
+  (the owner chose memory headroom over zero downtime). For the single api
+  replica that means no old/new overlap at all; when KEDA has scaled the
+  worker above one replica, old- and new-image workers coexist while
+  replicas are replaced one at a time, but never more pods than replicas. Expect the site to be
   unavailable for a few seconds per release — the time for the new api pod to
   start and pass `/readyz` — and longer if a migration is running.
 - **Migrations gate the new pods.** Both Deployments have a
@@ -29,7 +32,9 @@ The Deployments are set up so that is safe on a 2 GiB node:
   (`python -m services.glassbox.db.wait_for_migrations`) that polls the
   database's Alembic revision (read-only) until it equals the head baked into
   the image, i.e. until this tag's `migrate` Job has finished. It gives up
-  after 5 minutes with an `ERROR ... timed out` log line; the pod then shows
+  after 5 minutes with an `ERROR ... timed out` log line (each read is capped
+  at 5s with its own connection and socket timeouts, so a stalled MySQL can't
+  stretch the wait past that bound); the pod then shows
   `Init:Error`/`Init:CrashLoopBackOff` and the kubelet retries it. Check
   `kubectl -n app logs deploy/api -c wait-for-migrations` and
   `kubectl -n app logs job/migrate`. Rolling *back* to an image older than the
