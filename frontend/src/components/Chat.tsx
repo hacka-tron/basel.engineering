@@ -55,9 +55,9 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
   return (
     <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col bg-panel md:border-r md:border-hairline">
       <div aria-live="polite" className="sr-only">{announcement}</div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div ref={messagesRef} aria-label="Messages" aria-live="off" className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-7">
-          <div className="flex flex-col gap-4">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div ref={messagesRef} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-7 md:py-6">
+          <div className="flex shrink-0 flex-col gap-4">
             {messages.map((message) => {
               const pending = message.state === 'pending'
               if (message.role === 'assistant' && !message.content && !pending) return null
@@ -92,30 +92,30 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
               )
             })}
           </div>
+          {/* Suggested questions return whenever this tab's conversation is empty. */}
+          {messages.length === 0 && <div className="mt-auto shrink-0 pt-6">
+            <p className="mb-3 text-xs text-muted">Suggested questions</p>
+            {/* Chips wrap so every question is fully visible; 44px min tap height on mobile. */}
+            <div className="flex flex-wrap gap-2">
+              {questions[corpus].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => setQuestion(suggestion)}
+                  className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-sm leading-relaxed text-muted transition-colors hover:text-primary md:min-h-0"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>}
         </div>
 
-        {/* Suggested questions return whenever this tab's conversation is empty. */}
-        {messages.length === 0 && <div className="shrink-0 px-4 pb-6 md:px-7">
-          <p className="mb-3 text-xs text-muted">Suggested questions</p>
-          {/* Chips wrap so every question is fully visible; 44px min tap height on mobile. */}
-          <div className="flex flex-wrap gap-2">
-            {questions[corpus].map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                onClick={() => setQuestion(suggestion)}
-                className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-sm leading-relaxed text-muted transition-colors hover:text-primary md:min-h-0"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        </div>}
       </div>
 
       {inputAccessory}
 
-      <div className="shrink-0 px-4 pb-7 md:px-7">
+      <div className="shrink-0 px-4 pb-3 md:px-7 md:pb-7">
         {errorMessage && <p role="alert" className="mb-2 text-xs text-muted">{errorMessage}</p>}
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -135,7 +135,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
             →
           </button>
         </form>
-        <p className="mt-3 flex flex-wrap items-center gap-x-1 text-[11px] text-muted md:mt-2">
+        <p className="mt-2 flex flex-wrap items-center gap-x-1 text-[11px] text-muted md:mt-2">
           Chats are saved in this browser.{' '}
           <button
             type="button"

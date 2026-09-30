@@ -446,25 +446,15 @@ function App() {
 
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
-      <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-2 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
+      <header className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
-          Below md, the header wraps to two rows: [h1 + nav] on row one,
-          [Contact + GitHub] on row two. `md:contents` removes the h1/nav
-          wrapper from layout at md+, so those become direct header
-          children again there; the Contact/GitHub group's own `w-full`
-          (mobile) vs `md:w-auto md:ml-auto` (desktop) is what forces it
-          onto its own row below md and pushes it to the right at md+ -
-          the corpus toggle lives with the logo group (site identity +
-          navigation on the left), while Contact/GitHub are the two "meta"
-          actions grouped together on the right. `flex-wrap` on the logo
-          group is a safety net, not the primary layout: h1 stays on one
-          line (shrink-0/whitespace-nowrap) and nav drops to its own line
-          only if there's genuinely not enough room (e.g. ~375px), rather
-          than squeezing h1's text.
+          Below md: row one is [h1 ... Contact + GitHub], row two is the topic
+          nav (flex-wrap; the revealed email wraps onto its own row). Visual
+          order is set with `order-*`; at md+ everything sits on one row as
+          [h1, nav ... Contact + GitHub].
         */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 md:contents">
-          <h1 className="shrink-0 whitespace-nowrap text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight">Basel Abdel-Rahman</h1>
-          <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-4">
+        <h1 className="order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight">Basel Abdel-Rahman</h1>
+          <nav aria-label="Question topic" className="order-3 flex w-full items-center gap-2 text-xs md:order-2 md:ml-4 md:w-auto">
             <button
               type="button"
               aria-pressed={corpus === 'basel'}
@@ -483,16 +473,15 @@ function App() {
               About This System
             </button>
           </nav>
-        </div>
 
-        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-0 md:w-auto md:gap-3 md:flex-nowrap md:ml-auto">
+        <div className="order-2 flex flex-wrap items-center gap-x-4 gap-y-0 md:order-3 md:ml-auto md:gap-3 md:flex-nowrap">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="View source on GitHub"
-            className="-m-3.5 p-3.5 text-muted transition-colors hover:text-primary md:m-0 md:p-0"
+            className="absolute right-0.5 top-0 flex size-11 items-center justify-center text-muted transition-colors hover:text-primary md:static md:size-auto"
           >
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
@@ -525,7 +514,7 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
+        {isDesktop && <ArchitecturePanel fitMinZoom={0.75} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
       </main>
 
       <StatsBar

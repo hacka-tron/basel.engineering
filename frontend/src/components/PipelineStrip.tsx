@@ -14,8 +14,8 @@ type PipelineStripProps = {
 
 function PipelineStrip({ onViewArchitecture, activeNode, triggerRef }: PipelineStripProps) {
   return (
-    <section aria-label="Architecture pipeline" className="shrink-0 border-t border-hairline bg-panel px-4 py-3 md:hidden">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section aria-label="Architecture pipeline" className="shrink-0 border-t border-hairline bg-panel px-4 py-1.5 md:hidden">
+      <div className="mb-1 flex items-center justify-between gap-3">
         <span className="text-xs text-muted">Pipeline</span>
         <button
           ref={triggerRef}

@@ -67,7 +67,7 @@ function StatsBar({
       </div>
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <span
-          className="group relative inline-flex cursor-help rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan"
+          className="group relative inline-flex cursor-help rounded-full outline-none before:absolute before:-inset-y-2.5 before:-left-4 before:-right-2.5 before:content-[''] focus-visible:ring-1 focus-visible:ring-cyan"
           tabIndex={0}
           role="status"
           aria-label={capacityLabel}
