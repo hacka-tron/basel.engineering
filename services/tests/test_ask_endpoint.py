@@ -93,12 +93,10 @@ def test_prompt_marks_future_design_as_planned():
     "text",
     [
         "## Future milestones (not started)\nKubernetes deployment comes later.",
-        "**Phase 7: Polish**\nLoad test numbers recorded.",
-        "## 8. Milestone 4: DD3 production ingestion pipeline",
+        "**Phase 5: Autoscaling demo**\nKEDA scales workers.",
+        "## 9. Kubernetes design\nThe retrieval-worker is scaled by KEDA.",
         "## 7. Milestone 3: DD2 features (deferred)",
         "## Stretch ideas\nTry an EKS demo.",
-        "Replace the instance with an Auto Scaling Group of one.",
-        "## Planned / not built yet\nA Google Drive connector.",
     ],
 )
 def test_prompt_marks_planned_content_from_other_design_docs(text):
@@ -129,12 +127,6 @@ def test_prompt_marks_planned_content_from_other_design_docs(text):
     [
         "The API streams cited answers from the current local service.",
         "A future format change can use a versioned cache key.",
-        # Live infrastructure (DD1 Phases 4-6) must not be labeled planned.
-        "KEDA scales retrieval-worker from 1 to 3 on Redis Streams lag.",
-        "The site runs on k3s on a single EC2 node provisioned by Terraform.",
-        "Flux GitOps image automation deploys each build; CI/CD runs in GitHub Actions.",
-        "**Phase 5: Autoscaling demo**\nKEDA scales workers.",
-        "Milestone 2: live on AWS.",
     ],
 )
 def test_prompt_does_not_mark_current_or_incidental_future_content(text):

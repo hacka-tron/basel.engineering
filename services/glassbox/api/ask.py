@@ -47,17 +47,16 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_PROMPT_VERSION = "v13"
-# Keyword-based, not tense-aware. DD1 Phases 4-6 (Milestone 2: k3s on EC2,
-# Terraform, KEDA, CI/CD, Flux GitOps) are live, so their names and phase/milestone
-# numbers are no longer planned-design signals: matching them mislabeled current
-# infrastructure docs as "not implemented yet". Only still-unbuilt work stays here
-# (Phase 7 polish, Milestones 3-4, and DD2's self-healing Auto Scaling Group).
-# Revisit this heuristic (or move to doc-level status metadata) as those land.
+_PROMPT_VERSION = "v12"
+# Keyword-based, not tense-aware: once Phase 4/5 actually ships Terraform/KEDA/k3s,
+# this will start mislabeling genuinely-current infrastructure content as "planned"
+# (it can't tell "Terraform provisions X" apart from "Terraform will provision X").
+# Revisit this heuristic (or move to doc-level status metadata) when those phases land.
 _PLANNED_SOURCE_SIGNAL = re.compile(
     r"\b(?:planned|deferred|not (?:yet )?(?:started|built|implemented)|"
     r"stretch ideas?|future (?:milestones?|path|work|features?|plans?)|"
-    r"phase 7|milestone [34]|Auto Scaling Group)\b",
+    r"phase [4-7]|milestone [2-4]|"
+    r"KEDA|k3s|Terraform|Flux|GitOps|CI/CD|Auto Scaling Group)\b",
     re.IGNORECASE,
 )
 _ANSWER_LOCK_TTL_MS = 15000
