@@ -33,10 +33,16 @@ return {allowed, retry}
 """
 # The daily budget counts integer quarter-units (DESIGN-002 §5.4/§9.4): a generated
 # answer costs 4, a follow-up rewrite (a much smaller call) costs 1.
+#
+# Transition: before quarter-units the counter was `budget:llm:{date}` in whole answers.
+# KEYS[2] reads that legacy key (x4) inside the same script so usage recorded earlier on
+# the deploy day still counts. It is only read, never written. Remove KEYS[2] in a later
+# cleanup once no legacy key can be within its 48 h TTL.
 ANSWER_BUDGET_UNITS = 4
 REWRITE_BUDGET_UNITS = 1
 _DAILY_BUDGET_SCRIPT = """
-local used = tonumber(redis.call('GET', KEYS[1])) or 0
+local legacy = tonumber(redis.call('GET', KEYS[2])) or 0
+local used = (tonumber(redis.call('GET', KEYS[1])) or 0) + 4 * legacy
 local units = tonumber(ARGV[2])
 if used + units > tonumber(ARGV[1]) then return 0 end
 redis.call('INCRBY', KEYS[1], units)
@@ -81,8 +87,9 @@ class RedisDailyBudget:
         return bool(
             await self.client.eval(
                 _DAILY_BUDGET_SCRIPT,
-                1,
+                2,
                 f"budget:llm:q:{today}",
+                f"budget:llm:{today}",  # legacy whole-answer key; see _DAILY_BUDGET_SCRIPT
                 self.cap * ANSWER_BUDGET_UNITS,
                 units,
             )

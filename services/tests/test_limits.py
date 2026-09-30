@@ -95,6 +95,56 @@ async def test_daily_budget_counts_rewrites_as_quarter_answers():
         await client.aclose()
 
 
+@pytest.mark.asyncio
+async def test_daily_budget_counts_legacy_whole_answer_key_on_transition_day():
+    """Usage recorded under the pre-quarter-unit key must still count that day."""
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis unavailable: {exc}")
+    today = datetime(2030, 3, 1, tzinfo=UTC)
+    day = today.date().isoformat()
+    legacy, key = f"budget:llm:{day}", f"budget:llm:q:{day}"
+    await client.delete(legacy, key)
+    budget = RedisDailyBudget(client, cap=100)
+    try:
+        await client.set(legacy, 100)
+        assert not await budget.reserve(now=today)
+        assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert await client.get(key) is None
+    finally:
+        await client.delete(legacy, key)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_daily_budget_combines_partial_legacy_and_quarter_usage():
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis unavailable: {exc}")
+    today = datetime(2030, 3, 2, tzinfo=UTC)
+    day = today.date().isoformat()
+    legacy, key = f"budget:llm:{day}", f"budget:llm:q:{day}"
+    await client.delete(legacy, key)
+    budget = RedisDailyBudget(client, cap=3)
+    try:
+        await client.set(legacy, 2)  # 2 whole answers = 8 of 12 quarter-units
+        assert await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)  # 9
+        assert not await budget.reserve(now=today)  # 9 + 4 > 12
+        assert await budget.reserve(now=today, units=3)  # 12
+        assert not await budget.reserve(now=today, units=REWRITE_BUDGET_UNITS)
+        assert int(await client.get(key)) == 4
+        assert int(await client.get(legacy)) == 2  # legacy key is read, never written
+    finally:
+        await client.delete(legacy, key)
+        await client.aclose()
+
+
 def _request(peer: str, forwarded: str) -> Request:
     return Request(
         {
