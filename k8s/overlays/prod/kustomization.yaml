@@ -7,4 +7,4 @@ resources:
   - flux/image-update-automation.yaml
 images:
   - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
-    newTag: "build-17" # {"$imagepolicy": "flux-system:glassbox:tag"}
+    newTag: "build-18" # {"$imagepolicy": "flux-system:glassbox:tag"}
