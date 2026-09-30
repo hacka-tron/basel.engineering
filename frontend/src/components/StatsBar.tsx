@@ -13,6 +13,7 @@ type StatsBarProps = {
 }
 
 const LONG_PRESS_MS = 500
+const LONG_PRESS_SLOP_PX = 10
 const TOOLTIP_AUTO_HIDE_MS = 4000
 
 /**
@@ -60,6 +61,10 @@ function StatsBar({
   const pressTimerRef = useRef<number | null>(null)
   const longPressedRef = useRef(false)
 
+  const activePointersRef = useRef(new Set<number>())
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressClickRef = useRef(false)
+
   function cancelPress() {
     if (pressTimerRef.current !== null) {
       window.clearTimeout(pressTimerRef.current)
@@ -69,10 +74,18 @@ function StatsBar({
 
   // Touch/pen only: a ~500ms hold opens the details instead of running the
   // test. Mouse users get the hover tooltip, so they never need a long-press.
+  // A second finger, a cancel, or drifting past the slop cancels the hold.
   function handlePointerDown(e: React.PointerEvent) {
     longPressedRef.current = false
     if (e.pointerType === 'mouse') return
+    activePointersRef.current.add(e.pointerId)
     cancelPress()
+    if (activePointersRef.current.size > 1) {
+      suppressClickRef.current = true
+      return
+    }
+    suppressClickRef.current = false
+    pressStartRef.current = { x: e.clientX, y: e.clientY }
     pressTimerRef.current = window.setTimeout(() => {
       pressTimerRef.current = null
       longPressedRef.current = true
@@ -80,7 +93,28 @@ function StatsBar({
     }, LONG_PRESS_MS)
   }
 
+  function handlePointerMove(e: React.PointerEvent) {
+    const start = pressStartRef.current
+    if (!start || pressTimerRef.current === null) return
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP_PX) cancelPress()
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    activePointersRef.current.delete(e.pointerId)
+    cancelPress()
+  }
+
+  function handlePointerCancel(e: React.PointerEvent) {
+    activePointersRef.current.delete(e.pointerId)
+    suppressClickRef.current = true
+    cancelPress()
+  }
+
   function handleClick() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
     if (longPressedRef.current) {
       // The release that ends a long-press must not also start a test.
       longPressedRef.current = false
@@ -130,8 +164,9 @@ function StatsBar({
           data-stress-button
           onClick={handleClick}
           onPointerDown={handlePointerDown}
-          onPointerUp={cancelPress}
-          onPointerCancel={cancelPress}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
           onPointerLeave={cancelPress}
           onContextMenu={(e) => e.preventDefault()}
           className={`group relative -mr-2 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:-mr-2.5 md:mr-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}

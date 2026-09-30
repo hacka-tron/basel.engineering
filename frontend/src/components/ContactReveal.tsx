@@ -8,6 +8,7 @@ type Status = 'idle' | 'copied' | 'shown'
 
 /** Legacy copy path for when the async Clipboard API is missing or denied. */
 function legacyCopy(text: string): boolean {
+  const previouslyFocused = document.activeElement as HTMLElement | null
   const textarea = document.createElement('textarea')
   textarea.value = text
   textarea.setAttribute('readonly', '')
@@ -24,6 +25,8 @@ function legacyCopy(text: string): boolean {
     return false
   } finally {
     document.body.removeChild(textarea)
+    // Selecting the textarea stole focus; hand it back (keyboard users).
+    previouslyFocused?.focus?.()
   }
 }
 
