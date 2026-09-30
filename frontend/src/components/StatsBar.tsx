@@ -21,7 +21,7 @@ function Avatar({ paths }: { paths: string[] }) {
       aria-hidden="true"
       className="flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus:text-primary"
     >
-      <svg viewBox="0 0 32 32" className="size-8 sm:size-9" fill="currentColor">
+      <svg viewBox="0 0 32 32" className="size-6 sm:size-7" fill="currentColor">
         {paths.map((d) => <path key={d.slice(0, 24)} d={d} />)}
       </svg>
     </span>
