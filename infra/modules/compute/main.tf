@@ -105,6 +105,18 @@ data "aws_iam_policy_document" "instance" {
   }
 
   statement {
+    sid       = "EcrAuth"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"] # ECR requires this action to be unscoped
+  }
+
+  statement {
+    sid       = "PullGlassboxImage"
+    actions   = ["ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer"]
+    resources = [var.ecr_repository_arn]
+  }
+
+  statement {
     sid     = "InvokeTitanEmbedding"
     actions = ["bedrock:InvokeModel"]
     resources = [
@@ -165,7 +177,9 @@ resource "aws_instance" "glassbox" {
   subnet_id              = var.public_subnet_id
   vpc_security_group_ids = [aws_security_group.glassbox.id]
   iam_instance_profile   = aws_iam_instance_profile.instance.name
-  user_data              = templatefile("${path.module}/user_data.sh", {})
+  user_data = templatefile("${path.module}/user_data.sh", {
+    ecr_pull_secret_refresh_script = file("${path.module}/../../../k8s/refresh-ecr-pull-secret.sh")
+  })
 
   root_block_device {
     volume_size = 20

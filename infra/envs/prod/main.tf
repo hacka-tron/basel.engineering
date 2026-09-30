@@ -12,11 +12,12 @@ module "network" {
 }
 
 module "compute" {
-  source           = "../../modules/compute"
-  vpc_id           = module.network.vpc_id
-  public_subnet_id = module.network.public_subnet_id
+  source             = "../../modules/compute"
+  vpc_id             = module.network.vpc_id
+  public_subnet_id   = module.network.public_subnet_id
+  ecr_repository_arn = module.registry.repository_arn
 
-  depends_on = [module.network]
+  depends_on = [module.network, module.registry]
 }
 
 module "secrets" {
