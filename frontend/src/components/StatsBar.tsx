@@ -40,21 +40,20 @@ function StatsBar({
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
 
   return (
-    // Below md, gaps/padding are tightened (rather than left at the desktop
-    // md: values) so this row fits without scrolling down to a ~375px
-    // phone — overflow-x-auto remains only as a fallback for edge cases
-    // (very narrow devices, unusually large numbers), not a substitute for
-    // sane spacing. "queries served" also drops to "queries" below `sm`,
+    // Below md, gaps/padding/font are tightened (rather than left at the
+    // desktop md: values) so this row fits at ~375px. It must not scroll
+    // (overflow-x-auto would clip the absolutely-positioned capacity
+    // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex h-[58px] shrink-0 items-center justify-between gap-3 overflow-x-auto border-t border-hairline bg-canvas px-4 text-xs text-muted md:gap-0 md:overflow-visible md:px-8">
-      <div className="flex shrink-0 items-center gap-3 md:gap-5">
+    <footer className="flex h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
         <span>last {lastStats ? `${lastStats.latencyMs}ms` : '—ms'}</span>
-        <span className="border-l border-hairline pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
-        <span className="border-l border-hairline pl-3 md:pl-5">
+        <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
+        <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <span
           className="group relative inline-flex cursor-help rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan"
           tabIndex={0}
@@ -76,7 +75,7 @@ function StatsBar({
         disabled={disabled}
         onClick={onStressTest}
         aria-label={onCooldown ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining` : 'Stress test'}
-        className={`shrink-0 rounded-[3px] border px-4 py-2 transition-colors ${
+        className={`shrink-0 rounded-[3px] border px-3 py-2 transition-colors sm:px-4 ${
           disabled
             ? 'cursor-not-allowed border-hairline text-muted'
             : 'border-hairline text-primary hover:border-cyan hover:text-cyan'
