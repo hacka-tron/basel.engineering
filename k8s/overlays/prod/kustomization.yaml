@@ -3,5 +3,5 @@ kind: Kustomization
 resources:
   - ../../base
 images:
-  - name: ghcr.io/hacka-tron/basel.engineering
-    newTag: 9c03c06-secfix
+  - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
+    newTag: latest

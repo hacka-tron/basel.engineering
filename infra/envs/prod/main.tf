@@ -23,6 +23,10 @@ module "secrets" {
   source = "../../modules/secrets"
 }
 
+module "registry" {
+  source = "../../modules/registry"
+}
+
 module "edge" {
   source               = "../../modules/edge"
   cloudflare_api_token = var.cloudflare_api_token

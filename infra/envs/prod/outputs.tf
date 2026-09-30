@@ -9,3 +9,7 @@ output "elastic_ip" {
 output "mysql_password_parameter_name" {
   value = module.secrets.mysql_password_parameter_name
 }
+
+output "ecr_repository_url" {
+  value = module.registry.repository_url
+}

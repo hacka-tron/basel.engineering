@@ -13,7 +13,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: ghcr.io/hacka-tron/basel.engineering:9c03c06-secfix
+          image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
           command: ["alembic", "upgrade", "head"]
           envFrom:
             - configMapRef:

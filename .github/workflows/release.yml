@@ -24,21 +24,29 @@ jobs:
     # minutes for what should be a normal-length build. Free for public
     # repos, same as ubuntu-latest.
     runs-on: ubuntu-24.04-arm
+    environment: release
     permissions:
       contents: read
-      packages: write
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - id: tag
         run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::404379474987:role/glassbox-ci-release
+          role-session-name: release-${{ github.run_id }}
+      # OIDC, not a stored secret - the same pattern the Terraform workflow
+      # already uses for AWS. GHCR was tried first and abandoned: the
+      # package was created by a human pushing manually, never had
+      # reliable Actions-token write access even after explicitly granting
+      # it in the package's own settings (confirmed by two separate failed
+      # runs). ECR sidesteps that whole class of problem rather than
+      # working around it.
+      - id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -48,47 +56,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ghcr.io/hacka-tron/basel.engineering:${{ steps.tag.outputs.tag }}
-            ghcr.io/hacka-tron/basel.engineering:latest
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:latest
 
-  bump-manifest:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    env:
-      # A PAT, deliberately not the default GITHUB_TOKEN: GitHub doesn't
-      # trigger other workflows for a push/PR made with the automatic
-      # token (anti-loop protection), which would leave this PR's checks
-      # never running and `gh pr merge --auto` waiting forever. A real
-      # token identity doesn't have that restriction.
-      GH_TOKEN: ${{ secrets.RELEASE_BOT_PAT }}
-      TAG: ${{ needs.build-and-push.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.RELEASE_BOT_PAT }}
-      - name: Set deployed image tag
-        working-directory: k8s/overlays/prod
-        run: yq -i '.images[0].newTag = "${{ env.TAG }}"' kustomization.yaml
-      # main requires backend-tests/frontend-checks to pass, and a check run
-      # can only exist for a commit that's already reachable on GitHub - a
-      # raw `git push` straight to main is rejected outright (there's no way
-      # for the checks to have run for a commit before it's been pushed
-      # anywhere). Going through a real PR + auto-merge instead: ci.yml runs
-      # against this PR's commit like any other, and GitHub merges it
-      # automatically once that passes.
-      - name: Open and auto-merge the deploy PR
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "deploy/${TAG}"
-          git add k8s/overlays/prod/kustomization.yaml
-          git commit -m "deploy: bump image to ${TAG}"
-          git push origin "deploy/${TAG}"
-          gh pr create --base main --head "deploy/${TAG}" \
-            --title "deploy: bump image to ${TAG}" \
-            --body "Automated image tag bump from the release workflow."
-          gh pr merge "deploy/${TAG}" --auto --merge --delete-branch
+# No bump-manifest job. Flux's own image automation (bootstrapped
+# separately, see project/AGENT_HANDOFF.md) watches the ECR repository
+# directly and updates k8s/overlays/prod/kustomization.yaml itself, using
+# its own git credential - not GitHub Actions'. That sidesteps two real
+# problems the original design hit: a direct push to protected main is
+# rejected outright (a brand-new commit can never already carry a passing
+# check run for its own not-yet-pushed SHA), and a PR opened with the
+# default GITHUB_TOKEN never triggers the checks needed to merge it
+# (GitHub's anti-loop protection). This job's only responsibility is
+# building and publishing the image; nothing here writes back to git.

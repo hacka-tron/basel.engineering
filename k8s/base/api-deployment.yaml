@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: ghcr.io/hacka-tron/basel.engineering:9c03c06-secfix
+          image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
           ports:
             - name: http
               containerPort: 8000
