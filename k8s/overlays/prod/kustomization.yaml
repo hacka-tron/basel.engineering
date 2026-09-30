@@ -8,4 +8,4 @@ resources:
   - flux/kustomization-keda.yaml
 images:
   - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
-    newTag: "build-23" # {"$imagepolicy": "flux-system:glassbox:tag"}
+    newTag: "build-25" # {"$imagepolicy": "flux-system:glassbox:tag"}
