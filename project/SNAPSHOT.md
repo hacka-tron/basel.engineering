@@ -2,11 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-30 (Flux Task 5 verified end-to-end; architecture inspection feature pending review)
+**Last updated:** 2026-09-30 (architecture highlight refinement ready for review)
 
 ## Latest local checkpoint
 
-**Architecture component inspection:** `feature/architecture-inspection` adds interactive diagram nodes. Hover or keyboard focus selects the About This System topic and shows each node's actual technology and role without an API request. Click or tap asks a component-specific question; a click during an existing response queues that question. The mobile architecture sheet closes on selection. This is implemented in a review branch, not live yet.
+**Architecture component inspection:** PR #33 merged interactive diagram nodes. Hover or keyboard focus shows each node's actual technology and role without an API request. Click or tap asks a component-specific question; a click during an existing response queues that question. The mobile architecture sheet closes on selection. The owner's follow-up is in `fix/architecture-highlight-states` (review branch): hover/focus leaves the chat topic alone, selection switches to About This System and retains a light border, and a running component fills its whole tile cyan. This refinement is not merged or live yet.
 
 **README and favicon:** PRs #30–32 merged the visitor-facing README revisions and the wrench browser-tab icon. The legacy GHCR package remains deleted; production uses ECR.
 

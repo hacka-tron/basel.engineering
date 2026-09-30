@@ -289,7 +289,7 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onPreview={() => setCorpus('system')} onInspect={handleInspectComponent} />}
+        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} />}
       </main>
 
       <StatsBar lastStats={lastStats} queriesServed={queriesServed} />
@@ -316,7 +316,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onPreview={() => setCorpus('system')} onInspect={handleInspectComponent} />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} />
             </div>
           </div>
         </div>
