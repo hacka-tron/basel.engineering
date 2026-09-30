@@ -32,14 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: tag
-        # Also tags with the run number: short git SHAs have no inherent
-        # ordering, but Flux's ImagePolicy needs to pick "the newest" tag
-        # by sorting something. github.run_number is a plain, always-
-        # increasing integer per workflow, giving Flux a sortable tag
-        # alongside the human-readable/git-traceable SHA one.
+        # Also tags with a prefixed run number: short git SHAs have no
+        # inherent ordering, but Flux's ImagePolicy needs to pick "the
+        # newest" tag by sorting something. github.run_number is a plain,
+        # always-increasing integer per workflow - the "build-" prefix is
+        # load-bearing, not cosmetic: a bare numeric tag once collided with
+        # an old commit's short SHA that happened to be all-digits
+        # ("3842459"), which sorted higher than any real build number and
+        # got deployed instead. The prefix makes that collision impossible.
         run: |
           echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "build_number=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "build_number=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           aws-region: us-east-1
