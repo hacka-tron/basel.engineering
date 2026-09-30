@@ -1,5 +1,5 @@
 import type { DemoCapacity } from '../hooks/useStressTest'
-import { LION_PATHS, RABBIT_HEAD_PATHS } from './capacityIcons'
+import { LION_PATHS, RABBIT_FACE_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
@@ -22,7 +22,7 @@ function Avatar({ paths }: { paths: string[] }) {
       aria-hidden="true"
       className="flex size-8 items-center justify-center rounded-full border border-hairline bg-panel text-primary/75 transition-colors group-hover:border-primary group-hover:text-primary group-focus:border-primary group-focus:text-primary sm:size-9"
     >
-      <svg viewBox="0 0 512 512" className="size-5 sm:size-6" fill="currentColor">
+      <svg viewBox="0 0 32 32" className="size-5 sm:size-6" fill="currentColor">
         {paths.map((d) => <path key={d.slice(0, 24)} d={d} />)}
       </svg>
     </span>
@@ -38,6 +38,11 @@ function StatsBar({
   stressTestCapacity = { sufficient: false, reason: 'Checking cluster capacity…' },
 }: StatsBarProps) {
   const onCooldown = stressTestCooldownSeconds !== null
+  // The API's `reason` (memory estimate vs. node allocatable) is for
+  // debugging/logs; visitors only need to know which kind of demo they'll get.
+  const capacityLabel = stressTestCapacity.sufficient
+    ? 'There is room for a real worker scale-up.'
+    : 'Visual demo only; no jobs will be queued.'
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
 
   return (
@@ -59,12 +64,11 @@ function StatsBar({
           className="group relative inline-flex cursor-help rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan"
           tabIndex={0}
           role="status"
-          aria-label={stressTestCapacity.reason}
+          aria-label={capacityLabel}
         >
-          <Avatar paths={stressTestCapacity.sufficient ? LION_PATHS : RABBIT_HEAD_PATHS} />
-          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
-            {stressTestCapacity.sufficient ? 'There is room for a real worker scale-up. ' : 'Visual demo only; no jobs will be queued. '}
-            {stressTestCapacity.reason}
+          <Avatar paths={stressTestCapacity.sufficient ? LION_PATHS : RABBIT_FACE_PATHS} />
+          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-max max-w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
+            {capacityLabel}
           </span>
         </span>
       <button

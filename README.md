@@ -38,4 +38,4 @@ The frontend is built with React, and the API is built with Python and FastAPI. 
 
 ## Credits
 
-Lion and rabbit status icons are from [game-icons.net](https://game-icons.net), licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+Lion and rabbit status icons are from Microsoft's [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (high-contrast set), MIT licensed.
