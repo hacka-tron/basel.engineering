@@ -21,7 +21,6 @@ type ArchitecturePanelProps = {
   nodeCacheStatus?: Partial<Record<NodeId, 'hit' | 'miss'>>
   retrievedChunks?: RetrievalChunk[]
   selectedNode?: NodeId | null
-  onPreview: () => void
   onInspect: (id: NodeId) => void
 }
 
@@ -41,9 +40,13 @@ const flowStyle = {
 } as CSSProperties
 
 function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
+  const nodeStyle = [
+    data.active ? 'bg-cyan text-canvas' : 'bg-panel text-primary hover:bg-canvas focus-within:bg-canvas',
+    data.selected ? 'border-primary ring-1 ring-primary/60' : data.active ? 'border-cyan' : 'border-hairline hover:border-muted focus-within:border-muted',
+  ].join(' ')
   return (
     <div
-      className={`relative h-[42px] w-[124px] rounded-[3px] border bg-panel text-center text-xs hover:ring-2 hover:ring-cyan focus-within:ring-2 focus-within:ring-cyan ${data.active ? 'border-cyan text-cyan' : 'border-hairline text-primary'} ${data.selected ? 'ring-2 ring-cyan' : ''}`}
+      className={`relative h-[42px] w-[124px] rounded-[3px] border text-center text-xs transition-colors ${nodeStyle}`}
     >
       <Handle id="left" type="target" position={Position.Left} style={handleStyle} />
       <Handle id="top" type="target" position={Position.Top} style={handleStyle} />
@@ -58,7 +61,7 @@ function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
         className="nopan nodrag flex h-full w-full cursor-pointer flex-col items-center justify-center px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
       >
         {data.label}
-        {data.cache && <span className="text-[10px] text-muted">{data.cache}</span>}
+        {data.cache && <span className={`text-[10px] ${data.active ? 'text-canvas/80' : 'text-muted'}`}>{data.cache}</span>}
       </button>
       <Handle id="right" type="source" position={Position.Right} style={handleStyle} />
       <Handle id="bottom" type="source" position={Position.Bottom} style={handleStyle} />
@@ -72,16 +75,14 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--color-muted)' },
 }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, onPreview, onInspect }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, onInspect }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   const inspectorRef = useRef<HTMLDivElement>(null)
-  const previewRef = useRef(onPreview)
   const inspectRef = useRef(onInspect)
   useEffect(() => {
-    previewRef.current = onPreview
     inspectRef.current = onInspect
-  }, [onPreview, onInspect])
-  const previewNode = useCallback((id: NodeId) => { setHoveredNode(id); previewRef.current() }, [])
+  }, [onInspect])
+  const previewNode = useCallback((id: NodeId) => setHoveredNode(id), [])
   const leaveNode = useCallback(() => setHoveredNode(null), [])
   const inspectNode = useCallback((id: NodeId) => inspectRef.current(id), [])
   const inspectedNode = hoveredNode ?? selectedNode
