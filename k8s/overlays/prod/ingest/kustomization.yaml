@@ -1,0 +1,13 @@
+# Applied by the `ingest` Flux Kustomization (flux/kustomization-ingest.yaml),
+# not by the root overlay, so the Job only starts once the new api and
+# retrieval-worker are Ready. It carries its own copy of the image setter:
+# ImageUpdateAutomation's update.path (./k8s/overlays/prod) covers this
+# directory recursively, so Flux bumps this tag in the same commit as the
+# root overlay's.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ingest-job.yaml
+images:
+  - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
+    newTag: latest # {"$imagepolicy": "flux-system:glassbox:tag"}

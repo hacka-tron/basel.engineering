@@ -24,7 +24,8 @@ How work is split between models on this project, plus the dispatch template for
 2. Codex review returns **APPROVED** (or CHANGES NEEDED → fixed → APPROVED).
 3. Real end-to-end verification done (review-by-reading doesn't catch integration bugs — see `gemini-reviewer.md`).
 4. PR opened with the Codex verdict summarized in the description; merge after CI passes.
-5. Anything that changes the live cluster on merge (Flux applies `k8s/overlays/prod` from the `deploy` branch) or grants new permissions (RBAC, IAM) needs the owner's explicit go-ahead before merge.
+5. For a substantial feature or change: a status report in `project/status/` (`YYYY-MM-DD-<slug>.md`, format in `project/status/README.md`) is written when the PR opens and added to that folder's index, then updated at merge and at deploy. A subagent can write it from the PR body, the Codex review results and the commit log.
+6. Anything that changes the live cluster on merge (Flux applies `k8s/overlays/prod` from the `deploy` branch) or grants new permissions (RBAC, IAM) needs the owner's explicit go-ahead before merge.
 
 ## Division of labor for git
 
