@@ -131,11 +131,11 @@ Glassbox answers only from retrieved chunks. The system prompt for Bedrock (the 
 The About This System corpus includes design documents that describe some features before they exist, often in the present tense. To keep answers honest about what is running today, the prompt builder in `services/glassbox/api/ask.py` labels each numbered source:
 
 - Any chunk from `docs/DESIGN-003-ingestion.md` (the content-pipeline design) gets a fixed label saying its Google Drive and Git connectors do not exist yet.
-- Any other chunk whose text matches a small list of status signals gets a label saying the features it describes do not exist yet. The signals are words that mark work as upcoming, postponed or unbuilt, plus references to the final polish phase, the last two milestones, and the self-healing instance group from the follow-up design doc.
+- Any other chunk whose text matches a small list of status signals gets a label saying the features it describes do not exist yet. The signals are words that mark work as upcoming, postponed or unbuilt, plus references to design phases, milestones and components that have not shipped.
 
 The answer prompt then instructs the model that a bracketed source status overrides present-tense design prose, that a design document describes intended behavior rather than proof that code is running, and that it should answer "No" when asked whether a feature works now if its source carries that "does not exist yet" label. The system prompt repeats the rule: only call a feature current when a source identifies it as implemented or working today.
 
-The signal list is keyword-based, not tense-aware, so it is kept to work that is still unbuilt. Live infrastructure names such as KEDA, k3s, Terraform, Flux, GitOps and CI/CD are deliberately not signals, because those components run in production and describing them must not add the "does not exist yet" label to a source. Changing the prompt or these labels bumps the prompt version, which is part of the semantic answer-cache key, so answers generated under older labeling are never replayed.
+The signal list is keyword-based, not tense-aware, so it is meant to cover only work that is still unbuilt: a chunk that describes a component running in production should not receive the "does not exist yet" label. Changing the prompt or these labels bumps the prompt version, which is part of the semantic answer-cache key, so answers generated under older labeling are never replayed.
 
 Chunks are retrieved individually, which is why this deep-dive document repeats key names in every section and keeps unbuilt work in one clearly labeled final section.
 
@@ -396,8 +396,8 @@ Tests live in `services/tests/`. They cover the chunkers, caches, limits, kill s
 - **Capacity-gated stress test.** A real burst runs only with 512 MiB of confirmed free memory, and a simulation covers every other case, so a visitor's click can never push the node into out-of-memory kills.
 - **Flux pull-based GitOps instead of CI pushes.** The cluster pulls from GitHub and ECR, so the Kubernetes API is never exposed to CI, and Git always describes the running state. The unprotected `deploy` branch lets Flux commit tag bumps without weakening `main`'s protection.
 - **Cloudflare instead of CloudFront and ACM.** Cloudflare already hosted the domain's DNS, proxies the apex natively and is free.
-- **Nova Lite for generation.** Anthropic Claude Haiku streaming on Bedrock was blocked by the account's first-time-use form, so production uses Amazon Nova Lite. The IAM policy already allows a Claude Haiku inference profile, and switching is a configuration change that also moves the answer cache to a new model identity.
-- **Keyword-based grounding labels.** Labeling design-doc chunks that describe unbuilt work is cheap and effective, but not tense-aware, so the signal list covers only unbuilt work and this deep dive keeps that work in one final section.
+- **Nova Lite for generation.** Anthropic Claude Haiku streaming on Bedrock was blocked by the account's first-time-use form, so production uses Amazon Nova Lite. Switching models is a configuration change that also moves the answer cache to a new model identity.
+- **Keyword-based grounding labels.** Labeling design-doc chunks that describe unbuilt work is cheap and effective, but not tense-aware, so the signal list is meant to cover only unbuilt work, and this deep dive keeps that work in one final section.
 - **Content baked into the image.** Ingesting from the image snapshot keeps content and code in lockstep and avoids Git credentials in the cluster. The trade-off is that a content fix needs a release.
 
 ## Planned / not built yet
