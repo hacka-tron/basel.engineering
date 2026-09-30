@@ -12,7 +12,9 @@ export type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  // `pending` covers thinking/streaming; `pending` and `error` are never saved.
+  // `pending` covers thinking/streaming and is never saved. `error` marks a
+  // friendly failure reply (lib/errorReplies.ts) or text cut off by a failure:
+  // saved so a reload shows the same chat, but never sent back as history.
   state?: 'pending' | 'error' | SettledState
   sources?: MessageSource[]
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
@@ -29,11 +31,13 @@ type StoredConversation = {
     id: string
     role: 'user' | 'assistant'
     content: string
-    state?: SettledState
+    state?: StoredState
     sources?: MessageSource[]
     createdAt: number
   }[]
 }
+
+type StoredState = SettledState | 'error'
 
 export const MAX_DISPLAY_MESSAGES = 50
 export const MAX_HISTORY_MESSAGES = 6
@@ -44,6 +48,8 @@ const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 // and would otherwise dodge the expiry indefinitely.
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 const SETTLED_STATES: ReadonlySet<string> = new Set(['done', 'stopped', 'retrieval_only'])
+// Saved to storage: settled answers plus failure replies.
+const STORED_STATES: ReadonlySet<string> = new Set([...SETTLED_STATES, 'error'])
 
 export function storageKey(corpus: ApiCorpus): string {
   return `glassbox:conv:v1:${corpus}`
@@ -56,7 +62,15 @@ export function newMessageId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function isSettled(message: ChatMessage): boolean {
+function isStorable(message: ChatMessage): boolean {
+  // A reply stopped before its first token has no text but is still settled, so
+  // a reload shows the same "Stopped" state the visitor saw.
+  if (!message.content && !(message.role === 'assistant' && message.state === 'stopped')) return false
+  return message.role === 'user' || (message.state !== undefined && STORED_STATES.has(message.state))
+}
+
+/** A turn the server may see as history: never an error reply or empty text. */
+function isHistoryTurn(message: ChatMessage): boolean {
   if (!message.content) return false
   return message.role === 'user' || (message.state !== undefined && SETTLED_STATES.has(message.state))
 }
@@ -81,13 +95,13 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
     const message = item as Record<string, unknown>
     if (typeof message.id !== 'string' || typeof message.content !== 'string' || typeof message.createdAt !== 'number') return null
     if (message.role !== 'user' && message.role !== 'assistant') return null
-    if (message.state !== undefined && (typeof message.state !== 'string' || !SETTLED_STATES.has(message.state))) return null
+    if (message.state !== undefined && (typeof message.state !== 'string' || !STORED_STATES.has(message.state))) return null
     if (message.sources !== undefined && (!Array.isArray(message.sources) || !message.sources.every(isSource))) return null
     messages.push({
       id: message.id,
       role: message.role,
       content: message.content,
-      state: message.state as SettledState | undefined,
+      state: message.state as StoredState | undefined,
       sources: message.sources as MessageSource[] | undefined,
       createdAt: message.createdAt,
     })
@@ -118,12 +132,13 @@ export function loadConversation(corpus: ApiCorpus, now = Date.now()): ChatMessa
 }
 
 /**
- * The persisted form of a conversation: only settled messages (users, and
- * assistants that reached done/stopped/retrieval_only), never pending or
- * errored ones, so a refresh mid-answer never restores a half-written reply.
+ * The persisted form of a conversation: users, assistants that reached
+ * done/stopped/retrieval_only, and error replies (marked `error`). Pending
+ * messages are never saved, so a refresh mid-answer never restores a
+ * half-written reply as if it were complete.
  */
 export function serializeConversation(messages: ChatMessage[], now = Date.now()): string | null {
-  const settled = messages.filter(isSettled).slice(-MAX_DISPLAY_MESSAGES)
+  const settled = messages.filter(isStorable).slice(-MAX_DISPLAY_MESSAGES)
   if (settled.length === 0) return null
   const stored: StoredConversation = {
     version: 1,
@@ -132,7 +147,7 @@ export function serializeConversation(messages: ChatMessage[], now = Date.now())
       id,
       role,
       content,
-      ...(role === 'assistant' && state && SETTLED_STATES.has(state) ? { state: state as SettledState } : {}),
+      ...(role === 'assistant' && state && STORED_STATES.has(state) ? { state: state as StoredState } : {}),
       ...(sources && sources.length > 0 ? { sources } : {}),
       createdAt,
     })),
@@ -151,7 +166,7 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
 
 /** The recent settled turns sent as `history` (the server re-applies its own limits). */
 export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
-  const turns = messages.filter(isSettled).slice(-MAX_HISTORY_MESSAGES)
+  const turns = messages.filter(isHistoryTurn).slice(-MAX_HISTORY_MESSAGES)
     .map((message) => ({ role: message.role, content: message.content.slice(0, MAX_HISTORY_CHARS) }))
   // Mirror the server's total-character cap, dropping the oldest turns first.
   let total = 0
