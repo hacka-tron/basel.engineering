@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from redis.exceptions import ResponseError
 
+from services.glassbox.providers.base import is_abstention
+
 INDEX_NAME = "idx:answers"
 ANSWER_TTL_S = 86400
 MIN_SIMILARITY = 0.95
@@ -21,6 +23,24 @@ class AnswerCache(Protocol):
     async def put(
         self, corpus: str, version: int, model_id: str, vector: list[float], payload: dict
     ) -> None: ...
+
+
+def uncacheable_reason(answer: object, chunks: list | None) -> str | None:
+    """Why an answer must not be cached, or None when it may be.
+
+    Only a real answer grounded in retrieved sources is worth replaying for 24h.
+    An abstention ("I don't know from what I have.") is never cached: a one-off
+    refusal would otherwise be served to every similar question until the TTL.
+    The answer prompt asks for plain prose without citation markers, so a missing
+    [n] marker is not a signal here.
+    """
+    if not isinstance(answer, str) or not answer.strip():
+        return "empty"
+    if not chunks:
+        return "no_sources"
+    if is_abstention(answer):
+        return "abstention"
+    return None
 
 
 def _model_tag(model_id: str) -> str:
@@ -111,7 +131,13 @@ class RedisAnswerCache:
             payload = json.loads(raw)
         except (TypeError, ValueError):
             return None
-        return payload if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            return None
+        # Entries written before the cacheability gate may hold a refusal or an
+        # empty answer; treat them as a miss so the question is answered afresh.
+        if uncacheable_reason(payload.get("answer"), payload.get("chunks")):
+            return None
+        return payload
 
     async def put(
         self, corpus: str, version: int, model_id: str, vector: list[float], payload: dict

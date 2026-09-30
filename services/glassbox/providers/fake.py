@@ -4,6 +4,7 @@ import hashlib
 from collections.abc import AsyncIterator
 
 from services.glassbox.providers.base import (
+    ABSTENTION_ANSWER,
     REWRITE_FOLLOW_UP_PREFIX,
     REWRITE_PROMPT_SUFFIX,
     EmbeddingProvider,
@@ -30,6 +31,11 @@ class FakeEmbeddingProvider(EmbeddingProvider):
         return vectors
 
 
+# Put this in a question to make the fake answer abstain, so the refusal path
+# (never cached) can be exercised locally without a real model.
+FAKE_ABSTAIN_MARKER = "[fake-abstain]"
+
+
 class FakeLLMProvider(LLMProvider):
     model_id = "fake-llm-v1"
 
@@ -47,6 +53,10 @@ class FakeLLMProvider(LLMProvider):
             if follow_ups:
                 yield follow_ups[-1]
                 return
+        question = prompt.rsplit("Question:", 1)[-1]
+        if FAKE_ABSTAIN_MARKER in question:
+            yield ABSTENTION_ANSWER
+            return
         response = "This is a fake response for local development."
         for index, word in enumerate(response.split()[: max(0, max_tokens)]):
             yield word if index == 0 else f" {word}"

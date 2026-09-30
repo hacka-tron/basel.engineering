@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.glassbox.api.sse import frame
-from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache
+from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache, uncacheable_reason
 from services.glassbox.cache.embedding import (
     EmbeddingCache,
     RedisEmbeddingCache,
@@ -35,6 +35,7 @@ from services.glassbox.limits import (
     get_rate_limiter,
 )
 from services.glassbox.providers.base import (
+    ABSTENTION_ANSWER,
     GROUNDING_RULES,
     REWRITE_FOLLOW_UP_PREFIX,
     REWRITE_PROMPT_SUFFIX,
@@ -47,18 +48,24 @@ router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_PROMPT_VERSION = "v12"
-# Keyword-based, not tense-aware: once Phase 4/5 actually ships Terraform/KEDA/k3s,
-# this will start mislabeling genuinely-current infrastructure content as "planned"
-# (it can't tell "Terraform provisions X" apart from "Terraform will provision X").
-# Revisit this heuristic (or move to doc-level status metadata) when those phases land.
+# Part of the answer-cache identity: bumping it makes every older entry unreachable
+# (they expire via the 24h TTL). v13: abstentions stop being cached, and the
+# planned-source signal and grounding rules no longer treat live infra as planned.
+_PROMPT_VERSION = "v13"
+# Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
+# M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
+# Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
+# KEDA, k3s, Terraform, Flux, GitOps and CI/CD are live and must not match. Update
+# this list when one of these ships (or move to doc-level status metadata).
 _PLANNED_SOURCE_SIGNAL = re.compile(
     r"\b(?:planned|deferred|not (?:yet )?(?:started|built|implemented)|"
     r"stretch ideas?|future (?:milestones?|path|work|features?|plans?)|"
-    r"phase [4-7]|milestone [2-4]|"
-    r"KEDA|k3s|Terraform|Flux|GitOps|CI/CD|Auto Scaling Group)\b",
+    r"milestone 4|M4|auto ?scaling groups?|ASG|launch templates?|self-healing|"
+    r"drive connectors?|S3 raw zone|SQS)\b",
     re.IGNORECASE,
 )
+# Code, manifests and infrastructure describe what runs; they are never "planned".
+_CODE_SOURCE_PREFIXES = ("services/", "k8s/", "infra/")
 _ANSWER_LOCK_TTL_MS = 15000
 _ANSWER_LOCK_WAIT_S = 3.0
 _ANSWER_LOCK_RELEASE = """
@@ -208,7 +215,8 @@ def _prompt(
             " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
             if chunk.source_path == "docs/DESIGN-003-ingestion.md"
             else " [PLANNED DESIGN; features in this source are not implemented yet]"
-            if _PLANNED_SOURCE_SIGNAL.search(chunk.text)
+            if not chunk.source_path.startswith(_CODE_SOURCE_PREFIXES)
+            and _PLANNED_SOURCE_SIGNAL.search(chunk.text)
             else ""
         )
         return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
@@ -219,14 +227,17 @@ def _prompt(
         "Use two or three concise sentences. Do not include bracketed citation "
         "markers like [1] or [2] in your answer text — the sources are shown "
         "separately, so just answer in plain prose. "
-        "Only describe a feature as working now when a source says it is implemented or current. "
+        "Describe a feature as working now when a source says it is implemented or current, "
+        "or when a design source describes a component that also appears in code, manifest, "
+        "or infrastructure sources (paths under services/, k8s/, or infra/). "
         "If a source says it is planned, future, on a roadmap, or not yet built, "
         "say so explicitly. "
         "Bracketed source status overrides present-tense design prose. "
         "If asked whether a feature works now, answer No when its bracketed status says "
         "not implemented yet. "
-        "A design document describes intended behavior, not proof that code is running. "
-        "When asked whether a feature exists today, check its source status and implemented code. "
+        "If the sources answer the question even in part, answer from them. Only if they "
+        "do not answer it at all, reply with exactly "
+        f'"{ABSTENTION_ANSWER}" and nothing else. '
         "Do not list every detail unless the question asks for a list.\n\n"
         f"{sources}\n\n{_conversation_block(history)}Question: {question}"
     )
@@ -626,11 +637,22 @@ async def _stream(
             response_parts.append(part)
             yield frame("token", {"text": part})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
+        # Reaching here means generation completed (errors and client disconnects
+        # leave the generator before this point). Refusals and empty answers are
+        # never cached; the flags land in the query log's stage_timings_ms JSON.
+        cache_skip = uncacheable_reason("".join(response_parts), chunks)
+        if cache_skip == "abstention":
+            timings["abstained"] = 1
+        if cache_skip and not history:
+            timings["answer_cache_skipped"] = 1
+            LOGGER.info("Answer cache write skipped for %s: %s", request_id, cache_skip)
+
         total_ms = elapsed_ms(request_start_ts)
         tokens_in = len(prompt.split())
         tokens_out = len("".join(response_parts).split())
         if not history and (
-            await RedisRetrievalCache(client).version(request.corpus) == corpus_version
+            cache_skip is None
+            and await RedisRetrievalCache(client).version(request.corpus) == corpus_version
         ):
             try:
                 await answer_cache.put(
