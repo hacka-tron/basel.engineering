@@ -161,8 +161,7 @@ function App() {
   function handleInspectComponent(id: NodeId) {
     setSelectedNode(id)
     setCorpus('system')
-    setArchitectureOpen(false)
-    if (!isDesktop) window.requestAnimationFrame(() => triggerButtonRef.current?.focus())
+    if (isDesktop) setArchitectureOpen(false)
     if (requestInFlightRef.current) {
       pendingComponentRef.current = id
     } else {
@@ -179,6 +178,11 @@ function App() {
   // simply never renders at md+, so it can never coexist with the desktop
   // panel below.
   const showArchitectureSheet = architectureOpen && !isDesktop
+  const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
+  const selectedAnswer = selectedNode && errorMessage ? errorMessage
+    : selectedQuestion && messages.at(-2)?.text === selectedQuestion && messages.at(-1)?.role === 'assistant'
+      ? messages.at(-1)?.text || ''
+      : selectedNode ? 'Waiting for the current answer…' : null
 
   // Focus management for the mobile bottom sheet: it declares
   // `aria-modal="true"`, which is a promise to assistive tech that focus is
@@ -316,7 +320,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} />
             </div>
           </div>
         </div>
