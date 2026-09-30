@@ -8,6 +8,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
+import { errorReplyFor } from './lib/errorReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
   historyForRequest,
@@ -60,9 +61,8 @@ function App() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
-  // Errors belong to the conversation whose request failed.
-  const [chatError, setChatError] = useState<{ corpus: Corpus; message: string } | null>(null)
-  const errorMessage = chatError?.corpus === corpus ? chatError.message : null
+  // The last friendly failure reply shown, so the next one is never the same.
+  const lastErrorReplyRef = useRef<string | null>(null)
   // Which conversation and assistant message the in-flight request writes to;
   // it stays fixed even if the visitor switches tabs mid-answer.
   const streamTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
@@ -304,7 +304,6 @@ function App() {
     streamTargetRef.current = { corpus: targetCorpus, messageId: assistantId }
     setNodeCacheStatus({})
     setRetrievedChunks([])
-    setChatError(null)
     setActiveNode(null)
     setConversations((current) => ({
       ...current,
@@ -356,8 +355,9 @@ function App() {
         revealFinalizeRef.current = () => {
           updateStreamingMessage((message) => ({
             ...message,
+            // Budget reached or LLM switched off: the sources still came back.
             content: event.mode === 'retrieval_only' && !message.content
-              ? 'Sources retrieved — no generated answer for this request.'
+              ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
               : message.content,
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
@@ -374,15 +374,24 @@ function App() {
       onError: (event) => {
         if (!isCurrent()) return
         revealFinalizeRef.current = () => {
-          setChatError({
-            corpus: targetCorpus,
-            message: event.code === 'rate_limited' && event.retry_after_s
-              ? `${event.message} Try again in ${event.retry_after_s} seconds.`
-              : event.message || 'Something went wrong — try again.',
-          })
-          // An empty reply is dropped; partial text stays visible but is
-          // marked `error`, so it is never saved or sent back as history.
-          updateStreamingMessage((message) => message.content ? { ...message, state: 'error' } : null)
+          // The technical detail is for developers; visitors get a chat reply.
+          console.warn(`Ask request failed (${event.code}): ${event.message}`)
+          const reply = errorReplyFor(event, lastErrorReplyRef.current)
+          lastErrorReplyRef.current = reply
+          // The failure becomes an assistant message marked `error`: saved with
+          // the conversation, but never sent as history or counted as an answer.
+          // Partial text stays visible and is marked `error` too.
+          const target = streamTargetRef.current
+          if (target) {
+            const errorReply: ChatMessage = { id: newMessageId(), role: 'assistant', content: reply, state: 'error', createdAt: Date.now() }
+            setConversations((current) => ({
+              ...current,
+              [target.corpus]: current[target.corpus].flatMap((message) => {
+                if (message.id !== target.messageId) return [message]
+                return message.content ? [{ ...message, state: 'error' as const }, errorReply] : [errorReply]
+              }).slice(-MAX_DISPLAY_MESSAGES),
+            }))
+          }
           finishRequest()
         }
         ensureRevealLoop()
@@ -417,7 +426,6 @@ function App() {
   function handleNewChat() {
     if (requestInFlightRef.current) return
     setConversations((current) => ({ ...current, [corpus]: [] }))
-    if (chatError?.corpus === corpus) setChatError(null)
     setRetrievedChunks([])
     setNodeCacheStatus({})
     if (corpus === 'system') setSelectedNode(null)
@@ -446,11 +454,16 @@ function App() {
   const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
   // Component questions always go to About This System's conversation.
   const systemMessages = conversations.system
-  const systemError = chatError?.corpus === 'system' ? chatError.message : null
-  const selectedAnswer = selectedNode && systemError ? systemError
-    : selectedQuestion && systemMessages.at(-2)?.content === selectedQuestion && systemMessages.at(-1)?.role === 'assistant'
-      ? systemMessages.at(-1)?.content || ''
-      : selectedNode ? 'Waiting for the current answer…' : null
+  // The latest reply to the selected component's question: its answer, or the
+  // friendly failure reply that follows any partial text.
+  const questionIndex = selectedQuestion
+    ? systemMessages.findLastIndex((message) => message.role === 'user' && message.content === selectedQuestion)
+    : -1
+  const selectedReply = questionIndex === -1 || questionIndex !== systemMessages.findLastIndex((message) => message.role === 'user')
+    ? undefined
+    : systemMessages.slice(questionIndex + 1).findLast((message) => message.role === 'assistant')
+  const selectedAnswer = selectedReply ? selectedReply.content
+    : selectedNode ? 'Waiting for the current answer…' : null
 
   // Focus management for the mobile bottom sheet: it declares
   // `aria-modal="true"`, which is a promise to assistive tech that focus is
@@ -542,7 +555,6 @@ function App() {
           onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
           onStop={handleStop}
           onNewChat={handleNewChat}
-          errorMessage={errorMessage}
           inputAccessory={
             <PipelineStrip
               activeNode={activeNode}

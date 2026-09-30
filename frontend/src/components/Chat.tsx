@@ -23,7 +23,6 @@ type ChatProps = {
   onAsk: (question: string) => void
   onStop: () => void
   onNewChat: () => void
-  errorMessage: string | null
   inputAccessory?: ReactNode
 }
 
@@ -33,7 +32,7 @@ const FOLLOW_THRESHOLD_PX = 80
 // answer it just asked for.
 const STOP_GUARD_MS = 400
 
-function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, errorMessage, inputAccessory }: ChatProps) {
+function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
   const askedAtRef = useRef(0)
@@ -97,7 +96,8 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, errorMe
               return (
                 <div key={message.id} className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end' : 'self-start'}`}>
                   {(message.content || pending) && <div
-                    className={`whitespace-pre-wrap break-words rounded-[3px] border border-hairline px-4 py-3 text-sm leading-relaxed text-primary md:text-[15px] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'}`}
+                    // Failure replies and text cut off by a failure get a dashed border.
+                    className={`whitespace-pre-wrap break-words rounded-[3px] border px-4 py-3 text-sm leading-relaxed md:text-[15px] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'} ${message.state === 'error' ? 'border-dashed border-hairline text-muted' : 'border-hairline text-primary'}`}
                   >
                     {message.content || '…'}
                   </div>}
@@ -158,7 +158,6 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, errorMe
       {inputAccessory}
 
       <div className="shrink-0 px-4 pb-3 md:px-7 md:pb-7">
-        {errorMessage && <p role="alert" className="mb-2 text-xs text-muted">{errorMessage}</p>}
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             aria-label="Ask anything"

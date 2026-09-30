@@ -44,11 +44,33 @@ test('an empty stopped reply is not sent as history, but partial stopped text is
   ])
 })
 
-test('empty replies that are still pending or errored are never saved', () => {
+test('pending and empty errored replies are never saved', () => {
   const serialized = serializeConversation([
     { id: 'u', role: 'user', content: 'q', createdAt: now },
-    { id: 'p', role: 'assistant', content: '', state: 'pending', createdAt: now },
+    { id: 'p', role: 'assistant', content: 'half an ans', state: 'pending', createdAt: now },
     { id: 'e', role: 'assistant', content: '', state: 'error', createdAt: now },
   ], now)
   assert.deepEqual(JSON.parse(serialized!).messages.map((message: { id: string }) => message.id), ['u'])
+})
+
+test('error replies are persisted as error but never sent as history', () => {
+  const chat: ChatMessage[] = [
+    { id: 'u1', role: 'user', content: 'First question', createdAt: now },
+    { id: 'a1', role: 'assistant', content: 'A real answer.', state: 'done', createdAt: now },
+    { id: 'u2', role: 'user', content: 'Second question', createdAt: now },
+    { id: 'a2', role: 'assistant', content: 'Partial text cut', state: 'error', createdAt: now },
+    { id: 'r2', role: 'assistant', content: 'Oops — something broke. Try again?', state: 'error', createdAt: now },
+  ]
+  const serialized = serializeConversation(chat, now)!
+  withStorage({ 'glassbox:conv:v1:about_system': serialized }, () => {
+    const restored = loadConversation('about_system', now)
+    assert.deepEqual(restored.map((message) => [message.id, message.state]), [
+      ['u1', undefined], ['a1', 'done'], ['u2', undefined], ['a2', 'error'], ['r2', 'error'],
+    ])
+    assert.deepEqual(historyForRequest(restored), [
+      { role: 'user', content: 'First question' },
+      { role: 'assistant', content: 'A real answer.' },
+      { role: 'user', content: 'Second question' },
+    ])
+  })
 })
