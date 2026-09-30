@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
-import ArchitecturePanel from './components/ArchitecturePanel'
+import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
+import { connectClusterStream } from './lib/clusterStream'
 
 export type Corpus = 'basel' | 'system'
 
@@ -34,6 +36,72 @@ function App() {
   // network, not when it's drawn on screen).
   const requestStartRef = useRef<number | null>(null)
   const firstTokenLatencyRef = useRef<number | null>(null)
+
+  // Stress test: pod dots + backlog counter (DESIGN.md §9.4), fed by a
+  // standing /api/cluster/stream connection — kept simple and always-on
+  // rather than opened/closed around each stress-test click, since the
+  // cluster can also scale from real (non-synthetic) traffic. `podsById`
+  // undefined means "no cluster view available" (e.g. local dev without a
+  // live Kubernetes API); ArchitecturePanel only renders pod dots when it's
+  // defined, so this degrades to today's plain worker node rather than
+  // showing a stuck/fake pod count.
+  const [podsById, setPodsById] = useState<Record<string, WorkerPod> | undefined>(undefined)
+  const [backlog, setBacklog] = useState<number | null>(null)
+  const [shaking, setShaking] = useState(false)
+  const shakeTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const disconnect = connectClusterStream({
+      onPod: (event) => {
+        setPodsById((current) => {
+          const next = { ...(current ?? {}) }
+          if (event.type === 'DELETED') {
+            delete next[event.pod]
+          } else {
+            next[event.pod] = { name: event.pod, ready: event.ready }
+          }
+          return next
+        })
+      },
+      onBacklog: (event) => setBacklog(event.backlog),
+      onUnavailable: () => {
+        setPodsById(undefined)
+        setBacklog(null)
+      },
+    })
+    return disconnect
+  }, [])
+
+  useEffect(() => () => {
+    if (shakeTimeoutRef.current !== null) window.clearTimeout(shakeTimeoutRef.current)
+  }, [])
+
+  // The "earthquake" wow-moment: a brief, tasteful-but-noticeable screen
+  // shake on every press, including a locked/cooldown one, since pressing
+  // the button is the fun feedback moment regardless of whether this
+  // particular click is the one that starts a new burst.
+  const triggerShake = useCallback(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (shakeTimeoutRef.current !== null) window.clearTimeout(shakeTimeoutRef.current)
+    setShaking(false)
+    // Force a reflow-driven restart so back-to-back clicks each re-trigger
+    // the CSS animation instead of the class no-op'ing because it's already
+    // applied.
+    requestAnimationFrame(() => {
+      setShaking(true)
+      shakeTimeoutRef.current = window.setTimeout(() => setShaking(false), 500)
+    })
+  }, [])
+
+  const stressTest = useStressTest()
+
+  function handleStressTestClick() {
+    // Shake on every press, immediately — the click itself is the wow
+    // moment, whether or not this particular click is the one that starts a
+    // new burst (a cooldown click still gets the same satisfying jolt).
+    triggerShake()
+    void stressTest.trigger()
+  }
 
   // Real per-token SSE events are the source of truth for *content*, but
   // nothing paces how fast they're *shown*. A short/cached answer (or the
@@ -214,7 +282,7 @@ function App() {
   }, [showArchitectureSheet])
 
   return (
-    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary">
+    <div className={`flex h-screen min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-3 md:h-[72px] md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
           Below md, the header wraps to two rows: [h1 + nav] on row one,
@@ -293,10 +361,16 @@ function App() {
           whenever the sheet below is also open. Only one ArchitecturePanel
           is ever mounted at a time (this one, or the sheet's).
         */}
-        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} />}
+        {isDesktop && <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={podsById && Object.values(podsById)} backlog={backlog} />}
       </main>
 
-      <StatsBar lastStats={lastStats} queriesServed={queriesServed} />
+      <StatsBar
+        lastStats={lastStats}
+        queriesServed={queriesServed}
+        onStressTest={handleStressTestClick}
+        stressTestCooldownSeconds={stressTest.cooldownSeconds}
+        stressTestSubmitting={stressTest.isSubmitting}
+      />
 
       {showArchitectureSheet && (
         <div role="dialog" aria-modal="true" aria-label="Architecture" className="fixed inset-0 z-50 md:hidden">
@@ -320,7 +394,7 @@ function App() {
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} />
+              <ArchitecturePanel activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} workerPods={podsById && Object.values(podsById)} backlog={backlog} />
             </div>
           </div>
         </div>

@@ -4,6 +4,8 @@ import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, type NodeId } from '../architecture'
 import type { RetrievalChunk } from '../lib/sse'
 
+export type WorkerPod = { name: string; ready: boolean }
+
 type LiveNode = Node<{
   id: NodeId
   label: string
@@ -11,9 +13,13 @@ type LiveNode = Node<{
   active: boolean
   selected: boolean
   cache?: 'hit' | 'miss'
+  pods?: WorkerPod[]
+  backlog?: number | null
   onPreview: (id: NodeId) => void
   onLeave: () => void
   onInspect: (id: NodeId) => void
+  workerPods?: WorkerPod[]
+  backlog?: number | null
 }, 'architecture'>
 
 type ArchitecturePanelProps = {
@@ -72,6 +78,12 @@ function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
       >
         {data.label}
         {data.cache && <span className={`text-[10px] ${data.active ? 'text-canvas/80' : 'text-muted'}`}>{data.cache}</span>}
+        {data.pods && (
+          <span className="flex items-center gap-1" role="img" aria-label={`${data.pods.length} worker pods`}>
+            {data.pods.map((pod) => <span key={pod.name} aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${pod.ready ? 'bg-cyan' : 'bg-muted'}`} />)}
+            {typeof data.backlog === 'number' && data.backlog > 0 && <span className="text-[9px] text-muted">{data.backlog}</span>}
+          </span>
+        )}
       </button>
       <Handle id="right" type="source" position={Position.Right} style={handleStyle} />
       <Handle id="bottom" type="source" position={Position.Bottom} style={handleStyle} />
@@ -85,7 +97,7 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--color-muted)' },
 }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   const inspectorRef = useRef<HTMLDivElement>(null)
   const inspectRef = useRef(onInspect)
@@ -112,11 +124,13 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       active: node.id === activeNode,
       selected: node.id === selectedNode,
       cache: nodeCacheStatus?.[node.id],
+      pods: node.id === 'worker' ? workerPods : undefined,
+      backlog: node.id === 'worker' ? backlog : undefined,
       onPreview: previewNode,
       onLeave: leaveNode,
       onInspect: inspectNode,
     },
-  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode])
+  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog])
 
   return (
     <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel">

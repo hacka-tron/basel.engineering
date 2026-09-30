@@ -1,9 +1,21 @@
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
   queriesServed?: number
+  onStressTest?: () => void
+  stressTestCooldownSeconds?: number | null
+  stressTestSubmitting?: boolean
 }
 
-function StatsBar({ lastStats, queriesServed = 0 }: StatsBarProps) {
+function StatsBar({
+  lastStats,
+  queriesServed = 0,
+  onStressTest,
+  stressTestCooldownSeconds = null,
+  stressTestSubmitting = false,
+}: StatsBarProps) {
+  const onCooldown = stressTestCooldownSeconds !== null
+  const disabled = !onStressTest || onCooldown || stressTestSubmitting
+
   return (
     // Below md, gaps/padding are tightened (rather than left at the desktop
     // md: values) so this row fits without scrolling down to a ~375px
@@ -21,10 +33,16 @@ function StatsBar({ lastStats, queriesServed = 0 }: StatsBarProps) {
       </div>
       <button
         type="button"
-        disabled
-        className="shrink-0 cursor-not-allowed rounded-[3px] border border-hairline px-3 py-2 text-muted md:px-4"
+        disabled={disabled}
+        onClick={onStressTest}
+        aria-label={onCooldown ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining` : 'Stress test'}
+        className={`shrink-0 rounded-[3px] border px-4 py-2 transition-colors ${
+          disabled
+            ? 'cursor-not-allowed border-hairline text-muted'
+            : 'border-hairline text-primary hover:border-cyan hover:text-cyan'
+        }`}
       >
-        Stress test
+        {onCooldown ? `Stress test (${stressTestCooldownSeconds}s)` : 'Stress test'}
       </button>
     </footer>
   )
