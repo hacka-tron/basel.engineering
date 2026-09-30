@@ -1,0 +1,34 @@
+name: Sync deploy branch
+
+# The `deploy` branch has no branch protection - it exists specifically so
+# Flux's Image Update Automation can push its own tag-bump commits without
+# hitting the same wall release.yml's original bump-manifest design did
+# (a direct push to a required-status-checks branch is rejected outright,
+# regardless of which credential makes it). This job keeps `deploy` mirroring
+# every change already tested and merged into `main`, so Flux's commits are
+# always layered on top of current code, never stale.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: sync-deploy-branch
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin deploy
+          git checkout deploy
+          git merge origin/main --no-edit -m "sync: merge main into deploy"
+          git push origin deploy
