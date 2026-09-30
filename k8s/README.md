@@ -84,6 +84,19 @@ mode must accept that certificate (Full). Full (strict) requires a trusted
 origin certificate and a corresponding TLS Secret, a separate certificate
 setup task. No Kubernetes LoadBalancer is used.
 
-KEDA autoscaling, the demo load flow, cluster-view RBAC, nightly ingestion,
-and Flux/GitOps deployment are separate later phases. When KEDA is installed,
-the Redis NetworkPolicy must also allow its operator pods.
+KEDA autoscaling, the demo load flow, cluster-view RBAC, and nightly
+ingestion are separate later phases. When KEDA is installed, the Redis
+NetworkPolicy must also allow its operator pods.
+
+## Image tag overlay
+
+`k8s/overlays/prod/kustomization.yaml` layers on `k8s/base` and pins the
+deployed application image tag in one place via kustomize's `images:`
+transformer, instead of the four hardcoded `image:` lines in the base
+manifests. `.github/workflows/release.yml` bumps this file's `newTag` on
+every merge to `main` after a successful image build/push; once Flux is
+bootstrapped (see `project/AGENT_HANDOFF.md`), it is the only thing that
+applies this overlay to the live cluster. The manual bring-up steps above
+still apply the individual base files directly, for the initial cluster
+setup and for manual recovery — `kubectl kustomize k8s/overlays/prod` is
+the way to inspect exactly what Flux will apply at any point.
