@@ -283,24 +283,30 @@ def _save_query(
     cache_status: str = "miss",
     mode: str = "full",
 ) -> None:
-    with get_session_factory()() as session:
-        session.add(
-            Query(
-                request_id=request_id,
-                corpus=request.corpus,
-                question=request.question,
-                cache_status=cache_status,
-                mode=mode,
-                chunk_ids=[chunk.chunk_id for chunk in chunks],
-                stage_timings_ms=timings,
-                total_ms=total_ms,
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
-                turn_index=turn_index,
-                rewritten_query=rewritten_query,
+    # The query log is stats, not part of answering: a failed insert (for example,
+    # the 0003 columns missing while migrate is still running) is logged and dropped
+    # rather than turning an already-generated answer into a stream error.
+    try:
+        with get_session_factory()() as session:
+            session.add(
+                Query(
+                    request_id=request_id,
+                    corpus=request.corpus,
+                    question=request.question,
+                    cache_status=cache_status,
+                    mode=mode,
+                    chunk_ids=[chunk.chunk_id for chunk in chunks],
+                    stage_timings_ms=timings,
+                    total_ms=total_ms,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    turn_index=turn_index,
+                    rewritten_query=rewritten_query,
+                )
             )
-        )
-        session.commit()
+            session.commit()
+    except Exception:
+        LOGGER.warning("Query log write failed for %s", request_id, exc_info=True)
 
 
 async def _stream(

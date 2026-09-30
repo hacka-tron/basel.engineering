@@ -6,10 +6,12 @@ import struct
 import pytest
 from fastapi.testclient import TestClient
 
+from services.glassbox.api import ask as _ask_module
 from services.glassbox.api.main import app
 from services.glassbox.providers.fake import FakeEmbeddingProvider
 from services.tests.test_ask_endpoint import MemoryRedis, events
 
+ORIGINAL_SAVE_QUERY = _ask_module._save_query
 REWRITTEN = "What else did Basel work on at YouTube?"
 HISTORY = [
     {"role": "user", "content": "What did Basel do at YouTube?"},
@@ -356,3 +358,33 @@ def test_follow_up_with_failed_rewrite_logs_no_rewritten_query(harness):
     [saved] = harness["saved"]
     assert saved["turn_index"] == 1
     assert saved["rewritten_query"] is None
+
+
+class _FailingSession:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def add(self, row):
+        pass
+
+    def commit(self):
+        from sqlalchemy.exc import OperationalError
+
+        raise OperationalError("INSERT INTO queries", {}, Exception("Unknown column"))
+
+
+@pytest.mark.parametrize("history", [None, HISTORY])
+def test_query_log_failure_does_not_break_a_generated_answer(harness, monkeypatch, history):
+    """New code may serve before migration 0003 finishes; logging must not fail the answer."""
+    from services.glassbox.api import ask
+
+    monkeypatch.setattr(ask, "_save_query", ORIGINAL_SAVE_QUERY)
+    monkeypatch.setattr(ask, "get_session_factory", lambda: lambda: _FailingSession())
+    stream = events(harness["post"](history=history))
+    assert "error" not in [name for name, _ in stream]
+    assert any(name == "token" for name, _ in stream)
+    assert stream[-1][0] == "done"
+    assert stream[-1][1]["mode"] == "full"
