@@ -1,5 +1,21 @@
 # Agent handoff
 
+## Task 5 closed for real: root cause of the Job-recreation bug found and fixed, verified with a real hands-off release — Claude, 2026-09-30
+
+**Active coordinator: Claude.** This closes out the "one still pending confirmation" item from the checkpoint immediately below. Two things happened after that checkpoint, in order:
+
+**1. The pending (a)-(d) verification (does `build-N` actually reach ECR → ImagePolicy → `deploy` → pods) — all confirmed, but pods still needed a manual `kubectl delete job` to pick up `build-12`,** exactly like bug #5 below, which was surprising since PR #17 supposedly already fixed that. A Codex second-opinion review of PRs #20-24 (requested by the owner) independently flagged the same suspicion the owner had: the `kustomize.toolkit.fluxcd.io/force` annotation's value.
+
+**2. Root cause found and fixed (PR #26), not just worked around again.** Per Flux's own docs (`https://fluxcd.io/flux/components/kustomize/kustomizations/`), the per-resource `force` annotation is a **string enum** (`enabled`/`disabled`) — it is *not* the same boolean type as the Kustomization-**spec**-level `.spec.force` field (same word, different knob, different value format). Both `ingest-job.yaml` and `migrate-job.yaml` had `kustomize.toolkit.fluxcd.io/force: "true"`, which Flux silently treats as unset — so the annotation had *never actually worked*, on either the original PR #17 fix or the manual-delete workaround in bug #5 below. It only ever "worked" because a human ran `kubectl delete job` by hand each time and Flux happily recreated fresh objects that then carried the (still-broken) annotation forward, masking the bug.
+
+Fixed the value to `enabled` in both files, merged, and verified with a real release end-to-end: PR #26's merge auto-triggered `build-13`; `ImagePolicy` picked it up, `ImageUpdateAutomation` committed it to `deploy`, and **both Jobs auto-recreated and `api`/`retrieval-worker` rolled out to `build-13` with zero manual intervention** — confirmed directly via SSM (`ingest`/`migrate` both `Complete` on `build-13`, ~114s old; `api`/`retrieval-worker` both on `build-13`). This is the first fully hands-off release this project has ever had.
+
+**Also confirmed correct, from the same Codex review:** `filterTags`/`extract` syntax and `order: asc` (both correct, not bugs). **New findings from that review, not yet acted on** (now in `project/BACKLOG.md`'s Infrastructure & reliability section): (a) a manual `workflow_dispatch` release run against an old ref could still mint a higher `build-N` and get selected — build number alone doesn't prove current-`main` provenance; (b) the release path-filter is missing some Dockerfile-`COPY`'d paths (`corpus/`, `docs/`, `infra/`, `k8s/`), so a merge touching only those could leave the image stale; (c) `sync-deploy-branch.yml` and Flux both push to `deploy` with no retry, so a race could silently drop a sync; (d) `migrate` and `api` share one Kustomization with no explicit ordering — nothing guarantees the migration finishes before the API expecting it rolls out (flagged independently by both the owner and Codex).
+
+**Two feature branches also built this session, ready for review, not yet merged** — `feature/frontend-ui-polish` and `feature/stress-test-keda`. See `project/SNAPSHOT.md`'s latest checkpoint for what's in each; do not apply `feature/stress-test-keda`'s KEDA Helm install without confirming the chart version and that `helm-controller` is actually running first.
+
+---
+
 ## Task 5 real end-to-end verification: five real bugs found and fixed, one still pending confirmation — Claude, 2026-09-30
 
 **Active coordinator: Claude.** Context: the owner asked to finally verify Task 5 (Flux bootstrap + Image Automation, previously marked "bootstrap succeeded" by an earlier session) actually works end to end — a real UI change reaching a real pod restart, not just "reconciled successfully." It had never been exercised for real. This checkpoint exists because the owner explicitly asked to save full context before possibly clearing the conversation - read this before trusting any earlier "Flux is done" note above.
