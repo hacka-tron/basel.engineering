@@ -6,7 +6,13 @@ metadata:
 spec:
   image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
   interval: 1m
-  # No secretRef: image-reflector-controller runs on the EC2 node and
-  # authenticates to ECR using the node's own IAM instance role (the same
-  # one k8s/refresh-ecr-pull-secret.sh uses), via the AWS SDK's default
-  # credential chain - the same access already granted for pulling images.
+  # provider: aws is what actually turns on ECR auto-login - without it the
+  # controller never attempts the AWS SDK credential chain at all and just
+  # makes an anonymous registry request, which ECR always answers with a
+  # bare 401 regardless of the node's IAM permissions (found the hard way:
+  # fixing IMDS hop limit and IAM ecr:Describe*/List* permissions first,
+  # neither of which was wrong to fix, but neither was the actual blocker).
+  # No secretRef needed: image-reflector-controller runs on the EC2 node
+  # and authenticates via the node's own IAM instance role through the AWS
+  # SDK's default credential chain once this field is set.
+  provider: aws
