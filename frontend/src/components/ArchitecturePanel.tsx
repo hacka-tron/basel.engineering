@@ -21,6 +21,7 @@ type ArchitecturePanelProps = {
   nodeCacheStatus?: Partial<Record<NodeId, 'hit' | 'miss'>>
   retrievedChunks?: RetrievalChunk[]
   selectedNode?: NodeId | null
+  answerText?: string | null
   onInspect: (id: NodeId) => void
 }
 
@@ -75,7 +76,7 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--color-muted)' },
 }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, onInspect }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   const inspectorRef = useRef<HTMLDivElement>(null)
   const inspectRef = useRef(onInspect)
@@ -133,7 +134,14 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
             <h2 className="text-xs font-medium text-primary">{inspectedComponent.data.label}</h2>
             <p className="mt-1 text-xs text-cyan">{inspectedComponent.data.implementation}</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">{inspectedComponent.data.description}</p>
-            <p className="mt-1 text-[10px] text-muted">Select the component for a full answer in About This System.</p>
+            {answerText !== undefined && inspectedNode === selectedNode ? (
+              <div className="mt-3 border-l border-cyan pl-3">
+                <h3 className="text-[10px] text-cyan">About This System answer</h3>
+                <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-primary">{answerText || 'Working…'}</p>
+              </div>
+            ) : (
+              <p className="mt-1 text-[10px] text-muted">Select the component for a full answer in About This System.</p>
+            )}
           </div>
         ) : (
           <p className="mb-4 text-xs text-muted">Hover or focus a component to see what runs it. Select it to ask more.</p>
