@@ -59,67 +59,71 @@ function StatsBar({
   const tooltipId = useId()
   const [tooltipOpen, setTooltipOpen] = useState(false)
   const pressTimerRef = useRef<number | null>(null)
-  const longPressedRef = useRef(false)
-
+  // One gesture state decides whether the release runs the test:
+  // idle -> pressing -> longpress | cancelled -> (next pointerdown) idle.
+  // Only a gesture that is still `idle`/`pressing` at click time runs it.
+  // Keyboard clicks (detail === 0) have no pointer gesture and always run.
+  const gestureRef = useRef<'idle' | 'pressing' | 'longpress' | 'cancelled'>('idle')
   const activePointersRef = useRef(new Set<number>())
   const pressStartRef = useRef<{ x: number; y: number } | null>(null)
-  const suppressClickRef = useRef(false)
 
-  function cancelPress() {
+  function clearPressTimer() {
     if (pressTimerRef.current !== null) {
       window.clearTimeout(pressTimerRef.current)
       pressTimerRef.current = null
     }
   }
 
+  function cancelGesture() {
+    clearPressTimer()
+    if (gestureRef.current === 'pressing') gestureRef.current = 'cancelled'
+  }
+
   // Touch/pen only: a ~500ms hold opens the details instead of running the
   // test. Mouse users get the hover tooltip, so they never need a long-press.
-  // A second finger, a cancel, or drifting past the slop cancels the hold.
+  // A second finger, a cancel, or drifting past the slop cancels the gesture.
   function handlePointerDown(e: React.PointerEvent) {
-    longPressedRef.current = false
-    if (e.pointerType === 'mouse') return
-    activePointersRef.current.add(e.pointerId)
-    cancelPress()
-    if (activePointersRef.current.size > 1) {
-      suppressClickRef.current = true
+    clearPressTimer()
+    if (e.pointerType === 'mouse') {
+      activePointersRef.current.clear()
+      gestureRef.current = 'idle'
       return
     }
-    suppressClickRef.current = false
+    activePointersRef.current.add(e.pointerId)
+    if (activePointersRef.current.size > 1) {
+      gestureRef.current = 'cancelled'
+      return
+    }
+    gestureRef.current = 'pressing'
     pressStartRef.current = { x: e.clientX, y: e.clientY }
     pressTimerRef.current = window.setTimeout(() => {
       pressTimerRef.current = null
-      longPressedRef.current = true
+      gestureRef.current = 'longpress'
       setTooltipOpen(true)
     }, LONG_PRESS_MS)
   }
 
   function handlePointerMove(e: React.PointerEvent) {
     const start = pressStartRef.current
-    if (!start || pressTimerRef.current === null) return
-    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP_PX) cancelPress()
+    if (!start || gestureRef.current !== 'pressing') return
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP_PX) cancelGesture()
   }
 
   function handlePointerUp(e: React.PointerEvent) {
     activePointersRef.current.delete(e.pointerId)
-    cancelPress()
+    clearPressTimer()
   }
 
   function handlePointerCancel(e: React.PointerEvent) {
     activePointersRef.current.delete(e.pointerId)
-    suppressClickRef.current = true
-    cancelPress()
+    cancelGesture()
+    gestureRef.current = 'cancelled'
   }
 
-  function handleClick() {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false
-      return
-    }
-    if (longPressedRef.current) {
-      // The release that ends a long-press must not also start a test.
-      longPressedRef.current = false
-      return
-    }
+  function handleClick(e: React.MouseEvent) {
+    const state = gestureRef.current
+    gestureRef.current = 'idle'
+    if (e.detail !== 0 && (state === 'longpress' || state === 'cancelled')) return
     setTooltipOpen(false)
     if (!disabled) onStressTest?.()
   }
@@ -137,7 +141,7 @@ function StatsBar({
     }
   }, [tooltipOpen])
 
-  useEffect(() => cancelPress, [])
+  useEffect(() => clearPressTimer, [])
 
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
@@ -167,7 +171,6 @@ function StatsBar({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
-          onPointerLeave={cancelPress}
           onContextMenu={(e) => e.preventDefault()}
           className={`group relative -mr-2 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:-mr-2.5 md:mr-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
