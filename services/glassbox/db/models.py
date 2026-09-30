@@ -67,6 +67,8 @@ class Query(Base):
     chunk_ids: Mapped[list[int] | None] = mapped_column(JSON)
     stage_timings_ms: Mapped[dict[str, int] | None] = mapped_column(JSON)
     total_ms: Mapped[int | None] = mapped_column(Integer)
+    # Provider-reported when available (completed Bedrock answers), otherwise a
+    # whitespace-word estimate (fake provider, stopped answers); DESIGN-002 §6.6.
     tokens_in: Mapped[int | None] = mapped_column(Integer)
     tokens_out: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime | None] = mapped_column(

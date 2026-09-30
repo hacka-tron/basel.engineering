@@ -245,6 +245,26 @@ def _conversation_block(history: list[HistoryMessage] | None) -> str:
     )
 
 
+def estimate_tokens(text: str) -> int:
+    """Whitespace-word count: a rough stand-in for model tokens, not a billed count."""
+    return len(text.split())
+
+
+def _token_counts(prompt: str, output: str, usage: dict) -> tuple[int, int]:
+    """Measured usage when the provider reported it, else word-count estimates.
+
+    Bedrock reports usage only in the stream's final metadata event, so a
+    completed Bedrock answer is measured, while a stopped one (which never sees
+    that event) and the fake provider are estimated (DESIGN-002 §6.6).
+    """
+    measured_in = usage.get("inputTokens")
+    measured_out = usage.get("outputTokens")
+    return (
+        measured_in if isinstance(measured_in, int) else estimate_tokens(prompt),
+        measured_out if isinstance(measured_out, int) else estimate_tokens(output),
+    )
+
+
 def _public_chunk(chunk: WorkerChunk) -> dict:
     payload = chunk.model_dump(exclude={"text"}, exclude_none=True)
     payload["snippet"] = " ".join(chunk.text.split())[:180]
@@ -329,6 +349,7 @@ async def _stream(
     cache_status = "miss"
     llm_prompt: str | None = None
     response_parts: list[str] = []
+    llm_usage: dict = {}
 
     async def save(
         *,
@@ -613,21 +634,22 @@ async def _stream(
         prompt = llm_prompt = _prompt(request.question, chunks, history)
         # First questions keep the provider's default system prompt unchanged.
         system_kwargs = {"system": _FOLLOW_UP_SYSTEM} if history else {}
+        # Providers that can report real token usage fill this dict in place.
+        usage_kwargs = {"usage": llm_usage} if getattr(llm_provider, "reports_usage", False) else {}
         llm_started = time.monotonic()
         yield await stage("llm", "start")
         # aclosing: if the client leaves while this generator is suspended at a
         # yield, closing it closes the provider stream too (Bedrock's finally closes
         # its response stream), so generation stops rather than being orphaned.
         async with contextlib.aclosing(
-            llm_provider.generate(prompt, max_tokens=400, **system_kwargs)
+            llm_provider.generate(prompt, max_tokens=400, **system_kwargs, **usage_kwargs)
         ) as parts:
             async for part in parts:
                 response_parts.append(part)
                 yield frame("token", {"text": part})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
         total_ms = elapsed_ms(request_start_ts)
-        tokens_in = len(prompt.split())
-        tokens_out = len("".join(response_parts).split())
+        tokens_in, tokens_out = _token_counts(prompt, "".join(response_parts), llm_usage)
         if not history and (
             await RedisRetrievalCache(client).version(request.corpus) == corpus_version
         ):
@@ -658,17 +680,19 @@ async def _stream(
     except (asyncio.CancelledError, GeneratorExit):
         # The client went away: Stop button, closed tab, or dropped connection
         # (DESIGN-002 §6.2). Generation has already stopped (the cancellation or
-        # close propagated through the provider stream). Log the tokens actually
-        # generated as mode='stopped'. The budget slot reserved for this answer
-        # stays spent (the provider billed the prompt and any output), and a
-        # stopped answer never reaches the answer-cache write after the loop.
+        # close propagated through the provider stream). Log mode='stopped' with
+        # the output relayed so far (an estimate; see _token_counts). The budget
+        # slot reserved for this answer stays spent (the provider billed the prompt
+        # and any output), and a stopped answer never reaches the answer-cache
+        # write after the loop.
         if not settled:
             try:
-                await save(
-                    tokens_in=len(llm_prompt.split()) if llm_prompt else 0,
-                    tokens_out=len("".join(response_parts).split()),
-                    mode="stopped",
+                tokens_in, tokens_out = (
+                    _token_counts(llm_prompt, "".join(response_parts), llm_usage)
+                    if llm_prompt
+                    else (0, 0)
                 )
+                await save(tokens_in=tokens_in, tokens_out=tokens_out, mode="stopped")
             except BaseException:
                 LOGGER.warning("Stopped query log failed for %s", request_id, exc_info=True)
         raise

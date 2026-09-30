@@ -1,6 +1,8 @@
 """Bedrock provider contracts without paid model calls."""
 
+import asyncio
 import json
+import threading
 
 import pytest
 
@@ -116,3 +118,69 @@ def test_provider_factory_selects_bedrock(monkeypatch):
     monkeypatch.setenv("BEDROCK_LLM_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
     assert isinstance(get_embedding_provider(), BedrockEmbeddingProvider)
     assert isinstance(get_llm_provider(), BedrockLLMProvider)
+
+
+class ClosableStream:
+    def __init__(self, events):
+        self.events = iter(events)
+        self.closed = threading.Event()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self.events)
+
+    def close(self):
+        self.closed.set()
+
+
+class SlowOpeningClient(StubClient):
+    """converse_stream blocks (like a cold call waiting for headers) until released."""
+
+    def __init__(self):
+        super().__init__()
+        self.release = threading.Event()
+        self.stream = ClosableStream([{"contentBlockDelta": {"delta": {"text": "late"}}}])
+
+    def converse_stream(self, **kwargs):
+        self.generation_requests.append(kwargs)
+        assert self.release.wait(5)
+        return {"stream": self.stream}
+
+
+@pytest.mark.asyncio
+async def test_stream_that_arrives_after_cancellation_is_closed():
+    """DESIGN-002 §6.2: a Stop during a cold call must not leave generation running."""
+    client = SlowOpeningClient()
+    generator = BedrockLLMProvider(client=client).generate("q", max_tokens=50)
+    task = asyncio.create_task(anext(generator))
+    await asyncio.sleep(0.05)
+    assert client.generation_requests, "the call is in flight"
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not client.stream.closed.is_set()
+    client.release.set()  # The response headers arrive only now.
+    await asyncio.to_thread(client.stream.closed.wait, 2)
+    assert client.stream.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_stream_is_closed_when_the_consumer_stops_early():
+    client = SlowOpeningClient()
+    client.release.set()
+    generator = BedrockLLMProvider(client=client).generate("q", max_tokens=50)
+    assert await anext(generator) == "late"
+    await generator.aclose()
+    assert client.stream.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_generate_reports_measured_usage_from_stream_metadata():
+    provider = BedrockLLMProvider(client=StubClient())
+    usage = {}
+    parts = [part async for part in provider.generate("q", max_tokens=50, usage=usage)]
+    assert parts == ["Hello", " world"]
+    assert usage == {"inputTokens": 5, "outputTokens": 2}
+    assert provider.reports_usage

@@ -57,7 +57,9 @@ export function newMessageId(): string {
 }
 
 function isSettled(message: ChatMessage): boolean {
-  if (!message.content) return false
+  // A reply stopped before its first token has no text but is still settled, so
+  // a reload shows the same "Stopped" state the visitor saw.
+  if (!message.content && !(message.role === 'assistant' && message.state === 'stopped')) return false
   return message.role === 'user' || (message.state !== undefined && SETTLED_STATES.has(message.state))
 }
 
@@ -151,7 +153,8 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
 
 /** The recent settled turns sent as `history` (the server re-applies its own limits). */
 export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
-  const turns = messages.filter(isSettled).slice(-MAX_HISTORY_MESSAGES)
+  // Empty stopped replies carry no content, and the server rejects empty turns.
+  const turns = messages.filter((message) => isSettled(message) && message.content).slice(-MAX_HISTORY_MESSAGES)
     .map((message) => ({ role: message.role, content: message.content.slice(0, MAX_HISTORY_CHARS) }))
   // Mirror the server's total-character cap, dropping the oldest turns first.
   let total = 0

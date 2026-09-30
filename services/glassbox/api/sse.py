@@ -56,21 +56,29 @@ async def with_heartbeat(
     and closed so generation stops instead of spending tokens for nobody. Starlette
     surfaces a disconnect by cancelling this generator (or closing it); as a
     fallback that does not depend on the server version, ``is_disconnected`` is
-    polled every ``poll_interval_s`` while waiting. Cleanup runs in a separate task
-    because awaits inside a cancelled response scope would be cancelled again.
+    polled every ``poll_interval_s``, whether or not events are flowing. Cleanup
+    runs in a separate task because awaits inside a cancelled response scope
+    would be cancelled again.
     """
     loop = asyncio.get_running_loop()
     iterator = aiter(source)
     pending: asyncio.Task | None = None
     finished = False
     last_sent = loop.time()
+    next_poll = loop.time() + poll_interval_s
     try:
         while True:
+            # Time-based, not idle-based: a fast token stream must not starve the
+            # check, or generation would run to completion for a departed client.
+            if is_disconnected is not None and loop.time() >= next_poll:
+                next_poll = loop.time() + poll_interval_s
+                if await is_disconnected():
+                    return
             if pending is None:
                 pending = asyncio.create_task(_next(iterator))
             wait_s = max(0.0, last_sent + interval_s - loop.time())
             if is_disconnected is not None:
-                wait_s = min(wait_s, poll_interval_s)
+                wait_s = min(wait_s, max(0.0, next_poll - loop.time()))
             done, _ = await asyncio.wait({pending}, timeout=wait_s)
             if done:
                 task, pending = pending, None
@@ -82,8 +90,6 @@ async def with_heartbeat(
                 yield item
                 last_sent = loop.time()
                 continue
-            if is_disconnected is not None and await is_disconnected():
-                return
             if loop.time() - last_sent >= interval_s:
                 yield PING_FRAME
                 last_sent = loop.time()

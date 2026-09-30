@@ -161,6 +161,39 @@ def test_heartbeat_polls_for_disconnect_and_stops_the_source():
     assert source.produced == produced == 0
 
 
+def test_heartbeat_polls_for_disconnect_even_while_events_flow():
+    """A fast token stream after a disconnect must not starve the fallback poll."""
+    source = CountingSource(delay=0.005)
+    polls = []
+
+    async def run():
+        started = time.monotonic()
+
+        async def is_disconnected():
+            polls.append(time.monotonic() - started)
+            return time.monotonic() - started > 0.2
+
+        out = await _collect(
+            with_heartbeat(
+                source(), interval_s=10, is_disconnected=is_disconnected, poll_interval_s=0.25
+            ),
+            limit=2000,  # ~10 s of events: reached only if the poll never stops the stream.
+        )
+        ended = time.monotonic() - started
+        await asyncio.sleep(0.05)
+        produced = source.produced
+        await asyncio.sleep(0.2)
+        return out, ended, produced
+
+    out, ended, produced = asyncio.run(run())
+    assert len(out) > 10, "events were relayed before the disconnect"
+    assert len(out) < 2000
+    assert ended < 0.8, f"stream kept running {ended:.2f}s after a 0.2s disconnect"
+    assert polls and polls[-1] < 0.8
+    assert source.closed
+    assert source.produced == produced
+
+
 def test_heartbeat_relays_source_errors():
     async def failing():
         yield "event: a\n\n"
@@ -484,3 +517,27 @@ def test_stopped_query_row_is_stored(monkeypatch):
             session.commit()
         engine.dispose()
         get_session_factory.cache_clear()
+
+
+def test_token_counts_prefer_measured_usage_and_otherwise_estimate():
+    from services.glassbox.api.ask import _token_counts
+
+    assert _token_counts("a b c", "x y", {"inputTokens": 40, "outputTokens": 7}) == (40, 7)
+    # A stopped Bedrock stream never reaches its usage metadata: estimate.
+    assert _token_counts("a b c", "x y", {}) == (3, 2)
+
+
+def test_completed_answer_logs_provider_reported_usage(harness):
+    class UsageLLM(SlowLLM):
+        reports_usage = True
+
+        async def generate(self, prompt, *, max_tokens, system=None, usage=None):
+            async for part in super().generate(prompt, max_tokens=max_tokens, system=system):
+                yield part
+            usage.update(inputTokens=1234, outputTokens=56)
+
+    harness["llm"] = UsageLLM(delay=0, count=3)
+    stream = events(TestClient(app).post("/api/ask", json=BODY))
+    done = stream[-1][1]
+    assert (done["tokens_in"], done["tokens_out"]) == (1234, 56)
+    assert (harness["saved"][0]["tokens_in"], harness["saved"][0]["tokens_out"]) == (1234, 56)
