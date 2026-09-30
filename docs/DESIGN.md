@@ -312,7 +312,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
 | `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
 | `rl:{ip_hash}` | token bucket | 10 questions per 10 minutes per IP | 10 minutes |
-| `budget:llm:q:{yyyy-mm-dd}` | counter | LLM spend today in integer quarter-units: a generated answer costs 4, a follow-up rewrite costs 1 (DD2 §5.4); default cap 100 answers = 400 units | 2 days |
+| `budget:llm:q:{yyyy-mm-dd}` | counter | LLM spend today in integer quarter-units: a generated answer costs 4, a follow-up rewrite costs 1 (DD2 §5.4); default cap 100 answers = 400 units. During the transition, reservations also count the old `budget:llm:{yyyy-mm-dd}` whole-answer key ×4 (DD2 §5.3.1) | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
 | `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples | rolling |
 
