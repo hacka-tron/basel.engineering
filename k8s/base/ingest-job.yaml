@@ -3,6 +3,10 @@ kind: Job
 metadata:
   name: ingest
   namespace: app
+  annotations:
+    # See migrate-job.yaml - Job pod templates are immutable, so any image
+    # tag change needs Flux to delete and recreate rather than patch.
+    kustomize.toolkit.fluxcd.io/force: "true"
 spec:
   backoffLimit: 2
   template:
