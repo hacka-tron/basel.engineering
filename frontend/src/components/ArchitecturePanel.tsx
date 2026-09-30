@@ -93,6 +93,9 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   }, [inspectedNode])
   const nodes = useMemo<LiveNode[]>(() => architectureNodes.map((node) => ({
     ...node,
+    // Match the fixed NodeView size so React Flow never hides these nodes to remeasure them.
+    width: 124,
+    height: 42,
     data: {
       ...node.data,
       id: node.id,
