@@ -130,7 +130,7 @@ def test_schema_columns_and_constraints():
     assert isinstance(queries.c.cache_status.type, ENUM)
     assert queries.c.cache_status.type.enums == ["answer_hit", "miss"]
     assert isinstance(queries.c.mode.type, ENUM)
-    assert queries.c.mode.type.enums == ["full", "retrieval_only"]
+    assert queries.c.mode.type.enums == ["full", "retrieval_only", "stopped"]
     assert all(
         not queries.c[name].nullable
         for name in ("request_id", "corpus", "question", "cache_status", "mode")
@@ -206,7 +206,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "ENUM('about_me','about_system') NOT NULL" in ddl["queries"]
     assert "VARCHAR(1000) NOT NULL" in ddl["queries"]
     assert "ENUM('answer_hit','miss') NOT NULL" in ddl["queries"]
-    assert "ENUM('full','retrieval_only') NOT NULL" in ddl["queries"]
+    assert "ENUM('full','retrieval_only','stopped') NOT NULL" in ddl["queries"]
     assert ddl["queries"].count("JSON") == 2
     assert "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP" in ddl["queries"]
     # DESIGN-002 §9.3 conversational columns.
@@ -249,4 +249,15 @@ def test_conversation_columns_migration_follows_queries_table():
     assert migration.down_revision == "0002_add_queries_table"
     assert migration.revision == "0003_query_turn_columns"
     # alembic_version.version_num is VARCHAR(32).
+    assert len(migration.revision) <= 32
+
+
+def test_stopped_mode_migration_follows_conversation_columns():
+    import importlib
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0004_query_mode_stopped"
+    )
+    assert migration.down_revision == "0003_query_turn_columns"
+    assert migration.revision == "0004_query_mode_stopped"
     assert len(migration.revision) <= 32

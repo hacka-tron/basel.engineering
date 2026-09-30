@@ -29,6 +29,20 @@ def _next_event(iterator):
         return False, None
 
 
+def _close_stream(response) -> None:
+    closer = getattr(response.get("stream"), "close", None)
+    if closer is not None:
+        closer()
+
+
+def _close_orphaned_response(opening: asyncio.Future) -> None:
+    """Close a converse_stream response that arrived after its caller was cancelled."""
+    if opening.cancelled() or opening.exception() is not None:
+        return
+    # Closing drops the HTTP connection, which ends generation and its billing.
+    asyncio.get_running_loop().run_in_executor(None, _close_stream, opening.result())
+
+
 def _invoke_embedding(client, model_id: str, value: str):
     response = client.invoke_model(
         modelId=model_id,
@@ -69,6 +83,8 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
 
 class BedrockLLMProvider(LLMProvider):
+    reports_usage = True
+
     def __init__(
         self, *, client=None, model_id: str = DEFAULT_LLM_MODEL, region: str = "us-east-1"
     ):
@@ -76,17 +92,36 @@ class BedrockLLMProvider(LLMProvider):
         self.model_id = model_id
 
     async def generate(
-        self, prompt: str, *, max_tokens: int, system: str | None = None
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        system: str | None = None,
+        usage: dict | None = None,
     ) -> AsyncIterator[str]:
+        """Stream text deltas; ``usage`` receives Bedrock's token counts if the
+        stream reaches its final metadata event (it does not when stopped early)."""
         if not 1 <= max_tokens <= 400:
             raise ValueError("max_tokens must be between 1 and 400")
-        response = await asyncio.to_thread(
-            self.client.converse_stream,
-            modelId=self.model_id,
-            system=[{"text": GROUNDING_RULES if system is None else system}],
-            messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
+        # The call runs in a worker thread that cannot be interrupted. If the
+        # client stops while it is still waiting for response headers, the
+        # cancellation skips the `finally` below, so the stream that arrives
+        # later would have no owner and keep generating. Shield the call and,
+        # on cancellation, close whatever it returns once it returns.
+        opening = asyncio.ensure_future(
+            asyncio.to_thread(
+                self.client.converse_stream,
+                modelId=self.model_id,
+                system=[{"text": GROUNDING_RULES if system is None else system}],
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
+            )
         )
+        try:
+            response = await asyncio.shield(opening)
+        except asyncio.CancelledError:
+            opening.add_done_callback(_close_orphaned_response)
+            raise
         stream = response["stream"]
         iterator = iter(stream)
         try:
@@ -98,6 +133,15 @@ class BedrockLLMProvider(LLMProvider):
                     part = event["contentBlockDelta"].get("delta", {}).get("text")
                     if part:
                         yield part
+                elif "metadata" in event and usage is not None:
+                    reported = event["metadata"].get("usage", {})
+                    usage.update(
+                        {
+                            key: reported[key]
+                            for key in ("inputTokens", "outputTokens")
+                            if isinstance(reported.get(key), int)
+                        }
+                    )
                 elif "messageStop" in event:
                     reason = event["messageStop"].get("stopReason")
                     if reason not in {"end_turn", "max_tokens", "stop_sequence"}:
