@@ -7,10 +7,16 @@ spec:
   imageRepositoryRef:
     name: glassbox
   # Every image also gets a short git-SHA tag and :latest, neither of which
-  # sorts meaningfully - restrict to the purely-numeric build-number tag
-  # (release.yml's github.run_number) and pick the highest one.
+  # sorts meaningfully - restrict to the build-number tag (release.yml's
+  # github.run_number, prefixed "build-") and pick the highest one. A bare
+  # `^\d+$` pattern was tried first and is a real trap: short git SHAs are
+  # hex but can land all-digits by chance, so an old commit's SHA tag
+  # ("3842459") was numerically larger than any real build number and got
+  # deployed instead of the actual latest release. The "build-" prefix
+  # makes that collision impossible.
   filterTags:
-    pattern: '^\d+$'
+    pattern: '^build-(?P<num>\d+)$'
+    extract: '$num'
   policy:
     numerical:
       order: asc
