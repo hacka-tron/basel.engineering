@@ -1,0 +1,45 @@
+# Ordered KEDA rollout. The root flux-system Kustomization (path
+# ./k8s/overlays/prod) applies these two child Kustomizations instead of the
+# KEDA manifests directly: on a first install, a ScaledObject applied in the
+# same pass as the HelmRelease fails server-side dry-run because
+# helm-controller hasn't registered the keda.sh CRDs yet, which blocks the
+# whole root Kustomization — app workloads included.
+#
+# 1. `keda` applies the HelmRepository/HelmRelease and, via `wait: true`,
+#    only turns Ready once the HelmRelease is Ready (chart installed, CRDs
+#    registered, operator Deployments rolled out).
+# 2. `keda-scaling` dependsOn `keda`, so the ScaledObject is never applied
+#    before its CRD exists. Its failure is isolated from the app workloads.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keda
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  path: ./k8s/overlays/prod/keda
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keda-scaling
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: keda
+  interval: 10m
+  retryInterval: 1m
+  timeout: 2m
+  path: ./k8s/overlays/prod/keda-scaling
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

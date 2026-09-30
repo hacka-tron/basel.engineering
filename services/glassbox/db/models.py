@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, UniqueConstraint, text
-from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP
+from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP, TINYINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -72,3 +72,10 @@ class Query(Base):
     created_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP, server_default=text("CURRENT_TIMESTAMP")
     )
+    # Added after created_at by migration 0003 (DESIGN-002 §9.3).
+    # 0 = first question; a follow-up counts the prior user turns.
+    turn_index: Mapped[int] = mapped_column(
+        TINYINT(unsigned=True), nullable=False, server_default=text("0")
+    )
+    # The standalone retrieval query a follow-up was rewritten to, if any.
+    rewritten_query: Mapped[str | None] = mapped_column(String(1000))

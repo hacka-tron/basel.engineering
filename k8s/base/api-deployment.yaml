@@ -5,6 +5,15 @@ metadata:
   namespace: app
 spec:
   replicas: 1
+  # Memory over zero downtime (owner decision): the 2 GiB node can't comfortably
+  # hold an old and a new api pod at once, so the old pod stops before the new
+  # one starts. Each release costs a few seconds of downtime (longer if the
+  # new pod waits in wait-for-migrations for the migrate Job).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: api
@@ -13,8 +22,38 @@ spec:
       labels:
         app: api
     spec:
+      serviceAccountName: api
+      # Uvicorn's own drain (--timeout-graceful-shutdown 25 in the Dockerfile
+      # CMD) finishes inside this window, before the kubelet's SIGKILL.
+      terminationGracePeriodSeconds: 30
       imagePullSecrets:
         - name: regcred
+      initContainers:
+        # Blocks until the database's Alembic revision equals this image's
+        # head (i.e. the migrate Job for this tag has finished), so the api
+        # never serves against an older schema. Read-only; exits non-zero
+        # after 5 minutes so a failed migration shows up as Init:Error
+        # instead of hanging. See services/glassbox/db/wait_for_migrations.py.
+        - name: wait-for-migrations
+          image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
+          command: ["python", "-m", "services.glassbox.db.wait_for_migrations", "--timeout", "300"]
+          envFrom:
+            - configMapRef:
+                name: glassbox-config
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: glassbox-mysql
+                  key: mysql-password
+          resources:
+            # Measured peak RSS ~57 MiB. The pod's effective request is
+            # max(init, main), so this adds nothing to the node's request total.
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
       containers:
         - name: api
           image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
@@ -35,16 +74,30 @@ spec:
                 secretKeyRef:
                   name: glassbox-app
                   key: ip-hash-salt
+          # Generous timeouts: under swap pressure on the 2 GiB node the
+          # default 1s timeout produced spurious probe failures mid-rollout.
+          # The startupProbe gives a slow boot up to 150s before liveness
+          # (and its restarts) take over.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /readyz
               port: http
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m

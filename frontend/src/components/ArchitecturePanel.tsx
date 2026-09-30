@@ -4,6 +4,8 @@ import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, type NodeId } from '../architecture'
 import type { RetrievalChunk } from '../lib/sse'
 
+export type WorkerPod = { name: string; ready: boolean }
+
 type LiveNode = Node<{
   id: NodeId
   label: string
@@ -11,6 +13,8 @@ type LiveNode = Node<{
   active: boolean
   selected: boolean
   cache?: 'hit' | 'miss'
+  pods?: WorkerPod[]
+  backlog?: number | null
   onPreview: (id: NodeId) => void
   onLeave: () => void
   onInspect: (id: NodeId) => void
@@ -23,6 +27,10 @@ type ArchitecturePanelProps = {
   selectedNode?: NodeId | null
   answerText?: string | null
   onInspect: (id: NodeId) => void
+  workerPods?: WorkerPod[]
+  backlog?: number | null
+  /** Smallest zoom fitView may pick (mobile sheet: keep labels readable and pan instead of shrinking). */
+  fitMinZoom?: number
 }
 
 const handleStyle: CSSProperties = {
@@ -68,10 +76,16 @@ function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
         onFocus={() => data.onPreview(data.id)}
         onBlur={data.onLeave}
         onClick={() => data.onInspect(data.id)}
-        className="nopan nodrag flex h-full w-full cursor-pointer flex-col items-center justify-center px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
+        className="nopan nodrag relative flex h-full w-full after:absolute after:-inset-[11px] after:content-[''] cursor-pointer flex-col items-center justify-center px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan"
       >
         {data.label}
-        {data.cache && <span className={`text-[10px] ${data.active ? 'text-canvas/80' : 'text-muted'}`}>{data.cache}</span>}
+        {data.cache && <span className={`text-[11px] ${data.active ? 'text-canvas/80' : 'text-muted'}`}>{data.cache}</span>}
+        {data.pods && (
+          <span className="flex items-center gap-1" role="img" aria-label={`${data.pods.length} worker pods`}>
+            {data.pods.map((pod) => <span key={pod.name} aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${pod.ready ? 'bg-cyan' : 'bg-muted'}`} />)}
+            {typeof data.backlog === 'number' && data.backlog > 0 && <span className="text-[11px] text-muted">{data.backlog}</span>}
+          </span>
+        )}
       </button>
       <Handle id="right" type="source" position={Position.Right} style={handleStyle} />
       <Handle id="bottom" type="source" position={Position.Bottom} style={handleStyle} />
@@ -85,7 +99,7 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--color-muted)' },
 }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   const inspectorRef = useRef<HTMLDivElement>(null)
   const inspectRef = useRef(onInspect)
@@ -112,11 +126,13 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       active: node.id === activeNode,
       selected: node.id === selectedNode,
       cache: nodeCacheStatus?.[node.id],
+      pods: node.id === 'worker' ? workerPods : undefined,
+      backlog: node.id === 'worker' ? backlog : undefined,
       onPreview: previewNode,
       onLeave: leaveNode,
       onInspect: inspectNode,
     },
-  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode])
+  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog])
 
   return (
     <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel">
@@ -130,7 +146,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           colorMode="dark"
           style={flowStyle}
           fitView
-          fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
+          fitViewOptions={{ padding: 0.12, maxZoom: 1, ...(fitMinZoom ? { minZoom: fitMinZoom } : {}) }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
@@ -141,7 +157,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           proOptions={{ hideAttribution: true }}
         />
       </div>
-      <div ref={inspectorRef} className="h-44 shrink-0 overflow-y-auto border-t border-hairline px-7 py-4">
+      <div ref={inspectorRef} className="h-44 shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:px-7">
         {inspectedComponent ? (
           <div className="mb-4" aria-live="polite">
             <h2 className="text-xs font-medium text-primary">{inspectedComponent.data.label}</h2>
@@ -149,11 +165,11 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
             <p className="mt-1 text-xs leading-relaxed text-muted">{inspectedComponent.data.description}</p>
             {answerText !== undefined && inspectedNode === selectedNode ? (
               <div className="mt-3 border-l border-cyan pl-3">
-                <h3 className="text-[10px] text-cyan">About This System answer</h3>
+                <h3 className="text-[11px] text-cyan">About This System answer</h3>
                 <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-primary">{answerText || 'Working…'}</p>
               </div>
             ) : (
-              <p className="mt-1 text-[10px] text-muted">Select the component for a full answer in About This System.</p>
+              <p className="mt-1 text-[11px] text-muted">Select the component for a full answer in About This System.</p>
             )}
           </div>
         ) : (

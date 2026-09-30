@@ -221,6 +221,19 @@ Server-side limits (enforced, not trusted from the client):
 | Embedding cache | Keyed on the question | Keyed on the rewritten query |
 | Retrieval cache | Keyed on the question | Keyed on the rewritten query |
 
+### 5.3.1 Implementation notes (feature/chat-context)
+
+Where the build had to choose, it chose as follows:
+
+- **Accepted input vs. used history.** `AskRequest.history` accepts up to 50 messages of 1–4,000 characters each and rejects anything larger (HTTP 422). The server then keeps the newest 6 messages within 4,000 total characters, dropping the oldest first. Roles are limited to `user`/`assistant`.
+- **Follow-up traces.** The `answer_cache` stage is not emitted for a follow-up, since the cache is not consulted, and no answer-cache lock is taken. A follow-up whose question text matches a cached first question can therefore never be served that cached answer.
+- **System prompt.** First questions keep the unchanged default grounding system prompt, and the prompt version (and so the answer cache) is untouched. Follow-ups append the untrusted-history rule to it, and the rewrite call uses its own system prompt that forbids following instructions found in the conversation.
+- **Rewrite fallbacks.** If the kill switch is on, the budget cannot cover the quarter-unit, or the rewrite fails or returns nothing usable, retrieval uses the original question. In that case the `rewritten_query` field is omitted from the retrieval event.
+- **Component questions.** Selecting an architecture node records its self-contained question in the About This System conversation but sends it without `history`, so it stays answer-cache eligible. Later typed follow-ups include it as context.
+- **Rewritten query display.** The rewritten query is shown under the answer's sources while live. It is not persisted, matching the §5.5 storage shape.
+- **Query log (§9.3).** Migration `0003_query_turn_columns` adds `turn_index` (`TINYINT UNSIGNED NOT NULL DEFAULT 0`) and `rewritten_query` (`VARCHAR(1000) NULL`) to `queries`. `question` stays the original wording. `turn_index` is the number of `user` messages in the history the client sent, before server trimming, so it keeps counting past the six-message window (0 = first question). `rewritten_query` holds the rewrite that retrieval actually used and is `NULL` for first questions and for every rewrite fallback. The other §9.3 changes (`mode` `stopped`, `ttft_ms`, `documents.metadata`) belong to other sections and are not part of this change.
+- **Budget keys.** Whole answers are still counted one per answer in the original `budget:llm:{date}` key, and rewrites are counted in quarter-units in a separate `budget:llm:rw:{date}` key. One atomic Lua script checks `4 × answers + rewrites + requested` against `4 × cap`, then increments the matching key. Old and new API pods therefore share the answer counter during a rolling deploy, so there is no transition window for answers. Accepted residual: old pods compare only answers against the cap, so they do not see rewrite usage during the brief overlap.
+
 ### 5.4 Budget
 
 A rewrite counts as 0.25 of a generated answer against the daily cap (DD1 7.2), since it is a much smaller call.

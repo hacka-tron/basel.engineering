@@ -22,6 +22,7 @@ from services.glassbox.worker.main import (
     GROUP_NAME,
     STREAM_NAME,
     enqueue_retrieval_job,
+    enqueue_synthetic_jobs,
     ensure_consumer_group,
     process_one_message,
 )
@@ -199,6 +200,104 @@ async def test_malformed_job_does_not_crash_and_is_acked_locally():
     assert client.events[0][1]["type"] == "error"
     assert client.events[0][1]["code"] == "internal"
     assert client.acked == [(STREAM_NAME, GROUP_NAME, b"1-0")]
+
+
+@pytest.mark.asyncio
+async def test_synthetic_job_sleeps_and_never_touches_db_or_publishes(monkeypatch):
+    """The stress-test path (DESIGN.md §9.4): no Bedrock/MySQL, no publish."""
+    from services.glassbox.worker import main as worker
+
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(worker.asyncio, "sleep", fake_sleep)
+    client = RecordingRedis(
+        {
+            b"request_id": b"synthetic-abc123",
+            b"corpus": b"about_me",
+            b"synthetic": b"1",
+            b"synthetic_delay_ms": b"200",
+        }
+    )
+    # session_factory is None: a synthetic job must never reach MySQL, so
+    # touching it at all would raise before the assertions below run.
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert sleep_calls == [0.2]
+    assert client.events == []
+    assert client.acked == [(STREAM_NAME, GROUP_NAME, b"1-0")]
+
+
+@pytest.mark.asyncio
+async def test_synthetic_job_defaults_to_200ms_when_delay_missing(monkeypatch):
+    from services.glassbox.worker import main as worker
+
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(worker.asyncio, "sleep", fake_sleep)
+    client = RecordingRedis({b"request_id": b"synthetic-xyz", b"synthetic": b"1"})
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert sleep_calls == [0.2]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_synthetic_jobs_flags_every_job(monkeypatch):
+    client = RecordingRedis()
+    monkeypatch.setattr(worker_module.time, "time", lambda: 1000.0)
+    enqueued = []
+    original_xadd = client.xadd
+
+    async def recording_xadd(stream, fields, **kwargs):
+        enqueued.append(fields)
+        return await original_xadd(stream, fields, **kwargs)
+
+    client.xadd = recording_xadd
+    count = await enqueue_synthetic_jobs(client, count=5, simulated_delay_ms=150)
+    assert count == 5
+    assert len(enqueued) == 5
+    request_ids = {fields["request_id"] for fields in enqueued}
+    assert len(request_ids) == 5  # each job gets a unique request_id
+    assert all(rid.startswith("synthetic-") for rid in request_ids)
+    assert all(fields["synthetic"] == "1" for fields in enqueued)
+    assert all(fields["synthetic_delay_ms"] == 150 for fields in enqueued)
+    assert all(fields["embedding_model"] == "synthetic" for fields in enqueued)
+    assert all(len(fields["embedding"]) == 2048 for fields in enqueued)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_synthetic_jobs_real_redis_never_publishes(isolated_stream):
+    """End-to-end against real local Redis: backlog grows, drains, no publish."""
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis unavailable: {exc}")
+    try:
+        await ensure_consumer_group(client)
+        enqueued = await enqueue_synthetic_jobs(client, count=3, simulated_delay_ms=5)
+        assert enqueued == 3
+        info = await client.xinfo_groups(isolated_stream)
+        assert info[0]["lag"] == 3
+        async with client.pubsub() as pubsub:
+            await pubsub.psubscribe("trace:synthetic-*")
+            for _ in range(3):
+                assert await process_one_message(
+                    client, None, consumer_name="test-worker", block_ms=100
+                )
+            # Nothing was ever published for these jobs, unlike a real request.
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.3)
+            assert message is None
+        drained = await client.xinfo_groups(isolated_stream)
+        assert drained[0]["lag"] == 0
+        assert drained[0]["pending"] == 0
+    finally:
+        await client.delete(isolated_stream)
+        await client.aclose()
 
 
 @pytest.mark.asyncio

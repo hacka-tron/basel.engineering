@@ -55,7 +55,47 @@ body {
   overflow: hidden;
 }
 
+/*
+ * font-family only: the `font` shorthand here is unlayered, so it beat
+ * Tailwind's layered `text-*` utilities and silently reset every button's and
+ * input's font-size to the inherited 16px. Size is set per element instead.
+ */
 button,
 input {
-  font: inherit;
+  font-family: inherit;
+}
+
+/*
+ * "Earthquake" screen-shake on Stress test (owner-requested wow moment,
+ * see docs/DESIGN.md §4.5's stress-test button plus the extra ask beyond the
+ * doc). Toggled via a short-lived `.earthquake-shake` class on the app root
+ * (see App.tsx) rather than a JS animation library, per the dependency-free
+ * preference. Moderate amplitude and a few hundred ms, as asked for — a
+ * genuinely noticeable jolt, not a subtle wobble.
+ */
+@keyframes earthquake-shake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-10px, 3px) rotate(-0.6deg); }
+  20% { transform: translate(9px, -4px) rotate(0.7deg); }
+  30% { transform: translate(-8px, 4px) rotate(-0.5deg); }
+  40% { transform: translate(8px, -3px) rotate(0.6deg); }
+  50% { transform: translate(-6px, 3px) rotate(-0.4deg); }
+  60% { transform: translate(6px, -2px) rotate(0.4deg); }
+  70% { transform: translate(-4px, 2px) rotate(-0.3deg); }
+  80% { transform: translate(3px, -2px) rotate(0.2deg); }
+  90% { transform: translate(-2px, 1px) rotate(-0.1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.earthquake-shake {
+  animation: earthquake-shake 450ms ease-in-out;
+}
+
+/* Skip/minimize the shake for users who've asked for less motion, rather
+ * than dropping the "wow moment" feedback entirely — a brief, low-amplitude
+ * fade stands in for it. */
+@media (prefers-reduced-motion: reduce) {
+  .earthquake-shake {
+    animation: none;
+  }
 }

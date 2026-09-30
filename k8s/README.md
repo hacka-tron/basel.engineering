@@ -12,6 +12,46 @@ is bootstrapped (status in `project/AGENT_HANDOFF.md`), it applies that
 overlay to the live cluster automatically — no manual step needed for a
 routine release.
 
+### What a release does to the running site
+
+Flux applies the whole overlay in one pass, so the recreated `migrate` and
+`ingest` Jobs and the new `api`/`retrieval-worker` pods all start together.
+The Deployments are set up so that is safe on a 2 GiB node:
+
+- **Brief downtime by design.** `api` and `retrieval-worker` use
+  `RollingUpdate` with `maxSurge: 0, maxUnavailable: 1`: a rollout never adds
+  an extra pod, so the old pod is stopped *before* its replacement starts
+  (the owner chose memory headroom over zero downtime). For the single api
+  replica that means no old/new overlap at all; when KEDA has scaled the
+  worker above one replica, old- and new-image workers coexist while
+  replicas are replaced one at a time, but never more pods than replicas. Expect the site to be
+  unavailable for a few seconds per release — the time for the new api pod to
+  start and pass `/readyz` — and longer if a migration is running.
+- **Migrations gate the new pods.** Both Deployments have a
+  `wait-for-migrations` initContainer
+  (`python -m services.glassbox.db.wait_for_migrations`) that polls the
+  database's Alembic revision (read-only) until it equals the head baked into
+  the image, i.e. until this tag's `migrate` Job has finished. It gives up
+  after 5 minutes with an `ERROR ... timed out` log line (each read is capped
+  at 5s with its own connection and socket timeouts, so a stalled MySQL can't
+  stretch the wait past that bound); the pod then shows
+  `Init:Error`/`Init:CrashLoopBackOff` and the kubelet retries it. Check
+  `kubectl -n app logs deploy/api -c wait-for-migrations` and
+  `kubectl -n app logs job/migrate`. Rolling *back* to an image older than the
+  database's schema also blocks here (the revisions no longer match), which is
+  deliberate: it refuses to run code against a schema it doesn't know.
+- **Graceful shutdown.** Uvicorn runs with `--timeout-graceful-shutdown 25`
+  (Dockerfile `CMD`) inside the api's `terminationGracePeriodSeconds: 30`, so
+  in-flight requests and SSE streams get up to 25s to finish before SIGKILL.
+- **Probes tolerate swap pressure.** Readiness and liveness use
+  `timeoutSeconds: 5`; liveness needs 6 consecutive failures (2 minutes at a
+  20s period) before a restart. A `startupProbe` on `/healthz` (every 5s, up
+  to 30 failures = 150s) holds off liveness until the process first answers,
+  so a slow boot isn't killed mid-start.
+- **Not yet ordered:** the `ingest` Job still runs alongside the rollout
+  rather than after it (a planned follow-up splits it into its own Flux
+  Kustomization).
+
 ## Manual apply / disaster recovery
 
 The node has no SSH and no public Kubernetes API — access is AWS SSM Session
@@ -62,8 +102,43 @@ self-signed certificate, so Cloudflare's SSL/TLS mode must stay on **Full**
 (not "Full (strict)", which would need a trusted origin certificate and a
 TLS Secret this cluster doesn't have yet).
 
-## Not yet built
+## Stress test / KEDA autoscaling (DESIGN.md §9.3/§9.4)
 
-KEDA autoscaling, cluster-view RBAC, and nightly ingestion are future work
-(see `project/BACKLOG.md`). When KEDA is installed, the Redis NetworkPolicy
-will also need to allow its operator pods.
+The "Stress test" demo is made of:
+
+- `k8s/base/rbac-api.yaml` — the `api` ServiceAccount (wired into
+  `api-deployment.yaml` via `serviceAccountName: api`) with a namespaced
+  Role for get/list/watch on `pods` in `app` (backs `GET /api/cluster/stream`),
+  plus a ClusterRole that can only `list` `nodes` (backs
+  `GET /api/demo/capacity`), plus `list` on `nodes` in `metrics.k8s.io` for
+  live node usage from metrics-server. If either read fails, the check fails
+  closed and the site runs the visual-only demo.
+- `k8s/overlays/prod/keda/` — KEDA itself, installed via a Flux
+  `HelmRepository`/`HelmRelease` (not Terraform's helm provider — Flux owns
+  all live cluster config, so a second install path would risk drift).
+- `k8s/overlays/prod/keda-scaling/` — the `ScaledObject` scaling
+  `retrieval-worker` 1→3 on `retrieval:jobs`' consumer-group lag.
+- **Install order:** the root overlay doesn't apply those two directories
+  directly. `k8s/overlays/prod/flux/kustomization-keda.yaml` defines two Flux
+  Kustomizations: `keda` (`wait: true`, so it's Ready only once the
+  HelmRelease has installed the chart and registered the `keda.sh` CRDs) and
+  `keda-scaling` (`dependsOn: keda`). A first install therefore never
+  dry-runs the `ScaledObject` before its CRD exists, and a KEDA failure can't
+  block the app workloads.
+- `k8s/base/worker-deployment.yaml` doesn't pin `replicas`, so KEDA's HPA
+  owns that field. A fresh Deployment defaults to 1.
+- `k8s/base/networkpolicy-data.yaml` admits the `keda` namespace to Redis,
+  since the redis-streams scaler polls it from KEDA's operator pod.
+
+**Removing KEDA later:** deleting the `ScaledObject`/HPA does not reset the
+worker count — the Deployment keeps whatever replica count KEDA last set
+(up to 3). Scale it back explicitly (`kubectl -n app scale
+deploy/retrieval-worker --replicas=1`) or re-add `replicas: 1` to
+`worker-deployment.yaml` in the same change that removes KEDA.
+
+Installing KEDA is a new cluster-level component: merging this to `main`
+(and so to `deploy`) makes Flux install it, which needs the owner's explicit
+go-ahead. Validated locally with `kubectl kustomize` on `k8s/overlays/prod`,
+`keda`, and `keda-scaling`.
+
+Nightly ingestion is still future work (see `project/BACKLOG.md`).

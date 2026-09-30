@@ -1,7 +1,7 @@
 import type { Edge, Node } from '@xyflow/react'
 
 export type NodeId =
-  | 'edge' | 'api' | 'answer_cache' | 'queue' | 'worker'
+  | 'edge' | 'api' | 'rewrite' | 'answer_cache' | 'queue' | 'worker'
   | 'embed_cache' | 'embed' | 'vector_search' | 'mysql' | 'llm'
 
 export type ArchitectureNode = Node<{
@@ -16,6 +16,7 @@ export type ArchitectureEdge = Edge & { source: NodeId; target: NodeId }
 export const architectureNodes: ArchitectureNode[] = [
   { id: 'edge', type: 'architecture', data: { label: 'Edge', implementation: 'Cloudflare + Traefik', description: 'Cloudflare receives public traffic; Traefik routes it to the site on k3s.' }, position: { x: 0, y: 0 } },
   { id: 'api', type: 'architecture', data: { label: 'API', implementation: 'Python + FastAPI', description: 'Accepts questions, coordinates the request, and streams progress and answers to the browser.' }, position: { x: 180, y: 0 } },
+  { id: 'rewrite', type: 'architecture', data: { label: 'Rewrite', implementation: 'Amazon Nova Lite via Bedrock', description: 'Turns a follow-up like "tell me more about that" into a standalone search query using the recent conversation. Skipped on a first question.' }, position: { x: 180, y: 120 } },
   { id: 'answer_cache', type: 'architecture', data: { label: 'Answer Cache', implementation: 'Redis Stack semantic cache', description: 'Reuses a grounded answer when a similar question has already been answered.' }, position: { x: 360, y: 0 } },
   { id: 'queue', type: 'architecture', data: { label: 'Queue', implementation: 'Redis Streams', description: 'Passes retrieval jobs from the API to the worker.' }, position: { x: 360, y: 120 } },
   { id: 'worker', type: 'architecture', data: { label: 'Worker', implementation: 'Python retrieval worker on k3s', description: 'Finds matching document chunks and sends trace events back to the API.' }, position: { x: 540, y: 120 } },
@@ -34,6 +35,8 @@ export function questionForComponent(id: NodeId): string {
 export const architectureEdges: ArchitectureEdge[] = [
   { id: 'edge-api', source: 'edge', target: 'api', sourceHandle: 'right', targetHandle: 'left' },
   { id: 'api-answer_cache', source: 'api', target: 'answer_cache', sourceHandle: 'right', targetHandle: 'left' },
+  { id: 'api-rewrite', source: 'api', target: 'rewrite', sourceHandle: 'bottom', targetHandle: 'top' },
+  { id: 'rewrite-embed_cache', source: 'rewrite', target: 'embed_cache', sourceHandle: 'bottom', targetHandle: 'top' },
   { id: 'answer_cache-queue', source: 'answer_cache', target: 'queue', sourceHandle: 'bottom', targetHandle: 'top' },
   { id: 'queue-worker', source: 'queue', target: 'worker', sourceHandle: 'right', targetHandle: 'left' },
   { id: 'worker-vector_search', source: 'worker', target: 'vector_search', sourceHandle: 'bottom', targetHandle: 'top' },
