@@ -59,14 +59,24 @@ _PROMPT_VERSION = "v13"
 # KEDA, k3s, Terraform, Flux, GitOps and CI/CD are live and must not match. Update
 # this list when one of these ships (or move to doc-level status metadata).
 _PLANNED_SOURCE_SIGNAL = re.compile(
-    r"\b(?:planned|deferred|not (?:yet )?(?:started|built|implemented)|"
-    r"stretch ideas?|future (?:milestones?|path|work|features?|plans?)|"
+    # "planned/future", "current-vs-planned" and "current vs. planned" name the
+    # category, not a status.
+    r"\b(?:(?<!vs\. )(?<!vs )(?<![-/])planned(?![-/])|deferred|"
+    r"not (?:yet )?(?:started|built|implemented)|"
+    r"stretch ideas?|(?<!/)future (?:milestones?|path|work|features?|plans?)|"
     r"milestone 4|M4|auto ?scaling groups?|ASG|launch templates?|self-healing|"
     r"drive connectors?|S3 raw zone|SQS)\b",
     re.IGNORECASE,
 )
 # Code, manifests and infrastructure describe what runs; they are never "planned".
 _CODE_SOURCE_PREFIXES = ("services/", "k8s/", "infra/")
+# Labels go on the planned text itself, not the whole chunk: one chunk often mixes a
+# live component with a sentence about future work, and a chunk-wide "not built"
+# label steered answers about the live part toward "No". A heading or list item is
+# one unit; a paragraph or table row is split into sentences.
+PLANNED_MARK = "[PLANNED, not built yet]"
+_UNIT_LINE = re.compile(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s)")
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=\S)")
 _ANSWER_LOCK_TTL_MS = 15000
 _ANSWER_LOCK_WAIT_S = 3.0
 _ANSWER_LOCK_RELEASE = """
@@ -208,19 +218,35 @@ def _clean_rewrite(raw: str) -> str | None:
     return line[:_REWRITE_MAX_CHARS] or None
 
 
+def _mark_planned(text: str) -> str:
+    """Prefix each heading, list item, or sentence that names planned work."""
+    lines = []
+    for line in text.split("\n"):
+        if _UNIT_LINE.match(line):
+            if _PLANNED_SOURCE_SIGNAL.search(line):
+                indent = line[: len(line) - len(line.lstrip())]
+                line = f"{indent}{PLANNED_MARK} {line.lstrip()}"
+        elif _PLANNED_SOURCE_SIGNAL.search(line):
+            line = " ".join(
+                f"{PLANNED_MARK} {sentence}"
+                if _PLANNED_SOURCE_SIGNAL.search(sentence)
+                else sentence
+                for sentence in _SENTENCE_BREAK.split(line)
+            )
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _prompt(
     question: str, chunks: list[WorkerChunk], history: list[HistoryMessage] | None = None
 ) -> str:
     def source_line(chunk: WorkerChunk) -> str:
-        status = (
-            " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
-            if chunk.source_path == "docs/DESIGN-003-ingestion.md"
-            else " [PLANNED DESIGN; features in this source are not implemented yet]"
-            if not chunk.source_path.startswith(_CODE_SOURCE_PREFIXES)
-            and _PLANNED_SOURCE_SIGNAL.search(chunk.text)
-            else ""
-        )
-        return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
+        if chunk.source_path == "docs/DESIGN-003-ingestion.md":
+            status = " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
+            return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
+        if chunk.source_path.startswith(_CODE_SOURCE_PREFIXES):
+            return f"[{chunk.n}] {chunk.source_path}: {chunk.text}"
+        return f"[{chunk.n}] {chunk.source_path}: {_mark_planned(chunk.text)}"
 
     sources = "\n".join(source_line(chunk) for chunk in chunks)
     return (
@@ -234,8 +260,9 @@ def _prompt(
         "If a source says it is planned, future, on a roadmap, or not yet built, "
         "say so explicitly. "
         "Bracketed source status overrides present-tense design prose. "
-        "If asked whether a feature works now, answer No when its bracketed status says "
-        "not implemented yet. "
+        f"Text prefixed {PLANNED_MARK} describes work that does not exist today: if asked "
+        "whether that feature works now, answer No. The marker applies only to the heading, "
+        "list item, or sentence it prefixes, not to unmarked text in the same source. "
         "If the sources answer the question even in part, answer from them. Only if they "
         "do not answer it at all, reply with exactly "
         f'"{ABSTENTION_ANSWER}" and nothing else. '
@@ -547,7 +574,10 @@ async def _stream(
         if not chunks:
             # A new embedding model can temporarily have no indexed chunks. Avoid
             # sending an empty-source prompt or spending an LLM budget slot.
-            answer = "I don't know from what I have."
+            answer = ABSTENTION_ANSWER
+            timings["abstained"] = 1
+            if not history:
+                timings["answer_cache_skipped"] = 1
             yield frame("token", {"text": answer})
             total_ms = elapsed_ms(request_start_ts)
             await asyncio.to_thread(

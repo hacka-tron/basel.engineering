@@ -42,6 +42,15 @@ def allow_all_limits(monkeypatch):
         '"I don\'t know from what I have."',
         "I don't know from what I have. The sources cover other topics.",
         "I don't know from what I have, but the sources mention Redis.",
+        # Drift from the requested sentence must not be cached either.
+        "I don't know from the provided sources.",
+        "The sources don't say whether the queue is live.",
+        "The provided sources do not mention the queue.",
+        "None of the sources describe the queue.",
+        "There is no information about the queue in the sources.",
+        "I cannot answer that from the sources.",
+        # Intentionally an abstention: a hedge that opens with "I don't know".
+        "I don't know from what I have learned so far whether the ASG is live.",
     ],
 )
 def test_abstention_variants_are_detected(answer):
@@ -55,6 +64,8 @@ def test_abstention_variants_are_detected(answer):
         "The queue is a Redis Stream named retrieval:jobs.",
         "I know the queue is a Redis Stream.",
         "Workers read the queue; I don't know from what I have is not an answer here.",
+        "The sources describe the queue as a Redis Stream.",
+        "Sources show the worker reads retrieval:jobs. It does not say more.",
     ],
 )
 def test_real_answers_are_cacheable(answer):
@@ -218,3 +229,20 @@ def test_grounding_rules_ask_for_the_exact_abstention_sentence():
     assert f'exactly "{ABSTENTION_ANSWER}" and nothing else' in GROUNDING_RULES
     assert "Design prose alone is not evidence" not in GROUNDING_RULES
     assert "services/, k8s/, or infra/" in GROUNDING_RULES
+
+
+def test_no_sources_refusal_is_flagged_in_the_query_log(monkeypatch):
+    from services.glassbox.api import ask
+
+    saved = []
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    redis_client = MemoryRedis(outcome="empty")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: redis_client)
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: RecordingAnswerCache())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
+    stream = events(
+        TestClient(app).post("/api/ask", json={"question": "Anything?", "corpus": "about_me"})
+    )
+    assert "".join(d["text"] for n, d in stream if n == "token") == ABSTENTION_ANSWER
+    assert saved[0]["timings"]["abstained"] == 1
+    assert saved[0]["timings"]["answer_cache_skipped"] == 1
