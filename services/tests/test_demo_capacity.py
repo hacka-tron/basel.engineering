@@ -129,3 +129,44 @@ def test_direct_load_request_cannot_bypass_capacity_gate(monkeypatch):
     assert response.status_code == 200
     assert response.json()["enqueued"] == 0
     assert response.json()["started"] is False
+
+
+class _LockRedis:
+    def __init__(self, ttl):
+        self._ttl = ttl
+
+    async def ttl(self, key):
+        assert key == "demo:load:lock"
+        return self._ttl
+
+    async def aclose(self):
+        pass
+
+
+def test_capacity_reports_cooldown_while_real_burst_lock_is_held(monkeypatch):
+    # Codex review: another visitor's lock must show every visitor the
+    # simulated state, not a tiger that promises a real burst.
+    from services.glassbox.api import capacity
+
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(capacity.redis, "from_url", lambda _url: _LockRedis(212))
+
+    async def must_not_assess():
+        raise AssertionError("node capacity is irrelevant while the lock is held")
+
+    monkeypatch.setattr(capacity, "assess_capacity", must_not_assess)
+    body = TestClient(app).get("/api/demo/capacity").json()
+    assert body == {
+        "sufficient": False,
+        "reason": "A real stress test is cooling down.",
+        "retry_after_s": 212,
+    }
+
+
+def test_capacity_falls_through_to_node_check_without_a_lock(monkeypatch):
+    from services.glassbox.api import capacity
+
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(capacity.redis, "from_url", lambda _url: _LockRedis(-2))
+    node = FakeNodeClient("2Gi", used="1000Mi")
+    assert _capacity(monkeypatch, node)["sufficient"] is True

@@ -15,7 +15,9 @@ covers usage drifting between them, and the burst is short-lived.
 
 import asyncio
 import logging
+import os
 
+import redis.asyncio as redis
 from fastapi import APIRouter
 
 from services.glassbox.api.cluster import _incluster_client
@@ -28,6 +30,9 @@ LOGGER = logging.getLogger(__name__)
 EXTRA_WORKERS_MI = 4 * 128
 SAFETY_MARGIN_MI = 256
 REQUIRED_FREE_MI = EXTRA_WORKERS_MI + SAFETY_MARGIN_MI
+
+# Global stress-test cooldown lock, taken by POST /api/demo/load (demo.py).
+LOCK_KEY = "demo:load:lock"
 
 _NODES_PATH = "/api/v1/nodes"
 _NODE_METRICS_PATH = "/apis/metrics.k8s.io/v1beta1/nodes"
@@ -87,6 +92,29 @@ async def assess_capacity() -> dict[str, bool | str]:
         return _denied("Cluster capacity is unavailable.")
 
 
+async def _cooldown_remaining_s() -> int:
+    """Seconds left on a real burst's cooldown lock, or 0 (also when Redis is unreachable)."""
+    try:
+        client = redis.from_url(os.environ["REDIS_URL"])
+        try:
+            return max(0, int(await client.ttl(LOCK_KEY)))
+        finally:
+            await client.aclose()
+    except Exception:
+        LOGGER.warning("Could not read the stress-test cooldown lock", exc_info=True)
+        return 0
+
+
 @router.get("/api/demo/capacity")
-async def demo_capacity() -> dict[str, bool | str]:
+async def demo_capacity() -> dict[str, bool | str | int]:
+    # While any visitor's real burst holds the lock, a click can't start
+    # another one, so report that instead of the node's headroom: every
+    # visitor then sees the simulated-demo state, not just the one who clicked.
+    remaining = await _cooldown_remaining_s()
+    if remaining > 0:
+        return {
+            "sufficient": False,
+            "reason": "A real stress test is cooling down.",
+            "retry_after_s": remaining,
+        }
     return await assess_capacity()

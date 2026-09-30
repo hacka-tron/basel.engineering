@@ -5,12 +5,11 @@ import os
 import redis.asyncio as redis
 from fastapi import APIRouter
 
-from services.glassbox.api.capacity import assess_capacity
+from services.glassbox.api.capacity import LOCK_KEY, assess_capacity
 from services.glassbox.worker.main import enqueue_synthetic_jobs
 
 router = APIRouter()
 
-LOCK_KEY = "demo:load:lock"
 LOCK_TTL_S = 300
 SYNTHETIC_JOB_COUNT = 300
 SYNTHETIC_JOB_DELAY_MS = 200

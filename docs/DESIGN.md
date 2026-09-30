@@ -455,7 +455,7 @@ spec:
 
 ### 9.4 Stress test flow
 
-1. Visitor clicks **Stress test**. Frontend calls `POST /api/demo/load`.
+1. Visitor clicks **Stress test**. The frontend rechecks `GET /api/demo/capacity`, which reports the cooldown if `demo:load:lock` is held, or otherwise the node's live free memory. If a cooldown is running or there isn't room, the click plays the simulated animation and sends no load request. Otherwise the frontend calls `POST /api/demo/load`, which rechecks capacity before taking the lock.
 2. API tries `SET demo:load:lock 1 NX EX 300`. If the lock exists, returns the remaining cooldown.
 3. API adds 300 synthetic jobs to `retrieval:jobs` (flag `synthetic=1`, about 200 ms simulated work each). No LLM calls, no Bedrock calls (embeddings come from cache).
 4. Backlog exceeds the KEDA target; workers scale up toward 5 within 10 to 20 seconds.

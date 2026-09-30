@@ -12,6 +12,8 @@ export type DemoCapacity = {
   reason: string
   /** Set while a real burst's server-side cooldown runs: clicks are simulated until it ends. */
   realCooldown?: boolean
+  /** From GET /api/demo/capacity when a real burst's cooldown lock is held. */
+  retry_after_s?: number
 }
 
 const unknownCapacity: DemoCapacity = { sufficient: false, reason: 'Checking cluster capacity…' }
@@ -22,6 +24,7 @@ async function fetchCapacity(): Promise<DemoCapacity> {
     if (!response.ok) throw new Error('capacity request failed')
     const value = await response.json()
     if (typeof value.sufficient !== 'boolean' || typeof value.reason !== 'string') throw new Error('invalid capacity')
+    if (value.retry_after_s !== undefined && typeof value.retry_after_s !== 'number') throw new Error('invalid capacity')
     return value as DemoCapacity
   } catch {
     return { sufficient: false, reason: 'Cluster capacity is unavailable.' }
@@ -52,11 +55,6 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void): Stres
   const realIntervalRef = useRef<number | null>(null)
   const busyRef = useRef(false)
 
-  useEffect(() => {
-    let mounted = true
-    void fetchCapacity().then((result) => { if (mounted) setCapacity(result) })
-    return () => { mounted = false }
-  }, [])
 
   const startCountdown = useCallback((seconds: number) => {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current)
@@ -77,24 +75,38 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void): Stres
 
   // A real burst holds the server's demo lock for its cooldown. Until it
   // expires, show the bunny and simulate; afterwards recheck capacity so the
-  // tiger comes back only if there's still room.
+  // tiger comes back only if there's still room. Counts down to a deadline
+  // rather than decrementing per tick, since background tabs throttle timers.
   const startRealCooldown = useCallback((seconds: number) => {
     if (realIntervalRef.current !== null) window.clearInterval(realIntervalRef.current)
-    setRealCooldownSeconds(seconds)
+    const deadline = Date.now() + seconds * 1000
+    const remaining = () => Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+    setRealCooldownSeconds(remaining())
     realIntervalRef.current = window.setInterval(() => {
-      setRealCooldownSeconds((current) => {
-        if (current === null || current <= 1) {
-          if (realIntervalRef.current !== null) {
-            window.clearInterval(realIntervalRef.current)
-            realIntervalRef.current = null
-          }
-          void fetchCapacity().then(setCapacity)
-          return null
-        }
-        return current - 1
-      })
+      const left = remaining()
+      if (left > 0) {
+        setRealCooldownSeconds(left)
+        return
+      }
+      if (realIntervalRef.current !== null) {
+        window.clearInterval(realIntervalRef.current)
+        realIntervalRef.current = null
+      }
+      setRealCooldownSeconds(null)
+      void fetchCapacity().then(setCapacity)
     }, 1000)
   }, [])
+
+  // Another visitor's real burst may already hold the lock when the page loads.
+  useEffect(() => {
+    let mounted = true
+    void fetchCapacity().then((result) => {
+      if (!mounted) return
+      setCapacity(result)
+      if (result.retry_after_s) startRealCooldown(result.retry_after_s)
+    })
+    return () => { mounted = false }
+  }, [startRealCooldown])
 
   useEffect(() => () => {
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current)
@@ -114,6 +126,7 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void): Stres
       // Recheck at click time; the status displayed before the click may be stale.
       const currentCapacity = await fetchCapacity()
       setCapacity(currentCapacity)
+      if (currentCapacity.retry_after_s) startRealCooldown(currentCapacity.retry_after_s)
       if (!currentCapacity.sufficient) {
         onVisual?.()
         startCountdown(9)
