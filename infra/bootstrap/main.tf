@@ -137,10 +137,21 @@ data "aws_iam_policy_document" "ci" {
   }
 
   # infra/modules/compute/zram.tf: the glassbox-zram-swap Command document
-  # and the State Manager association that runs it on the node. Documents
-  # are scoped by the glassbox- name prefix; association IDs are generated
-  # by AWS, so association actions are scoped to this account and region.
-  # CreateAssociation is also authorized against the target instance ARN.
+  # and the State Manager association that runs it on the node.
+  #
+  # Scope, honestly: documents are limited to the glassbox- name prefix and
+  # can't be shared (no ModifyDocumentPermission). Create/UpdateAssociation
+  # are authorized against the document they name, which must be a
+  # glassbox-* document, so this role can never associate AWS-RunShellScript
+  # or any other document. But association IDs are AWS-generated (no name or
+  # tag condition exists for them), so Describe/Delete by ID reach any
+  # association in this account/region; and IAM does not check an
+  # association's Targets (InstanceIds or tags) against any resource ARN, so
+  # no policy can confine an association to the Glassbox node. Residual
+  # risk: this role could run a glassbox-* document it wrote on another
+  # instance here. Accepted because the account has exactly one instance and
+  # this role already has ec2:* in the region (it could equally rewrite that
+  # instance's user_data).
   statement {
     sid    = "ManageProjectSsmDocuments"
     effect = "Allow"
@@ -151,7 +162,6 @@ data "aws_iam_policy_document" "ci" {
       "ssm:DescribeDocumentPermission",
       "ssm:GetDocument",
       "ssm:ListDocumentVersions",
-      "ssm:ModifyDocumentPermission",
       "ssm:UpdateDocument",
       "ssm:UpdateDocumentDefaultVersion",
     ]
@@ -170,7 +180,6 @@ data "aws_iam_policy_document" "ci" {
     resources = [
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*",
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*",
-      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*",
     ]
   }
 
@@ -362,7 +371,6 @@ data "aws_iam_policy_document" "plan" {
     resources = [
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*",
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*",
-      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*",
     ]
   }
 

@@ -16,8 +16,11 @@
 #      /dev/zram0 on every boot: half of RAM, swap priority 100.
 #   2. Leaves /swapfile alone (priority -2): the kernel fills zram first and
 #      only overflows to the EBS-backed swap file when zram is full.
-#   3. Persists zram-oriented VM sysctls in /etc/sysctl.d/ and applies them.
-#   4. Activates zram0 now if it is not already an active swap device.
+#   3. Activates zram0 now if it is not already an active swap device.
+#   4. Only once /dev/zram0 is confirmed active: persists zram-oriented VM
+#      sysctls in /etc/sysctl.d/ and applies them. If activation fails it
+#      exits non-zero without applying them (and removes them if an earlier
+#      run left them), so the node never favors swapping with disk swap only.
 #
 # Rollback (manual, as root on the node) - see docs/DESIGN.md section 9.7.
 set -euo pipefail
@@ -147,44 +150,6 @@ fi
 ZRAM_CHANGED=0
 write_if_changed "$ZRAM_CONF" "$ZRAM_CONTENT" && ZRAM_CHANGED=1
 
-# 3. Sysctls commonly recommended with zram swap:
-#  - swappiness 150: swapping anon pages to zram costs a compression, which
-#    is cheaper than dropping file cache (binaries, SQLite pages) and
-#    re-reading it from EBS.
-#  - page-cluster 0: zram has no seek cost, so read-ahead of 8 pages only
-#    wastes CPU and memory.
-#  - watermark_boost_factor 0 / watermark_scale_factor 125: no reclaim bursts
-#    after fragmentation events; kswapd starts a little earlier and runs
-#    steadier.
-SYSCTL_CONTENT="# Managed by Terraform: infra/modules/compute/zram-swap.sh (SSM association
-# glassbox-zram-swap). Hand edits are overwritten.
-vm.swappiness = 150
-vm.page-cluster = 0
-vm.watermark_boost_factor = 0
-vm.watermark_scale_factor = 125"
-write_if_changed "$SYSCTL_CONF" "$SYSCTL_CONTENT" || true
-# Always re-apply (cheap) so a manual `sysctl -w` drift self-heals weekly.
-run sysctl -p "$SYSCTL_CONF"
-
-# 4. Activate zram0 now (the generator handles every later boot).
-if zram_swap_active; then
-  log "$ZRAM_DEV is already an active swap device; not touching it"
-  if [ "$ZRAM_CHANGED" = 1 ]; then
-    log "note: new zram config takes effect on the next reboot (resizing an in-use swap device would need swapoff)"
-  fi
-else
-  run systemctl daemon-reload
-  if [ "$DRY_RUN" = 0 ] && ! systemctl cat "$SWAP_UNIT" >/dev/null 2>&1; then
-    echo "[zram] zram-generator did not create $SWAP_UNIT; check $ZRAM_CONF" >&2
-    exit 1
-  fi
-  # Restart (not start) the setup unit so a previously failed or half-done
-  # setup is redone; the device is not in use as swap at this point.
-  run systemctl reset-failed "$SETUP_UNIT" "$SWAP_UNIT" || true
-  run systemctl restart "$SETUP_UNIT"
-  run systemctl start "$SWAP_UNIT"
-fi
-
 # 2. /swapfile stays as lower-priority overflow. Re-enable it if it is in
 #    fstab but somehow off; never disable it.
 if [ -f /swapfile ] && grep -qE '^/swapfile[[:space:]]' /etc/fstab; then
@@ -195,10 +160,65 @@ if [ -f /swapfile ] && grep -qE '^/swapfile[[:space:]]' /etc/fstab; then
   fi
 fi
 
-if [ "$DRY_RUN" = 0 ] && ! zram_swap_active; then
-  echo "[zram] $ZRAM_DEV is not an active swap device after setup" >&2
+# 3. Activate zram0 now (the generator handles every later boot).
+activate_zram() {
+  systemctl daemon-reload || return 1
+  if ! systemctl cat "$SWAP_UNIT" >/dev/null 2>&1; then
+    echo "[zram] zram-generator did not create $SWAP_UNIT; check $ZRAM_CONF" >&2
+    return 1
+  fi
+  # Restart (not start) the setup unit so a previously failed or half-done
+  # setup is redone; the device is not in use as swap at this point.
+  systemctl reset-failed "$SETUP_UNIT" "$SWAP_UNIT" 2>/dev/null || true
+  systemctl restart "$SETUP_UNIT" || return 1
+  systemctl start "$SWAP_UNIT" || return 1
+  zram_swap_active
+}
+
+if zram_swap_active; then
+  log "$ZRAM_DEV is already an active swap device; not touching it"
+  if [ "$ZRAM_CHANGED" = 1 ]; then
+    log "note: new zram config takes effect on the next reboot (resizing an in-use swap device would need swapoff)"
+  fi
+elif [ "$DRY_RUN" = 1 ]; then
+  log "dry-run: would run: systemctl daemon-reload; systemctl restart $SETUP_UNIT; systemctl start $SWAP_UNIT"
+  log "dry-run: sysctls below are applied only once $ZRAM_DEV is confirmed active"
+elif ! activate_zram; then
+  # The swap-happy sysctls below only make sense with RAM-backed swap; with
+  # only /swapfile they would push more pages to EBS. So on failure: never
+  # apply them, and if a previous successful run left them persisted (e.g.
+  # zram broke after a reboot), remove them and restore AL2023's defaults.
+  echo "[zram] ERROR: $ZRAM_DEV did not become an active swap device; zram sysctls NOT applied" >&2
+  systemctl --no-pager status "$SETUP_UNIT" "$SWAP_UNIT" 2>&1 | tail -20 >&2 || true
+  if [ -f "$SYSCTL_CONF" ]; then
+    rm -f "$SYSCTL_CONF"
+    sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10 >&2 || true
+    echo "[zram] removed $SYSCTL_CONF from an earlier run and restored AL2023 default VM sysctls" >&2
+  fi
+  swapon --show >&2 || true
   exit 1
 fi
+
+# 4. Sysctls commonly recommended with zram swap - only reached once
+#    /dev/zram0 is confirmed active (or in dry-run):
+#  - swappiness 150: swapping anon pages to zram costs a compression, which
+#    is cheaper than dropping file cache (binaries, SQLite pages) and
+#    re-reading it from EBS.
+#  - page-cluster 0: zram has no seek cost, so read-ahead of 8 pages only
+#    wastes CPU and memory.
+#  - watermark_boost_factor 0 / watermark_scale_factor 125: no reclaim bursts
+#    after fragmentation events; kswapd starts a little earlier and runs
+#    steadier.
+SYSCTL_CONTENT="# Managed by Terraform: infra/modules/compute/zram-swap.sh (SSM association
+# glassbox-zram-swap). Hand edits are overwritten. Removed automatically if
+# zram fails to activate on a later run.
+vm.swappiness = 150
+vm.page-cluster = 0
+vm.watermark_boost_factor = 0
+vm.watermark_scale_factor = 125"
+write_if_changed "$SYSCTL_CONF" "$SYSCTL_CONTENT" || true
+# Always re-apply (cheap) so a manual `sysctl -w` drift self-heals weekly.
+run sysctl -p "$SYSCTL_CONF"
 
 log "--- state"
 swapon --show || true
