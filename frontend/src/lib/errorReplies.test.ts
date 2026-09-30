@@ -42,7 +42,26 @@ test('rate limiting keeps the wait time', () => {
 })
 
 test('an exhausted daily budget says so', () => {
-  assert.match(errorReplyFor({ code: 'budget_exhausted' }), /today's answer budget/)
+  assert.match(errorReplyFor({ code: 'budget_exhausted' }), /answer limit for today/)
+})
+
+test('no reply blames the visitor', () => {
+  const replies = [
+    ...ERROR_REPLIES,
+    errorReplyFor({ code: 'rate_limited', retry_after_s: 37 }),
+    errorReplyFor({ code: 'rate_limited' }),
+    errorReplyFor({ code: 'budget_exhausted' }),
+  ]
+  const blame = /\b(you asked|you've asked|your fault|too many questions|slow down|lot of questions at once|you did|you broke|you sent)\b/i
+  for (const reply of replies) assert.doesNotMatch(reply, blame, reply)
+})
+
+test('can avoid several replies at once, e.g. the one saved just above after a reload', () => {
+  for (let i = 0; i < 200; i++) {
+    const reply = pickErrorReply([ERROR_REPLIES[0], ERROR_REPLIES[1]])
+    assert.ok(reply !== ERROR_REPLIES[0] && reply !== ERROR_REPLIES[1])
+  }
+  assert.ok(ERROR_REPLIES.includes(pickErrorReply([...ERROR_REPLIES])))
 })
 
 test('generic failures get a random reply', () => {
