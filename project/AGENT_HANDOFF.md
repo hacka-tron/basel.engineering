@@ -1,5 +1,41 @@
 # Agent handoff
 
+## Handing off to Codex — Claude, 2026-09-30, session ending (low on tokens)
+
+**Active coordinator: Claude, handing execution to Codex.** This entry is about a *different* track than the "Architecture hover and highlight refinement"/README/favicon entries immediately below (PRs #30-33) — those are Codex's own already-merged work from a concurrent/prior run, untouched by anything here. This entry covers the tail end of Claude's own session, ending on a token limit mid-task.
+
+### Merged and live from Claude's track this session
+
+- PR #27 (docs closeout), #28 (`feature/frontend-ui-polish` — mobile spacing, retractable contact reveal, header/GitHub icon fix, header group swap), #29 (retract-arrow repositioned + pointing right, `StatsBar` latency changed from server `total_ms` to client-measured time-to-first-token) — all merged to `main`, all auto-deployed via Flux (confirmed hands-off, no manual steps needed).
+
+### Two branches with real, uncommitted-further work — pick up here
+
+**1. `feature/stress-test-keda`** (worktree: `.worktrees/stress-test-keda`). Four commits exist and are solid: backend (`POST /api/demo/load` synthetic burst, `GET /api/cluster/stream` SSE), KEDA-as-Flux-HelmRelease + RBAC + `ScaledObject` (infra-as-code, confirmed chart version `2.21.0` and `helm-controller` presence live), frontend (button, pod dots, shake effect). **Nothing has been applied to the live cluster.** Full detail in `project/SNAPSHOT.md`'s prior checkpoint.
+
+**Known unresolved risk, needs a decision before merging:** the `ScaledObject` and the KEDA `HelmRelease` are both in the *same* Flux Kustomization (`k8s/overlays/prod/kustomization.yaml`). A `HelmRelease` only *requests* an install — `helm-controller` installs KEDA (and registers its CRDs) asynchronously, so on first merge Flux will likely try to apply `ScaledObject` before that CRD exists, and (per everything learned this session about Flux Kustomizations) one failing resource blocks the whole apply. It should self-heal within a few minutes once KEDA's install finishes and Flux retries — unlike the Job/annotation bug, this isn't a permanent misconfiguration — but it could briefly block unrelated changes landing in the same window. **The owner was asked to choose between (a) merge as-is and accept a few minutes of turbulence, or (b) split into two Flux `Kustomization` objects with an explicit `dependsOn` for zero turbulence — no answer was given before this session ended.** Ask before merging, or use your own judgment if the owner isn't available and document the choice here.
+
+**New feature requested, NOT yet implemented on this branch:** a real resource-capacity check before the stress test runs, with a status icon:
+- The cluster's own documented budget (`docs/DESIGN.md` §9.7) says peak memory usage (5 worker replicas + everything else) is "~1.9-2.0 Gi" on a 2 GiB node — "confirmed tight in practice, not just on paper." The owner wants an honest check of whether there's actually room before triggering a real burst, not a blind attempt that could evict something.
+- Build `GET /api/demo/capacity` (or similar): read the node's live allocatable memory (`GET /api/v1/nodes` — needs a **new**, additional `ClusterRole`/`ClusterRoleBinding`, `get`/`list` on `nodes` only, cluster-scoped since Nodes aren't namespaced — keep this separate from the existing namespaced `Role` in `k8s/base/rbac-api.yaml`, don't broaden that one). Compare live allocatable against the *known, already-declared* static requests of always-on workloads (mysql/redis/api/1 baseline worker, using the §9.7 table's numbers) plus the ~360Mi delta 4 more workers would add, with a small safety margin. Return `{"sufficient": bool, "reason": "..."}`; treat cluster-unreachable (local dev) as "insufficient/unknown," never assume yes.
+- Frontend: a small icon near the Stress Test button with a **real visible hover tooltip** (not just `aria-label` — the owner was explicit that hovering should visibly show what's going on, unlike the current bare-`aria-label` GitHub icon). Lion icon + "there's room, this will really scale workers" when sufficient; bunny icon + "not enough headroom right now, this is visual only" when not.
+- When insufficient: clicking Stress Test still does the full client-side spectacle (shake, simulated pod-dot animation 1→5→1, fake backlog counter) but must **not** call the real `/api/demo/load` — nothing real gets enqueued, KEDA never tries to schedule something that won't fit.
+- A background agent was dispatched for this (prompt has the full spec, same as above) but failed immediately on session-limit — **zero commits landed**, branch is still exactly at `62928de`. Re-dispatch or implement directly.
+
+**2. `fix/typography-consistency`** (worktree: `.worktrees/typography-pass`, branched off `main` at `e9ee6dc`). **Zero commits — completely unstarted**, the dispatched agent failed immediately on session-limit before doing anything. Owner's exact request, verbatim: "the contact me text looks out of place, it should be the same size as the about basel and about this system sections. also the text in the suggesting questions and ask box is too big, and the diagram text is too small. please see other chatbots for inspiration about text size to make this more visually appealing."
+
+Already-measured facts to start from, so this doesn't need re-deriving:
+- `ContactReveal.tsx`'s "Contact me" button and the nav tabs in `App.tsx` both already use `text-xs` — same font-size. The "out of place" look is almost certainly the nav tabs' `px-3 py-2` padding vs. Contact/GitHub's bare `gap-3` wrapper with no per-button padding — fix padding, not font-size.
+- `Chat.tsx`: suggested-question chips are `text-xs` (~line 90), input box and message bubbles are `text-sm` (~lines 63, 110) — everything else in the app's chrome (nav, StatsBar, diagram labels, citations) is `text-xs`, so the jump to `text-sm` for just these two elements likely reads as inconsistent. Don't flatten everything to one size, though — mainstream chat UIs (ChatGPT, Claude.ai) give conversation content *more* visual weight than chrome, not less.
+- `ArchitecturePanel.tsx` node labels (~line 32) are `text-xs`, unweighted (no `font-medium`), inside small 42×124px boxes — reads as an afterthought against the diagram's edges/boxes even at the same nominal size as everything else; likely needs weight/contrast more than a size bump.
+- Verify all of this live in a real browser before changing anything — the diagnosis above is inference from reading class names, not confirmed by eye yet. Note: this branch and its worktree predate PRs #30-33 below (branched from `main` at `e9ee6dc`) — rebase onto current `main` before starting so the typography fixes apply on top of the README/favicon/architecture-inspection work too.
+
+### Housekeeping
+
+- `project/BACKLOG.md`'s `> RESUME HERE` and `project/SNAPSHOT.md`'s latest checkpoint should be updated once the above lands — check their current content first, Codex's concurrent PRs #30-33 already moved them forward once.
+- Both worktrees/branches already exist and are correctly set up (see paths above) — resume in them directly, don't recreate.
+
+---
+
 ## Architecture hover and highlight refinement — Codex, 2026-09-30
 
 **Active coordinator: Claude.** PR #33 merged the first architecture inspection feature. The owner then clarified that hover/focus should preview a component without switching the chat topic; only selecting it should switch to About This System. Branch `fix/architecture-highlight-states` in `.worktrees/architecture-inspection` makes that change and separates the visual states: subtle background/border on hover, persistent light border on selection, and a cyan filled tile while a component runs. The selected border remains after its running stage ends. `docs/DESIGN.md` §4.4 now describes this behavior. Frontend lint/build and `git diff --check` passed. A headless Chrome run with mocked `/api/ask` confirmed that hovering API keeps About Basel selected and makes zero requests, clicking sends an `about_system` question, an API stage start fills the whole tile, and stage end removes the fill while retaining the selected border. This branch needs Claude review before merge; no production deploy was made.
