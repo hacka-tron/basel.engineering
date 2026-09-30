@@ -16,8 +16,12 @@ spec:
       author:
         name: fluxcdbot
         email: fluxcdbot@users.noreply.github.com
-      messageTemplate: |
-        deploy: bump image to {{range .Updated.Images}}{{println .}}{{end}}
+      # A static message, not a template referencing .Updated/.Changed: the
+      # exact template field shape has changed across Flux versions (found
+      # the hard way - .Updated is removed in the version bootstrapped
+      # here), and the commit diff itself already shows exactly which tag
+      # changed, so there's nothing a dynamic message adds.
+      messageTemplate: "deploy: automated image tag update"
     push:
       branch: deploy
   update:
