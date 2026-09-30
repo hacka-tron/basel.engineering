@@ -101,7 +101,7 @@ The nodes can also be inspected directly. Hovering or keyboard-focusing one show
 
 ### 4.5 Stress test button
 
-Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 5, then shrinking back after about a minute. A tiger icon beside the button means the node has room for a real burst; a bunny means it doesn't, and a click plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
+Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 3, then shrinking back after about a minute. A tiger icon beside the button means the node has room for a real burst; a bunny means it doesn't, and a click plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
 
 ### 4.6 Citations
 
@@ -414,7 +414,7 @@ type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: st
 | Namespace | Workload | Kind | Notes |
 |---|---|---|---|
 | `app` | `api` | Deployment (1 replica) | Readiness probe on `/readyz` |
-| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 5) | Requests 50m CPU / 64Mi, limit 128Mi |
+| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi |
 | `app` | `ingest` | Job (per deploy) + CronJob (nightly) | Idempotent |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
@@ -437,9 +437,9 @@ spec:
   scaleTargetRef:
     name: retrieval-worker
   minReplicaCount: 1
-  maxReplicaCount: 5
+  maxReplicaCount: 3
   pollingInterval: 5        # seconds
-  advanced:                 # 5→1 is the HPA's scale-down, not cooldownPeriod
+  advanced:                 # 3→1 is the HPA's scale-down, not cooldownPeriod
     horizontalPodAutoscalerConfig:
       behavior:
         scaleDown:
@@ -459,7 +459,7 @@ spec:
 1. Visitor clicks **Stress test**. The frontend rechecks `GET /api/demo/capacity`, which reports the cooldown if `demo:load:lock` is held, or otherwise the node's live free memory. If a cooldown is running or there isn't room, the click plays the simulated animation and sends no load request. Otherwise the frontend calls `POST /api/demo/load`, which rechecks capacity before taking the lock.
 2. API tries `SET demo:load:lock 1 NX EX 300`. If the lock exists, returns the remaining cooldown.
 3. API adds 300 synthetic jobs to `retrieval:jobs` (flag `synthetic=1`, about 200 ms simulated work each). No LLM calls, no Bedrock calls (embeddings come from cache).
-4. Backlog exceeds the KEDA target; workers scale up toward 5 within 10 to 20 seconds.
+4. Backlog exceeds the KEDA target; workers scale up toward 3 within 10 to 20 seconds.
 5. Frontend watches `/api/cluster/stream`; pod dots appear on the worker node, with a live backlog counter.
 6. Backlog drains; after the HPA's 45-second scale-down stabilization window, workers drop back to 1 and the dots disappear (about a minute).
 
@@ -512,8 +512,12 @@ The endpoint only forwards pod name, phase and readiness for pods labeled `app=r
 | Redis | 60 to 100 Mi |
 | MySQL | 200 to 350 Mi (tuned down via mysqld flags - default config OOMKilled at 250Mi during the actual first deploy) |
 | API | 120 Mi |
-| Workers (5 at peak) | 450 Mi |
-| **Total at peak** | **about 1.9 to 2.0 Gi** |
+| Workers (3 at peak) | 270 to 384 Mi (projection: ~90 Mi observed per worker, 128 Mi limit each) |
+| **Total at peak** | **about 1.5 to 1.9 Gi** (sum of the rows above; a projection, not a measurement) |
+
+Measured on the live node on 2026-09-30 during a rollout (process RSS, not pod requests): k3s-server ~606 MB, Flux controllers ~195 MB, MySQL ~129 MB resident (more in swap), KEDA ~90 MB, API + worker ~115 MB, with ~440–510 MB of the 1 GiB swap in use — i.e. the node was already running over physical memory before any stress-test burst.
+
+The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at 128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this 2 GiB node, which is staying at 2 GiB; it was 5 workers before that decision.
 
 Tight, and confirmed tight in practice, not just on paper — MySQL's real memory needs pushed the earlier 150-250Mi estimate up during the first live deploy. Mitigations: a 1 GiB swap file created in user data, embeddings offloaded to Bedrock (no local model), MySQL's own memory tuned down explicitly (`innodb_buffer_pool_size`, `key_buffer_size`, `performance_schema=OFF`, etc. - see `k8s/base/mysql-statefulset.yaml`) rather than just raising its limit, and a documented upgrade path to `t4g.medium` (4 GiB) if memory pressure shows up despite that.
 
@@ -564,6 +568,7 @@ infra/
 - IAM instance role with least privilege: `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the two model ARNs, `ssm:GetParameter` on `/glassbox/*`, SSM Session Manager for shell access (no SSH port open).
 - `user_data`: create swap, install k3s, install Flux bootstrap prerequisites.
 - Elastic IP so the Cloudflare-proxied origin address survives stop/start.
+- **AMI is pinned after first launch** (`lifecycle { ignore_changes = [ami] }`): the AMI comes from the SSM "latest" parameter, and k3s/MySQL/Redis state lives on the root volume, so a newly published AL2023 image must not force a replacement. Patch in place with `dnf`; to intentionally roll to a new AMI, take a backup and, with owner approval, run `terraform apply -replace=module.compute.aws_instance.glassbox`.
 
 ### 10.5 Database
 
@@ -752,7 +757,7 @@ Each phase ends in something that works. Hand these to Claude Code one phase at 
 
 **Phase 5: Autoscaling demo**
 - KEDA, synthetic load endpoint, cluster stream, pod dots in the UI.
-- *Done when:* pressing Stress test visibly scales workers from 1 to 5 and back.
+- *Done when:* pressing Stress test visibly scales workers from 1 to 3 and back.
 
 **Phase 6: CI/CD + GitOps**
 - Image builds to GHCR, Flux bootstrap, frontend deploy workflow, plan-on-PR.
@@ -769,7 +774,7 @@ Fill in the numbers after Phase 7; don't claim them before they're measured.
 
 - Designed and deployed a retrieval-augmented generation service on AWS (Terraform, Kubernetes/k3s, self-hosted MySQL, Redis, Bedrock) serving cited answers at [X] ms p50 latency.
 - Built a three-layer Redis cache (semantic answer, embedding, retrieval) with versioned-key invalidation, reaching a [X]% hit rate and cutting LLM calls by [X]%.
-- Implemented queue-driven autoscaling with KEDA on Redis Streams, scaling workers from 1 to 5 in [X] seconds under synthetic load.
+- Implemented queue-driven autoscaling with KEDA on Redis Streams, scaling workers from 1 to 3 in [X] seconds under synthetic load.
 - Provisioned all infrastructure as modular Terraform with remote state, GitHub OIDC (no static credentials) and pull-based GitOps deploys via Flux.
 - Added a retrieval evaluation harness to CI (recall@5 = [X]) that gates changes to chunking and ranking.
 
