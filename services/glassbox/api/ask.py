@@ -278,6 +278,8 @@ def _save_query(
     total_ms: int,
     tokens_in: int,
     tokens_out: int,
+    turn_index: int,
+    rewritten_query: str | None,
     cache_status: str = "miss",
     mode: str = "full",
 ) -> None:
@@ -294,6 +296,8 @@ def _save_query(
                 total_ms=total_ms,
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
             )
         )
         session.commit()
@@ -347,6 +351,9 @@ async def _stream(
         llm_provider = get_llm_provider()
         answer_model_id = f"{provider.model_id}|{llm_provider.model_id}|{_PROMPT_VERSION}"
         history = bounded_history(request.history)
+        # DESIGN-002 §9.3: 0 = first question. Counts every prior user turn the client
+        # sent (not just the retained window); the raw cap keeps it within TINYINT.
+        turn_index = sum(message.role == "user" for message in request.history)
         # Follow-ups retrieve with a standalone rewrite (DESIGN-002 §5.2); the answer
         # prompt still gets the original question plus history.
         retrieval_query = request.question
@@ -429,6 +436,8 @@ async def _stream(
                 _save_query,
                 request_id=request_id,
                 request=request,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
                 chunks=chunks,
                 timings=timings,
                 total_ms=total_ms,
@@ -527,6 +536,8 @@ async def _stream(
                 _save_query,
                 request_id=request_id,
                 request=request,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
                 chunks=chunks,
                 timings=timings,
                 total_ms=total_ms,
@@ -551,6 +562,8 @@ async def _stream(
                 _save_query,
                 request_id=request_id,
                 request=request,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
                 chunks=chunks,
                 timings=timings,
                 total_ms=total_ms,
@@ -576,6 +589,8 @@ async def _stream(
                 _save_query,
                 request_id=request_id,
                 request=request,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
                 chunks=chunks,
                 timings=timings,
                 total_ms=total_ms,
@@ -628,6 +643,8 @@ async def _stream(
             _save_query,
             request_id=request_id,
             request=request,
+            turn_index=turn_index,
+            rewritten_query=rewritten_query,
             chunks=chunks,
             timings=timings,
             total_ms=total_ms,

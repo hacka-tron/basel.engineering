@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import struct
 
 import pytest
@@ -14,6 +15,20 @@ from services.glassbox.api.main import app
 from services.glassbox.db.models import Chunk, Document, Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.worker.main import STREAM_NAME
+
+# Integration tests default to the shared local MySQL; point them at a private,
+# fully migrated instance with GLASSBOX_TEST_MYSQL_PORT.
+TEST_MYSQL_PORT = os.environ.get("GLASSBOX_TEST_MYSQL_PORT", "3306")
+
+
+def skip_unless_query_log_migrated(engine) -> None:
+    """Skip when the local queries table predates migration 0003 (DESIGN-002 §9.3)."""
+    with engine.connect() as connection:
+        columns = {row[0] for row in connection.exec_driver_sql("SHOW COLUMNS FROM queries")}
+    missing = {"turn_index", "rewritten_query"} - columns
+    if missing:
+        engine.dispose()
+        pytest.skip(f"local MySQL queries table not migrated to head (missing {sorted(missing)})")
 
 
 @pytest.fixture(autouse=True)
@@ -550,7 +565,7 @@ def test_worker_error_ends_stream_before_llm(monkeypatch):
 @pytest.fixture
 def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
-    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
@@ -565,6 +580,7 @@ def integration_stack(monkeypatch):
     except Exception as exc:
         engine.dispose()
         pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    skip_unless_query_log_migrated(engine)
 
     async def check_redis():
         client = redis.from_url("redis://127.0.0.1:6379/15")

@@ -15,6 +15,7 @@ from services.glassbox.cache.embedding import embedding_cache_key
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.trace import next_seq
+from services.tests.test_ask_endpoint import TEST_MYSQL_PORT, skip_unless_query_log_migrated
 
 
 @pytest.mark.asyncio
@@ -59,7 +60,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     from services.glassbox.providers.fake import FakeLLMProvider
 
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
-    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
@@ -70,6 +71,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     except Exception as exc:
         engine.dispose()
         pytest.skip(f"local MySQL unavailable: {exc}")
+    skip_unless_query_log_migrated(engine)
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
     get_session_factory.cache_clear()

@@ -116,6 +116,8 @@ def test_schema_columns_and_constraints():
         "tokens_in",
         "tokens_out",
         "created_at",
+        "turn_index",
+        "rewritten_query",
     ]
     assert isinstance(queries.c.id.type, BigInteger)
     assert queries.c.id.primary_key and queries.c.id.autoincrement
@@ -145,6 +147,10 @@ def test_schema_columns_and_constraints():
     assert isinstance(queries.c.created_at.type, TIMESTAMP)
     assert queries.c.created_at.nullable
     assert str(queries.c.created_at.server_default.arg) == "CURRENT_TIMESTAMP"
+    assert not queries.c.turn_index.nullable
+    assert str(queries.c.turn_index.server_default.arg) == "0"
+    assert queries.c.rewritten_query.nullable
+    assert queries.c.rewritten_query.type.length == 1000
     assert not queries.foreign_keys
     assert len(queries.indexes) == 1
     index = next(iter(queries.indexes))
@@ -203,6 +209,9 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "ENUM('full','retrieval_only') NOT NULL" in ddl["queries"]
     assert ddl["queries"].count("JSON") == 2
     assert "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP" in ddl["queries"]
+    # DESIGN-002 §9.3 conversational columns.
+    assert "turn_index TINYINT UNSIGNED NOT NULL DEFAULT 0" in ddl["queries"]
+    assert "rewritten_query VARCHAR(1000)," in ddl["queries"]
     index = next(iter(Query.__table__.indexes))
     assert str(CreateIndex(index).compile(dialect=mysql_dialect())) == (
         "CREATE INDEX idx_created ON queries (created_at)"
@@ -229,3 +238,15 @@ def test_database_url_uses_required_environment_and_default_port(monkeypatch):
 
     monkeypatch.setenv("MYSQL_PORT", "3307")
     assert get_database_url().port == 3307
+
+
+def test_conversation_columns_migration_follows_queries_table():
+    import importlib
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0003_query_turn_columns"
+    )
+    assert migration.down_revision == "0002_add_queries_table"
+    assert migration.revision == "0003_query_turn_columns"
+    # alembic_version.version_num is VARCHAR(32).
+    assert len(migration.revision) <= 32

@@ -316,3 +316,43 @@ def test_rewrite_skipped_when_llm_kill_switch_is_on(harness):
 def test_follow_up_query_log_keeps_original_question(harness):
     events(harness["post"]())
     assert harness["saved"][0]["request"].question == "tell me more about that"
+
+
+# --- query log (DESIGN-002 §9.3) ----------------------------------------------------
+
+
+def test_first_question_logs_turn_zero_without_rewrite(harness):
+    events(harness["post"](question="Who is Basel?", history=None))
+    [saved] = harness["saved"]
+    assert saved["turn_index"] == 0
+    assert saved["rewritten_query"] is None
+    assert saved["request"].question == "Who is Basel?"
+
+
+def test_follow_up_logs_turn_index_and_rewritten_query(harness):
+    history = HISTORY + [
+        {"role": "user", "content": "Where else?"},
+        {"role": "assistant", "content": "Also at Google."},
+    ]
+    events(harness["post"](history=history))
+    [saved] = harness["saved"]
+    assert saved["turn_index"] == 2
+    assert saved["rewritten_query"] == REWRITTEN
+    assert saved["request"].question == "tell me more about that"
+
+
+def test_follow_up_turn_index_counts_user_turns_beyond_retained_window(harness):
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(20)
+    ]
+    events(harness["post"](history=history))
+    [saved] = harness["saved"]
+    assert saved["turn_index"] == 10
+
+
+def test_follow_up_with_failed_rewrite_logs_no_rewritten_query(harness):
+    harness["llm"].fail_rewrite = True
+    events(harness["post"]())
+    [saved] = harness["saved"]
+    assert saved["turn_index"] == 1
+    assert saved["rewritten_query"] is None
