@@ -76,7 +76,7 @@ Unchanged from DD1 §17 Phases 0–3, run entirely with Docker Compose (MySQL, R
 | Phase | Work | Done when |
 |---|---|---|
 | 4 | Terraform: `network` (VPC, no NAT), `compute` (EC2 t4g.small + k3s user_data), `database` (RDS MySQL), `secrets` (SSM), `budgets`. **No `edge` module.** Cloudflare DNS record → Elastic IP. Security group scoped to Cloudflare's IP ranges. Traefik serves static frontend + `/api/*`. K8s base manifests, RBAC, NetworkPolicies, manual first deploy | `https://basel.engineering` serves the site and answers questions |
-| 5 | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI | Stress test visibly scales workers 1→5 and back |
+| 5 | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI | Stress test visibly scales workers 1→3 and back |
 | 6 | GitHub Actions (GHCR images), Flux bootstrap, frontend deploy step (now: sync built files onto the node instead of S3+CloudFront invalidation — e.g., include the frontend build in the API/Traefik image, or a small `scp`/`rsync` step in the deploy workflow), plan-on-PR, post-deploy Cloudflare streaming check (section 3.3) | Merging to `main` deploys without touching the server |
 | 7 | README with screenshots, footer stats, suggested questions tuned, load test numbers recorded | Polish complete |
 

@@ -37,7 +37,7 @@ function ContactReveal() {
       <button
         type="button"
         onClick={() => setRevealed(true)}
-        className="text-xs text-muted transition-colors hover:text-primary"
+        className="inline-flex min-h-11 items-center text-sm text-muted transition-colors hover:text-primary md:min-h-0"
       >
         Contact me
       </button>
@@ -45,12 +45,12 @@ function ContactReveal() {
   }
 
   return (
-    <span className="flex items-center gap-2 text-xs">
+    <span className="flex flex-wrap items-center gap-x-1.5 text-sm">
       <button
         type="button"
         onClick={() => setRevealed(false)}
         aria-label="Hide email address"
-        className="px-1 text-sm leading-none text-muted transition-colors hover:text-primary"
+        className="-ml-2.5 inline-flex min-h-11 min-w-11 items-center justify-center text-sm leading-none text-muted transition-colors hover:text-primary md:ml-0 md:min-h-0 md:min-w-0 md:px-1"
       >
         →
       </button>
@@ -59,7 +59,7 @@ function ContactReveal() {
         type="button"
         onClick={handleCopy}
         aria-label="Copy email address"
-        className="rounded-[3px] border border-hairline px-2 py-1 text-muted transition-colors hover:text-primary"
+        className="inline-flex min-h-11 items-center rounded-[3px] border border-hairline px-2 text-sm text-muted transition-colors hover:text-primary md:min-h-0 md:py-1"
       >
         {copied ? 'Copied' : 'Copy'}
       </button>
