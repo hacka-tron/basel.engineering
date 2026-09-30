@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**Plan role fix applied; protected PR plan awaits review (Codex, 2026-09-30):** The owner approved the policy update; Terraform applied exactly one in-place IAM policy change, and the next bootstrap plan reports no changes. Live IAM simulation allows the needed SSM/ECR reads and denies ECR writes. Draft PR #13's current run `36675476076` has passed validate and waits at the `terraform-plan` environment gate. After owner approval, inspect the plan job and PR comment. The fix is still unmerged; do not treat Terraform CI as proven until the plan job succeeds.
+**Handoff to Claude — Terraform CI verified, automatic previews configured (Codex, 2026-09-30):** Protected PR run `36675954502` succeeded and commented **no production changes**. At the owner's request, `terraform-plan` now has no required reviewer; `terraform-prod` still requires owner review and accepts only `main`. Draft PR #13 carries the plan-role IAM fix and documentation on `feature/flux-prerequisites`; it is unmerged and needs Claude's code review. After review and merge, the `main` plan should run automatically and the production apply should wait for the owner's approval. The actual `terraform-prod` apply path remains unproven. The owner also requested a later security audit of automatic previews; see the task below.
 
 **First protected plan failure (resolved at IAM level, 2026-09-30):** Run `36674696537` successfully assumed AWS credentials and opened production state, then failed on denied reads for the public AL2023 AMI SSM parameter and the project ECR repository. The owner approved the narrowly scoped policy fix; the current PR run above will determine whether the full production refresh now succeeds.
 
@@ -111,6 +111,8 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 - **M4 (DD3):** Google Drive + Git connectors, S3 raw zone, SQS + DLQ, KEDA ScaledJob ingestion, nightly reconciliation, blue-green re-embedding.
 
 ## Bugs / stubs
+
+- **Security audit of automatic Terraform previews:** Before granting anyone else repository write access or accepting privileged previews from new PR sources, review whether a PR can change workflow/Terraform code to read or leak the `terraform-plan` Cloudflare token, AWS read-role credentials, SSM parameters, or production state. Recheck the same-repository/fork guard, GitHub environment protection, OIDC trust and IAM scope, plan logs/comments/artifacts, and whether restoring a preview approval gate is warranted. Record the findings and any changes before broadening access; revisit at the next infrastructure security review even if access stays unchanged.
 
 Deferred from Phase 1a's ingestion script review (`services/glassbox/ingest/run.py`) — acceptable at current scale (174 chunks, local dev, single-worker batch script), worth revisiting if this ever runs under real concurrent load or against a much larger corpus:
 

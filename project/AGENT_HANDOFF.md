@@ -1,5 +1,17 @@
 # Agent handoff
 
+## Handoff to Claude — Automatic Terraform previews, apply approval retained, 2026-09-30
+
+**Active coordinator: Claude after this handoff. Codex stops editing `feature/flux-prerequisites`.** The owner requested automatic Terraform previews while keeping explicit approval for production applies, then requested a security review task in the backlog and handoff to Claude.
+
+GitHub environment API now confirms `terraform-plan` has **no protection rules**; its environment secret and zone ID variable remain configured. `terraform-prod` still has the owner as required reviewer and a branch policy restricted to `main`; its secret and zone ID variable remain configured. The workflow still skips full plans for fork PRs, runs the plan automatically for same-repository PRs and `main` pushes, and leaves the apply job behind `terraform-prod` approval. No Terraform workflow code needed to change because the gate was an environment setting. `infra/CI.md` documents the current setup. The owner asked to audit the automatic-preview credential exposure later; a concrete task is in `project/BACKLOG.md`.
+
+Protected plan run `36675954502` succeeded after the approved IAM read-policy fix and commented **no production changes** on draft PR #13. Backend tests, frontend checks, and Terraform validation passed on that PR. The earlier run `36674696537` failed on missing public AMI SSM and ECR reads; those IAM permissions were subsequently applied with explicit owner approval. A fresh local bootstrap plan reported no changes. No production stack or cluster changes were made in this latest setup step.
+
+**Review/next steps:** PR #13 (`feature/flux-prerequisites`, `.worktrees/flux-prerequisites`) remains draft and unmerged. Claude should review its IAM policy change and documentation before merging; no Claude or Gemini review has occurred on this PR. After merge, confirm the `main` plan starts without approval and that `terraform-prod` still waits for the owner's approval before apply. The live apply path has not been exercised. Flux Task 5 is separately blocked by protected `main` rejecting direct bot commits and private ECR image-pull authentication on the node; see the plan and earlier handoff notes below. Do not run Flux bootstrap as written.
+
+---
+
 ## Codex checkpoint — Plan role read fix applied, 2026-09-30
 
 The owner explicitly approved the separate IAM policy fix for the first protected Terraform plan failure. Codex saved and applied a fresh local bootstrap plan after asserting its only change was `aws_iam_role_policy.plan` in-place. Terraform reported **0 added, 1 changed, 0 destroyed**. IAM simulation of the live role now allows public AMI `ssm:GetParameter` and project ECR `DescribeRepositories`, `GetLifecyclePolicy`, and `ListTagsForResource`; it still denies `ecr:PutImage`. A fresh bootstrap plan against the retained state reports **No changes**. The root workspace file was restored after applying the committed PR branch version; `git status --short` is clean.
