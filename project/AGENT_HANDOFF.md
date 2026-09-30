@@ -1,5 +1,51 @@
 # Agent handoff
 
+## Handoff to Claude — Automatic Terraform previews, apply approval retained, 2026-09-30
+
+**Active coordinator: Claude after this handoff. Codex stops editing `feature/flux-prerequisites`.** The owner requested automatic Terraform previews while keeping explicit approval for production applies, then requested a security review task in the backlog and handoff to Claude.
+
+GitHub environment API now confirms `terraform-plan` has **no protection rules**; its environment secret and zone ID variable remain configured. `terraform-prod` still has the owner as required reviewer and a branch policy restricted to `main`; its secret and zone ID variable remain configured. The workflow still skips full plans for fork PRs, runs the plan automatically for same-repository PRs and `main` pushes, and leaves the apply job behind `terraform-prod` approval. No Terraform workflow code needed to change because the gate was an environment setting. The first new PR run after removing the gate, `36678599909`, started its plan job automatically after validation, succeeded, and commented **no changes**. `infra/CI.md` documents the current setup. The owner asked to audit the automatic-preview credential exposure later; a concrete task is in `project/BACKLOG.md`.
+
+Protected plan run `36675954502` succeeded after the approved IAM read-policy fix and commented **no production changes** on draft PR #13. Backend tests, frontend checks, and Terraform validation passed on that PR. The earlier run `36674696537` failed on missing public AMI SSM and ECR reads; those IAM permissions were subsequently applied with explicit owner approval. A fresh local bootstrap plan reported no changes. No production stack or cluster changes were made in this latest setup step.
+
+**Review/next steps:** PR #13 (`feature/flux-prerequisites`, `.worktrees/flux-prerequisites`) remains draft and unmerged. Claude should review its IAM policy change and documentation before merging; no Claude or Gemini review has occurred on this PR. After merge, confirm the `main` plan starts without approval and that `terraform-prod` still waits for the owner's approval before apply. The live apply path has not been exercised. Flux Task 5 is separately blocked by protected `main` rejecting direct bot commits and private ECR image-pull authentication on the node; see the plan and earlier handoff notes below. Do not run Flux bootstrap as written.
+
+---
+
+## Codex checkpoint — Plan role read fix applied, 2026-09-30
+
+The owner explicitly approved the separate IAM policy fix for the first protected Terraform plan failure. Codex saved and applied a fresh local bootstrap plan after asserting its only change was `aws_iam_role_policy.plan` in-place. Terraform reported **0 added, 1 changed, 0 destroyed**. IAM simulation of the live role now allows public AMI `ssm:GetParameter` and project ECR `DescribeRepositories`, `GetLifecyclePolicy`, and `ListTagsForResource`; it still denies `ecr:PutImage`. A fresh bootstrap plan against the retained state reports **No changes**. The root workspace file was restored after applying the committed PR branch version; `git status --short` is clean.
+
+Draft PR #13's current Terraform run `36675476076` passed validation and is waiting for the owner's required `terraform-plan` environment review. Have the owner approve this exact run, then inspect the plan result and PR comment. The code is still unmerged, so future bootstrap plans from `main` would propose reverting the policy until PR #13 is reviewed and merged. Flux blockers remain unresolved.
+
+---
+
+## Codex checkpoint — First protected Terraform plan failed, fix prepared, 2026-09-30
+
+The owner approved draft PR #13's `terraform-plan` environment job in run `36674696537`. OIDC role assumption and production state initialization succeeded; the plan failed on two `AccessDeniedException`s: `ssm:GetParameter` for the public AL2023 arm64 AMI parameter and `ecr:DescribeRepositories` for `glassbox`. AWS IAM simulation confirmed the plan role denies these actions; its policy only covered project SSM parameters and had no ECR reads. This is a policy omission, not a Cloudflare token failure.
+
+Branch `feature/flux-prerequisites` now adds narrowly scoped public AMI SSM read and project ECR `DescribeRepositories`, `GetLifecyclePolicy`, `ListTagsForResource` reads to `infra/bootstrap/main.tf`. `terraform fmt -check` and `terraform validate` passed in the isolated worktree. A fresh local bootstrap plan using the retained state showed **0 adds, 1 in-place policy update, 0 destroys**. IAM simulation of the proposed policy allowed the four needed reads and still denied `ecr:PutImage`. The owner has **not yet approved or applied this new plan**. After review and explicit owner approval, apply the policy, rerun the protected PR plan, and verify its PR comment. Flux blockers remain as recorded below.
+
+---
+
+## Codex checkpoint — Bootstrap IAM applied, 2026-09-30
+
+**Active coordinator: Codex.** The owner added `CLOUDFLARE_API_TOKEN` to both `terraform-plan` and `terraform-prod` GitHub environments; `gh secret list` verified both names without exposing values. The owner explicitly approved applying the bootstrap plan. Codex saved a fresh plan to `/private/tmp/glassbox-bootstrap-approved.tfplan` and applied that exact file. Terraform reported **2 added, 1 changed, 0 destroyed**: new `glassbox-ci-plan` role and inline policy, plus `glassbox-ci` trust changed to the protected `terraform-prod` environment. A fresh `terraform plan -detailed-exitcode` returned 0 with **No changes**, and `aws iam get-role` verified the plan role's immutable GitHub OIDC subject. No production stack or cluster changes were made.
+
+Draft PR #13 (`feature/flux-prerequisites`, `.worktrees/flux-prerequisites`) records the Cloudflare permission correction and Flux preflight blockers. Its backend, frontend, and Terraform validate jobs passed. Its Terraform plan job in run `36673561180` is waiting for the owner's required `terraform-plan` environment review. After approval, verify the plan job succeeds and posts its PR comment. Flux bootstrap remains blocked by the Git write and ECR pull issues below.
+
+---
+
+## Codex continuation — Terraform CI setup and Flux preflight, 2026-09-30
+
+Both protected GitHub environments exist. Codex set nonsecret `CLOUDFLARE_ZONE_ID=0d20c987878c222aaea75af989c8f460` in `terraform-plan` and `terraform-prod`, using the value in the live Terraform state; both were verified via `gh variable list`. Neither environment has `CLOUDFLARE_API_TOKEN` yet. The owner was asked to create zone-scoped tokens and set the secrets directly in GitHub, without pasting them into chat. Correct plan-token permissions are Zone Read, DNS Read, and Cache Rules Read; prod needs Zone Read, DNS Edit, and Cache Rules Edit. The instructions in `infra/CI.md` are corrected in this branch.
+
+A fresh read-only `terraform plan` in `infra/bootstrap` showed exactly **2 additions** (`glassbox-ci-plan` role and policy), **1 in-place update** (`glassbox-ci` OIDC trust to the protected `terraform-prod` environment), **0 destroys**. The owner was asked for the explicit approval required by the prior handoff before any AWS apply; no approval has arrived and **nothing was applied**. The latest failed Terraform workflow run (`36671785475`) stops at `AssumeRoleWithWebIdentity`, as expected while the plan role does not exist.
+
+Flux Task 5 has two preflight blockers: GitHub confirms required checks plus `enforce_admins: true` on `main`, so direct Flux pushes to that branch would fail; and private ECR pulls lack both EC2 role read permission and k3s registry/credential-provider configuration. A read-only SSM check confirmed the credential-provider and registry paths are absent on the live node (command `c73a63a1-1c29-4516-a8d6-efebacef0713`). Do not run Flux bootstrap as written. The plan's Task 5 now records these findings; a Git write path and ECR authentication design must be agreed and prepared before requesting live-bootstrap approval. No cluster configuration was changed.
+
+---
+
 ## Handing off to Codex — Claude, 2026-09-30, session ending (low on tokens)
 
 **Active coordinator: Claude, but handing execution to Codex for the next stretch.** Owner said to wrap up cleanly rather than start new multi-step work. Everything below is committed and pushed to `main` unless stated otherwise.
@@ -9,7 +55,7 @@
 **Just did, not yet finished:** created the two GitHub environments `terraform.yml` needs — `terraform-plan` (required reviewer: owner, no branch restriction) and `terraform-prod` (required reviewer: owner, restricted to `main` only) — both via `gh api`, both confirmed correctly configured.
 
 **Next concrete steps, in order, for whoever picks this up:**
-1. **Add Cloudflare secrets to both new environments** (per `infra/CI.md`): `terraform-plan` needs a **read-only** `CLOUDFLARE_API_TOKEN` (Zone Read only); `terraform-prod` needs the existing edit-capable one (DNS Edit, Cache Rules Edit, Zone Read — same permissions already used for the manual `TF_VAR_cloudflare_api_token` runs). Both environments also need `CLOUDFLARE_ZONE_ID` as an environment **variable** (not secret — it's not sensitive). The owner needs to create/roll these in the Cloudflare dashboard (https://dash.cloudflare.com/profile/api-tokens) and add them via `gh secret set CLOUDFLARE_API_TOKEN --env terraform-plan --repo hacka-tron/basel.engineering` (and again for `terraform-prod`), plus `gh variable set CLOUDFLARE_ZONE_ID --env <env> --body <zone-id>`.
+1. **Add Cloudflare secrets to both new environments** (per `infra/CI.md`): `terraform-plan` needs a **read-only** `CLOUDFLARE_API_TOKEN` (Zone Read, DNS Read, Cache Rules Read); `terraform-prod` needs the existing edit-capable one (DNS Edit, Cache Rules Edit, Zone Read — same permissions already used for the manual `TF_VAR_cloudflare_api_token` runs). Both environments also need `CLOUDFLARE_ZONE_ID` as an environment **variable** (not secret — it's not sensitive). The owner needs to create/roll these in the Cloudflare dashboard (https://dash.cloudflare.com/profile/api-tokens) and add them via `gh secret set CLOUDFLARE_API_TOKEN --env terraform-plan --repo hacka-tron/basel.engineering` (and again for `terraform-prod`), plus `gh variable set CLOUDFLARE_ZONE_ID --env <env> --body <zone-id>`.
 2. **Apply `infra/bootstrap` for real** (owner-run, real AWS infra — `cd infra/bootstrap && terraform apply -auto-approve`; plan should show additions for `glassbox-ci-plan` role+policy and possibly an update to `glassbox-ci`'s trust condition, depending on what's already live — check `terraform plan` output first, don't assume).
 3. **Confirm the first real `terraform-ci` workflow run** — open any PR touching `infra/**` (or just re-run the existing failed run via `gh run rerun --failed` once the above is done) and confirm the `plan` job succeeds and posts a PR comment, then confirm `apply` succeeds after merge + environment approval click.
 4. **Task 5 — Flux bootstrap with Image Update Automation** on the live cluster (see `docs/superpowers/plans/2026-09-29-app-cicd-flux.md`'s Task 5). This is the one still-missing piece that makes merges actually deploy live — **requires explicit owner go-ahead immediately before running** (first automated write to the live cluster's config) and a fine-grained PAT for Flux's git write access. The owner already asked once tonight why frontend changes weren't showing up live — this is exactly why: the build/push pipeline works, but nothing yet deploys it.

@@ -6,17 +6,28 @@ then applies `infra/envs/prod` after a merge to `main`. `infra/bootstrap` remain
 a manually applied local-state root. Fork PRs receive formatting and
 validation checks, but do not receive production state or Cloudflare access.
 
-## One-time setup before merging the workflow
+As of 2026-09-30, both environments, their Cloudflare secrets and zone ID
+variables, and the bootstrap IAM roles are configured. The owner approved and
+applied the plan role's read-policy fix in draft PR #13. Protected PR run
+`36675954502` then completed successfully and reported no production changes.
+The owner subsequently chose automatic previews: `terraform-plan` has no
+required reviewer, while `terraform-prod` still requires owner approval and
+accepts only `main`.
+
+## Environment setup and recovery
 
 1. In GitHub repository Settings → Environments, create `terraform-plan` and
-   `terraform-prod`. Add the owner as a **required reviewer** to both. Restrict
-   `terraform-prod` deployments to `main`; leave `terraform-plan` available to
-   PR refs. Keep these review gates enabled. The plan job executes PR Terraform
-   code with access to production state, so review the PR before approving it.
-2. In `terraform-plan`, add environment secret `CLOUDFLARE_API_TOKEN` with
-   Cloudflare zone read permissions sufficient for DNS and Cache Rules reads.
-   In `terraform-prod`, add a separate `CLOUDFLARE_API_TOKEN` with the existing
-   zone-scoped DNS/Cache Rules edit permissions. In **each** environment, add
+   `terraform-prod`. Add the owner as a **required reviewer** to `terraform-prod`
+   only. Restrict `terraform-prod` deployments to `main`; leave `terraform-plan`
+   available to PR refs with no reviewer. The plan job runs automatically for
+   same-repository PRs and reads production state and Cloudflare with scoped
+   credentials. Fork PRs receive validation only. Review Terraform code before
+   merging; adding a repository write collaborator also grants that person the
+   ability to run a privileged same-repository preview.
+2. In `terraform-plan`, add environment secret `CLOUDFLARE_API_TOKEN` scoped to
+   the `basel.engineering` zone with Zone Read, DNS Read, and Cache Rules Read.
+   In `terraform-prod`, add a separate `CLOUDFLARE_API_TOKEN` scoped to the same
+   zone with Zone Read, DNS Edit, and Cache Rules Edit. In **each** environment, add
    variable `CLOUDFLARE_ZONE_ID` for `basel.engineering`. Do not use repository
    secrets for these values, because the environment gates their release.
 3. From `infra/bootstrap`, using the owner's AWS credentials and the retained
@@ -24,8 +35,8 @@ validation checks, but do not receive production state or Cloudflare access.
    that the plan adds only `glassbox-ci-plan` and its policy, updates the
    `glassbox-ci` trust policy, and exposes the new output. Then run
    `terraform apply`. The workflow cannot update its own bootstrap roles.
-4. Merge the reviewed workflow branch. The first `main` run will wait for
-   `terraform-plan` approval, then for `terraform-prod` approval. Inspect the
+4. Merge the reviewed workflow branch. The `main` plan runs automatically,
+   then the apply job waits for `terraform-prod` approval. Inspect the fresh
    production plan log before approving apply. Confirm the run completes and
    review the resulting Terraform state changes.
 
