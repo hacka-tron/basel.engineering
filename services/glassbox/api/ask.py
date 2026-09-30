@@ -27,6 +27,7 @@ from services.glassbox.cache.embedding import (
 from services.glassbox.cache.retrieval import RedisRetrievalCache
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
+from services.glassbox.killswitch import get_kill_switch
 from services.glassbox.limits import client_ip_hash, get_daily_budget, get_rate_limiter
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
 from services.glassbox.trace import elapsed_ms, next_seq
@@ -412,6 +413,31 @@ async def _stream(
                 {
                     "total_ms": total_ms,
                     "mode": "full",
+                    "answer_cache": "miss",
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                },
+            )
+            return
+
+        if await get_kill_switch(client).llm_disabled():
+            total_ms = elapsed_ms(request_start_ts)
+            await asyncio.to_thread(
+                _save_query,
+                request_id=request_id,
+                request=request,
+                chunks=chunks,
+                timings=timings,
+                total_ms=total_ms,
+                tokens_in=0,
+                tokens_out=0,
+                mode="retrieval_only",
+            )
+            yield frame(
+                "done",
+                {
+                    "total_ms": total_ms,
+                    "mode": "retrieval_only",
                     "answer_cache": "miss",
                     "tokens_in": 0,
                     "tokens_out": 0,

@@ -415,6 +415,32 @@ def test_daily_budget_exhaustion_returns_sources_without_llm(monkeypatch):
     assert saved[0]["mode"] == "retrieval_only"
 
 
+def test_kill_switch_returns_sources_without_llm_or_budget_reservation(monkeypatch):
+    from services.glassbox.api import ask
+    from services.glassbox.killswitch import RedisKillSwitch
+
+    class NoBudget:
+        async def reserve(self):
+            pytest.fail("disabled LLM must not reserve a budget slot")
+
+    client = MemoryRedis()
+    client.cache[RedisKillSwitch.KEY] = b"1"
+    saved = []
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: NoBudget())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
+    stream = events(
+        TestClient(app).post("/api/ask", json={"question": "Who is Basel?", "corpus": "about_me"})
+    )
+    done = next(data for name, data in stream if name == "done")
+    retrieval = next(data for name, data in stream if name == "retrieval")
+    assert done["mode"] == "retrieval_only"
+    assert retrieval["chunks"][0]["snippet"] == "Basel builds software."
+    assert all(name != "token" for name, _ in stream)
+    assert saved[0]["mode"] == "retrieval_only"
+
+
 def test_empty_model_filtered_retrieval_answers_without_llm(monkeypatch):
     from services.glassbox.api import ask
 
