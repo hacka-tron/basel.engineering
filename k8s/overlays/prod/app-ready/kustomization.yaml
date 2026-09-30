@@ -1,0 +1,7 @@
+# Intentionally empty. The `app-ready` Flux Kustomization
+# (flux/kustomization-ingest.yaml) applies nothing; it exists only to run
+# health checks on the api and retrieval-worker Deployments so that `ingest`
+# can dependsOn it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []

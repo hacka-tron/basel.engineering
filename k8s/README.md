@@ -1,8 +1,10 @@
 # Kubernetes manifests
 
 Glassbox runs on a single k3s node (see `docs/DESIGN.md` §10 for the full
-architecture). `k8s/base` holds every workload; `k8s/overlays/prod` layers on
-top of it to pin the deployed image tag in one place.
+architecture). `k8s/base` holds every long-running workload plus the `migrate`
+Job; `k8s/overlays/prod` layers on top of it to pin the deployed image tag and
+adds Flux's own objects. The `ingest` Job lives in `k8s/overlays/prod/ingest`
+and is applied by a separate, dependent Flux Kustomization (see below).
 
 ## Normal operation
 
@@ -14,9 +16,10 @@ routine release.
 
 ### What a release does to the running site
 
-Flux applies the whole overlay in one pass, so the recreated `migrate` and
-`ingest` Jobs and the new `api`/`retrieval-worker` pods all start together.
-The Deployments are set up so that is safe on a 2 GiB node:
+Flux's root `flux-system` Kustomization applies the overlay in one pass, so
+the recreated `migrate` Job and the new `api`/`retrieval-worker` pods start
+together; the `ingest` Job follows only once the new pods are Ready. The
+Deployments are set up so that is safe on a 2 GiB node:
 
 - **Brief downtime by design.** `api` and `retrieval-worker` use
   `RollingUpdate` with `maxSurge: 0, maxUnavailable: 1`: a rollout never adds
@@ -48,9 +51,23 @@ The Deployments are set up so that is safe on a 2 GiB node:
   20s period) before a restart. A `startupProbe` on `/healthz` (every 5s, up
   to 30 failures = 150s) holds off liveness until the process first answers,
   so a slow boot isn't killed mid-start.
-- **Not yet ordered:** the `ingest` Job still runs alongside the rollout
-  rather than after it (a planned follow-up splits it into its own Flux
-  Kustomization).
+- **Ingest runs after the rollout.** `flux/kustomization-ingest.yaml`
+  defines two child Kustomizations. `app-ready` (empty path
+  `k8s/overlays/prod/app-ready`) dependsOn the root `flux-system`, so it only
+  runs once the root has applied this Git revision, then health-checks the
+  `api` and `retrieval-worker` Deployments (timeout 10m). `ingest` (path
+  `k8s/overlays/prod/ingest`) dependsOn `app-ready`, then applies the Job
+  with `wait: true` (timeout 15m). The Job keeps
+  `kustomize.toolkit.fluxcd.io/force: enabled`, and `ingest/kustomization.yaml`
+  carries its own `$imagepolicy` setter, so Flux bumps its tag in the same
+  commit and recreates it per release. Ingestion is content-hash incremental,
+  so a routine run only embeds changed docs. To follow a release:
+  `flux get kustomizations` (expect `flux-system` → `app-ready` → `ingest`
+  Ready at the same revision), then `kubectl -n app logs job/ingest`. If a
+  rollout never becomes Ready, `app-ready` times out and ingest simply does
+  not run for that revision. This relies on the root `flux-system`
+  Kustomization not having `wait: true` (the `flux bootstrap` default) —
+  otherwise it would wait on `ingest`, which waits on it.
 
 ## Manual apply / disaster recovery
 
@@ -81,12 +98,13 @@ recover after a manual intervention:
    kubectl apply -f k8s/base/api-service.yaml -f k8s/base/api-deployment.yaml -f k8s/base/worker-deployment.yaml -f k8s/base/api-ingress.yaml
    kubectl -n app rollout status deployment/api --timeout=5m
    kubectl -n app rollout status deployment/retrieval-worker --timeout=5m
-   kubectl apply -f k8s/base/ingest-job.yaml
+   kubectl kustomize k8s/overlays/prod/ingest | kubectl apply -f -
    kubectl -n app wait --for=condition=complete job/ingest --timeout=15m
    ```
 
    `kubectl kustomize k8s/overlays/prod` renders the exact manifests
-   (including the currently pinned image tag) if you'd rather apply that
+   (including the currently pinned image tag, but not the `ingest` Job —
+   render that with `kubectl kustomize k8s/overlays/prod/ingest`) if you'd rather apply that
    directly once past initial bring-up. If a Job fails, check `kubectl -n
    app logs job/migrate` or `job/ingest`, then delete and re-apply it — Job
    pod templates are immutable and can't be patched in place.
