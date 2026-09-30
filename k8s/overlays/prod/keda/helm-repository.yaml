@@ -1,0 +1,27 @@
+# Flux-managed Helm install for KEDA (DESIGN.md §9.2/§9.3).
+#
+# Why Flux HelmRelease instead of Terraform's helm provider: this repo has no
+# Terraform-managed Kubernetes resources at all (grep infra/modules — network,
+# compute, edge, registry, secrets are all AWS-level; k3s workloads are
+# entirely Flux/kustomize-managed, per k8s/README.md and the explicit design
+# choice in docs/superpowers/plans/2026-09-29-app-cicd-flux.md to let Flux
+# own the cluster's live config so it can't drift from git). Introducing a
+# Terraform helm provider here would create a second, Terraform-driven path
+# to cluster state that Flux doesn't reconcile or know about — exactly the
+# drift risk this project chose Flux to prevent. A HelmRepository +
+# HelmRelease alongside the existing flux/ImageRepository-style manifests
+# keeps KEDA on the same GitOps path as everything else in this namespace.
+#
+# This assumes `flux bootstrap`'s default component set is active
+# (source-controller, kustomize-controller, helm-controller,
+# notification-controller — helm-controller is on by default unless a prior
+# bootstrap explicitly restricted --components; verify with
+# `kubectl get deploy -n flux-system helm-controller` before relying on this).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kedacore
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://kedacore.github.io/charts

@@ -1,0 +1,52 @@
+# Installs the KEDA operator + metrics adapter into the `keda` namespace.
+# Flux's helm-controller performs the actual `helm install`/`upgrade` once
+# this is synced — nothing here is applied by this branch's author.
+#
+# IMPORTANT for whoever reviews/applies this: `chart.spec.version` below is a
+# placeholder pin, not independently re-verified against the current latest
+# KEDA release at review time (this branch was built without live internet
+# access to the chart repo's index). Confirm the latest stable 2.x chart
+# version before merging, and update the pin — Flux will otherwise install
+# whatever was current as of this writing rather than "latest".
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keda
+  namespace: keda
+spec:
+  interval: 30m
+  releaseName: keda
+  targetNamespace: keda
+  chart:
+    spec:
+      chart: keda
+      version: "2.16.x" # placeholder — pin an exact version before applying, see note above
+      sourceRef:
+        kind: HelmRepository
+        name: kedacore
+        namespace: flux-system
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Keep KEDA's footprint inside the budget docs/DESIGN.md §9.7 reserves
+    # for it (~150Mi) on this single 2GiB t4g.small node. Only watch the
+    # `app` namespace: this cluster has nothing else for KEDA to scale.
+    watchNamespace: app
+    resources:
+      operator:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 150Mi
+      metricServer:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          memory: 100Mi

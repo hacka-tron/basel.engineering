@@ -62,8 +62,38 @@ self-signed certificate, so Cloudflare's SSL/TLS mode must stay on **Full**
 (not "Full (strict)", which would need a trusted origin certificate and a
 TLS Secret this cluster doesn't have yet).
 
-## Not yet built
+## Stress test / KEDA autoscaling (DESIGN.md §9.3/§9.4)
 
-KEDA autoscaling, cluster-view RBAC, and nightly ingestion are future work
-(see `project/BACKLOG.md`). When KEDA is installed, the Redis NetworkPolicy
-will also need to allow its operator pods.
+`feature/stress-test-keda` adds the pieces for the "Stress test" demo:
+
+- `k8s/base/rbac-api.yaml` — a scoped `api` ServiceAccount + Role +
+  RoleBinding (get/list/watch on `pods`, `app` namespace only), wired into
+  `api-deployment.yaml` via `serviceAccountName: api`. Backs
+  `GET /api/cluster/stream`.
+- `k8s/overlays/prod/keda/` — KEDA itself, installed via a Flux
+  `HelmRepository`/`HelmRelease` (not Terraform's helm provider — this repo
+  has no Terraform-managed Kubernetes resources; Flux already owns every
+  other piece of live cluster config, so a second, Terraform-driven install
+  path would risk exactly the drift Flux was chosen to prevent). Verify the
+  chart version pin in `helm-release.yaml` against the current latest KEDA
+  release before applying — it was written without live access to the chart
+  index.
+- `k8s/overlays/prod/scaledobject-retrieval-worker.yaml` — the `ScaledObject`
+  scaling `retrieval-worker` 1→5 on `retrieval:jobs`' consumer-group lag.
+  `k8s/base/worker-deployment.yaml` no longer pins a fixed `replicas` so KEDA's
+  HPA (not a stray `kubectl apply`/Flux reconcile) owns that field.
+- `k8s/base/networkpolicy-data.yaml`'s `redis-from-app` policy now also
+  allows ingress from the `keda` namespace, since KEDA's redis-streams
+  scaler polls Redis directly from its own operator pod, not through
+  `retrieval-worker`.
+
+**None of this has been applied to the live cluster.** Installing KEDA is a
+new cluster-level component and needs the owner's explicit go-ahead
+immediately before running, per this project's standing rule for live
+cluster changes (see `project/AGENT_HANDOFF.md`). Rendered and validated
+locally only: `kubectl kustomize k8s/base` / `k8s/overlays/prod`, every
+resulting document parses as valid YAML, and `terraform fmt`/`validate` still
+pass across `infra/` (unchanged by this branch — KEDA is Flux/kustomize, not
+Terraform).
+
+Nightly ingestion is still future work (see `project/BACKLOG.md`).

@@ -10,6 +10,7 @@ resources:
   - configmap-app.yaml
   - migrate-job.yaml
   - ingest-job.yaml
+  - rbac-api.yaml
   - api-deployment.yaml
   - api-service.yaml
   - api-ingress.yaml

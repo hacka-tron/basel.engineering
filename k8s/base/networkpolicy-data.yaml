@@ -45,3 +45,14 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+    # KEDA's redis-streams scaler polls Redis directly (from its own
+    # operator pod in the `keda` namespace, not from retrieval-worker) to
+    # compute retrieval:jobs' consumer-group lag for the ScaledObject in
+    # k8s/overlays/prod/scaledobject-retrieval-worker.yaml.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+      ports:
+        - protocol: TCP
+          port: 6379

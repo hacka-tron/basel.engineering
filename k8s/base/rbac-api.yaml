@@ -1,0 +1,34 @@
+# Tightly-scoped ServiceAccount + Role + RoleBinding for the api Deployment's
+# cluster view (DESIGN.md §9.5): read-only on pods, this namespace only.
+# GET /api/cluster/stream (services/glassbox/api/cluster.py) uses this
+# ServiceAccount's mounted token to list/watch retrieval-worker pods and
+# forwards only name/phase/ready — nothing else leaves the cluster.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api
+  namespace: app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-viewer
+  namespace: app
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-pod-viewer
+  namespace: app
+subjects:
+  - kind: ServiceAccount
+    name: api
+    namespace: app
+roleRef:
+  kind: Role
+  name: pod-viewer
+  apiGroup: rbac.authorization.k8s.io
