@@ -49,7 +49,7 @@ async def assess_capacity() -> dict[str, bool | str]:
             return {"sufficient": False, "reason": "The node reports memory pressure."}
         allocatable_mi = _memory_mi(status["allocatable"]["memory"])
         reason = (
-            f"Estimated peak needs {REQUIRED_MI} MiB; " f"node allocatable is {allocatable_mi} MiB."
+            f"Estimated peak needs {REQUIRED_MI} MiB; node allocatable is {allocatable_mi} MiB."
         )
         if allocatable_mi < REQUIRED_MI:
             return {"sufficient": False, "reason": reason}
