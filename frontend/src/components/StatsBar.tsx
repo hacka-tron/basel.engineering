@@ -1,6 +1,6 @@
 import type { DemoCapacity } from '../hooks/useStressTest'
 import type { ReactNode } from 'react'
-import { LionIcon, RabbitIcon } from './capacityIcons'
+import { RabbitIcon, TigerIcon } from './capacityIcons'
 
 type StatsBarProps = {
   lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
@@ -13,8 +13,8 @@ type StatsBarProps = {
 
 /**
  * Capacity-status icon: muted at rest and brightening on hover/focus of its
- * `group` parent, matching the header's GitHub mark. Lion = room for a real
- * scale-up; bunny = visual demo only.
+ * `group` parent, matching the header's GitHub mark. Tiger = room for a real
+ * stress test; bunny = simulated demo only.
  */
 function Avatar({ children }: { children: ReactNode }) {
   return (
@@ -49,8 +49,8 @@ function StatsBar({
   // The API's `reason` (memory estimate vs. node allocatable) is for
   // debugging/logs; visitors only need to know which kind of demo they'll get.
   const capacityLabel = stressTestCapacity.sufficient
-    ? 'There is room for a real worker scale-up.'
-    : 'Visual demo only; no jobs will be queued.'
+    ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 5 to drain them. Watch the pods and backlog on the Worker node.'
+    : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
 
   return (
@@ -74,8 +74,8 @@ function StatsBar({
           role="status"
           aria-label={capacityLabel}
         >
-          <Avatar>{stressTestCapacity.sufficient ? <LionIcon /> : <RabbitIcon />}</Avatar>
-          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-max max-w-64 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
+          <Avatar>{stressTestCapacity.sufficient ? <TigerIcon /> : <RabbitIcon />}</Avatar>
+          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-60 sm:w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
             {capacityLabel}
           </span>
         </span>
