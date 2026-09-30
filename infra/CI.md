@@ -6,6 +6,12 @@ then applies `infra/envs/prod` after a merge to `main`. `infra/bootstrap` remain
 a manually applied local-state root. Fork PRs receive formatting and
 validation checks, but do not receive production state or Cloudflare access.
 
+As of 2026-09-30, both protected environments, their Cloudflare secrets and
+zone ID variables, and the bootstrap IAM roles are configured. The owner
+approved the bootstrap apply; a subsequent bootstrap plan reported no changes.
+The first protected `terraform-plan` job still needs the owner's environment
+approval and a successful run before this workflow is considered verified.
+
 ## One-time setup before merging the workflow
 
 1. In GitHub repository Settings → Environments, create `terraform-plan` and
