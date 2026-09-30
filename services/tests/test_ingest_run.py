@@ -102,7 +102,35 @@ def test_architecture_deep_dive_is_ingested_into_about_system():
     scanned = scan_file(sources[deep_dive])
     assert scanned.error is None
     assert scanned.content is not None
-    assert len(chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)) > 1
+
+    # One retrievable chunk per H2 section: every chunk starts at a heading, no
+    # section is split or merged, and unbuilt work stays in its own last chunk.
+    chunks = chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)
+    sections = [line for line in scanned.content.splitlines() if line.startswith("## ")]
+    assert len(chunks) == len(sections) == 25
+    assert chunks[0].text.startswith("# Glassbox architecture deep dive")
+    for chunk, heading in zip(chunks[1:], sections[1:], strict=True):
+        assert chunk.text.startswith(heading)
+    assert chunks[-1].text.startswith("## Planned / not built yet")
+    assert all(chunk.token_count <= 500 for chunk in chunks)
+
+
+def test_release_workflow_rebuilds_on_every_path_copied_into_the_image():
+    """A docs- or corpus-only merge must build a release, or ingest never sees it."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = (repo_root / ".github/workflows/release.yml").read_text()
+    triggers = {
+        line.strip().removeprefix("- ").removesuffix("/**")
+        for line in workflow.split("paths:", 1)[1].split("concurrency:", 1)[0].splitlines()
+        if line.strip().startswith("- ")
+    }
+    copied = set()
+    for line in (repo_root / "Dockerfile").read_text().splitlines():
+        parts = line.split()
+        if parts[:1] == ["COPY"] and not parts[1].startswith("--from"):
+            copied.update(source.rstrip("/").split("/", 1)[0] for source in parts[1:-1])
+    assert copied, "expected COPY instructions in the Dockerfile"
+    assert copied <= triggers, f"release.yml paths miss: {sorted(copied - triggers)}"
 
 
 @pytest.fixture

@@ -99,7 +99,7 @@ The worker node also shows live Kubernetes state during a stress test: one dot p
 
 ## Caching layers: embedding, retrieval, chunk and semantic answer caches
 
-Glassbox has four Redis caches, all versioned so a model change or a re-ingestion can never replay stale results.
+Glassbox has four Redis caches. Every cache key includes whatever could make its value stale: the model identity for vectors and answers, and the corpus version for anything that depends on indexed content.
 
 1. **Embedding cache** (`emb:{sha256}`): an exact-match cache of question vectors. The key hashes the embedding model ID together with the normalized question (whitespace collapsed, case-folded). Values are 512 packed float32 values with a 7-day TTL. A hit skips the Titan embedding call on Bedrock. For follow-ups, the key uses the rewritten standalone query.
 2. **Semantic answer cache** (`idx:answers` over `ans:{corpus}:v{version}:{id}` hashes): a RediSearch HNSW vector index of previous question vectors, each stored with its answer and cited chunks for 24 hours. A lookup is a KNN-1 search filtered by corpus, corpus version and a hashed model tag, and it counts as a hit only at cosine similarity 0.95 or higher. The model tag hashes `embedding model | LLM model | prompt version`, so changing either model or the prompt wording (the prompt version) makes old answers unreachable. A hit skips the queue, the worker and the LLM entirely and uses no daily budget.
@@ -135,7 +135,7 @@ The About This System corpus includes design documents that describe some featur
 
 The answer prompt then instructs the model that a bracketed source status overrides present-tense design prose, that a design document describes intended behavior rather than proof that code is running, and that it should answer "No" when asked whether a feature works now if its source carries that "does not exist yet" label. The system prompt repeats the rule: only call a feature current when a source identifies it as implemented or working today.
 
-The signal list is keyword-based, not tense-aware, so it is meant to cover only work that is still unbuilt: a chunk that describes a component running in production should not receive the "does not exist yet" label. Changing the prompt or these labels bumps the prompt version, which is part of the semantic answer-cache key, so answers generated under older labeling are never replayed.
+The signal list is keyword-based, not tense-aware. Its intent is to flag only unbuilt work, but a keyword match can also label a chunk that describes a component already running in production, so the label is a hint to the model rather than a guarantee. Changing the prompt or these labels bumps the prompt version, which is part of the semantic answer-cache key, so answers generated under older labeling are never replayed.
 
 Chunks are retrieved individually, which is why this deep-dive document repeats key names in every section and keeps unbuilt work in one clearly labeled final section.
 
@@ -188,7 +188,7 @@ Redis structures and keys:
 - **`demo:load:lock`**: the global stress-test cooldown lock. 5-minute TTL.
 - **`idx:chunks:model-tags-ready`**: a marker recording that existing chunk hashes carry model tags.
 
-Redis holds nothing that cannot be recreated. Chunk vectors come from MySQL and ingestion, caches refill on demand, and counters and locks are short-lived.
+Most of Redis can be recreated: chunk vectors come from MySQL and ingestion, caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
 
 ## Ingestion pipeline: how content gets into the RAG index
 
@@ -299,7 +299,7 @@ Every Glassbox change reaches production through GitHub pull requests into `main
 - `backend-tests`: Python 3.12 with MySQL 8.0 and redis-stack-server 7.2 as service containers. It applies the Alembic migrations, runs `ruff check`, then runs `pytest services/tests` with the fake provider, so CI never calls Bedrock or spends money.
 - `frontend-checks`: Node 22, `npm ci`, lint (oxlint), and a production build (TypeScript plus Vite).
 
-**Release (`.github/workflows/release.yml`).** On a push to `main` that touches `services/`, `frontend/`, the Dockerfile, `k8s/base/` or a few other build inputs, a native ARM64 GitHub runner builds the image. Native ARM64 matches the Graviton EC2 node; an x86 runner emulating ARM took more than 20 minutes. The multi-stage Dockerfile builds the frontend with Node 22, then copies it into a Python 3.12 slim image with the API, worker, migrations and corpus content. The image runs as a non-root `glassbox` user. The workflow gets short-lived AWS credentials through GitHub OIDC (the `release` environment and a dedicated release role), logs in to Amazon ECR, and pushes three tags: the short Git SHA, `build-N` (the workflow run number) and `latest`. The release workflow never writes to Git.
+**Release (`.github/workflows/release.yml`).** On a push to `main` that touches any path the Dockerfile copies into the image (`services/`, `frontend/`, `corpus/`, `docs/`, `infra/`, `k8s/`) or another build input, a native ARM64 GitHub runner builds the image. A docs-only or corpus-only merge therefore still ships a release, and its ingest Job indexes the new content. Native ARM64 matches the Graviton EC2 node; an x86 runner emulating ARM took more than 20 minutes. The multi-stage Dockerfile builds the frontend with Node 22, then copies it into a Python 3.12 slim image with the API, worker, migrations and corpus content. The image runs as a non-root `glassbox` user. The workflow gets short-lived AWS credentials through GitHub OIDC (the `release` environment and a dedicated release role), logs in to Amazon ECR, and pushes three tags: the short Git SHA, `build-N` (the workflow run number) and `latest`. The release workflow never writes to Git.
 
 **Why `build-N`.** Flux needs a tag it can sort to find the newest image. Short Git SHAs do not sort, and a bare numeric tag once collided with an all-digit short SHA that sorted higher than every real build and got deployed. The `build-` prefix makes that collision impossible.
 
