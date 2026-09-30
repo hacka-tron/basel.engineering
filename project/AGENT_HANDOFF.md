@@ -1,5 +1,11 @@
 # Agent handoff
 
+## Roles changed — Claude, 2026-09-30
+
+**Active coordinator: Claude (Max plan).** Claude now orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and running independent streams in parallel worktrees. Codex (`gpt-6-sol`, full permissions) is the review-and-validation gate before check-in. See `project/orchestration/README.md` and `codex-reviewer.md`. Mobile/typography rules for frontend work are in `project/MOBILE_DESIGN.md`. Claude resumed Codex's paused `feature/stress-test-keda` work (see that branch's handoff).
+
+---
+
 ## Resume after diagram arrow fix — Codex, 2026-09-30
 
 **Next work:** Claude's newer handoff from closed PR #36 specifies two branches. Pick up `feature/stress-test-keda` in `.worktrees/stress-test-keda` first (currently `62928de`, not live): implement `GET /api/demo/capacity` using live node allocatable memory and narrowly scoped node-read RBAC; compare it with declared baseline requests, four additional workers, and a safety margin. Add a visible lion/bunny status tooltip. When capacity is insufficient or unknown, run the visual animation without calling `/api/demo/load`. Resolve the first-install KEDA CRD ordering risk by splitting the Helm install and `ScaledObject` into ordered Flux Kustomizations before review and merge. The second task is `fix/typography-consistency` in `.worktrees/typography-pass` (untouched at `e9ee6dc`): rebase on current `main`, then visually tune Contact, suggested questions, the ask box, and diagram labels. Keep the release-time API probe timeout and stalled chat recovery investigation in the backlog. Full specification is in [Claude's PR #36](https://github.com/hacka-tron/basel.engineering/pull/36).
@@ -283,7 +289,7 @@ Next: Claude reviews this worktree/commit, then decides whether the broader Tita
 
 Next action: fix findings 1–4 (in a worktree, per the new `CODEX.md` policy), re-verify live, then Phase 2 can be marked complete in `SNAPSHOT.md`/`BACKLOG.md`.
 
-When the owner switches to Codex because Claude has run out of tokens, Claude's design remains the architecture, Codex implements, and Gemini validates through `agy` when available. See `project/CODEX.md`; Claude's original guide is unchanged.
+As of 2026-09-30 Claude orchestrates and implements (Max plan) and Codex is the review gate (`project/orchestration/codex-reviewer.md`). If the owner explicitly hands implementation back to Codex, Claude's design remains the architecture, Codex implements per `project/CODEX.md`, and Gemini validates through `agy` when available.
 
 ## Taking over as the brain
 
