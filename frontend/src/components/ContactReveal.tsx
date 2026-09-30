@@ -37,7 +37,7 @@ function ContactReveal() {
       <button
         type="button"
         onClick={() => setRevealed(true)}
-        className="text-xs text-muted transition-colors hover:text-primary md:ml-4"
+        className="text-xs text-muted transition-colors hover:text-primary"
       >
         Contact me
       </button>
@@ -45,7 +45,7 @@ function ContactReveal() {
   }
 
   return (
-    <span className="flex items-center gap-2 text-xs md:ml-4">
+    <span className="flex items-center gap-2 text-xs">
       <span className="select-all text-primary">{EMAIL}</span>
       <button
         type="button"

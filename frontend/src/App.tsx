@@ -177,52 +177,57 @@ function App() {
     <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary">
       <header className="flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline px-4 py-3 md:h-[72px] md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
-          Below md, the header wraps to two rows: [h1 + Contact + GitHub]
-          on row one, [nav] alone on row two. `md:contents` removes the
-          h1/Contact/GitHub wrapper from layout at md+, so those become
-          direct header children again there; nav's own `w-full` (mobile)
-          vs `md:w-auto md:ml-auto` (desktop) is what forces it onto its
-          own row below md and pushes it to the right at md+, so it no
-          longer needs a second wrapper div of its own. The GitHub link
-          lives with the logo group (not the nav row) at every width - it's
-          a fixed site-identity link, not another corpus-toggle option, so
-          it shouldn't compete with "About This System" for attention.
+          Below md, the header wraps to two rows: [h1 + nav] on row one,
+          [Contact + GitHub] on row two. `md:contents` removes the h1/nav
+          wrapper from layout at md+, so those become direct header
+          children again there; the Contact/GitHub group's own `w-full`
+          (mobile) vs `md:w-auto md:ml-auto` (desktop) is what forces it
+          onto its own row below md and pushes it to the right at md+ -
+          the corpus toggle lives with the logo group (site identity +
+          navigation on the left), while Contact/GitHub are the two "meta"
+          actions grouped together on the right. `flex-wrap` on the logo
+          group is a safety net, not the primary layout: h1 stays on one
+          line (shrink-0/whitespace-nowrap) and nav drops to its own line
+          only if there's genuinely not enough room (e.g. ~375px), rather
+          than squeezing h1's text.
         */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 md:contents">
           <h1 className="shrink-0 whitespace-nowrap text-base font-semibold tracking-tight">Basel Abdel-Rahman</h1>
+          <nav aria-label="Question topic" className="flex items-center gap-2 text-xs md:ml-4">
+            <button
+              type="button"
+              aria-pressed={corpus === 'basel'}
+              onClick={() => setCorpus('basel')}
+              className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+            >
+              About Basel
+            </button>
+            <span aria-hidden="true" className="text-hairline">|</span>
+            <button
+              type="button"
+              aria-pressed={corpus === 'system'}
+              onClick={() => setCorpus('system')}
+              className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
+            >
+              About This System
+            </button>
+          </nav>
+        </div>
+
+        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:flex-nowrap md:ml-auto">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="View source on GitHub"
-            className="ml-auto text-muted transition-colors hover:text-primary md:ml-3"
+            className="text-muted transition-colors hover:text-primary"
           >
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
             </svg>
           </a>
         </div>
-
-        <nav aria-label="Question topic" className="flex w-full items-center gap-2 text-xs md:w-auto md:ml-auto">
-          <button
-            type="button"
-            aria-pressed={corpus === 'basel'}
-            onClick={() => setCorpus('basel')}
-            className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
-          >
-            About Basel
-          </button>
-          <span aria-hidden="true" className="text-hairline">|</span>
-          <button
-            type="button"
-            aria-pressed={corpus === 'system'}
-            onClick={() => setCorpus('system')}
-            className={`rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-          >
-            About This System
-          </button>
-        </nav>
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[40%_60%]">
