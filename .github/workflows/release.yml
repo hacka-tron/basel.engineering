@@ -38,7 +38,13 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # The default GITHUB_TOKEN can't push to this package even with
+          # `permissions: packages: write` declared above and the package's
+          # own "Manage Actions access" set to Write for this repo - that
+          # repo-to-package linkage has been unreliable in practice here.
+          # RELEASE_BOT_PAT authenticates as the account that actually owns
+          # the package, sidestepping that linkage entirely.
+          password: ${{ secrets.RELEASE_BOT_PAT }}
       - uses: docker/build-push-action@v6
         with:
           context: .
