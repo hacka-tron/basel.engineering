@@ -18,6 +18,9 @@ def stream(*frames: str) -> io.BytesIO:
     return io.BytesIO("".join(frames).encode())
 
 
+LLM_START = frame("stage", {"node": "llm", "status": "start"})
+
+
 def done(**fields) -> str:
     payload = {"total_ms": 12, "mode": "full", "answer_cache": "miss", "tokens_in": 30}
     payload["tokens_out"] = 8
@@ -56,7 +59,7 @@ def test_parse_sse_skips_heartbeats():
             (frame("stage", {"node": "answer_cache", "cache": "hit"}), done(answer_cache="hit")),
             "cached",
         ),
-        ((frame("token", {"text": "Hi"}), done()), "warmed"),
+        ((LLM_START, frame("token", {"text": "Hi"}), done()), "warmed"),
         ((done(tokens_in=0, tokens_out=0),), "no_sources"),
         ((frame("error", {"code": "internal", "message": "boom"}),), "failed"),
         ((frame("stage", {"node": "api"}),), "failed"),
@@ -94,7 +97,7 @@ def scripted(results):
         result = results[question]
         if isinstance(result, Exception):
             raise result
-        return warm.Outcome(corpus, question, result, 5)
+        return warm.Outcome(corpus, question, result, 5, llm_attempted=result == "warmed")
 
     return ask_fn, calls
 
@@ -162,6 +165,7 @@ def test_ask_posts_a_first_question_exactly_like_a_visitor(monkeypatch):
 
 
 def test_main_exit_codes(monkeypatch, tmp_path):
+    monkeypatch.setattr(warm, "daily_cap_from_env", lambda: FakeCap(cap=10))
     path = tmp_path / "q.json"
     path.write_text(json.dumps({"about_me": ["A?", "B?"]}))
     monkeypatch.setattr(
@@ -171,3 +175,143 @@ def test_main_exit_codes(monkeypatch, tmp_path):
 
     monkeypatch.setattr(warm, "ask", lambda api, corpus, q: warm.Outcome(corpus, q, "failed"))
     assert warm.main(["--questions", str(path)]) == 1
+
+
+# --- every attempt that may have generated counts (review finding 1) ---
+
+
+@pytest.mark.parametrize(
+    ("frames", "attempted"),
+    [
+        ((done(answer_cache="hit"),), False),
+        ((done(tokens_in=0, tokens_out=0),), False),
+        ((frame("error", {"code": "internal", "message": "before llm"}),), False),
+        ((LLM_START, frame("error", {"code": "internal", "message": "mid answer"})), True),
+        ((LLM_START, frame("token", {"text": "cut"})), True),
+        ((LLM_START, done()), True),
+    ],
+)
+def test_llm_attempted_tracks_the_llm_stage(frames, attempted):
+    outcome = warm.classify("about_me", "Q?", warm.parse_sse(stream(*frames)))
+    assert outcome.llm_attempted is attempted
+
+
+def test_ask_counts_a_stream_that_broke_after_opening(monkeypatch):
+    class Broken:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def __iter__(self):
+            raise TimeoutError("read timed out")
+
+    monkeypatch.setattr(warm.urllib.request, "urlopen", lambda request, timeout: Broken())
+    outcome = warm.ask("http://api", "about_me", "Q?")
+    assert outcome.result == "failed" and outcome.llm_attempted
+
+    def refuse(request, timeout):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(warm.urllib.request, "urlopen", refuse)
+    assert not warm.ask("http://api", "about_me", "Q?").llm_attempted
+
+
+def test_failed_generations_count_toward_the_per_run_cap():
+    calls = []
+
+    def ask_fn(api_url, corpus, question):
+        calls.append(question)
+        return warm.Outcome(corpus, question, "failed", detail="internal", llm_attempted=True)
+
+    outcomes, stopped = warm.warm("http://api", QUESTIONS, max_llm_calls=2, ask_fn=ask_fn)
+    assert calls == ["A?", "B?"]
+    assert "max-llm-calls=2" in stopped
+
+
+# --- shared daily warm-up cap (review finding 2) ---
+
+
+class FakeRedis:
+    def __init__(self):
+        self.values = {}
+        self.ttls = {}
+
+    def incr(self, key):
+        self.values[key] = self.values.get(key, 0) + 1
+        return self.values[key]
+
+    def decr(self, key):
+        self.values[key] = self.values.get(key, 0) - 1
+        return self.values[key]
+
+    def expire(self, key, seconds):
+        self.ttls[key] = seconds
+
+
+class FakeCap(warm.DailyCap):
+    def __init__(self, cap, client=None):
+        super().__init__(client or FakeRedis(), cap)
+
+
+def test_daily_cap_reserves_atomically_and_expires():
+    from datetime import UTC, datetime
+
+    client = FakeRedis()
+    cap = warm.DailyCap(client, 2, now=lambda: datetime(2026, 9, 30, 23, tzinfo=UTC))
+    assert cap.reserve() and cap.reserve()
+    assert not cap.reserve()  # over the cap: the increment is undone
+    assert client.values == {"warm:budget:2026-09-30": 2}
+    assert client.ttls == {"warm:budget:2026-09-30": 48 * 3600}
+    cap.refund()
+    assert cap.reserve()
+
+
+def test_daily_cap_is_shared_across_runs_and_hits_are_refunded():
+    client = FakeRedis()
+    results = {"A?": "cached", "B?": "warmed", "C?": "warmed", "D?": "warmed"}
+
+    def ask_fn(api_url, corpus, question):
+        result = results[question]
+        return warm.Outcome(corpus, question, result, 5, llm_attempted=result == "warmed")
+
+    # First run (e.g. the CronJob): a hit costs nothing, then two generations fill the cap.
+    outcomes, stopped = warm.warm(
+        "http://api", QUESTIONS, max_llm_calls=7, daily_cap=FakeCap(2, client), ask_fn=ask_fn
+    )
+    assert [o.result for o in outcomes] == ["cached", "warmed", "warmed"]
+    assert "daily warm-up cap" in stopped
+
+    # A second run the same day (e.g. after a deploy) can't generate anything.
+    calls = []
+
+    def counting_ask(api_url, corpus, question):
+        calls.append(question)
+        return ask_fn(api_url, corpus, question)
+
+    _, stopped = warm.warm(
+        "http://api", QUESTIONS, max_llm_calls=7, daily_cap=FakeCap(2, client), ask_fn=counting_ask
+    )
+    assert calls == []
+    assert "daily warm-up cap" in stopped
+    assert sum(client.values.values()) == 2
+
+
+def test_limit_stop_refunds_the_reserved_slot():
+    client = FakeRedis()
+
+    def ask_fn(api_url, corpus, question):
+        raise warm.StopWarmup("rate_limited")
+
+    warm.warm("http://api", QUESTIONS, max_llm_calls=7, daily_cap=FakeCap(5, client), ask_fn=ask_fn)
+    assert sum(client.values.values()) == 0
+
+
+def test_daily_cap_needs_redis(monkeypatch):
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    with pytest.raises(KeyError):
+        warm.daily_cap_from_env()
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:1/0")
+    monkeypatch.setenv("GLASSBOX_WARM_DAILY_LLM_CAP", "3")
+    assert warm.daily_cap_from_env().cap == 3

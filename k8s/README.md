@@ -74,7 +74,10 @@ Deployments are set up so that is safe on a 2 GiB node:
   through the `api` Service so their answers are cached again (a changed
   corpus invalidates them); a warm-up failure is logged and ignored. The
   `warm-answers` CronJob (`base/warm-cronjob.yaml`, every 2h, 48Mi limit)
-  does the same between deploys. Both pods carry
+  does the same between deploys. All runs share a daily cap of
+  `GLASSBOX_WARM_DAILY_LLM_CAP` (10, in the ConfigMap) LLM calls, counted in
+  Redis as `warm:budget:{date}`, so the CronJob pod may reach Redis (not
+  MySQL). Both pods carry
   `glassbox/answer-warmer: "true"`, which the `api-from-answer-warmer`
   NetworkPolicy admits to the api on port 8000. Check a run with
   `kubectl -n app logs job/ingest | tail` or the latest `warm-answers-*` Job.

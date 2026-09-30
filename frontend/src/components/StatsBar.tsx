@@ -61,11 +61,11 @@ function StatsBar({
     // since that's the single biggest chunk of text width at this size.
     <footer className="flex min-h-[58px] shrink-0 items-center pb-[env(safe-area-inset-bottom)] justify-between gap-2 border-t border-hairline bg-canvas px-3 text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
-        {/* Below sm, "cached" drops to a second line so the row still fits at
+        {/* Below sm, "· cached" drops to a second line so the row still fits at
             360-375px with a four-digit time. */}
         <span className="flex flex-col leading-tight sm:flex-row sm:leading-normal">
           <span>{latency.timing}</span>
-          {latency.cached && <span className="sm:ml-1"><span className="hidden sm:inline">· </span>cached</span>}
+          {latency.cached && <span className="sm:ml-1">· cached</span>}
         </span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>

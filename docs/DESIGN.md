@@ -328,7 +328,7 @@ Three layers, cheapest check first:
 
 Invalidation uses **versioned keys**: ingestion bumps `corpus:ver:{corpus}`, and every cache key embeds the version, so old entries simply stop being read and age out. No scan-and-delete.
 
-**Warm-up of the suggested questions.** The suggested question chips (§4.3) are the questions most visitors ask first, so their answers are kept in the semantic answer cache. `python -m services.glassbox.warm` reads `frontend/src/suggested-questions.json` (the same file the chips come from) and asks each one through `POST /api/ask` in-cluster, exactly like a visitor's first question, so the embedding, retrieval and answer caches fill the same way. A still-cached answer comes back as a hit and costs nothing; only expired or invalidated ones are regenerated. It runs from the `warm-answers` CronJob every 2 hours and at the end of each deploy's ingest Job (after ingestion may have bumped a corpus version). It goes through the normal rate limiter and daily budget, generates at most one answer per suggested question per run (7 today), and stops at the first `rate_limited`/`budget_exhausted` error, HTTP 429, or `retrieval_only` answer. Why every 2 hours rather than daily: answers expire 24 hours after they are written and a run skips anything still cached, so a daily run landing just before expiry would leave that answer cold for most of a day.
+**Warm-up of the suggested questions.** The suggested question chips (§4.3) are the questions most visitors ask first, so their answers are kept in the semantic answer cache. `python -m services.glassbox.warm` reads `frontend/src/suggested-questions.json` (the same file the chips come from) and asks each one through `POST /api/ask` in-cluster, exactly like a visitor's first question, so the embedding, retrieval and answer caches fill the same way. A still-cached answer comes back as a hit and costs nothing; only expired or invalidated ones are regenerated. It runs from the `warm-answers` CronJob every 2 hours and at the end of each deploy's ingest Job (after ingestion may have bumped a corpus version). It goes through the normal rate limiter and daily budget. Every ask that may have reached generation counts, including one that errored after the LLM started: at most one per suggested question per run (7 today), and at most `GLASSBOX_WARM_DAILY_LLM_CAP` (10) per UTC day across all runs, enforced by an atomic Redis counter `warm:budget:{date}` (48h TTL). A slot is reserved before each ask and handed back when the stream shows no LLM call (hit, no sources, error before generation). Warm-ups can therefore take at most 10 of the 100 daily answers from visitors. The run also stops at the first `rate_limited`/`budget_exhausted` error, HTTP 429, or `retrieval_only` answer. Why every 2 hours rather than daily: answers expire 24 hours after they are written and a run skips anything still cached, so a daily run landing just before expiry would leave that answer cold for most of a day.
 
 ---
 
@@ -419,7 +419,7 @@ type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: st
 | `app` | `api` | Deployment (1 replica) | Startup/liveness probes on `/healthz`, readiness on `/readyz` (5s timeouts); `maxSurge: 0` rollout; waits for migrations |
 | `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
 | `app` | `ingest` | Job (per deploy) + CronJob (nightly) | Idempotent |
-| `app` | `warm-answers` | CronJob (every 2h) | Warms the suggested questions' answer cache via the api (§7.3); ~15 MiB, 48Mi limit |
+| `app` | `warm-answers` | CronJob (every 2h) | Warms the suggested questions' answer cache via the api (§7.3); ~21 MiB, 48Mi limit; Redis only for its daily cap counter |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
 | `data` | `mysql` | StatefulSet (1) + PVC 4Gi | NetworkPolicy restricted; see 10.5 for why this replaced RDS |
@@ -501,7 +501,7 @@ The endpoint only forwards pod name, phase and readiness for pods labeled `app=r
 
 ### 9.6 NetworkPolicy
 
-- `data/redis` accepts traffic only from pods in `app` and from KEDA.
+- `data/redis` accepts traffic only from pods in `app` (api, retrieval-worker, ingest, warm-answers) and from KEDA.
 - Default deny ingress in `app` except from Traefik to `api`, and from pods labelled `glassbox/answer-warmer: "true"` (the `warm-answers` CronJob and the ingest Job's warm-up tail) to `api` on port 8000.
 - (k3s ships an embedded network policy controller.)
 

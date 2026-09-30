@@ -2,8 +2,9 @@
 # (docs/DESIGN.md §7.3). Asks each one through the api Service exactly like a
 # visitor's first question; cached answers come back as hits and cost no LLM
 # call. Only answers that expired or were invalidated by a corpus change are
-# regenerated (at most one per suggested question per run), and the run stops
-# at the first rate-limit/budget signal. The same command also runs once
+# regenerated: at most one per suggested question per run and at most
+# GLASSBOX_WARM_DAILY_LLM_CAP (10) per UTC day across all runs, counted in
+# Redis; the run also stops at the first rate-limit/budget signal. The same command also runs once
 # after each deploy, at the end of the ingest Job (overlays/prod/ingest).
 #
 # Every 2 hours rather than daily: answers expire 24h after they are written,
@@ -48,11 +49,15 @@ spec:
                 - services.glassbox.warm
                 - --api-url
                 - http://api.app.svc.cluster.local
-              # Standard library only: measured ~15 MiB cgroup peak (24 MiB max RSS)
-              # locally for a full 7-question run.
+              # REDIS_URL and GLASSBOX_WARM_DAILY_LLM_CAP (shared daily cap).
+              envFrom:
+                - configMapRef:
+                    name: glassbox-config
+              # Measured locally (arm64 image, with the redis client for the
+              # daily cap): ~21 MiB cgroup peak, ~31 MiB max RSS.
               resources:
                 requests:
                   cpu: 10m
-                  memory: 24Mi
+                  memory: 32Mi
                 limits:
                   memory: 48Mi

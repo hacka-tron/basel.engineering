@@ -6,14 +6,21 @@ would, so the embedding, retrieval and answer caches fill the same way. A
 question whose answer is already cached comes back as an answer-cache hit and
 costs no LLM call; only misses generate (one answer each).
 
-Cost guards: at most ``--max-llm-calls`` misses per run (default: the number of
-suggested questions), and the run stops at the first sign of the shared limits
-(HTTP 429, a ``rate_limited``/``budget_exhausted`` error, or a
-``retrieval_only`` answer, which is what the API sends when the daily LLM
-budget is spent or the LLM is switched off). The warm-up goes through the same
-rate limiter and daily budget as visitors; it never bypasses them.
+Cost guards, all counting every ask that may have reached generation (an
+answer that errored after the LLM started still spent a budget slot):
 
-Standard library only, so the container stays small.
+- at most ``--max-llm-calls`` per run (default: the number of questions);
+- at most ``GLASSBOX_WARM_DAILY_LLM_CAP`` (default 10) per UTC day across all
+  runs (the CronJob and each deploy's run), via an atomic Redis counter
+  ``warm:budget:{date}``, so warm-ups can never take more than that share of
+  the visitors' daily answer budget. A slot is reserved before each ask and
+  handed back when the ask provably made no LLM call (cache hit, no sources,
+  error before generation);
+- the run stops at the first sign of the shared limits (HTTP 429/503, a
+  ``rate_limited``/``budget_exhausted`` error, or a ``retrieval_only`` answer,
+  which the API sends when the daily LLM budget is spent or the LLM is off).
+
+The warm-up goes through the same rate limiter and daily budget as visitors.
 
     python -m services.glassbox.warm --api-url http://api.app.svc.cluster.local
 """
@@ -21,18 +28,22 @@ Standard library only, so the container stays small.
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger("glassbox.warm")
 DEFAULT_QUESTIONS = Path(__file__).resolve().parents[2] / "frontend/src/suggested-questions.json"
 CORPORA = ("about_me", "about_system")
 REQUEST_TIMEOUT_S = 90.0
+DEFAULT_DAILY_LLM_CAP = 10
+_DAILY_KEY_TTL_S = 48 * 3600
 
 
 class StopWarmup(Exception):
@@ -46,6 +57,35 @@ class Outcome:
     result: str  # "cached", "warmed", "no_sources", "failed"
     total_ms: int | None = None
     detail: str = ""
+    # True when this ask may have made an LLM call. Conservative: only a
+    # stream that shows no generation (hit, no sources, error before the llm
+    # stage) sets False, so an unknown outcome counts against the caps.
+    llm_attempted: bool = True
+
+
+class DailyCap:
+    """Warm-up LLM calls per UTC day, shared by every run (Redis INCR is atomic)."""
+
+    def __init__(self, client, cap: int, *, now=None):
+        self.client = client
+        self.cap = cap
+        self.now = now or (lambda: datetime.now(UTC))
+
+    def _key(self) -> str:
+        return f"warm:budget:{self.now().date().isoformat()}"
+
+    def reserve(self) -> bool:
+        key = self._key()
+        used = self.client.incr(key)
+        if used == 1:
+            self.client.expire(key, _DAILY_KEY_TTL_S)
+        if used > self.cap:
+            self.client.decr(key)
+            return False
+        return True
+
+    def refund(self) -> None:
+        self.client.decr(self._key())
 
 
 def load_questions(path: Path) -> list[tuple[str, str]]:
@@ -82,25 +122,50 @@ def parse_sse(lines: Iterable[bytes]) -> Iterator[tuple[str, dict]]:
         yield event, json.loads("\n".join(data))
 
 
-def classify(corpus: str, question: str, events: Iterable[tuple[str, dict]]) -> Outcome:
-    """Turn one /api/ask stream into an outcome, or raise StopWarmup on a limit."""
+def classify(
+    corpus: str,
+    question: str,
+    events: Iterable[tuple[str, dict]],
+    progress: dict | None = None,
+) -> Outcome:
+    """Turn one /api/ask stream into an outcome, or raise StopWarmup on a limit.
+
+    ``progress["llm"]`` is set once the stream shows the LLM stage starting, so a
+    caller that loses the stream afterwards still knows generation began.
+    """
+    progress = {} if progress is None else progress
+    progress.setdefault("llm", False)
     for event, data in events:
-        if event == "error":
+        if event == "stage" and data.get("node") == "llm":
+            progress["llm"] = True
+        elif event == "error":
             code = data.get("code")
             if code in {"rate_limited", "budget_exhausted"}:
                 raise StopWarmup(f"{code}: {data.get('message', '')}")
-            return Outcome(corpus, question, "failed", detail=f"{code}: {data.get('message', '')}")
-        if event == "done":
+            return Outcome(
+                corpus,
+                question,
+                "failed",
+                detail=f"{code}: {data.get('message', '')}",
+                llm_attempted=progress["llm"],
+            )
+        elif event == "done":
             if data.get("mode") == "retrieval_only":
                 raise StopWarmup("daily LLM budget spent or LLM switched off (retrieval_only)")
             total_ms = data.get("total_ms")
             if data.get("answer_cache") == "hit":
-                return Outcome(corpus, question, "cached", total_ms)
-            if data.get("tokens_in", 0) == 0 and data.get("tokens_out", 0) == 0:
+                return Outcome(corpus, question, "cached", total_ms, llm_attempted=False)
+            if not progress["llm"]:
                 # No chunks indexed for this corpus/model yet: nothing was generated.
-                return Outcome(corpus, question, "no_sources", total_ms)
+                return Outcome(corpus, question, "no_sources", total_ms, llm_attempted=False)
             return Outcome(corpus, question, "warmed", total_ms)
-    return Outcome(corpus, question, "failed", detail="stream ended without a done event")
+    return Outcome(
+        corpus,
+        question,
+        "failed",
+        detail="stream ended without a done event",
+        llm_attempted=progress["llm"],
+    )
 
 
 def ask(api_url: str, corpus: str, question: str, *, timeout: float = REQUEST_TIMEOUT_S) -> Outcome:
@@ -115,17 +180,27 @@ def ask(api_url: str, corpus: str, question: str, *, timeout: float = REQUEST_TI
         },
         method="POST",
     )
+    progress: dict = {"llm": False, "opened": False}
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
+            progress["opened"] = True
             # Read to `done`: the API writes the answer cache just before it,
             # and leaving early would log the request as stopped, uncached.
-            return classify(corpus, question, parse_sse(response))
+            return classify(corpus, question, parse_sse(response), progress)
     except urllib.error.HTTPError as exc:
         if exc.code in {429, 503}:
             raise StopWarmup(f"HTTP {exc.code}") from exc
-        return Outcome(corpus, question, "failed", detail=f"HTTP {exc.code}")
+        return Outcome(corpus, question, "failed", detail=f"HTTP {exc.code}", llm_attempted=False)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        return Outcome(corpus, question, "failed", detail=f"{type(exc).__name__}: {exc}")
+        # Before the response opened nothing ran; once it did, the server may be
+        # generating even if we never saw the llm stage, so count it.
+        return Outcome(
+            corpus,
+            question,
+            "failed",
+            detail=f"{type(exc).__name__}: {exc}",
+            llm_attempted=progress["llm"] or progress["opened"],
+        )
 
 
 def warm(
@@ -133,6 +208,7 @@ def warm(
     questions: list[tuple[str, str]],
     *,
     max_llm_calls: int,
+    daily_cap: DailyCap | None = None,
     ask_fn=None,
 ) -> tuple[list[Outcome], str | None]:
     """Ask each question once; returns outcomes and the reason it stopped early, if any."""
@@ -142,15 +218,22 @@ def warm(
     for corpus, question in questions:
         if llm_calls >= max_llm_calls:
             return outcomes, f"reached --max-llm-calls={max_llm_calls}"
+        if daily_cap is not None and not daily_cap.reserve():
+            return outcomes, f"reached the daily warm-up cap ({daily_cap.cap} LLM calls)"
         try:
             outcome = ask_fn(api_url, corpus, question)
         except StopWarmup as exc:
+            # Every limit signal arrives before generation starts.
+            if daily_cap is not None:
+                daily_cap.refund()
             return outcomes, str(exc)
         outcomes.append(outcome)
-        if outcome.result == "warmed":
+        if outcome.llm_attempted:
             llm_calls += 1
+        elif daily_cap is not None:
+            daily_cap.refund()
         LOGGER.info(
-            "%-8s %-12s %5sms  %s%s",
+            "%-10s %-12s %5sms  %s%s",
             outcome.result,
             corpus,
             outcome.total_ms if outcome.total_ms is not None else "-",
@@ -158,6 +241,17 @@ def warm(
             f"  ({outcome.detail})" if outcome.detail else "",
         )
     return outcomes, None
+
+
+def daily_cap_from_env() -> DailyCap:
+    """The shared daily cap; needs REDIS_URL (fails closed without it)."""
+    raw = os.getenv("GLASSBOX_WARM_DAILY_LLM_CAP", str(DEFAULT_DAILY_LLM_CAP))
+    cap = int(raw)
+    if cap < 0:
+        raise ValueError("GLASSBOX_WARM_DAILY_LLM_CAP must be >= 0")
+    import redis  # imported here so tests and --help don't need a server
+
+    return DailyCap(redis.from_url(os.environ["REDIS_URL"]), cap)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -177,18 +271,22 @@ def main(argv: list[str] | None = None) -> int:
     max_llm_calls = len(questions) if args.max_llm_calls is None else args.max_llm_calls
     if max_llm_calls < 0:
         parser.error("--max-llm-calls must be >= 0")
+    # Fails closed: without REDIS_URL the shared daily cap can't be enforced.
+    daily_cap = daily_cap_from_env()
     started = time.monotonic()
-    outcomes, stopped = warm(args.api_url, questions, max_llm_calls=max_llm_calls)
+    outcomes, stopped = warm(
+        args.api_url, questions, max_llm_calls=max_llm_calls, daily_cap=daily_cap
+    )
     counts = {
         name: sum(o.result == name for o in outcomes)
         for name in ("cached", "warmed", "no_sources", "failed")
     }
     LOGGER.info(
-        "warm-up: %d/%d asked, %s, LLM answer calls %d, %.1fs%s",
+        "warm-up: %d/%d asked, %s, LLM answer calls (incl. failed) %d, %.1fs%s",
         len(outcomes),
         len(questions),
         ", ".join(f"{name} {count}" for name, count in counts.items()),
-        counts["warmed"],
+        sum(o.llm_attempted for o in outcomes),
         time.monotonic() - started,
         f"; stopped early: {stopped}" if stopped else "",
     )
