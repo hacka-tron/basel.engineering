@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
 
@@ -21,19 +21,47 @@ type ChatProps = {
   messages: ChatMessage[]
   isStreaming: boolean
   onAsk: (question: string) => void
+  onStop: () => void
   onNewChat: () => void
   errorMessage: string | null
   inputAccessory?: ReactNode
 }
 
-function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, inputAccessory }: ChatProps) {
+// Within this distance of the bottom counts as "at the bottom" (DESIGN-002 §6.3).
+const FOLLOW_THRESHOLD_PX = 80
+// Send turns into Stop in place; a double-click on Send must not stop the
+// answer it just asked for.
+const STOP_GUARD_MS = 400
+
+function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, errorMessage, inputAccessory }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
+  const askedAtRef = useRef(0)
+  // Smart auto-scroll (DESIGN-002 §6.3): follow new content only while the
+  // visitor is at the bottom; scrolling up pauses it and offers a pill back.
+  const [following, setFollowing] = useState(true)
+  const [followedCorpus, setFollowedCorpus] = useState(corpus)
+  if (followedCorpus !== corpus) {
+    // Each tab's conversation opens at its latest message.
+    setFollowedCorpus(corpus)
+    setFollowing(true)
+  }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = messagesRef.current
-    if (container) container.scrollTop = container.scrollHeight
-  }, [messages])
+    if (container && following) container.scrollTop = container.scrollHeight
+  }, [messages, following])
+
+  function handleScroll() {
+    const container = messagesRef.current
+    if (!container) return
+    setFollowing(container.scrollHeight - container.scrollTop - container.clientHeight <= FOLLOW_THRESHOLD_PX)
+  }
+
+  function handleStop() {
+    if (performance.now() - askedAtRef.current < STOP_GUARD_MS) return
+    onStop()
+  }
 
   // The message list mutates on every streamed token; a live region on the
   // whole list would re-announce (or re-read) on each mutation. Instead, a
@@ -48,6 +76,8 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
     event.preventDefault()
     const trimmedQuestion = question.trim()
     if (!trimmedQuestion || isStreaming) return
+    askedAtRef.current = performance.now()
+    setFollowing(true)
     onAsk(trimmedQuestion)
     setQuestion('')
   }
@@ -55,20 +85,23 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
   return (
     <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col bg-panel md:border-r md:border-hairline">
       <div aria-live="polite" className="sr-only">{announcement}</div>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div ref={messagesRef} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-7 md:py-6">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={messagesRef} onScroll={handleScroll} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-7 md:py-6">
           <div className="flex shrink-0 flex-col gap-4">
             {messages.map((message) => {
               const pending = message.state === 'pending'
-              if (message.role === 'assistant' && !message.content && !pending) return null
+              const stopped = message.role === 'assistant' && message.state === 'stopped'
+              // A reply stopped before its first token keeps only the label.
+              if (message.role === 'assistant' && !message.content && !pending && !stopped) return null
               const showSources = message.role === 'assistant' && !pending && (message.sources?.length ?? 0) > 0
               return (
                 <div key={message.id} className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end' : 'self-start'}`}>
-                  <div
+                  {(message.content || pending) && <div
                     className={`whitespace-pre-wrap break-words rounded-[3px] border border-hairline px-4 py-3 text-sm leading-relaxed text-primary md:text-[15px] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'}`}
                   >
                     {message.content || '…'}
-                  </div>
+                  </div>}
+                  {stopped && <p className="px-1 text-[11px] leading-relaxed text-muted">Stopped</p>}
                   {showSources && (
                     <p className="break-words px-1 text-[11px] leading-relaxed text-muted">
                       <span>Sources: </span>
@@ -111,6 +144,15 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
           </div>}
         </div>
 
+        {!following && messages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setFollowing(true)}
+            className="absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center rounded-full border border-hairline bg-canvas px-4 text-xs text-muted shadow-sm transition-colors hover:text-primary md:min-h-0 md:py-1.5"
+          >
+            Jump to latest ↓
+          </button>
+        )}
       </div>
 
       {inputAccessory}
@@ -126,14 +168,25 @@ function Chat({ corpus, messages, isStreaming, onAsk, onNewChat, errorMessage, i
             placeholder="Ask anything..."
             className="min-w-0 flex-1 rounded-[3px] border border-hairline bg-canvas px-3 py-3 text-base text-primary outline-none placeholder:text-muted focus:border-cyan disabled:cursor-not-allowed"
           />
-          <button
-            type="submit"
-            aria-label="Send question"
-            disabled={isStreaming}
-            className="min-w-11 rounded-[3px] border border-hairline bg-canvas px-4 text-lg text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            →
-          </button>
+          {isStreaming ? (
+            // Replaces Send while an answer streams (DESIGN-002 §6.1/§6.2).
+            <button
+              type="button"
+              onClick={handleStop}
+              aria-label="Stop answer"
+              className="min-h-11 min-w-11 rounded-[3px] border border-hairline bg-canvas px-4 text-sm text-muted transition-colors hover:text-primary focus-visible:text-primary"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              aria-label="Send question"
+              className="min-w-11 rounded-[3px] border border-hairline bg-canvas px-4 text-lg text-muted transition-colors hover:text-primary"
+            >
+              →
+            </button>
+          )}
         </form>
         <p className="mt-2 flex flex-wrap items-center gap-x-1 text-[11px] text-muted md:mt-2">
           Chats are saved in this browser.{' '}

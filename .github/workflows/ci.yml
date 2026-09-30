@@ -21,10 +21,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: root  # pragma: allowlist secret (throwaway CI service container)
           MYSQL_DATABASE: glassbox
           MYSQL_USER: glassbox
-          MYSQL_PASSWORD: glassbox
+          MYSQL_PASSWORD: glassbox  # pragma: allowlist secret (throwaway CI service container)
         ports:
           - 3306:3306
         options: >-
@@ -45,7 +45,7 @@ jobs:
       MYSQL_HOST: 127.0.0.1
       MYSQL_PORT: "3306"
       MYSQL_USER: glassbox
-      MYSQL_PASSWORD: glassbox
+      MYSQL_PASSWORD: glassbox  # pragma: allowlist secret (throwaway CI service container)
       MYSQL_DATABASE: glassbox
       REDIS_URL: redis://127.0.0.1:6379/0
       GLASSBOX_PROVIDER: fake
@@ -77,4 +77,5 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build

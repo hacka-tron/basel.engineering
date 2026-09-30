@@ -247,6 +247,13 @@ function App() {
   const revealFinalizeRef = useRef<(() => void) | null>(null)
   const REVEAL_TICK_MS = 30
 
+  function stopRevealLoop() {
+    if (revealTimerRef.current !== null) {
+      window.clearInterval(revealTimerRef.current)
+      revealTimerRef.current = null
+    }
+  }
+
   function ensureRevealLoop() {
     if (revealTimerRef.current !== null) return
     revealTimerRef.current = window.setInterval(() => {
@@ -260,10 +267,7 @@ function App() {
       if (revealFinalizeRef.current) {
         const finalize = revealFinalizeRef.current
         revealFinalizeRef.current = null
-        if (revealTimerRef.current !== null) {
-          window.clearInterval(revealTimerRef.current)
-          revealTimerRef.current = null
-        }
+        stopRevealLoop()
         finalize()
       }
     }, REVEAL_TICK_MS)
@@ -316,8 +320,13 @@ function App() {
     requestStartRef.current = performance.now()
     firstTokenLatencyRef.current = null
 
+    // Callbacks from a request the visitor already stopped are ignored; the
+    // next request owns the shared refs by then.
+    const isCurrent = () => abortControllerRef.current === controller
+
     void askQuestion(question, apiCorpus(targetCorpus), {
       onStage: (event) => {
+        if (!isCurrent()) return
         setActiveNode((current) => event.status === 'start'
           ? event.node
           : current === event.node ? null : current)
@@ -326,6 +335,7 @@ function App() {
         }
       },
       onRetrieval: (event) => {
+        if (!isCurrent()) return
         setRetrievedChunks(event.chunks)
         updateStreamingMessage((message) => ({
           ...message,
@@ -334,6 +344,7 @@ function App() {
         }))
       },
       onToken: (event) => {
+        if (!isCurrent()) return
         if (firstTokenLatencyRef.current === null && requestStartRef.current !== null) {
           firstTokenLatencyRef.current = Math.round(performance.now() - requestStartRef.current)
         }
@@ -341,13 +352,14 @@ function App() {
         ensureRevealLoop()
       },
       onDone: (event) => {
+        if (!isCurrent()) return
         revealFinalizeRef.current = () => {
           updateStreamingMessage((message) => ({
             ...message,
             content: event.mode === 'retrieval_only' && !message.content
               ? 'Sources retrieved — no generated answer for this request.'
               : message.content,
-            state: event.mode === 'retrieval_only' ? 'retrieval_only' : 'done',
+            state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
           setLastStats({
             latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
@@ -360,6 +372,7 @@ function App() {
         ensureRevealLoop()
       },
       onError: (event) => {
+        if (!isCurrent()) return
         revealFinalizeRef.current = () => {
           setChatError({
             corpus: targetCorpus,
@@ -375,6 +388,30 @@ function App() {
         ensureRevealLoop()
       },
     }, controller.signal, history)
+  }
+
+  // Stop button (DESIGN-002 §6.2): aborting the fetch closes the connection,
+  // which makes the server cancel generation. The partial answer is kept,
+  // marked `stopped` (so it is saved and sent as history like any settled
+  // answer), and the chat is immediately free for the next question.
+  function handleStop() {
+    const controller = abortControllerRef.current
+    if (!requestInFlightRef.current || !controller) return
+    const pendingText = revealBufferRef.current
+    revealBufferRef.current = ''
+    const finalize = revealFinalizeRef.current
+    revealFinalizeRef.current = null
+    stopRevealLoop()
+    if (finalize) {
+      // The answer already finished arriving and is only still being revealed:
+      // show the rest now and settle it normally instead of calling it stopped.
+      if (pendingText) updateStreamingMessage((message) => ({ ...message, content: message.content + pendingText }))
+      finalize()
+      return
+    }
+    controller.abort()
+    updateStreamingMessage((message) => ({ ...message, content: message.content + pendingText, state: 'stopped' }))
+    finishRequest()
   }
 
   function handleNewChat() {
@@ -503,6 +540,7 @@ function App() {
           messages={messages}
           isStreaming={isStreaming}
           onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
+          onStop={handleStop}
           onNewChat={handleNewChat}
           errorMessage={errorMessage}
           inputAccessory={
