@@ -1,5 +1,13 @@
 # Agent handoff
 
+## Codex continuation — Terraform CI setup and Flux preflight, 2026-09-30
+
+Both protected GitHub environments exist. Codex set nonsecret `CLOUDFLARE_ZONE_ID=0d20c987878c222aaea75af989c8f460` in `terraform-plan` and `terraform-prod`, using the value in the live Terraform state; both were verified via `gh variable list`. Neither environment has `CLOUDFLARE_API_TOKEN` yet. The owner was asked to create zone-scoped tokens and set the secrets directly in GitHub, without pasting them into chat. Correct plan-token permissions are Zone Read, DNS Read, and Cache Rules Read; prod needs Zone Read, DNS Edit, and Cache Rules Edit. The instructions in `infra/CI.md` are corrected in this branch.
+
+A fresh read-only `terraform plan` in `infra/bootstrap` showed exactly **2 additions** (`glassbox-ci-plan` role and policy), **1 in-place update** (`glassbox-ci` OIDC trust to the protected `terraform-prod` environment), **0 destroys**. The owner was asked for the explicit approval required by the prior handoff before any AWS apply; no approval has arrived and **nothing was applied**. The latest failed Terraform workflow run (`36671785475`) stops at `AssumeRoleWithWebIdentity`, as expected while the plan role does not exist.
+
+Flux Task 5 has two preflight blockers: GitHub confirms required checks plus `enforce_admins: true` on `main`, so direct Flux pushes to that branch would fail; and private ECR pulls lack both EC2 role read permission and k3s registry/credential-provider configuration. A read-only SSM check confirmed the credential-provider and registry paths are absent on the live node (command `c73a63a1-1c29-4516-a8d6-efebacef0713`). Do not run Flux bootstrap as written. The plan's Task 5 now records these findings; a Git write path and ECR authentication design must be agreed and prepared before requesting live-bootstrap approval. No cluster configuration was changed.
+
 ## App CI/CD pipeline built, proven end to end — Claude, 2026-09-30
 
 **Active coordinator: Claude.** Built and merged `docs/superpowers/plans/2026-09-29-app-cicd-flux.md` Tasks 1–4b in one session, with the owner steering real-time (not an async handoff). PR-gate (`ci.yml`: `backend-tests`+`frontend-checks`, required on `main`, no path filters — a path-filtered PR/push never gets a required check run and there's no automatic leniency for either a direct push or, it turned out, a PR either) and the release pipeline (`release.yml`: native `ubuntu-24.04-arm` runner, no QEMU, pushes to a new ECR repo via OIDC) are both real and verified live, not just written. First genuine end-to-end release run succeeded in 50s, pushing `glassbox:latest`+`glassbox:<sha>` to `404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox`.
