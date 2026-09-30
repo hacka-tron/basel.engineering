@@ -2,11 +2,11 @@
 
 Architecture and repo-state blueprint. Read this first when starting a new session — it should make scanning the repo unnecessary for orientation.
 
-**Last updated:** 2026-09-30 (Flux Task 5 verified end-to-end; README copy revision pending review)
+**Last updated:** 2026-09-30 (Flux Task 5 verified end-to-end; README and favicon update pending review)
 
 ## Latest local checkpoint
 
-**README and GitHub Packages cleanup:** PR #30 merged the visitor-facing README. The owner then requested a shorter, warmer first-person version focused on the site and why it was built; `docs/readme-personal-tone` contains that revision for review. The legacy public GHCR container package `ghcr.io/hacka-tron/basel.engineering` was deleted at the owner's request; GitHub's package API listed no active container packages afterward. Production uses ECR and was unaffected.
+**README and favicon:** PRs #30 and #31 merged the README and a shorter first-person revision. The owner then requested a medium-length, more visually engaging README with useful sections and a wrench browser-tab icon. Branch `feature/readme-favicon` contains those changes for review. The legacy GHCR package remains deleted; production uses ECR.
 
 **Flux GitOps + Image Update Automation is bootstrapped, live, and proven end-to-end — merging to `main` now deploys to production hands-off, no manual step.** This had previously been marked "bootstrap succeeded" without ever being forced through a real reconcile; this session did that for real and found six real, compounding bugs before it actually worked (IMDS hop limit — a red herring; missing ECR IAM reads; `ImageRepository` missing `spec.provider: aws`, the actual 401 cause; a removed Flux template field breaking the commit step; stale immutable Jobs; and a wrong image reaching production because `ImagePolicy`'s tag filter matched a coincidentally-all-digits git SHA alongside real build numbers). All fixed (PRs #20-25). See `project/AGENT_HANDOFF.md` for the full blow-by-blow.
 
