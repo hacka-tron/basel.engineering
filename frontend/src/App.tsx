@@ -447,7 +447,7 @@ function App() {
   // Rendered before the Contact group at md+ and after it below md so DOM/tab
   // order matches the visual order at both layouts (visual order via `order-*`).
   const topicNav = (
-      <nav aria-label="Question topic" className="order-3 flex w-full items-center gap-2 text-xs md:order-2 md:ml-4 md:w-auto">
+      <nav aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
         <button
           type="button"
           aria-pressed={corpus === 'basel'}

@@ -15,7 +15,7 @@
 
 Glassbox is a single-page website with a chatbot that answers questions about two things: **Basel** (work history, projects, skills) and **the system itself** (its Terraform, Kubernetes manifests, source code and design decisions). Every answer is grounded in retrieved documents and cites its sources.
 
-The differentiator is that the machinery is the design. Next to the chat, a live architecture diagram lights up as each request moves through the system: edge, API, cache, queue, worker, vector search, database, LLM. Each node shows real timings and cache hit/miss status. A "stress test" button floods the retrieval queue so visitors can watch Kubernetes scale worker pods in real time.
+The differentiator is that the machinery is the design. Next to the chat, a live architecture diagram lights up as each request moves through the system: edge, API, cache, queue, worker, vector search, database, LLM. Each node shows real timings and cache hit/miss status. A "stress test" control (the tiger/bunny icon in the footer) floods the retrieval queue so visitors can watch Kubernetes scale worker pods in real time.
 
 Recruiters get a polished, memorable demo. Engineers get a working, inspectable system where every technology on the resume has a real job.
 
@@ -99,9 +99,9 @@ Driven entirely by trace events from the backend (section 8). For each event the
 
 The nodes can also be inspected directly. Hovering or keyboard-focusing one shows a short description plus the concrete implementation (for example, Redis Streams for Queue) below the diagram without changing the chat topic or making a model request. Selecting a node gives it a persistent border, switches to **About This System**, and asks a component-specific question; if an answer is still streaming, the question starts when that answer finishes. During a request, the active component's whole tile fills with cyan, distinct from the selected border and subtle hover state. The diagram declares fixed node dimensions and connection-handle positions to React Flow so live state updates keep both nodes and arrows visible. On mobile, selecting a node keeps the architecture sheet open and shows the answer below the diagram. Closing the sheet reveals the full chat history.
 
-### 4.5 Stress test button
+### 4.5 Stress test (the tiger/bunny icon)
 
-Enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 3, then shrinking back after about a minute. A tiger icon beside the button means the node has room for a real burst; a bunny means it doesn't, and a click plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
+The footer has no separate button: the tiger/bunny capacity icon is the button. Tapping or clicking it runs the test; holding it for about half a second on touch (or hovering/keyboard-focusing it on desktop) shows the details tooltip instead, and releasing a long-press does not start a test. While the short cooldown runs the icon dims and shows the remaining seconds. Running it enqueues a burst of synthetic retrieval jobs (no LLM calls, so it costs nothing). The worker node on the diagram shows pod dots multiplying from 1 up to 3, then shrinking back after about a minute. A tiger icon means the node has room for a real burst; a bunny means it doesn't, and a tap plays a simulated version instead (same pod-dot animation, no jobs queued). After a real burst the global 5-minute cooldown switches the icon to the bunny, so clicks stay simulated until it ends; where there's no live cluster view, a real burst also uses the simulated animation so it never looks like nothing happened.
 
 ### 4.6 Citations
 

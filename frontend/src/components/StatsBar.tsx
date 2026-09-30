@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef, useState } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
@@ -11,16 +12,19 @@ type StatsBarProps = {
   stressTestRealCooldownSeconds?: number | null
 }
 
+const LONG_PRESS_MS = 500
+const TOOLTIP_AUTO_HIDE_MS = 4000
+
 /**
- * Capacity-status icon: muted at rest and brightening on hover/focus of its
+ * Capacity icon: muted at rest and brightening on hover/focus/press of its
  * `group` parent, matching the header's GitHub mark. Tiger = room for a real
  * stress test; bunny = simulated demo only.
  */
-function Avatar({ paths }: { paths: string[] }) {
+function Avatar({ paths, dimmed }: { paths: string[]; dimmed: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className="flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus:text-primary"
+      className={`flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus-visible:text-primary group-active:text-primary ${dimmed ? 'opacity-40' : ''}`}
     >
       <svg viewBox="0 0 32 32" className="size-6 sm:size-7" fill="currentColor">
         {paths.map((d) => <path key={d.slice(0, 24)} d={d} />)}
@@ -45,11 +49,61 @@ function StatsBar({
     ? null
     : Math.max(1, Math.ceil(stressTestRealCooldownSeconds / 60))
   const capacityLabel = stressTestCapacity.sufficient
-    ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 3 to drain them. Watch the pods and backlog on the Worker node.'
+    ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 3 to drain them. Watch the pods and backlog on the Worker node. Tap to run.'
     : stressTestCapacity.realCooldown
-      ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued.`
-      : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
+      ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued. Tap to run.`
+      : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales. Tap to run."
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
+
+  const tooltipId = useId()
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+  const pressTimerRef = useRef<number | null>(null)
+  const longPressedRef = useRef(false)
+
+  function cancelPress() {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current)
+      pressTimerRef.current = null
+    }
+  }
+
+  // Touch/pen only: a ~500ms hold opens the details instead of running the
+  // test. Mouse users get the hover tooltip, so they never need a long-press.
+  function handlePointerDown(e: React.PointerEvent) {
+    longPressedRef.current = false
+    if (e.pointerType === 'mouse') return
+    cancelPress()
+    pressTimerRef.current = window.setTimeout(() => {
+      pressTimerRef.current = null
+      longPressedRef.current = true
+      setTooltipOpen(true)
+    }, LONG_PRESS_MS)
+  }
+
+  function handleClick() {
+    if (longPressedRef.current) {
+      // The release that ends a long-press must not also start a test.
+      longPressedRef.current = false
+      return
+    }
+    setTooltipOpen(false)
+    if (!disabled) onStressTest?.()
+  }
+
+  useEffect(() => {
+    if (!tooltipOpen) return
+    const hide = window.setTimeout(() => setTooltipOpen(false), TOOLTIP_AUTO_HIDE_MS)
+    function onDocPointerDown(e: PointerEvent) {
+      if (!(e.target as Element | null)?.closest?.('[data-stress-button]')) setTooltipOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointerDown)
+    return () => {
+      window.clearTimeout(hide)
+      document.removeEventListener('pointerdown', onDocPointerDown)
+    }
+  }, [tooltipOpen])
+
+  useEffect(() => cancelPress, [])
 
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
@@ -65,39 +119,37 @@ function StatsBar({
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <span
-          className="group relative inline-flex cursor-help rounded-full outline-none before:absolute before:-inset-y-2.5 before:-left-4 before:-right-1 before:content-[''] focus-visible:ring-1 focus-visible:ring-cyan"
-          tabIndex={0}
-          role="status"
-          aria-label={capacityLabel}
+      <div className="flex shrink-0 items-center">
+        <button
+          type="button"
+          aria-disabled={disabled}
+          aria-label={onCooldown
+            ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining`
+            : `Run stress test (${stressTestCapacity.sufficient ? 'real' : 'simulated'})`}
+          aria-describedby={tooltipId}
+          data-stress-button
+          onClick={handleClick}
+          onPointerDown={handlePointerDown}
+          onPointerUp={cancelPress}
+          onPointerCancel={cancelPress}
+          onPointerLeave={cancelPress}
+          onContextMenu={(e) => e.preventDefault()}
+          className={`group relative -mr-2 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:-mr-2.5 md:mr-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} />
-          <span className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-60 sm:w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs leading-relaxed text-primary shadow-lg group-hover:block group-focus:block">
+          <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={disabled} />
+          {onCooldown && (
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 text-[11px] leading-none tabular-nums text-cyan">
+              {stressTestCooldownSeconds}
+            </span>
+          )}
+          <span
+            id={tooltipId}
+            role="tooltip"
+            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-60 sm:w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${tooltipOpen ? 'block' : 'hidden'}`}
+          >
             {capacityLabel}
           </span>
-        </span>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onStressTest}
-        aria-label={onCooldown ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining` : 'Stress test'}
-        className={`min-h-11 shrink-0 rounded-[3px] border px-3 py-2 transition-colors md:min-h-0 sm:px-4 ${
-          disabled
-            ? 'cursor-not-allowed border-hairline text-muted'
-            : 'border-hairline text-primary hover:border-cyan hover:text-cyan'
-        }`}
-      >
-        {onCooldown ? (
-          <>
-            <span className="hidden sm:inline">Stress test (</span>
-            {stressTestCooldownSeconds}s
-            <span className="hidden sm:inline">)</span>
-          </>
-        ) : (
-          'Stress test'
-        )}
-      </button>
+        </button>
       </div>
     </footer>
   )
