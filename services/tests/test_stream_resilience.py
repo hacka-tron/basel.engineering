@@ -1,0 +1,486 @@
+"""Streaming hardening (DESIGN-002 §6.2, §7.4): heartbeats, and stopping on disconnect."""
+
+import asyncio
+import json
+import os
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
+
+from services.glassbox.api import ask as _ask_module
+from services.glassbox.api.main import app
+from services.glassbox.api.sse import PING_FRAME, with_heartbeat
+from services.tests.test_ask_endpoint import TEST_MYSQL_PORT, MemoryRedis, events
+
+ORIGINAL_SAVE_QUERY = _ask_module._save_query
+BODY = {"question": "What is Basel's background?", "corpus": "about_me"}
+
+
+# --- with_heartbeat ------------------------------------------------------------
+
+
+async def _collect(stream, *, limit=100):
+    started = time.monotonic()
+    out = []
+    async for item in stream:
+        out.append((time.monotonic() - started, item))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def test_heartbeat_pings_while_source_is_quiet_and_keeps_event_order():
+    async def slow_source():
+        yield "event: a\n\n"
+        await asyncio.sleep(0.35)
+        yield "event: b\n\n"
+        await asyncio.sleep(0.35)
+        yield "event: c\n\n"
+
+    out = asyncio.run(_collect(with_heartbeat(slow_source(), interval_s=0.1)))
+    items = [item for _, item in out]
+    assert [item for item in items if item != PING_FRAME] == [
+        "event: a\n\n",
+        "event: b\n\n",
+        "event: c\n\n",
+    ]
+    between_a_and_b = items[items.index("event: a\n\n") + 1 : items.index("event: b\n\n")]
+    between_b_and_c = items[items.index("event: b\n\n") + 1 : items.index("event: c\n\n")]
+    assert between_a_and_b and set(between_a_and_b) == {PING_FRAME}
+    assert between_b_and_c and set(between_b_and_c) == {PING_FRAME}
+    # Pings arrive at the interval: no silent gap much longer than 0.1 s.
+    times = [at for at, _ in out]
+    assert max(later - earlier for earlier, later in zip(times, times[1:], strict=False)) < 0.2
+    # And the first ping waits a full interval after the last real event.
+    first_ping_at = times[items.index(PING_FRAME)]
+    assert first_ping_at >= 0.09
+
+
+def test_heartbeat_sends_no_ping_while_events_flow():
+    async def fast_source():
+        for index in range(20):
+            await asyncio.sleep(0.01)
+            yield f"event: {index}\n\n"
+
+    out = asyncio.run(_collect(with_heartbeat(fast_source(), interval_s=0.1)))
+    assert PING_FRAME not in [item for _, item in out]
+    assert len(out) == 20
+
+
+def test_heartbeat_ping_is_an_sse_comment():
+    assert PING_FRAME == ": ping\n\n"
+
+
+class CountingSource:
+    """An endless token source that records how far it got and whether it was closed."""
+
+    def __init__(self, delay=0.02):
+        self.delay = delay
+        self.produced = 0
+        self.closed = False
+        self.cancelled = False
+
+    async def __call__(self):
+        try:
+            while True:
+                await asyncio.sleep(self.delay)
+                self.produced += 1
+                yield f"event: token\ndata: {self.produced}\n\n"
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        finally:
+            self.closed = True
+
+
+def test_heartbeat_stops_the_source_when_the_consumer_closes():
+    source = CountingSource()
+
+    async def run():
+        stream = with_heartbeat(source(), interval_s=10)
+        assert (await anext(stream)).startswith("event: token")
+        await stream.aclose()
+        await asyncio.sleep(0.1)  # Cleanup runs in its own task.
+        produced = source.produced
+        await asyncio.sleep(0.1)
+        return produced
+
+    produced = asyncio.run(run())
+    assert source.closed
+    assert source.produced == produced
+
+
+def test_heartbeat_stops_the_source_when_the_consumer_is_cancelled():
+    source = CountingSource()
+
+    async def consume(stream):
+        async for _ in stream:
+            pass
+
+    async def run():
+        task = asyncio.create_task(consume(with_heartbeat(source(), interval_s=10)))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0.1)
+        produced = source.produced
+        await asyncio.sleep(0.1)
+        return produced
+
+    produced = asyncio.run(run())
+    assert source.closed and source.cancelled
+    assert source.produced == produced
+
+
+def test_heartbeat_polls_for_disconnect_and_stops_the_source():
+    """Fallback for servers that never cancel the response on disconnect."""
+    source = CountingSource(delay=0.2)
+
+    async def run():
+        started = time.monotonic()
+
+        async def is_disconnected():
+            return time.monotonic() - started > 0.1
+
+        out = await _collect(
+            with_heartbeat(
+                source(), interval_s=10, is_disconnected=is_disconnected, poll_interval_s=0.05
+            )
+        )
+        await asyncio.sleep(0.05)
+        produced = source.produced
+        await asyncio.sleep(0.3)
+        return out, produced
+
+    out, produced = asyncio.run(run())
+    assert out == []  # Disconnected before the first 0.2 s token.
+    assert source.cancelled and source.closed
+    assert source.produced == produced == 0
+
+
+def test_heartbeat_relays_source_errors():
+    async def failing():
+        yield "event: a\n\n"
+        raise RuntimeError("boom")
+
+    async def run():
+        return [item async for item in with_heartbeat(failing(), interval_s=10)]
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(run())
+
+
+# --- /api/ask with a slow fake provider ---------------------------------------------
+
+
+class SlowLLM:
+    model_id = "slow-llm"
+
+    def __init__(self, delay=0.05, count=40):
+        self.delay = delay
+        self.count = count
+        self.produced = 0
+        self.closed = False
+
+    async def generate(self, prompt, *, max_tokens, system=None):
+        try:
+            for index in range(self.count):
+                await asyncio.sleep(self.delay)
+                self.produced += 1
+                yield f" w{index}"
+        finally:
+            self.closed = True
+
+
+class SlowWorkerRedis(MemoryRedis):
+    """Publishes the worker's retrieval result after a delay, like a busy worker."""
+
+    def __init__(self, delay=0.0, outcome="retrieval"):
+        super().__init__(outcome)
+        self.delay = delay
+
+    async def xadd(self, stream, fields, **kwargs):
+        async def later():
+            await asyncio.sleep(self.delay)
+            await MemoryRedis.xadd(self, stream, fields, **kwargs)
+
+        self.channel = f"trace:{fields['request_id']}"
+        asyncio.get_running_loop().create_task(later())
+
+
+class RecordingAnswerCache:
+    def __init__(self):
+        self.puts = 0
+
+    async def get(self, *args):
+        return None
+
+    async def put(self, *args):
+        self.puts += 1
+
+
+class CountingBudget:
+    def __init__(self):
+        self.reservations = 0
+
+    async def reserve(self, *, units=4):
+        self.reservations += 1
+        return True
+
+
+class AllowAllRate:
+    async def allow(self, client_hash):
+        return True, 0
+
+
+@pytest.fixture
+def harness(monkeypatch):
+    from services.glassbox.api import ask
+
+    state = {
+        "redis": SlowWorkerRedis(),
+        "llm": SlowLLM(),
+        "cache": RecordingAnswerCache(),
+        "budget": CountingBudget(),
+        "saved": [],
+    }
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: state["redis"])
+    monkeypatch.setattr(ask, "get_llm_provider", lambda: state["llm"])
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: state["cache"])
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: state["budget"])
+    monkeypatch.setattr(ask, "get_rate_limiter", lambda client: AllowAllRate())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: state["saved"].append(kwargs))
+    return state
+
+
+def test_ask_stream_pings_during_retrieval_wait_and_token_loop(harness, monkeypatch):
+    from services.glassbox.api import ask
+
+    monkeypatch.setattr(ask, "HEARTBEAT_INTERVAL_S", 0.05)
+    harness["redis"].delay = 0.3
+    harness["llm"].delay = 0.12
+    harness["llm"].count = 4
+    response = TestClient(app).post("/api/ask", json=BODY)
+    frames = response.text.strip().split("\n\n")
+    kinds = [
+        "ping" if frame == PING_FRAME.strip() else frame.splitlines()[0].removeprefix("event: ")
+        for frame in frames
+    ]
+    retrieval = kinds.index("retrieval")
+    first_token = kinds.index("token")
+    assert "ping" in kinds[:retrieval], "no ping while waiting for the worker"
+    assert "ping" in kinds[first_token : kinds.index("done")], "no ping between slow tokens"
+    stream = events(response)
+    names = [name for name, _ in stream]
+    assert names.index("retrieval") < names.index("token") < names.index("done")
+    assert "".join(data["text"] for name, data in stream if name == "token") == " w0 w1 w2 w3"
+    assert stream[-1] == ("done", stream[-1][1]) and stream[-1][1]["mode"] == "full"
+    assert harness["saved"][0]["mode"] == "full"
+
+
+def _asgi_ask(body, *, disconnect_when):
+    """Drive the real ASGI app, disconnecting once ``disconnect_when(sent_text)`` is true."""
+
+    async def run():
+        disconnected = asyncio.Event()
+        sent = []
+        request_sent = False
+
+        async def receive():
+            nonlocal request_sent
+            if not request_sent:
+                request_sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await disconnected.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.body":
+                sent.append(message.get("body", b"").decode())
+                if disconnect_when("".join(sent)):
+                    disconnected.set()
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/ask",
+            "raw_path": b"/api/ask",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [(b"content-type", b"application/json"), (b"host", b"testserver")],
+            "client": ("127.0.0.1", 50000),
+            "server": ("testserver", 80),
+        }
+        await asyncio.wait_for(app(scope, receive, send), timeout=5)
+        # Cleanup (cancelling generation, logging the stop) runs in its own task.
+        await asyncio.sleep(0.3)
+        return "".join(sent)
+
+    return run
+
+
+def test_disconnect_mid_answer_stops_generation_and_logs_stopped(harness):
+    llm = harness["llm"]
+
+    async def scenario():
+        text = await _asgi_ask(
+            json.dumps(BODY).encode(),
+            disconnect_when=lambda sent: sent.count("event: token") >= 3,
+        )()
+        produced = llm.produced
+        await asyncio.sleep(0.3)
+        return text, produced
+
+    text, produced = asyncio.run(scenario())
+    assert "event: done" not in text
+    assert llm.closed
+    assert produced < llm.count
+    assert llm.produced == produced, "the LLM kept being iterated after the client left"
+    [saved] = harness["saved"]
+    assert saved["mode"] == "stopped"
+    assert saved["tokens_in"] > 0
+    assert 3 <= saved["tokens_out"] <= produced
+    assert saved["chunks"][0].chunk_id == 42
+    # The reserved answer slot stays spent; a stopped answer is never cached.
+    assert harness["budget"].reservations == 1
+    assert harness["cache"].puts == 0
+
+
+def test_disconnect_during_retrieval_logs_stopped_without_spending_budget(harness):
+    harness["redis"].delay = 1.0
+
+    async def scenario():
+        return await _asgi_ask(
+            json.dumps(BODY).encode(),
+            disconnect_when=lambda sent: '"node":"queue","status":"end"' in sent,
+        )()
+
+    text = asyncio.run(scenario())
+    assert "event: retrieval" not in text
+    assert harness["llm"].produced == 0
+    [saved] = harness["saved"]
+    assert saved["mode"] == "stopped"
+    assert saved["tokens_in"] == 0 and saved["tokens_out"] == 0
+    assert saved["chunks"] == []
+    assert harness["budget"].reservations == 0
+
+
+def test_closing_the_stream_generator_mid_answer_closes_the_provider(harness):
+    """GeneratorExit path: the stream is closed while suspended at a token yield."""
+    from services.glassbox.api import ask
+
+    llm = harness["llm"]
+
+    async def scenario():
+        stream = ask._stream(ask.AskRequest(**BODY), "01TESTREQUEST0000000000000", 0, "hash")
+        tokens = 0
+        async for item in stream:
+            if item.startswith("event: token"):
+                tokens += 1
+                if tokens == 2:
+                    break
+        await stream.aclose()
+        produced = llm.produced
+        await asyncio.sleep(0.2)
+        return produced
+
+    produced = asyncio.run(scenario())
+    assert llm.closed
+    assert llm.produced == produced == 2
+    [saved] = harness["saved"]
+    assert saved["mode"] == "stopped"
+    assert saved["tokens_out"] == 2
+    assert harness["cache"].puts == 0
+
+
+def test_client_leaving_after_an_error_is_not_logged_as_stopped(harness, monkeypatch):
+    from services.glassbox.api import ask
+
+    class Deny:
+        async def allow(self, client_hash):
+            return False, 30
+
+    monkeypatch.setattr(ask, "get_rate_limiter", lambda client: Deny())
+
+    async def scenario():
+        stream = ask._stream(ask.AskRequest(**BODY), "01TESTREQUEST0000000000000", 0, "hash")
+        async for item in stream:
+            if item.startswith("event: error"):
+                break
+        await stream.aclose()
+
+    asyncio.run(scenario())
+    assert harness["saved"] == []
+
+
+def test_completed_answer_is_logged_once_as_full(harness):
+    harness["llm"].delay = 0
+    harness["llm"].count = 3
+    stream = events(TestClient(app).post("/api/ask", json=BODY))
+    assert stream[-1][0] == "done"
+    assert [saved["mode"] for saved in harness["saved"]] == ["full"]
+    assert harness["cache"].puts == 1
+
+
+# --- MySQL: the stopped mode is storable (migration 0004) ---------------------------
+
+
+def test_stopped_query_row_is_stored(monkeypatch):
+    from services.glassbox.db.session import create_db_engine, get_session_factory
+
+    monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
+    monkeypatch.setenv("MYSQL_USER", "glassbox")
+    monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
+    monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
+    get_session_factory.cache_clear()
+    engine = create_db_engine()
+    try:
+        with engine.connect() as connection:
+            mode = connection.exec_driver_sql("SHOW COLUMNS FROM queries LIKE 'mode'").one()[1]
+    except Exception as error:  # pragma: no cover - depends on local services
+        engine.dispose()
+        get_session_factory.cache_clear()
+        pytest.skip(f"MySQL unavailable: {error}")
+    if "stopped" not in str(mode):
+        engine.dispose()
+        get_session_factory.cache_clear()
+        message = "MySQL queries.mode not migrated to 0004 (missing 'stopped')"
+        if os.environ.get("CI"):
+            pytest.fail(message)
+        pytest.skip(message)
+
+    from services.glassbox.db.models import Query
+
+    request_id = "01STOPPEDQUERYTEST00000000"
+    try:
+        ORIGINAL_SAVE_QUERY(
+            request_id=request_id,
+            request=_ask_module.AskRequest(**BODY),
+            chunks=[],
+            timings={"embed": 1},
+            total_ms=12,
+            tokens_in=30,
+            tokens_out=4,
+            turn_index=0,
+            rewritten_query=None,
+            mode="stopped",
+        )
+        with get_session_factory()() as session:
+            row = session.scalar(select(Query).where(Query.request_id == request_id))
+            assert row is not None
+            assert row.mode == "stopped"
+            assert row.tokens_out == 4
+    finally:
+        with get_session_factory()() as session:
+            session.execute(delete(Query).where(Query.request_id == request_id))
+            session.commit()
+        engine.dispose()
+        get_session_factory.cache_clear()

@@ -1,6 +1,7 @@
 """Stream the API and retrieval worker trace for a question."""
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -16,7 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from services.glassbox.api.sse import frame
+from services.glassbox.api.sse import frame, with_heartbeat
 from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache
 from services.glassbox.cache.embedding import (
     EmbeddingCache,
@@ -46,6 +47,8 @@ from services.glassbox.worker.main import enqueue_retrieval_job
 router = APIRouter()
 LOGGER = logging.getLogger(__name__)
 RETRIEVAL_TIMEOUT_S = 30.0
+# DESIGN-002 §7.4: an SSE comment ping whenever the stream has been quiet this long.
+HEARTBEAT_INTERVAL_S = 15.0
 _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _PROMPT_VERSION = "v12"
 # Keyword-based, not tense-aware: once Phase 4/5 actually ships Terraform/KEDA/k3s,
@@ -316,6 +319,40 @@ async def _stream(
     timings: dict[str, int] = {}
     lock_key = None
     lock_token = None
+    # State the stop path (DESIGN-002 §6.2) needs to log what actually happened.
+    # `settled` is set once the request has a recorded outcome (a query-log row or
+    # an error event), so a client leaving afterwards is not logged as a stop.
+    settled = False
+    turn_index = 0
+    rewritten_query = None
+    chunks: list[WorkerChunk] | None = None
+    cache_status = "miss"
+    llm_prompt: str | None = None
+    response_parts: list[str] = []
+
+    async def save(
+        *,
+        tokens_in: int,
+        tokens_out: int,
+        mode: str = "full",
+        total_ms: int | None = None,
+    ) -> None:
+        nonlocal settled
+        settled = True
+        await asyncio.to_thread(
+            _save_query,
+            request_id=request_id,
+            request=request,
+            turn_index=turn_index,
+            rewritten_query=rewritten_query,
+            chunks=chunks or [],
+            timings=timings,
+            total_ms=elapsed_ms(request_start_ts) if total_ms is None else total_ms,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cache_status=cache_status,
+            mode=mode,
+        )
 
     async def stage(
         node: str,
@@ -344,6 +381,7 @@ async def _stream(
         yield await stage("api", "start", t_ms=0)
         allowed, retry_after_s = await get_rate_limiter(client).allow(client_hash)
         if not allowed:
+            settled = True
             yield frame(
                 "error",
                 {
@@ -431,6 +469,7 @@ async def _stream(
             yield await stage("answer_cache", "end", cache="hit" if answer_hit else "miss")
         if answer_hit:
             chunks = [WorkerChunk.model_validate(item) for item in answer_hit["chunks"]]
+            cache_status = "answer_hit"
             answer = answer_hit["answer"]
             yield frame(
                 "retrieval",
@@ -438,19 +477,7 @@ async def _stream(
             )
             yield frame("token", {"text": answer})
             total_ms = elapsed_ms(request_start_ts)
-            await asyncio.to_thread(
-                _save_query,
-                request_id=request_id,
-                request=request,
-                turn_index=turn_index,
-                rewritten_query=rewritten_query,
-                chunks=chunks,
-                timings=timings,
-                total_ms=total_ms,
-                tokens_in=0,
-                tokens_out=0,
-                cache_status="answer_hit",
-            )
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
             yield frame(
                 "done",
                 {
@@ -485,6 +512,7 @@ async def _stream(
             while chunks is None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
+                    settled = True
                     yield frame(
                         "error",
                         {"code": "internal", "message": "Retrieval timed out after 30 seconds"},
@@ -513,6 +541,7 @@ async def _stream(
                     event = WorkerError.model_validate(raw)
                     if event.request_id != request_id:
                         raise ValueError("worker trace request_id mismatch")
+                    settled = True
                     yield frame(
                         "error",
                         event.model_dump(
@@ -538,18 +567,7 @@ async def _stream(
             answer = "I don't know from what I have."
             yield frame("token", {"text": answer})
             total_ms = elapsed_ms(request_start_ts)
-            await asyncio.to_thread(
-                _save_query,
-                request_id=request_id,
-                request=request,
-                turn_index=turn_index,
-                rewritten_query=rewritten_query,
-                chunks=chunks,
-                timings=timings,
-                total_ms=total_ms,
-                tokens_in=0,
-                tokens_out=0,
-            )
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
             yield frame(
                 "done",
                 {
@@ -564,19 +582,7 @@ async def _stream(
 
         if await get_kill_switch(client).llm_disabled():
             total_ms = elapsed_ms(request_start_ts)
-            await asyncio.to_thread(
-                _save_query,
-                request_id=request_id,
-                request=request,
-                turn_index=turn_index,
-                rewritten_query=rewritten_query,
-                chunks=chunks,
-                timings=timings,
-                total_ms=total_ms,
-                tokens_in=0,
-                tokens_out=0,
-                mode="retrieval_only",
-            )
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0, mode="retrieval_only")
             yield frame(
                 "done",
                 {
@@ -591,19 +597,7 @@ async def _stream(
 
         if not await get_daily_budget(client).reserve():
             total_ms = elapsed_ms(request_start_ts)
-            await asyncio.to_thread(
-                _save_query,
-                request_id=request_id,
-                request=request,
-                turn_index=turn_index,
-                rewritten_query=rewritten_query,
-                chunks=chunks,
-                timings=timings,
-                total_ms=total_ms,
-                tokens_in=0,
-                tokens_out=0,
-                mode="retrieval_only",
-            )
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0, mode="retrieval_only")
             yield frame(
                 "done",
                 {
@@ -616,15 +610,20 @@ async def _stream(
             )
             return
 
-        prompt = _prompt(request.question, chunks, history)
+        prompt = llm_prompt = _prompt(request.question, chunks, history)
         # First questions keep the provider's default system prompt unchanged.
         system_kwargs = {"system": _FOLLOW_UP_SYSTEM} if history else {}
         llm_started = time.monotonic()
         yield await stage("llm", "start")
-        response_parts = []
-        async for part in llm_provider.generate(prompt, max_tokens=400, **system_kwargs):
-            response_parts.append(part)
-            yield frame("token", {"text": part})
+        # aclosing: if the client leaves while this generator is suspended at a
+        # yield, closing it closes the provider stream too (Bedrock's finally closes
+        # its response stream), so generation stops rather than being orphaned.
+        async with contextlib.aclosing(
+            llm_provider.generate(prompt, max_tokens=400, **system_kwargs)
+        ) as parts:
+            async for part in parts:
+                response_parts.append(part)
+                yield frame("token", {"text": part})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
         total_ms = elapsed_ms(request_start_ts)
         tokens_in = len(prompt.split())
@@ -645,18 +644,7 @@ async def _stream(
                 )
             except Exception:
                 LOGGER.warning("Answer cache write failed for %s", request_id, exc_info=True)
-        await asyncio.to_thread(
-            _save_query,
-            request_id=request_id,
-            request=request,
-            turn_index=turn_index,
-            rewritten_query=rewritten_query,
-            chunks=chunks,
-            timings=timings,
-            total_ms=total_ms,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-        )
+        await save(total_ms=total_ms, tokens_in=tokens_in, tokens_out=tokens_out)
         yield frame(
             "done",
             {
@@ -667,6 +655,23 @@ async def _stream(
                 "tokens_out": tokens_out,
             },
         )
+    except (asyncio.CancelledError, GeneratorExit):
+        # The client went away: Stop button, closed tab, or dropped connection
+        # (DESIGN-002 §6.2). Generation has already stopped (the cancellation or
+        # close propagated through the provider stream). Log the tokens actually
+        # generated as mode='stopped'. The budget slot reserved for this answer
+        # stays spent (the provider billed the prompt and any output), and a
+        # stopped answer never reaches the answer-cache write after the loop.
+        if not settled:
+            try:
+                await save(
+                    tokens_in=len(llm_prompt.split()) if llm_prompt else 0,
+                    tokens_out=len("".join(response_parts).split()),
+                    mode="stopped",
+                )
+            except BaseException:
+                LOGGER.warning("Stopped query log failed for %s", request_id, exc_info=True)
+        raise
     except Exception:
         LOGGER.exception("Ask request %s failed", request_id)
         yield frame("error", {"code": "internal", "message": "The request could not be completed"})
@@ -684,7 +689,11 @@ async def ask(request: AskRequest, http_request: Request) -> StreamingResponse:
     request_id = _ulid()
     request_start_ts = int(time.time() * 1000)
     return StreamingResponse(
-        _stream(request, request_id, request_start_ts, client_ip_hash(http_request)),
+        with_heartbeat(
+            _stream(request, request_id, request_start_ts, client_ip_hash(http_request)),
+            interval_s=HEARTBEAT_INTERVAL_S,
+            is_disconnected=http_request.is_disconnected,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

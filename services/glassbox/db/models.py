@@ -63,7 +63,7 @@ class Query(Base):
     corpus: Mapped[str] = mapped_column(ENUM("about_me", "about_system"), nullable=False)
     question: Mapped[str] = mapped_column(String(1000), nullable=False)
     cache_status: Mapped[str] = mapped_column(ENUM("answer_hit", "miss"), nullable=False)
-    mode: Mapped[str] = mapped_column(ENUM("full", "retrieval_only"), nullable=False)
+    mode: Mapped[str] = mapped_column(ENUM("full", "retrieval_only", "stopped"), nullable=False)
     chunk_ids: Mapped[list[int] | None] = mapped_column(JSON)
     stage_timings_ms: Mapped[dict[str, int] | None] = mapped_column(JSON)
     total_ms: Mapped[int | None] = mapped_column(Integer)
