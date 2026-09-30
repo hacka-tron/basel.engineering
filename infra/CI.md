@@ -13,10 +13,10 @@ validation checks, but do not receive production state or Cloudflare access.
    `terraform-prod` deployments to `main`; leave `terraform-plan` available to
    PR refs. Keep these review gates enabled. The plan job executes PR Terraform
    code with access to production state, so review the PR before approving it.
-2. In `terraform-plan`, add environment secret `CLOUDFLARE_API_TOKEN` with
-   Cloudflare zone read permissions sufficient for DNS and Cache Rules reads.
-   In `terraform-prod`, add a separate `CLOUDFLARE_API_TOKEN` with the existing
-   zone-scoped DNS/Cache Rules edit permissions. In **each** environment, add
+2. In `terraform-plan`, add environment secret `CLOUDFLARE_API_TOKEN` scoped to
+   the `basel.engineering` zone with Zone Read, DNS Read, and Cache Rules Read.
+   In `terraform-prod`, add a separate `CLOUDFLARE_API_TOKEN` scoped to the same
+   zone with Zone Read, DNS Edit, and Cache Rules Edit. In **each** environment, add
    variable `CLOUDFLARE_ZONE_ID` for `basel.engineering`. Do not use repository
    secrets for these values, because the environment gates their release.
 3. From `infra/bootstrap`, using the owner's AWS credentials and the retained
