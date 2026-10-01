@@ -82,6 +82,27 @@ Deployments are set up so that is safe on a 2 GiB node:
   NetworkPolicy admits to the api on port 8000. Check a run with
   `kubectl -n app logs job/ingest | tail` or the latest `warm-answers-*` Job.
 
+## Incidents: push-button runbooks
+
+Use **Actions → Ops runbooks** (`.github/workflows/ops.yml`) instead of SSM
+sessions and hand-typed `kubectl`/`flux`. Every action is described in
+`infra/CI.md` under "Runbooks". `diagnose` needs no approval. Everything
+else waits for the owner's approval and prints a diagnose before and after.
+
+| Symptom | Run |
+|---|---|
+| Anything looks wrong | `diagnose` first. Read the memory PSI, swap in/out (`si`/`so`), node conditions, unready pods, warning events, and the k3s error and Slow SQL counts. |
+| Site returns 521/522 or times out, and `diagnose` fails, times out or shows the apiserver not answering | `reboot-node`. If the after-diagnose shows no `/dev/zram0`, run `apply-zram`. |
+| Node responsive but thrashing (memory PSI `full` stays high, heavy `si`/`so`, many Slow SQL lines), or KEDA's Helm release keeps retrying | `flux-suspend` `helmrelease-keda`, then `flux-suspend` `keda`, then `scale-keda` `0`. Optionally `cronjob-suspend` `warm-answers`. |
+| …incident over | In reverse: `scale-keda` `1`, `flux-resume` `helmrelease-keda`, `flux-resume` `keda`, `cronjob-resume` `warm-answers`. |
+| `api` Running but not serving (stuck streams, readiness flapping) | `restart-deployment` `api`. This causes a few seconds of downtime. |
+| A merged fix should deploy now, or a release is stuck behind Flux's interval | `flux-reconcile`. |
+| Need to stop all deploys while investigating | `flux-suspend` `flux-system`, and later `flux-resume` `flux-system`. |
+
+Anything not on this list still needs an SSM session (see below). If it
+keeps coming up, add it as a new `glassbox-ops-*` document in
+`infra/modules/ops` rather than repeating it by hand.
+
 ## Manual apply / disaster recovery
 
 The node has no SSH and no public Kubernetes API — access is AWS SSM Session

@@ -54,3 +54,16 @@ Future project IAM roles, policies, and instance profiles managed by CI must
 use the `glassbox-` name prefix to match the CI role's permissions scope. CI
 can only `iam:PassRole` matching roles to EC2, and its S3 access is limited
 to this one state bucket — it has no access to any application data bucket.
+
+## Runbook and bootstrap-pipeline roles
+
+`runbooks.tf` adds four more OIDC roles. `glassbox-ops-read` and
+`glassbox-ops` are for `.github/workflows/ops.yml` (push-button node
+operations through Terraform-managed SSM documents only).
+`glassbox-bootstrap-plan` and `glassbox-bootstrap` are for
+`.github/workflows/bootstrap.yml`, which plans and, after owner approval,
+applies this root from CI once its state is in S3. Their trust conditions and
+permissions, and the one-time manual apply that creates them, are in
+`infra/CI.md` ("Runbooks", "Bootstrap via pipeline", "One-time owner
+setup"). After that one apply, bootstrap changes go through the Bootstrap
+workflow instead of a local `terraform apply`.
