@@ -94,7 +94,6 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs
 
-
 - **Mobile Diagram view: the "Details / N chunks" toggle shows the latest chat answer when no component is selected (owner, 2026-10-01).** Opening the details panel under the portrait diagram before tapping any component shows the most recent chat answer and its chunks, which reads as unrelated. Owner's suggestion: disable the toggle (or keep it closed and non-interactive) until a component is selected, and show a short "Select a component" hint instead. Look at `frontend/src/components/ArchitecturePanel.tsx` (portrait readout/collapse state) and how `retrievedChunks` and the selected node feed it. Keep 44px targets and an accessible disabled state (`aria-disabled`, focusable or not, decided consistently). Not implemented yet; pick up when the owner asks.
 
 ## Feature work (priority)
