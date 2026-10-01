@@ -1,0 +1,32 @@
+name: "Ops · Restart deployment"
+
+# kubectl rollout restart. Needs owner approval.
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: Deployment to restart
+        type: choice
+        required: true
+        default: api
+        options: [api, retrieval-worker, traefik]
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: restart-deployment
+      deployment: ${{ inputs.deployment }}
+      reason: ${{ inputs.reason }}
