@@ -17,6 +17,8 @@
 #   2. Leaves /swapfile alone (priority -2): the kernel fills zram first and
 #      only overflows to the EBS-backed swap file when zram is full.
 #   3. Activates zram0 now if it is not already an active swap device.
+#   0. Holds an exclusive flock on /run/lock/glassbox-zram-swap.lock for the
+#      whole run, so overlapping runs cannot undo each other.
 #   4. Only once /dev/zram0 is confirmed active: persists zram-oriented VM
 #      sysctls in /etc/sysctl.d/ and applies them. An EXIT trap covers every
 #      failure path: if zram0 is not active swap when the script exits, it
@@ -173,6 +175,19 @@ on_exit() {
   fi
   exit "$rc"
 }
+
+# Serialize runs (the weekly association, an on-change run and the ops
+# apply-zram runbook can overlap). Without this, one run can see zram inactive,
+# another can activate and tune it, and the first then rolls back the good
+# state. Take the lock before installing the trap, so a run that times out
+# waiting exits without touching anything; the lock is released when the
+# process exits.
+LOCK_FILE=/run/lock/glassbox-zram-swap.lock
+exec 9>"$LOCK_FILE"
+if ! flock -w 300 9; then
+  log "another zram-swap run still holds $LOCK_FILE after 300s; exiting without changes"
+  exit 1
+fi
 trap on_exit EXIT
 
 log "mode=$MODE kernel=$(uname -r)"
