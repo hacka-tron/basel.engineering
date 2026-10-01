@@ -27,6 +27,8 @@ from services.glassbox.trace import elapsed_ms, next_seq
 STREAM_NAME = "retrieval:jobs"
 GROUP_NAME = "workers"
 LOGGER = logging.getLogger(__name__)
+# The only text a failed retrieval job publishes (see process_one_message).
+RETRIEVAL_FAILED_MESSAGE = "Retrieval failed"
 
 
 async def ensure_consumer_group(redis_client) -> None:
@@ -260,11 +262,14 @@ async def process_one_message(
             cache="hit" if chunk_hit else "miss",
         )
         await emit("retrieval", {"chunks": chunks})
-    except Exception as exc:
+    except Exception:
         LOGGER.exception("Retrieval job %s failed", message_id)
         if channel:
             try:
-                await emit("error", {"code": "internal", "message": str(exc)})
+                # Fixed text: the trace reaches the visitor's browser, and
+                # exception text can carry SQL, hostnames or AWS error detail.
+                # The full exception is in the worker log above.
+                await emit("error", {"code": "internal", "message": RETRIEVAL_FAILED_MESSAGE})
             except Exception:
                 LOGGER.exception("Could not publish failure for job %s", message_id)
     finally:
