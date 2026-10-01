@@ -2,6 +2,7 @@ import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Nod
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
+import { PORTRAIT_DETAILS_HINT, portraitDetailsState } from '../lib/detailsPanel'
 import { boundsOf, createRefitter } from '../lib/diagramFit'
 import type { RetrievalChunk } from '../lib/sse'
 
@@ -37,8 +38,6 @@ type ArchitecturePanelProps = {
    * capped in height and can be collapsed so the diagram keeps the room.
    */
   portrait?: boolean
-  /** Shown in the portrait details panel when no component is selected. */
-  latestAnswer?: string | null
   /** Portrait: leave the diagram for the conversation. */
   onContinueInChat?: () => void
 }
@@ -131,11 +130,13 @@ const defaultEdgeOptions = {
 // for, which made the Vector Search -> MySQL arrow loop back on itself.
 const portraitEdgeOptions = { ...defaultEdgeOptions, pathOptions: { offset: 8 } }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom, portrait = false, latestAnswer, onContinueInChat }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom, portrait = false, onContinueInChat }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   // Portrait only: the details panel starts collapsed (unless a component is
-  // already selected) so the diagram gets the room.
+  // already selected) so the diagram gets the room. With nothing selected the
+  // toggle is locked closed (lib/detailsPanel.ts).
   const [detailsOpen, setDetailsOpen] = useState(() => selectedNode != null)
+  const portraitDetails = portraitDetailsState(selectedNode != null, detailsOpen)
   const detailsId = useId()
   // Collapsing/expanding swaps one button for the other; keep keyboard focus
   // on whichever control is now showing (a node tap leaves focus alone).
@@ -250,17 +251,8 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           )}
         </div>
       ) : (
-        <>
-          <p className="mb-4 text-xs text-muted">
-            {portrait ? 'Tap a component to see what runs it and ask about it.' : 'Hover or focus a component to see what runs it. Select it to ask more.'}
-          </p>
-          {portrait && latestAnswer && (
-            <div className="mb-4">
-              <h2 className="text-xs font-medium text-primary">Latest answer</h2>
-              <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-primary">{latestAnswer}</p>
-            </div>
-          )}
-        </>
+        // Desktop only: the portrait panel opens only with a component selected.
+        <p className="mb-4 text-xs text-muted">Hover or focus a component to see what runs it. Select it to ask more.</p>
       )}
       <h2 className="text-xs font-medium text-primary">Retrieved chunks</h2>
       {retrievedChunks.length === 0 ? (
@@ -319,7 +311,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         <div ref={inspectorRef} className="h-44 shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:px-7">
           {details}
         </div>
-      ) : detailsOpen ? (
+      ) : portraitDetails === 'open' ? (
         // Capped so the diagram keeps its room; the collapse button stays
         // pinned while the details scroll, and text keeps clear of it.
         <div id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline" style={portraitPanelStyle}>
@@ -338,6 +330,21 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
             <Chevron direction="down" />
           </button>
         </div>
+      ) : portraitDetails === 'locked' ? (
+        // No component selected: nothing to show yet (not the latest chat
+        // answer). aria-disabled rather than disabled, so the button stays
+        // focusable and screen-reader users still hear the hint when tabbing.
+        <button
+          ref={expandButtonRef}
+          type="button"
+          aria-disabled="true"
+          className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted"
+        >
+          <span className="min-w-0 truncate">{PORTRAIT_DETAILS_HINT}</span>
+          <span className="flex shrink-0 items-center opacity-40">
+            <Chevron direction="up" />
+          </span>
+        </button>
       ) : (
         <button
           ref={expandButtonRef}
