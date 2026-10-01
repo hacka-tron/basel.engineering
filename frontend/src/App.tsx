@@ -384,7 +384,7 @@ function App() {
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
           // No token (sources only): keep firstTokenMs null so the footer
-          // labels the whole-request time as total, not as a first token.
+          // labels the whole-request time as total, not as a time to first token.
           setLastStats({
             firstTokenMs: firstTokenLatencyRef.current,
             totalMs: event.total_ms,
