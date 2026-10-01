@@ -91,8 +91,11 @@ connection errors, TLS, image pull, memory, disk, probes; kine's "Slow SQL"
 lines contain SQL arguments). The few remaining free-text columns (Flux
 status, kernel OOM lines) pass through a redaction filter (`redact` in
 `infra/modules/ops/scripts/lib.sh`): URL userinfo and query strings removed,
-values after password/token/secret/key/authorization masked, JWT-like and 20+
-character base64/hex strings masked, lines cut to 160-220 characters. That
+values after password/token/secret/key/authorization masked (also when the
+value is on the following lines: YAML blocks, pretty-printed JSON, the
+values of `data:`/`stringData:` maps, PEM blocks), JWT-like and 20+
+character base64/hex strings masked, lines cut to 160-220 characters. If the
+filter itself fails, the rest of the output is withheld, not printed raw. That
 filter is a safety net, not a guarantee; it has an offline test
 (`infra/modules/ops/tests/redact-test.sh`, run in CI). `ops-run.sh` runs the
 same `redact` over everything SSM returns (stdout, stderr) and over the

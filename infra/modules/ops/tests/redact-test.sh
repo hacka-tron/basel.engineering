@@ -46,6 +46,78 @@ expect_absent aws-key AKIAIOSFODNN7EXAMPLE 'key id AKIAIOSFODNN7EXAMPLE seen'  #
 expect_present pod-name retrieval-worker-5d9c8b7f6-abcde 'Back-off restarting retrieval-worker-5d9c8b7f6-abcde'
 expect_present plain-text 'node memory pressure' 'node memory pressure at 12:00'
 
+# Multiline: the key is on one line and its value on the next.
+expect_absent yaml-next-line-indented hunter2 $'password:\n  hunter2'  # pragma: allowlist secret
+expect_absent yaml-next-line-flush hunter2 $'Password:\nhunter2'  # pragma: allowlist secret
+expect_absent yaml-block-scalar line2secret $'db_password: |\n  line1secret\n  line2secret\nport: 3306'  # pragma: allowlist secret
+expect_present yaml-block-scalar-end 'port: 3306' $'db_password: |\n  line1secret\nport: 3306'  # pragma: allowlist secret
+expect_absent yaml-folded tokpart $'api_token: >-\n    tokpart1\n    tokpart2'  # pragma: allowlist secret
+expect_absent yaml-sequence seqsecret $'credentials:\n- seqsecret'  # pragma: allowlist secret
+expect_absent env-style envsecret $'TOKEN=\nenvsecret'  # pragma: allowlist secret
+expect_absent json-pretty-value jsonsecret $'{\n  "password":\n    "jsonsecret",\n  "user": "bob"\n}'  # pragma: allowlist secret
+expect_absent json-pretty-object nestedsecret $'{\n  "credentials": {\n    "user": "bob",\n    "pass": "nestedsecret"\n  },\n  "ok": true\n}'  # pragma: allowlist secret
+expect_present json-pretty-object-after '"ok": true' $'{\n  "credentials": {\n    "pass": "nestedsecret"\n  },\n  "ok": true\n}'  # pragma: allowlist secret
+expect_present crlf-input 'user: bob' $'password:\r\n  crlfsecret\r\nuser: bob'  # pragma: allowlist secret
+expect_absent crlf-secret crlfsecret $'password:\r\n  crlfsecret\r\nuser: bob'  # pragma: allowlist secret
+
+# kubectl get secret -o yaml / -o json: short base64 values (under the
+# 20-character rule) must not survive, but the key names and the rest do.
+secret_yaml=$'apiVersion: v1\ndata:\n  username: YWRtaW4=\n  ca.crt: Y2E=\n  config: |\n    c2hvcnQ=\nkind: Secret\nmetadata:\n  name: app-db\ntype: Opaque'  # pragma: allowlist secret
+expect_absent secret-yaml-username YWRtaW4= "$secret_yaml"
+expect_absent secret-yaml-dotted Y2E= "$secret_yaml"
+expect_absent secret-yaml-nested c2hvcnQ= "$secret_yaml"
+expect_present secret-yaml-key-name 'username' "$secret_yaml"
+expect_present secret-yaml-after 'name: app-db' "$secret_yaml"
+secret_list=$'items:\n- apiVersion: v1\n  data:\n    user: Ym9i\n  kind: Secret\n- apiVersion: v1\n  stringData:\n    pw: plainpw\n  kind: Secret'  # pragma: allowlist secret
+expect_absent secret-list-data Ym9i "$secret_list"
+expect_absent secret-list-stringdata plainpw "$secret_list"
+expect_present secret-list-kind 'kind: Secret' "$secret_list"
+secret_json=$'{\n    "apiVersion": "v1",\n    "data": {\n        "user": "Ym9i"\n    },\n    "kind": "Secret"\n}'  # pragma: allowlist secret
+expect_absent secret-json Ym9i "$secret_json"
+expect_present secret-json-kind '"kind": "Secret"' "$secret_json"
+expect_absent secret-json-oneline Ym9i '{"kind":"Secret","data":{"user":"Ym9i","x":"eA=="}}'  # pragma: allowlist secret
+expect_absent secret-annotation Ym9i $'  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: |\n      {"apiVersion":"v1","data":{"user":"Ym9i"},"kind":"Secret"}'  # pragma: allowlist secret
+
+# PEM blocks, on their own, inside YAML, on one line, and unterminated.
+pem=$'-----BEGIN PRIVATE KEY-----\nMIIBVgIBADANBg\nshortpemtail\n-----END PRIVATE KEY-----\nafter pem'  # pragma: allowlist secret
+expect_absent pem-body MIIBVgIBADANBg "$pem"
+expect_absent pem-tail shortpemtail "$pem"
+expect_present pem-after 'after pem' "$pem"
+expect_absent pem-in-yaml pemyamltail $'tls.key: |\n  -----BEGIN RSA PRIVATE KEY-----\n  pemyamltail\n  -----END RSA PRIVATE KEY-----\nkind: Secret'  # pragma: allowlist secret
+expect_absent pem-one-line onelinepem 'cert -----BEGIN CERTIFICATE----- onelinepem -----END CERTIFICATE----- ok'  # pragma: allowlist secret
+expect_present pem-one-line-rest 'ok' 'cert -----BEGIN CERTIFICATE----- onelinepem -----END CERTIFICATE----- ok'  # pragma: allowlist secret
+expect_absent pem-unterminated unterminated $'-----BEGIN PRIVATE KEY-----\nunterminated\nmore'  # pragma: allowlist secret
+
+# Negative cases: ordinary diagnose output must come through readable.
+# expect_same <label> <input>: output must equal input.
+expect_same() {
+  local out
+  out=$(printf '%s\n' "$2" | redact 220)
+  if [ "$out" = "$2" ]; then
+    echo "ok   $1 (unchanged)"
+  else
+    echo "FAIL $1: changed:"
+    diff <(printf '%s\n' "$2") <(printf '%s\n' "$out")
+    fail=1
+  fi
+}
+expect_same flux-table $'NAMESPACE     NAME          AGE   READY   STATUS\nflux-system   flux-system   3d    True    Applied revision: deploy@sha1:abc1234\napp           app-ready     3d    False   health check failed after 2m: timeout waiting for: [Deployment/app/api status: \'InProgress\']'
+expect_same section-and-free $'\n===== memory (MiB) =====\n               total        used        free      shared  buff/cache   available\nMem:            1843        1502          88           2         252         211\nSwap:           2047         812        1235'
+expect_same events-table $'NS    LAST                   COUNT   REASON      KIND   NAME\napp   2026-10-01T10:00:00Z   3       BackOff     Pod    retrieval-worker-5d9c8b7f6-abcde\napp   2026-10-01T10:01:00Z   1       Unhealthy   Pod    api-7c9d5f-xyz12'
+expect_same yaml-null-key $'password:\nusername: bob\nport: 3306'
+expect_same oom-line '2026-10-01T09:58:12+0000 ip-10-0-1-5 kernel: Out of memory: Killed process 4242 (mysqld) total-vm:1234kB, anon-rss:567kB'
+expect_same reconcile-log 'True Applied revision: deploy@sha1:abc1234'
+expect_same list-items $'- name: api\n  ready: true\n- name: worker\n  ready: false'
+
+# Fail closed: if a pass fails, the rest is withheld, not printed raw.
+out=$(awk() { return 2; }; printf 'password:\n  failsecret\n' | redact)  # pragma: allowlist secret
+if grep -qF failsecret <<<"$out" || ! grep -qF withheld <<<"$out"; then
+  echo "FAIL awk failure must withhold output: $out"
+  fail=1
+else
+  echo "ok   awk-failure -> $out"
+fi
+
 # Truncation: default 160, explicit width honoured, applied after masking.
 long=$(printf 'x%.0s ' $(seq 1 200))
 [ "$(printf '%s\n' "$long" | redact | wc -c | tr -d ' ')" -le 161 ] || {

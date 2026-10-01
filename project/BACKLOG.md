@@ -18,7 +18,6 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 - **"About Basel can't answer" → fall back to About This System:** proposed, **NOT approved** by the owner. Don't build it until the owner says so.
 - **Optional chat bubble tightening** (less padding, more Claude-like): offered, **not approved**.
 - **Contact clipboard-failure fallback layout:** #78 shows the address in an absolutely positioned bubble for 5s when copying fails (checked at 320px in the preview). Still worth one look on a real phone, where the clipboard can actually fail.
-- **ops `redact()` multiline values:** still open (checked 2026-10-01); see Infrastructure & reliability.
 - **iOS focus zoom on a real phone:** #77's iOS-only `maximum-scale=1` is not verified on a real iPhone. Ask the owner to try it.
 - **First change-type Ops runbook approval prompt:** not yet observed live since the per-action split (#68); confirm the `ops` approval prompt appears on the first non-diagnose run.
 - **Leftover branches for the owner to decide on (delete or keep):** `debug/oidc-token-claims` (local only), `docs/claude-session-handoff`, `fix/ghcr-pat-auth`, `docs/orchestration-codex-review` (local and on origin). Stale merged branches on origin can also go.
@@ -115,7 +114,6 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 ## Infrastructure & reliability
 
 - **Bring KEDA back** (RESUME HERE item 1). KEDA is suspended and scaled to 0 since the 2026-09-30 incident.
-- **ops `redact()`: multiline secret values (key on one line, value on the next) are not masked; process whole outputs, not line by line.** `infra/modules/ops/scripts/lib.sh` runs `sed` per line, so `password:\n  value` leaks the value. Make it handle whole outputs, and extend `infra/modules/ops/tests/redact-test.sh`. (Checked 2026-10-01: `redact()` is still a per-line `sed`, so this is open.)
 - **Release pipeline hardening:** a manual `workflow_dispatch` release run against an old ref could mint a higher `build-N` and get deployed (build number alone doesn't prove current-`main` provenance); `sync-deploy-branch.yml` and Flux both push to `deploy` with no retry, so a race could drop a sync. (The release path filter was fixed in #51; migrate-before-api ordering in #47; ingest-after-app in #49.)
 - **Release-time memory pressure and stalled chats.** Mitigated by #47 (probe timeouts, `maxSurge: 0`, graceful drain), #49 (ingest after rollout), #48 (client watchdog and Stop) and zram (#55). Still worth a check on the first releases after KEDA returns: probe timeouts, swap in/out, and whether an in-flight SSE request survives a pod replacement.
 - **M3 (DD2) remainder:** self-healing node (ASG + Elastic IP reassociation). Also §7.5 scripted `curl -N` timing check through Cloudflare after each deploy, and TTFT logging (`queries.ttft_ms`, §9.3).

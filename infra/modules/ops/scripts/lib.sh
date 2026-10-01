@@ -24,27 +24,129 @@ die() {
 section() { printf '\n===== %s =====\n' "$*"; }
 
 # redact [max-width]: filter for any free text that reaches the (public)
-# Actions log. Reads stdin, writes stdout. It
-#   - drops URL userinfo (user:pass@) and query strings,
-#   - masks the value after password/passwd/token/secret/key/authorization/
-#     credential (key=value, key: value, JSON "key":"value") and Bearer values,
-#   - masks JWT-like strings and any run of 20+ base64/hex characters,
-#   - truncates every line to max-width characters (default 160).
+# Actions log. Reads stdin, writes stdout. Two passes:
+#
+# 1. A multiline pass (awk, state carried from line to line), for secrets
+#    whose value is not on the same line as their key:
+#    - a key named like password/passwd/token/secret/key/authorization/
+#      credential with nothing (or only a YAML |/> block indicator, or a JSON
+#      { or [) after its : or = starts a block: the more-indented lines after
+#      it collapse to one "<masked>" line; if the next line is not indented
+#      and is not itself a key, that one line is masked (`Password:` then
+#      `hunter2`);
+#    - a data:/stringData:/binaryData: map (kubectl get secret -o yaml/json)
+#      keeps its keys but masks every value (short base64 values such as
+#      "YWRtaW4=" would slip past the 20-character rule below);
+#    - PEM blocks (-----BEGIN ...----- to -----END ...-----) become one
+#      "<pem masked>" line; a BEGIN with no END masks the rest of the output.
+# 2. The per-line pass (sed), unchanged in spirit:
+#    - drops URL userinfo (user:pass@) and query strings,
+#    - masks the value after password/passwd/token/secret/key/authorization/
+#      credential (key=value, key: value, JSON "key":"value") and Bearer
+#      values, and one-line data maps ("data":{...}),
+#    - masks JWT-like strings and any run of 20+ base64/hex characters,
+#    - truncates every line to max-width characters (default 160).
 # Masking happens before truncation so a cut can't leave a token prefix.
+#
+# Streaming: neither pass buffers the whole input. The awk pass keeps only a
+# few state variables, so output still flows line by line (with the usual
+# pipe block-buffering, same as the old sed-only filter). All current callers
+# feed it finite, short output or a here-string, so nothing waits on it.
+# Fail closed: if awk or sed fails (or is missing), a "withheld" line is
+# printed instead of the unfiltered rest.
+#
 # It is a safety net, not a guarantee: prefer printing structured fields
 # (names, counts, timestamps) over messages, and use this on what remains.
-# Character-class spellings instead of sed's I flag keep it working with
-# both GNU and BSD sed (the offline test runs on either).
+# Portability: POSIX awk only (gawk on the node and in CI, mawk on Ubuntu
+# runners, BSD awk on macOS); character-class spellings instead of sed's I
+# flag keep sed working with both GNU and BSD sed.
 redact() {
   local width=${1:-160}
-  sed -E \
-    -e 's#(://)[^/@[:space:]]*@#\1<userinfo>@#g' \
-    -e 's#\?[^[:space:]"'"'"'<>]*#?<query>#g' \
-    -e 's#([bB][eE][aA][rR][eE][rR])[[:space:]]+[^[:space:]]+#\1 <masked>#g' \
-    -e 's#([pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[tT][oO][kK][eE][nN]|[sS][eE][cC][rR][eE][tT]|[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL])[A-Za-z0-9_.-]*("|'"'"')?[[:space:]]*[=:][[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:],;&]+)#\1\2=<masked>#g' \
-    -e 's#eyJ[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*#<jwt>#g' \
-    -e 's#[A-Za-z0-9+/=_]{20,}#<masked>#g' |
-    cut -c1-"$width"
+  {
+    awk -v q="'" '
+      function indent_of(s) {
+        match(s, /^([ \t]|-[ \t])*/)
+        return RLENGTH
+      }
+      BEGIN {
+        kw = "(password|passwd|token|secret|key|authorization|credential)"
+        opener_kw = kw "[a-z0-9_.-]*[\"" q "]?[ \t]*[:=][ \t]*([|>][-+0-9]*|[{[])?[ \t\r]*$"
+        opener_data = "^([ \t]|-[ \t])*\"?(data|stringdata|binarydata)\"?[ \t]*:[ \t]*[{]?[ \t\r]*$"
+        keyline = "^([ \t]|-[ \t])*[\"" q "]?[A-Za-z0-9_./-]+[\"" q "]?[ \t]*[:=]"
+        mode = ""
+        inpem = 0
+      }
+      {
+        line = $0
+        low = tolower(line)
+        if (inpem) {
+          if (low ~ /-----end[^-]*-----/) inpem = 0
+          next
+        }
+        if (line ~ /^[ \t\r]*$/) {
+          print line
+          next
+        }
+        ind = indent_of(line)
+        pad = substr(line, 1, ind)
+        if (mode == "kw" || mode == "data") {
+          if (ind > bind) {
+            if (mode == "kw") {
+              if (!shown) print pad "<masked>"
+              shown = 1
+            } else {
+              if (cind < 0 || ind < cind) cind = ind
+              if (ind == cind) {
+                if (match(line, keyline)) print substr(line, 1, RLENGTH) " <masked>"
+                else print pad "<masked>"
+              }
+            }
+            next
+          }
+          if (mode == "kw" && !shown && line !~ keyline) {
+            mode = ""
+            print pad "<masked>"
+            next
+          }
+          mode = ""
+        }
+        if (match(low, /-----begin[^-]*-----/)) {
+          b = RSTART
+          if (match(substr(low, b), /-----end[^-]*-----/)) {
+            line = substr(line, 1, b - 1) "<pem masked>" substr(line, b + RSTART + RLENGTH - 1)
+            low = tolower(line)
+          } else {
+            print substr(line, 1, b - 1) "<pem masked>"
+            inpem = 1
+            next
+          }
+        }
+        if (low ~ opener_data) {
+          mode = "data"
+          bind = ind
+          cind = -1
+        } else if (low ~ opener_kw) {
+          mode = "kw"
+          bind = ind
+          shown = 0
+        }
+        print line
+      }
+      END {
+        if (inpem) print "<pem masked: no END line, rest of output withheld>"
+      }
+    ' || echo '<redact: filter failed, rest of output withheld>'
+  } | {
+    sed -E \
+      -e 's#(://)[^/@[:space:]]*@#\1<userinfo>@#g' \
+      -e 's#\?[^[:space:]"'"'"'<>]*#?<query>#g' \
+      -e 's#("?(data|stringData|binaryData)"?[[:space:]]*:[[:space:]]*)\{[^}]*\}#\1{<masked>}#g' \
+      -e 's#([bB][eE][aA][rR][eE][rR])[[:space:]]+[^[:space:]]+#\1 <masked>#g' \
+      -e 's#([pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[tT][oO][kK][eE][nN]|[sS][eE][cC][rR][eE][tT]|[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL])[A-Za-z0-9_.-]*("|'"'"')?[[:space:]]*[=:][[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:],;&]+)#\1\2=<masked>#g' \
+      -e 's#eyJ[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*#<jwt>#g' \
+      -e 's#[A-Za-z0-9+/=_]{20,}#<masked>#g' ||
+      echo '<redact: filter failed, rest of output withheld>'
+  } | cut -c1-"$width"
 }
 
 # kubectl with hard upper bounds: on a node thrashing in swap the apiserver
