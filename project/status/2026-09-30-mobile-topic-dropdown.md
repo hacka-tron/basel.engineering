@@ -1,6 +1,6 @@
 # Mobile header: one row, topic chips above the ask box
 
-**Status:** In review (PR pending) · **Scope:** `frontend/` below 768px only; desktop pixel-identical.
+**Status:** In review, PR [#78](https://github.com/hacka-tron/basel.engineering/pull/78) · **Scope:** `frontend/` below 768px only; desktop pixel-identical.
 
 ## TL;DR
 
