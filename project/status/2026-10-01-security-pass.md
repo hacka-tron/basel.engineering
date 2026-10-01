@@ -1,6 +1,6 @@
 # Security pass: secrets, error leaks, client IP, preview credentials
 
-**PR:** _(this PR)_ · **Branch:** `security/code-audit` · **Docs:** `docs/architecture/deep-dive.md` ("Per-IP rate limit"), `project/BACKLOG.md` "Security"
+**PR:** [#96](https://github.com/hacka-tron/basel.engineering/pull/96) · **Branch:** `security/code-audit` · **Docs:** `docs/architecture/deep-dive.md` ("Per-IP rate limit"), `project/BACKLOG.md` "Security"
 **Status:** In review. Code-level audit only: no production access was used (no AWS, SSM, kubectl, Terraform plan/apply, workflow runs or GitHub settings changes). One live check: plain GETs of the public page and its JS bundle.
 
 ## TL;DR
