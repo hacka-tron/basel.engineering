@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from eval import run_answers
-from eval.run_eval import load_questions
+from eval.run_eval import QUESTIONS_PATH, load_questions
 from eval.schema import GOLDEN_PATH, GoldenError, load_golden, snippet_in, validate_case
 from services.glassbox.api.ask import WorkerChunk
 from services.glassbox.providers.base import ABSTENTION_ANSWER
@@ -35,7 +35,8 @@ def test_committed_golden_set_is_valid():
 
 def test_questions_yaml_cases_migrate_verbatim():
     golden = {case["id"]: case for case in load_golden()}
-    for question in load_questions():
+    # Explicit path: load_questions() prefers golden.yaml once it exists.
+    for question in load_questions(QUESTIONS_PATH):
         case = golden[question["id"]]
         assert case["origin"] == "questions.yaml"
         for key in ("corpus", "question", "expected_sources"):
