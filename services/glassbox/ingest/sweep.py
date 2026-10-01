@@ -19,13 +19,16 @@ Redis keys first, then the corpus-version bump, then the MySQL rows in their own
 short transaction. No MySQL transaction is open during Redis I/O. The worker
 raises if a KNN match has no MySQL row, so the opposite order could leave Redis
 keys pointing at deleted rows if the second step failed. With this order a
-failure after the Redis step leaves MySQL rows without vectors: invisible to
-retrieval, and removed by the next sweep because the file is still missing.
+failure after the Redis step leaves MySQL rows without vectors. The next
+applied sweep removes them because the file is still missing (it runs before
+that run's Redis reconcile, ``reconcile.py``). If that run only reports, the
+reconcile writes their keys back from MySQL, so the rows stay retrievable and
+consistent until a sweep is applied.
 
 ``--clear`` has no such self-repair: its files still exist, so after a failure
-between the Redis and MySQL steps an incremental ingest skips them (unchanged
-hash and model) and their vectors stay missing. Re-run ``--clear`` to finish,
-then ingest.
+between the Redis and MySQL steps the next ingest's reconcile restores the keys
+from the remaining rows instead of finishing the wipe. Re-run ``--clear`` to
+finish, then ingest.
 """
 
 import logging
