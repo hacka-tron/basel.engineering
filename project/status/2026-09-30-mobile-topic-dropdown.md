@@ -60,5 +60,6 @@ The owner picked 2 with the envelope from 1, then asked for the chips in Chat vi
 
 ## Risks / open items
 
-- `frontend/phone-preview.html` (from #76) still captions the 360px frame "name shortens below 367"; it now shortens below 292px. Left untouched in this PR.
+- The phone preview's 360px caption no longer claims the name shortens there; a 280×653 Fold cover frame now shows the short name. At 280px the "Asking about" label is screen-reader-only so the System chip fits.
+- Left for later (Opus review minors): leftover mobile-only classes on the desktop-only topic nav (harmless), and widening past md with a chip focused drops focus to the page (tablet rotation edge case). Both are in BACKLOG.
 - The tooltip uses hover only on devices that can hover, so on phones it appears only with keyboard focus; the click result always shows.

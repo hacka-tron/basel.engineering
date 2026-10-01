@@ -52,7 +52,8 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
 
   return (
     <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:hidden">
-      <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted">Asking about</span>
+      {/* Below 320px (e.g. a 280px Fold cover screen) the label would push the System chip off screen, so it becomes screen-reader-only there; the radiogroup keeps its name. */}
+      <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted max-[319px]:sr-only">Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
         {options.map((option, index) => {
           const checked = option.value === value
