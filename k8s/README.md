@@ -125,6 +125,19 @@ recover after a manual intervention:
    basel.engineering' http://127.0.0.1/readyz` should return `"ready":true`.
    Publicly, check `https://basel.engineering/readyz`.
 
+## Node memory and swap
+
+The node has 1.84 GiB allocatable and runs over physical memory at times. So
+swap goes to compressed RAM first (`/dev/zram0`, priority 100), and the
+EBS-backed `/swapfile` (priority -2) is only overflow. This keeps swap traffic
+off the disk that k3s's SQLite datastore and MySQL share. It is host config,
+not a Kubernetes object: Terraform's SSM association `glassbox-zram-swap` sets
+it up (`infra/modules/compute/zram.tf`, `zram-swap.sh`). The kubelet runs
+with `fail-swap-on=false`, and pods' `memory.swap.max` is `max`, so pod memory
+can swap too. To check it (as root via SSM): `swapon --show`, `zramctl`,
+`cat /proc/pressure/memory /proc/pressure/io`. Rationale, tuning, baseline
+numbers and rollback are in `docs/DESIGN.md` §9.7.
+
 ## Networking
 
 Traefik serves HTTP and HTTPS through two Ingress routes to one API Service;
