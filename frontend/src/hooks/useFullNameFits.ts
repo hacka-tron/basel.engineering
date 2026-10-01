@@ -44,8 +44,8 @@ export function useFullNameFits(
         used += el.getBoundingClientRect().width + margins
         count += 1
       }
-      // Row-one gaps: between name and each other item. Below md the nav is
-      // on row two (full width) and is excluded by the wrap, not measured.
+      // Gaps between the name and each other item. Below md the topic is
+      // chosen above the ask box, so the row is just name and Contact/GitHub.
       const available = content - used - gap * (count - 1)
       const next = shouldShowFullName(fullRef.current, measureEl.getBoundingClientRect().width, available, gap)
       if (next !== fullRef.current) {
