@@ -100,6 +100,8 @@ HISTORY_MAX_MESSAGES = 6
 HISTORY_MAX_CHARS = 4000
 _HISTORY_MAX_RAW_MESSAGES = 50
 _REWRITE_MAX_TOKENS = 60
+# Output cap for a generated answer (DESIGN.md §6.7). eval/run_answers.py reuses it.
+_ANSWER_MAX_TOKENS = 400
 _REWRITE_MAX_CHARS = 1000
 _REWRITE_SYSTEM = (
     "You rewrite a follow-up question from a chat into one standalone question for a "
@@ -707,7 +709,9 @@ async def _stream(
         # yield, closing it closes the provider stream too (Bedrock's finally closes
         # its response stream), so generation stops rather than being orphaned.
         async with contextlib.aclosing(
-            llm_provider.generate(prompt, max_tokens=400, **system_kwargs, **usage_kwargs)
+            llm_provider.generate(
+                prompt, max_tokens=_ANSWER_MAX_TOKENS, **system_kwargs, **usage_kwargs
+            )
         ) as parts:
             async for part in parts:
                 response_parts.append(part)

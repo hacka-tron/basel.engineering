@@ -12,3 +12,19 @@ GLASSBOX_PROVIDER=fake python -m eval.run_eval
 The committed `baselines/fake-v1.json` is a pipeline smoke baseline. Fake embeddings are deterministic but not semantic, so its score is **not** a quality target. A normal run fails if recall@5 falls more than five percentage points below the matching baseline. A changed corpus fingerprint requires inspecting misses and intentionally running `--write-baseline`.
 
 For Titan, set `GLASSBOX_PROVIDER=bedrock`, re-ingest both corpora first, and obtain owner approval for paid calls before setting `GLASSBOX_EVAL_ALLOW_PAID=1`. Record the Titan baseline separately. Do not use fake-index scores as evidence of Bedrock retrieval quality.
+
+## Golden answer set and deterministic answer checks
+
+`golden.yaml` (version 2) is the answer-level dataset from DESIGN-005 §5.1: 74 public-safe cases. It contains the 30 `questions.yaml` cases copied verbatim (same ids, questions and expected sources), the 7 suggested-question chips, and new `planned`, `live`, `unanswerable`, `multi_turn` and `injection` cases. Each case can carry `expected_sources`, `gold_snippets` (text that must occur in one of those files), `must_include` / `must_not_include` (case-insensitive regexes), `rewrite_must_include` for follow-ups, `expect_abstain`, `holdout` (15 cases kept out of prompt tuning) and `needs_owner_review` (every About Basel case: they are claims about the owner, taken only from `corpus/about-me/`). `schema.py` validates the file, including that every gold snippet really occurs in its source file, and runs in CI through `services/tests/test_eval_golden.py`.
+
+`graders.py` scores answer text with free, deterministic checks: `fact_coverage` (share of `must_include` matched), `abstained` (reuses the API's `is_abstention`), `status_ok` (planned answers must say no/not yet in the first sentence; live answers must not claim the feature is planned), `rewrite_ok` (the follow-up rewrite keeps the resolved entity) and `injection_ok` (no system-prompt fragments, no forbidden content). `grade_case(case, answer, rewrite)` combines them into `passed` plus a list of `failures`, so any stored answer can be re-scored without a model call. The stress-test case (`sugg-system-stress`) requires the 512 MiB capacity rule and the 5-minute cooldown, so today's thin v13 answer fails it.
+
+`run_answers.py` produces answers in-process with the same building blocks as `/api/ask` (rewrite prompt, embedding, Redis KNN at k=8, MySQL chunk load, answer prompt, provider `generate`). It does not go through `/api/ask`, so the live rate limit, daily budget and answer cache are never touched. With MySQL/Redis running and the corpus ingested (see above):
+
+```sh
+GLASSBOX_PROVIDER=fake python -m eval.run_answers                       # all cases
+GLASSBOX_PROVIDER=fake python -m eval.run_answers --category planned,live --max-cases 5
+GLASSBOX_PROVIDER=fake python -m eval.run_answers --cases sugg-system-stress
+```
+
+It writes one JSON line per case (question, rewrite, retrieved chunk ids and paths, prompt version, answer, token counts, latency, grades) to `eval/runs/<UTC time>-<prompt version>-<git sha>.jsonl` (gitignored), a `.summary.json` next to it, and prints per-category numbers: pass rate, fact coverage, abstain rate on unanswerable cases, false-abstain rate, planned/live correctness, rewrite and injection checks, median answer length. With the fake provider this is a pipeline smoke test only; the fake model's canned answer fails almost every case by design. Any provider other than `fake` is refused unless `--paid` is passed, and a paid run needs the owner's approval first (plan phase 3).
