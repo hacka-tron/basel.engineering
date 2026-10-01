@@ -124,7 +124,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
                 <div key={message.id} className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end' : 'self-start'}`}>
                   {(message.content || pending) && <div
                     // Failure replies and text cut off by a failure get a dashed border.
-                    className={`whitespace-pre-wrap break-words rounded-[3px] border px-4 py-3 text-sm leading-relaxed md:text-[15px] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'} ${message.state === 'error' ? 'border-dashed border-hairline text-muted' : 'border-hairline text-primary'}`}
+                    className={`whitespace-pre-wrap break-words rounded-[3px] border max-w-[65ch] px-4 py-3 text-[13px] leading-[1.6] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'} ${message.state === 'error' ? 'border-dashed border-hairline text-muted' : 'border-hairline text-primary'}`}
                   >
                     {message.content || '…'}
                   </div>}
@@ -164,7 +164,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
                   value={suggestion}
                   onClick={handleSuggestionClick}
                   disabled={isStreaming}
-                  className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-sm leading-relaxed text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-muted md:min-h-0"
+                  className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-xs leading-normal text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-muted md:min-h-0"
                 >
                   {suggestion}
                 </button>
