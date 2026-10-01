@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import Collapsible from './components/Collapsible'
@@ -571,6 +571,11 @@ function App() {
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
+  // The topic nav is inert while the diagram view hides it (below md), so
+  // focus that was on it moves to the Chat/Diagram toggle instead of being lost.
+  useLayoutEffect(() => {
+    if (showDiagramView && navRef.current?.contains(document.activeElement)) diagramButtonRef.current?.focus()
+  }, [showDiagramView])
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
   // Rendered before the Contact group at md+ and after it below md so DOM/tab
@@ -600,7 +605,7 @@ function App() {
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header ref={headerRef} className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
+      <header ref={headerRef} className="relative flex shrink-0 md:min-h-[72px] flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
           Below md: row one is [h1 ... Contact me, GitHub], row two is the
           topic nav. Contact me sits directly left of the GitHub icon as one
@@ -632,7 +637,7 @@ function App() {
             </svg>
           </a>
         </div>
-        {!isDesktop && topicNav}
+        {!isDesktop && <Collapsible open={!showDiagramView} className="order-3 w-full">{topicNav}</Collapsible>}
       </header>
       </Collapsible>
 
