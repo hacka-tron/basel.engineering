@@ -14,6 +14,8 @@ The owner subsequently chose automatic previews: `terraform-plan` has no
 required reviewer, while `terraform-prod` still requires owner approval and
 accepts only `main`.
 
+
+**Action pinning:** Third-party actions are pinned by SHA with a version comment; Dependabot updates them. Never use a bare tag or branch in `uses:`.
 ## Environment setup and recovery
 
 1. In GitHub repository Settings → Environments, create `terraform-plan` and
