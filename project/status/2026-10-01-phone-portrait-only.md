@@ -1,6 +1,6 @@
 # Phones are portrait only: "turn your phone upright"
 
-**Status:** PR open, awaiting review (branch `feature/phone-portrait-only`).
+**Status:** PR [#119](https://github.com/hacka-tron/basel.engineering/pull/119) open, awaiting review.
 
 ## TL;DR
 
