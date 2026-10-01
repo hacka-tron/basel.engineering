@@ -331,13 +331,35 @@ def test_required_salt_accepts_a_real_salt(monkeypatch):
     validate_ip_hash_salt()
 
 
-def test_api_refuses_to_start_without_required_salt(monkeypatch):
+@pytest.mark.parametrize(
+    "salt",
+    [None, "x" * (MIN_IP_HASH_SALT_LENGTH - 1), " " * 8 + "x" * (MIN_IP_HASH_SALT_LENGTH - 1)],
+    ids=["missing", "one-char-short", "short-after-strip"],
+)
+def test_api_refuses_to_start_without_a_long_enough_required_salt(monkeypatch, salt):
+    """The app's lifespan, not just the helper, fails closed (review minor on #96)."""
     from fastapi.testclient import TestClient
 
     from services.glassbox.api.main import app
 
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
     monkeypatch.setenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "true")
-    monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
+    if salt is None:
+        monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
+    else:
+        monkeypatch.setenv("GLASSBOX_IP_HASH_SALT", salt)
     with pytest.raises(ValueError, match="GLASSBOX_IP_HASH_SALT"):
         with TestClient(app):
             pass
+
+
+def test_api_starts_with_a_long_enough_required_salt(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from services.glassbox.api.main import app
+
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    monkeypatch.setenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "true")
+    monkeypatch.setenv("GLASSBOX_IP_HASH_SALT", "s" * MIN_IP_HASH_SALT_LENGTH)
+    with TestClient(app) as client:
+        assert client.get("/healthz").status_code == 200

@@ -2,8 +2,9 @@
 # applying this root from CI (.github/workflows/bootstrap.yml). How to use
 # them: infra/CI.md "Runbooks" and "Bootstrap via pipeline".
 #
-#   glassbox-ops-read        ops-read environment or main: run the read-only
-#                            glassbox-ops-diagnose document, read results.
+#   glassbox-ops-read        ops-read environment (main only): run the
+#                            read-only glassbox-ops-diagnose document, read
+#                            results.
 #   glassbox-ops             ops environment (owner approval): run the
 #                            glassbox-ops-* and glassbox-zram-swap documents,
 #                            reboot the glassbox instance.
@@ -21,10 +22,11 @@
 locals {
   # role => exact OIDC subjects allowed to assume it.
   runbook_role_subjects = {
-    "glassbox-ops-read" = [
-      "${local.github_oidc_subject_prefix}:environment:ops-read",
-      "${local.github_oidc_subject_prefix}:ref:refs/heads/main",
-    ]
+    # Only the environment subject. The plain ref:refs/heads/main subject was
+    # dropped: the one caller (ops.yml's diagnose job) always runs in
+    # ops-read, and any other main job with id-token: write would otherwise
+    # be able to run diagnose.
+    "glassbox-ops-read"       = ["${local.github_oidc_subject_prefix}:environment:ops-read"]
     "glassbox-ops"            = ["${local.github_oidc_subject_prefix}:environment:ops"]
     "glassbox-bootstrap-plan" = ["${local.github_oidc_subject_prefix}:environment:bootstrap-plan"]
     "glassbox-bootstrap"      = ["${local.github_oidc_subject_prefix}:environment:bootstrap"]
