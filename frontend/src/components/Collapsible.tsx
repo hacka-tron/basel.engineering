@@ -10,7 +10,7 @@ const TRANSITION_MS = 200
  * open out of the footer are not cut off once it is fully open. At md+ both
  * wrappers are `display: contents`, so the desktop layout is untouched.
  */
-function Collapsible({ open, children }: { open: boolean; children: ReactNode }) {
+function Collapsible({ open, className = '', children }: { open: boolean; className?: string; children: ReactNode }) {
   const [settledOpen, setSettledOpen] = useState(open)
   useEffect(() => {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -21,7 +21,7 @@ function Collapsible({ open, children }: { open: boolean; children: ReactNode })
   return (
     <div
       inert={!open}
-      className={`grid shrink-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none md:contents ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      className={`grid shrink-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none md:contents ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${className}`}
     >
       <div className={`min-h-0 md:contents ${clipped ? 'overflow-hidden' : ''}`}>{children}</div>
     </div>
