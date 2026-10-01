@@ -540,7 +540,7 @@ async def test_unchanged_ingest_rebuilds_lost_redis_keys_from_mysql(
     returns results again; --reindex rewrites them; an orphan key is removed.
     """
     from services.glassbox.cache.answer import _model_tag
-    from services.glassbox.ingest.redis_index import content_sha
+    from services.glassbox.ingest.redis_index import chunk_content_sha
     from services.glassbox.retrieval.search import search_chunks
 
     engine, client = integration_stack
@@ -572,7 +572,7 @@ async def test_unchanged_ingest_rebuilds_lost_redis_keys_from_mysql(
         redis_keys += [f"chunk:{chunk_id}" for chunk_id in ids]
         for row in rows:
             assert await client.hget(f"chunk:{row.id}", "content_sha") == (
-                content_sha(row.text).encode()
+                chunk_content_sha(row.text).encode()
             )
         (vector,) = await FakeEmbeddingProvider().embed([rows[0].text])
 

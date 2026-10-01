@@ -142,15 +142,15 @@ async def test_search_isolates_model_during_partial_reingestion():
     try:
         await ensure_index(client)
         await replace_document_vectors(
-            client, [], [(ids[0], "about_me", packed, "old.md", 1)], model_a
+            client, [], [(ids[0], "about_me", packed, "old.md", 1, "text")], model_a
         )
         assert await search_chunks(client, vector, "about_me", model_b) == []
         await replace_document_vectors(
             client,
             [],
             [
-                (ids[1], "about_me", packed, "new.md", 2),
-                (ids[2], "about_me", packed, "newer.md", 3),
+                (ids[1], "about_me", packed, "new.md", 2, "text"),
+                (ids[2], "about_me", packed, "newer.md", 3, "text"),
             ],
             model_b,
         )

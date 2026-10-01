@@ -9,7 +9,7 @@ from services.glassbox.cache.answer import _model_tag
 from services.glassbox.ingest import reconcile as rec
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest.reconcile import ScopeRow, plan_reconcile
-from services.glassbox.ingest.redis_index import chunk_fields, content_sha
+from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields
 
 MODEL = "titan"
 TAG = _model_tag(MODEL)
@@ -18,7 +18,7 @@ VECTOR = struct.pack("512f", *([0.5] * 512))
 
 def _row(chunk_id, corpus="about_me", document_id=1, path="corpus/about-me/a.md", text=None):
     text = text if text is not None else f"chunk {chunk_id}"
-    return ScopeRow(chunk_id, corpus, document_id, path, content_sha(text))
+    return ScopeRow(chunk_id, corpus, document_id, path, chunk_content_sha(text))
 
 
 def _stored(row: ScopeRow, **overrides):
@@ -59,7 +59,7 @@ def test_other_models_keys_are_out_of_scope():
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"content_sha": content_sha("different text")},
+        {"content_sha": chunk_content_sha("different text")},
         {"content_sha": None},  # written before content_sha existed: back-filled
         {"document_id": "99"},
         {"source_path": "corpus/about-me/other.md"},
@@ -172,7 +172,7 @@ def mysql(monkeypatch):
     def load_scope_rows(engine, model_id):
         assert model_id == MODEL
         return [
-            ScopeRow(cid, corpus, doc, path, content_sha(text))
+            ScopeRow(cid, corpus, doc, path, chunk_content_sha(text))
             for cid, corpus, _, path, doc, text in rows.values()
         ]
 
@@ -196,7 +196,7 @@ async def test_reconcile_rebuilds_a_flushed_index_from_mysql_and_bumps_versions(
     assert reports["about_me"].repaired == [1, 2] and reports["about_system"].repaired == [3]
     stored = redis.store["chunk:1"]
     assert stored["vector"] == VECTOR
-    assert stored["content_sha"] == content_sha("alpha").encode()
+    assert stored["content_sha"] == chunk_content_sha("alpha").encode()
     assert stored["model"] == TAG.encode() and stored["corpus"] == b"about_me"
     assert stored["document_id"] == b"10"
     assert redis.strings == {"corpus:ver:about_me": 1, "corpus:ver:about_system": 1}
@@ -214,13 +214,13 @@ async def test_reconcile_removes_orphans_rewrites_mismatches_and_bumps_only_chan
     # An orphan (no MySQL row) plus its cached text, and a stale key for row 2.
     redis.hset("chunk:9", {"corpus": "about_me", "model": TAG, "vector": VECTOR})
     redis.hset("chunktxt:9", {"text": "old"})
-    redis.hset("chunk:2", {"content_sha": content_sha("old beta")})
+    redis.hset("chunk:2", {"content_sha": chunk_content_sha("old beta")})
     redis.hset("chunktxt:2", {"text": "old beta"})
     reports = {r.corpus: r for r in await rec.reconcile(None, redis, MODEL)}
     assert reports["about_me"].removed == [9]
     assert reports["about_me"].rewritten == [2]
     assert "chunk:9" not in redis.store and "chunktxt:9" not in redis.store
-    assert redis.store["chunk:2"]["content_sha"] == content_sha("beta").encode()
+    assert redis.store["chunk:2"]["content_sha"] == chunk_content_sha("beta").encode()
     assert "chunktxt:2" not in redis.store  # stale chunk-text cache dropped
     assert redis.strings == {"corpus:ver:about_me": 1}  # about_system was already right
 

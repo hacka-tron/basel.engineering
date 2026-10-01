@@ -1,10 +1,8 @@
 """Redis Search index for 512-dimensional chunk embeddings."""
 
-import hashlib
-
 from redis.exceptions import ResponseError
 
-from services.glassbox.cache.answer import _model_tag
+from services.glassbox.cache.answer import _model_tag, chunk_content_sha
 
 INDEX_NAME = "idx:chunks"
 
@@ -60,11 +58,6 @@ async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
             await client.hset(key, "model", _model_tag(model_id))
 
 
-def content_sha(text: str) -> str:
-    """SHA-256 hex of a chunk's text exactly as stored in MySQL (``chunks.text``)."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def chunk_fields(
     corpus: str, model_id: str, vector: bytes, source_path: str, document_id: int, text: str
 ) -> dict:
@@ -79,7 +72,7 @@ def chunk_fields(
         "vector": vector,
         "source_path": source_path,
         "document_id": document_id,
-        "content_sha": content_sha(text),
+        "content_sha": chunk_content_sha(text),
     }
 
 

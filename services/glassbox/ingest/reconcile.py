@@ -48,7 +48,7 @@ from sqlalchemy.orm import sessionmaker
 from services.glassbox.cache.answer import _model_tag
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
-from services.glassbox.ingest.redis_index import chunk_fields, content_sha
+from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields
 from services.glassbox.ingest.sweep import CORPORA
 
 LOGGER = logging.getLogger(__name__)
@@ -159,7 +159,7 @@ def load_scope_rows(engine: Engine, model_id: str) -> list[ScopeRow]:
             .where(DbChunk.embedding_model == model_id)
         )
         return [
-            ScopeRow(chunk_id, corpus, document_id, source_path, content_sha(text))
+            ScopeRow(chunk_id, corpus, document_id, source_path, chunk_content_sha(text))
             for chunk_id, corpus, document_id, source_path, text in result
         ]
 
