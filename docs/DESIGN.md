@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| **Status** | Draft v1 |
+| **Status** | Living design, mostly built and live. Each unbuilt part says so in its heading or line. |
 | **Owner** | Basel |
-| **Last updated** | 2026-09-28 |
+| **Last updated** | 2026-10-01 |
 | **Working name** | Glassbox (placeholder, rename freely) |
 
 ---
@@ -67,11 +67,11 @@ Recruiters get a polished, memorable demo. Engineers get a working, inspectable 
 |      systems?                 |   [Embed cache]->[Vector search]->[MySQL]  |
 |                               |                     |                      |
 |   A: ...streamed answer...    |                   [LLM]                    |
-|      [1] [2] [3] citations    |                                            |
+|      Sources: title, path     |                                            |
 |                               |   Retrieved chunks: file, score (0.87)     |
 |   [ ask anything...     ] ->  |                                            |
 +-------------------------------+--------------------------------------------+
-| p50 312ms | cache hit 64% today | 1,204 queries served | [ Stress test ]   |
+| 312ms | 1,204 queries served                            [tiger/bunny icon] |
 +----------------------------------------------------------------------------+
 ```
 
@@ -84,14 +84,14 @@ Visual rules:
 
 ### 4.2 Mobile layout
 
-Below 768px, and on a phone held sideways (landscape, at most 500px tall and under 1024px wide, so wider phones such as an iPhone 11 at 896x414 included), the chat takes the full width. The row above the ask box shows the pipeline as small labeled dots that light up in sequence (no heading), next to a **Chat | Diagram** switch.
+Below 768px (and on any viewport at most 500px tall and under 1024px wide), the chat takes the full width. Phones are used upright only: held sideways, a phone shows a "turn your phone upright" screen instead of the app (below). The row above the ask box shows the pipeline as small labeled dots that light up in sequence (no heading), next to a **Chat | Diagram** switch.
 
 - **Diagram replaces the chat in place.** Diagram swaps the message list for the architecture graph, drawn in a two-column portrait arrangement (`portraitNodes`/`portraitEdges` in `frontend/src/architecture.ts`; same fixed node size and handles) so all 11 components fit a phone without panning. The header, ask box and footer stay, so a visitor can ask and watch the request run through the diagram. There is no overlay or bottom sheet. Entering the diagram pushes a history entry: browser Back, Escape, the Chat segment, or "Continue in chat →" return to the conversation, and focus returns to the Diagram toggle. While a component is selected, the first Escape only deselects it and the next one returns to the conversation.
 - **Details panel.** It belongs to the selected component and is open exactly while one is selected. With nothing selected it is a 44px bar under the diagram that reads "Select a component for details" and cannot be opened (it is `aria-disabled` but stays focusable so the hint is reachable); it never shows the latest chat answer. Tapping a component asks about it and opens the panel with its implementation and the streamed answer. The panel is capped at 40% of the region (the diagram keeps at least 280px). Its chevron button closes it by deselecting the component, so the panel goes back to the locked bar and keyboard focus moves to that bar. Tapping empty diagram space or pressing Escape does the same (see §4.4).
 - **Focus mode.** While the ask box has focus, the header and footer slide away (200ms grid-row transition, none with reduced motion) so the conversation keeps its room with the keyboard up. They return on blur; a blur caused by a tap waits for the tap to finish so the tapped control does not move under the finger. The message list stays pinned to the latest message through the resize.
 - **Footer.** New chat moves into the footer, right-aligned immediately left of the capacity icon (the stats stay on the left and always keep one line). It is always a 44px "+" icon styled like the capacity icon: tap starts a new chat, press-and-hold shows a "New chat" tooltip without starting one (`frontend/src/hooks/useLongPressTooltip.ts`, shared with the capacity icon and the latency readout). The latency readout shows only the number (`312ms`), never a cache marker; hover, focus, or a long press explains it (time to first token, whether it was served from the answer cache, total). The privacy note moves into its tooltip and under the suggested questions.
 - **Header.** One row in both Chat and Diagram views: the name on the left (it shortens to "Basel A-R" only when the full name would not fit, below about 292px), then an envelope icon (Copy email) directly left of the GitHub icon. The envelope is used at every width, desktop included: hover or focus shows "Copy email", and a click shows "Email copied" (or the address itself if the clipboard is unavailable) in a floating bubble, so nothing in the row shifts.
-- **Landscape phones.** Held sideways, the same phone layout is compacted for the short height: the header is one 44px row without extra padding, the topic chips sit beside the ask box instead of above it, and the footer is 44px tall with the capacity icon as the stress-test button. In Diagram view the header slides away (the footer stays), the graph uses a three-row landscape arrangement (`landscapeNodes`/`landscapeEdges`) so all 11 components fit, and the details panel opens beside the diagram instead of below it. The rules are in `project/MOBILE_DESIGN.md` "Landscape phones".
+- **Phones are portrait only.** A web page cannot lock the orientation in a browser tab (the Screen Orientation API's `lock()` needs fullscreen or an installed app, and iOS Safari does not support it), so a phone held sideways (the device's orientation is landscape, from `screen.orientation` or the legacy `window.orientation`, never the viewport's shape, which Android's keyboard changes; plus a viewport at most 500px tall and under 1024px wide, a touch screen, and a screen at most 500px on its short side) shows a full-screen "Turn your phone upright to use basel.engineering" message with a rotating phone icon (still with reduced motion) and the name plus a GitHub link. It is an `alertdialog` that takes focus; the app underneath stays mounted but hidden, `inert` and `aria-hidden`, so a streaming answer, the conversation and the diagram selection carry on and are there when the phone is upright again. Tablets, short desktop windows, an upright phone with the keyboard open and a tablet whose on-screen keyboard shortens the viewport are not affected. Chat live-region announcements are silent while the screen shows. Detail in `project/MOBILE_DESIGN.md` "Phones are portrait only".
 - **Topic chips.** On phones the topic is picked with "Asking about (Basel) (System)" chips directly above the ask box, shown only in Chat view. In Diagram view they are hidden and the topic stays as it was; tapping a component switches to About This System.
 
 ### 4.3 Corpus toggle and suggested questions
@@ -115,15 +115,17 @@ The footer has no separate button: the tiger/bunny capacity icon is the button. 
 
 ### 4.6 Citations
 
-Each citation chip opens a popover with the chunk text. For the About This System corpus, the popover links to the exact file and line range on GitHub at the deployed commit.
+Built: the answer is plain prose without citation markers, and the retrieved sources are listed under it (title, path and similarity score; on mobile, in the details panel too).
+
+Not built yet: citation chips that open a popover with the chunk text and, for About This System, a deep link to the file and line range on GitHub at the deployed commit. The ingest Job does not compute GitHub URLs, so `RetrievalEvent.url` (§8) is never set today.
 
 ### 4.7 Degraded modes (shown honestly in the UI)
 
 | Condition | Behavior |
 |---|---|
-| Daily LLM budget reached | "Retrieval-only mode": show the top sources with snippets, no generated answer, and a small banner explaining why |
-| Per-IP rate limit hit | Friendly message with seconds until the next question is allowed |
-| Backend unreachable | Static fallback card with resume link and GitHub link |
+| Daily LLM budget reached (or the kill switch is on) | "Retrieval-only mode": show the top sources with snippets, no generated answer, and one of 20 playful daily-budget replies above them instead of a banner (DD2 §6.8) |
+| Per-IP rate limit hit | Friendly reply with the seconds until the next question is allowed; Retry waits out the limit (DD2 §6.4) |
+| Backend unreachable | A friendly, non-blaming failure reply in the chat with a Retry button (DD2 §6.6). A static fallback card with resume and GitHub links is not built yet. |
 
 ---
 
@@ -137,9 +139,9 @@ flowchart LR
     CFL -->|proxied, origin IP allowlisted| ING
 
     subgraph EC2["EC2 t4g.small running k3s"]
-        ING[Traefik ingress\nserves static frontend + /api/*] --> API[api Deployment]
+        ING[Traefik ingress\nroutes / and /api/*] --> API[api Deployment\nalso serves the built frontend]
         API <-->|Streams + pub/sub + caches + vector index| R[(Redis)]
-        W[retrieval-worker Deployment\nscaled by KEDA] <--> R
+        W[retrieval-worker Deployment\nscaled by KEDA when it is on] <--> R
         KEDA[KEDA] -.watches lag.-> R
         KEDA -.scales.-> W
         J[ingest Job] --> R
@@ -151,6 +153,8 @@ flowchart LR
     W --> BRE[Amazon Bedrock\nembeddings]
     J --> BRE
 ```
+
+KEDA is installed but suspended since the 2026-09-30 memory incident (its Flux Kustomizations and HelmRelease are suspended and its Deployments scaled to 0), so today the worker runs one replica and nothing autoscales. See §9.3.
 
 ### 5.2 Request lifecycle
 
@@ -168,8 +172,8 @@ flowchart LR
 | RAG (Bedrock embeddings + LLM) | Grounded, cited answers over two curated corpora | Core feature |
 | MySQL (in-cluster) | Source of truth for documents, chunks, embeddings, ingestion runs, query logs | Redis is rebuilt from MySQL on restart, so MySQL owns durability. Not RDS — see §10.5 for why |
 | Redis | Vector index, three cache layers, job queue (Streams), trace fan-out (pub/sub), rate limits, counters | Doing many jobs on purpose: one small in-memory store instead of five services |
-| Kubernetes (k3s) | Runs API, workers, Redis, ingestion; queue-driven autoscaling via KEDA; RBAC-scoped cluster view | Single node for cost. Manifests are cluster-agnostic and would run on EKS unchanged |
-| KEDA | Scales workers on Redis Stream backlog | The standard way to scale on queue depth rather than CPU |
+| Kubernetes (k3s) | Runs API, workers, Redis, ingestion; queue-driven autoscaling via KEDA (installed, suspended for now); RBAC-scoped cluster view | Single node for cost. Manifests are cluster-agnostic and would run on EKS unchanged |
+| KEDA | Scales workers on Redis Stream backlog | The standard way to scale on queue depth rather than CPU. Installed, but suspended and scaled to 0 since the 2026-09-30 memory incident (§9.3) |
 | Terraform | All AWS resources, modular, remote state | Everything reproducible from zero |
 | Cloudflare | DNS, TLS termination, edge proxy in front of the EC2 node; fronts both the static frontend and the API | Free; also proxies the apex domain natively, which CloudFront + Route 53 doesn't do as simply |
 | GitHub Actions + Flux | CI, image builds, GitOps deploys without exposing the cluster API | Pull-based deploys suit a single public node |
@@ -183,11 +187,11 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 ### 6.1 Frontend
 
 - **Stack:** React, Vite, TypeScript, Tailwind CSS.
-- **Diagram:** React Flow (`@xyflow/react`) with custom node components; Framer Motion for glows and edge animation.
-- **Architecture as data:** node IDs, labels and positions live in `frontend/src/architecture.ts`. The same file is indexed into the About This System corpus, so the diagram and the answers never drift apart.
+- **Diagram:** React Flow (`@xyflow/react`) with custom node components; node states are Tailwind color transitions (no animation library).
+- **Architecture as data:** node IDs, labels, descriptions and positions live in `frontend/src/architecture.ts`. The ingest Job does not index `frontend/` today (the About This System scanner reads `infra/`, `k8s/`, `services/` and `docs/`), so that file is not in the corpus; the deep dive describes the diagram instead.
 - **Streaming:** `fetch` with a streaming body reader parsing SSE (not `EventSource`, which cannot send POST bodies).
-- **Hosting:** built to static files, served directly by Traefik on the EC2 node (no S3/CloudFront). Cloudflare fronts the node for TLS and edge proxying.
-- **Dev mode:** a mock SSE server replays recorded traces so the UI can be built before the backend exists.
+- **Hosting:** built to static files inside the API image; FastAPI serves them at `/` and Traefik routes every path to the `api` Service (no S3/CloudFront, see §10.3). Cloudflare fronts the node for TLS and edge proxying.
+- **Dev mode:** Vite proxies `/api` to a local API running the fake provider (no recorded-trace mock server). `npm run phone` serves the phone preview frames.
 - **Footer latency:** the footer shows the last answer's client-measured time to first token as a bare number (`612ms`); it does not mark cache hits (suggested questions are pre-warmed, so they would always say cached). Hover, focus or long-press explains it (time to first token, plus the whole-answer time, or that it was served from the answer cache). When no token arrived (budget reached or LLM off, so only sources came back) it shows the whole-request time labelled `total`, never passed off as a first-token time.
 
 ### 6.2 API service
@@ -195,10 +199,11 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - **Stack:** Python 3.12, FastAPI, `redis-py` (async), `aiomysql` or SQLAlchemy async, `boto3` for Bedrock.
 - **Endpoints:**
   - `POST /api/ask` returns an SSE stream (section 8)
+  - `GET /api/demo/capacity` reports whether a real stress-test burst fits (§9.4)
   - `POST /api/demo/load` triggers the stress test
   - `GET /api/cluster/stream` returns SSE of worker pod events and the queue backlog, from one shared Kubernetes watch per api process, with caps on concurrent streams (section 9.5)
-  - `GET /api/stats` returns footer numbers
   - `GET /healthz`, `GET /readyz`
+  - Not built yet: `GET /api/stats` for server-side footer numbers. The footer counts this browser session's queries and shows the last answer's latency.
 - **Responsibilities:** rate limiting, answer cache, enqueue, trace forwarding, prompt building, LLM streaming, budget enforcement, query logging.
 - **Providers behind interfaces:** `EmbeddingProvider` and `LLMProvider` with a Bedrock implementation and a deterministic fake for tests and offline dev.
 - **Swappable runtime boundary:** API and ingestion select both providers through one factory. The fake stays the local default; production may select Bedrock, and another model vendor can implement the same interfaces. Persist each embedding model identity with its chunks and re-embed both corpora when switching vector spaces. The worker receives vectors in a provider-neutral 512-float format.
@@ -206,18 +211,20 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 
 ### 6.3 Retrieval worker
 
-- Same codebase and image as the API, different entrypoint (`python -m glassbox.worker`).
+- Same codebase and image as the API, different entrypoint (`python -m services.glassbox.worker.main`).
 - Consumes `retrieval:jobs` with `XREADGROUP` (group `workers`, one message at a time), acks with `XACK` after publishing results.
-- Steps: embed (cached) then KNN search in Redis (top 8, filtered by corpus) then load chunk text from the chunk cache or MySQL then optional light rerank (score threshold, dedupe by document) then publish.
+- Steps: embed (cached) then KNN search in Redis (top 8, filtered by corpus and embedding-model tag) then load chunk text from the chunk cache or MySQL then publish.
+- Not built yet: a light rerank (score threshold, dedupe by document). Retrieval returns the raw top 8; DESIGN-005 §4 plans hybrid search with a per-document cap instead.
 - Emits `stage` events for each step to `trace:{request_id}`.
 - Synthetic jobs (from the stress test) run the same path with cached embeddings plus a fixed simulated work delay, and skip publishing to any client.
 
 ### 6.4 Ingestion job
 
-- Kubernetes Job built from the repo; the image contains the repo snapshot at that commit (image tag equals commit SHA), so no Git credentials are needed in the cluster.
+- Kubernetes Job built from the repo; the image contains the repo snapshot at that commit (tagged `build-N` and with the short commit SHA), so no Git credentials are needed in the cluster. It runs once per release, after the rollout (§12).
+- Not built yet: a nightly ingest CronJob.
 - **Sources:**
   - `about_me`: curated Markdown in `corpus/about-me/` (bio, projects, and an export of the resume bullet bank). Only public-safe content.
-  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `frontend/src/architecture.ts`, `docs/`.
+  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `docs/` (`.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts`, `.tsx`). `frontend/` is not scanned.
 - **Denylist (always enforced):** `*.tfvars`, `*.tfstate*`, `.env*`, `**/secrets/**`, anything matching a secret-scanner pattern. The job fails if the scanner finds a match.
 - **Chunking:**
   - Markdown: split by headings, target 300 to 500 tokens, 50 token overlap.
@@ -232,7 +239,8 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 
 - Redis 8 (includes the query engine with vector search) or `redis-stack-server`, as a StatefulSet with a small PVC (k3s `local-path`).
 - AOF persistence off or `everysec`; nothing in Redis is precious because MySQL can rebuild it.
-- A `reindex` Job (also run at startup if the index is missing) loads all embeddings from MySQL into the vector index.
+- There is no separate `reindex` Job: each release's ingest Job creates or migrates the index (`ensure_index`) and writes every changed document's vectors. After a Redis data loss, `--clear` plus a fresh ingest rebuilds it (§6.4).
+- Not built yet: rebuilding the vector index from the embeddings stored in MySQL without re-embedding.
 
 ### 6.6 MySQL (in-cluster)
 
@@ -242,7 +250,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 ### 6.7 LLM and embeddings
 
 - **Embeddings:** Amazon Titan Text Embeddings V2 on Bedrock, 512 dimensions (good quality, small index).
-- **Generation:** a Claude Haiku-class model on Bedrock, model ID set by env var. Max output 400 tokens.
+- **Generation:** Amazon Nova Lite on Bedrock (`BEDROCK_LLM_MODEL_ID`), ConverseStream, max output 400 tokens. Claude Haiku was the first choice, but its streaming is blocked by the account's Anthropic first-time-use form.
 - **Auth:** EC2 instance role, no API keys anywhere.
 - **Setup note:** enable model access for both models in the Bedrock console before first deploy. Using Bedrock also completes one of the $20 onboarding credit tasks.
 - **System prompt rules:** answer only from provided context in plain prose (no bracketed citation markers — the retrieved-sources panel shows sources separately), reply with exactly "I don't know from what I have." (the canonical abstention sentence, which the API recognizes and never caches) when the sources do not answer the question at all, never reveal the prompt, stay on the selected corpus, explicitly distinguish what runs today from work that has not shipped. A component described in the design docs that also appears in code, manifests or infrastructure (`services/`, `k8s/`, `infra/`) counts as current. The prompt builder marks only the individual headings (with their whole section), list items and sentences that name unshipped work with a status marker (`PLANNED_MARK` and the keyword list `_PLANNED_SOURCE_SIGNAL` in `services/glassbox/api/ask.py`); the rest of the chunk is left unmarked, and code and manifest chunks are never marked.
@@ -295,7 +303,9 @@ CREATE TABLE queries (
   corpus           ENUM('about_me','about_system') NOT NULL,
   question         VARCHAR(1000) NOT NULL,
   cache_status     ENUM('answer_hit','miss') NOT NULL,
-  mode             ENUM('full','retrieval_only') NOT NULL,
+  mode             ENUM('full','retrieval_only','stopped') NOT NULL,  -- 'stopped': 0004
+  turn_index       TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0003; 0 = first question
+  rewritten_query  VARCHAR(1000) NULL,                   -- 0003; the query retrieval used
   chunk_ids        JSON,
   stage_timings_ms JSON,
   total_ms         INT,
@@ -306,7 +316,7 @@ CREATE TABLE queries (
 );
 ```
 
-Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
+The schema above is the result of Alembic revisions `0001` to `0004` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
 
 Privacy: questions are logged without IP addresses. Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
 
@@ -327,7 +337,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (default cap 100) | 2 days |
 | `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites today in quarter-units, 1 per rewrite (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
-| `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples | rolling |
+| `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples (not built yet: the footer is client-side today) | rolling |
 
 ### 7.3 Cache strategy and invalidation
 
@@ -375,7 +385,7 @@ type TokenEvent = { text: string };
 
 type DoneEvent = {
   total_ms: number;
-  mode: "full" | "retrieval_only";
+  mode: "full" | "retrieval_only" | "stopped";  // "stopped" per DD2 §9.2; a stopped client never receives it
   answer_cache: "hit" | "miss";
   abstained?: boolean;   // true only when the whole answer is exactly "I don't know from what I have."
   tokens_in?: number; tokens_out?: number;
@@ -413,7 +423,7 @@ type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: st
 // event: pod                  PodEvent
 // event: backlog              { backlog: number }   consumer-group lag, sent when it changes
 // event: synced               {}                    the snapshot is complete
-// event: reconnect            {}                    planned end of this connection; reconnect soon
+// event: reconnect            {}                    scheduled end of this connection; reconnect soon
 // event: cluster_unavailable  { message: string }   no in-cluster Kubernetes access; do not retry
 ```
 
@@ -436,19 +446,21 @@ Each connection starts with a `retry:` hint, then a snapshot: one `pod` event (t
 | Namespace | Workload | Kind | Notes |
 |---|---|---|---|
 | `app` | `api` | Deployment (1 replica) | Startup/liveness probes on `/healthz`, readiness on `/readyz` (5s timeouts); `maxSurge: 0` rollout; waits for migrations |
-| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
-| `app` | `ingest` | Job (per deploy) + CronJob (nightly) | Idempotent |
+| `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) when KEDA is on; one replica while it is suspended | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
+| `app` | `ingest` | Job (per deploy). A nightly CronJob is not built yet. | Idempotent. It ends with the answer warm-up. |
 | `app` | `warm-answers` | CronJob (every 2h) | Warms the suggested questions' answer cache via the api (§7.3); ~21 MiB, 48Mi limit; Redis only for its daily cap counter |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
 | `data` | `mysql` | StatefulSet (1) + PVC 4Gi | NetworkPolicy restricted; see 10.5 for why this replaced RDS |
-| `keda` | KEDA operator + metrics server | Helm | |
+| `keda` | KEDA operator + metrics server | Helm (Flux HelmRelease) | Suspended and scaled to 0 since 2026-09-30 (§9.3) |
 | `flux-system` | Flux controllers | Bootstrap | GitOps |
 | `kube-system` | Traefik, CoreDNS, metrics-server | k3s defaults | |
 
 Config via ConfigMaps; secrets via Kubernetes Secrets populated at bootstrap from SSM Parameter Store (see 10.6).
 
 ### 9.3 Queue-driven autoscaling (KEDA)
+
+Live status: KEDA 2.21 is installed through Flux (`keda` and `keda-scaling` Kustomizations), but since the 2026-09-30 memory incident both Kustomizations and the `keda` HelmRelease are suspended and the Deployments in the `keda` namespace are scaled to 0. The worker runs one replica and nothing autoscales until the owner turns it back on with the "Ops · KEDA on or off" runbook (§12). The ScaledObject below is the configuration that applies when it is on.
 
 ```yaml
 apiVersion: keda.sh/v1alpha1
@@ -486,6 +498,8 @@ spec:
 5. Frontend watches `/api/cluster/stream`; pod dots appear on the worker node, with a live backlog counter.
 6. Backlog drains; after the HPA's 45-second scale-down stabilization window, workers drop back to 1 and the dots disappear (about a minute).
 
+While KEDA is suspended (§9.3) the live free memory is also below the 512 MiB gate, so the capacity check says no and every click plays the simulation.
+
 ### 9.5 Cluster view and RBAC
 
 The API reads pod events through the Kubernetes API with a tightly scoped ServiceAccount:
@@ -518,6 +532,8 @@ roleRef:
 
 The endpoint only forwards pod name, phase and readiness for pods labeled `app=retrieval-worker`. Nothing else leaves the cluster.
 
+The stress-test capacity gate (§9.4) adds a ClusterRole, `glassbox-node-reader`, bound to the same `api` ServiceAccount: `list` on `nodes` and on `metrics.k8s.io` `nodes` (live node memory from metrics-server), nothing else (`k8s/base/rbac-api.yaml`).
+
 #### Bounded cost
 
 The endpoint is public and unauthenticated, so what an idle visitor can hold open is bounded (`services/glassbox/api/cluster.py`):
@@ -540,7 +556,7 @@ The endpoint is public and unauthenticated, so what an idle visitor can hold ope
 |---|---|
 | k3s server + agent | 500 to 600 Mi |
 | Traefik, CoreDNS, metrics-server | 100 Mi |
-| KEDA | 150 Mi |
+| KEDA | 150 Mi (0 while suspended, §9.3) |
 | Flux | 150 Mi |
 | Redis | 60 to 100 Mi |
 | MySQL | 200 to 350 Mi (tuned down via mysqld flags - default config OOMKilled at 250Mi during the actual first deploy) |
@@ -548,7 +564,7 @@ The endpoint is public and unauthenticated, so what an idle visitor can hold ope
 | Workers (3 at peak) | 270 to 384 Mi (projection: ~90 Mi observed per worker, 128 Mi limit each) |
 | **Total at peak** | **about 1.5 to 1.9 Gi** (sum of the rows above; a projection, not a measurement) |
 
-Measured on the live node on 2026-09-30 during a rollout (process RSS, not pod requests): k3s-server ~606 MB, Flux controllers ~195 MB, MySQL ~129 MB resident (more in swap), KEDA ~90 MB, API + worker ~115 MB, with ~440–510 MB of the 1 GiB swap in use — i.e. the node was already running over physical memory before any stress-test burst.
+Measured on the live node on 2026-09-30 during a rollout, before the incident fix (process RSS, not pod requests): k3s-server ~606 MB, Flux controllers ~195 MB, MySQL ~129 MB resident (more in swap), KEDA ~90 MB, API + worker ~115 MB, with ~440–510 MB of the 1 GiB swap in use — i.e. the node was already running over physical memory before any stress-test burst. After the fix (reboot, zram below, KEDA and briefly `warm-answers` suspended), memory PSI `some` avg300 is about 3% with about 357 MiB available (2026-10-01).
 
 The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at 128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this 2 GiB node, which is staying at 2 GiB; it was 5 workers before that decision.
 
@@ -566,7 +582,7 @@ Tight, and confirmed tight in practice, not just on paper — MySQL's real memor
 
 **How it is managed.** zram-generator ships on AL2023, but its packaged `/usr/lib/systemd/zram-generator.conf` sets `host-memory-limit=800`, which turns zram off on any instance with more than 800 MiB RAM. `infra/modules/compute/zram-swap.sh` writes `/etc/systemd/zram-generator.conf` to override that, which makes zram persistent across reboots, and activates zram0 now if it isn't already active. It writes and applies the sysctl file **only after `/dev/zram0` is confirmed active in `swapon --show`**, because a high swappiness with only disk swap would make thrashing worse. An exit trap covers every failure path, including `set -e` aborts and a failed `/swapfile` re-enable. If zram0 isn't active swap when the run ends, the run fails, and any sysctl file left by an earlier run (for example, zram broke after a reboot) is removed and AL2023's defaults restored. The script is idempotent and never turns swap off. Terraform delivers it as the SSM Command document `glassbox-zram-swap`. A State Manager association (`infra/modules/compute/zram.tf`) runs it on the node when the association is created, whenever the document changes, and weekly (Sunday 04:00 UTC) to repair drift. It isn't in `user_data`, because user data only runs on first boot and changing it stops and starts the instance. Run output stays in SSM's association history; there is no S3 or CloudWatch log sink. IAM: `glassbox-ci` may manage only `glassbox-*` documents, and it can create or update associations only for those documents. Associations are also tag-scoped: `aws:RequestTag/project=glassbox` is required to create one, and `aws:ResourceTag/project=glassbox` to describe, update or delete one. IAM can't restrict an association's *targets* to this node, so the role could still run a `glassbox-*` document on another instance in the account. Its pre-existing region-wide `ssm:AddTagsToResource` also means it could tag a foreign association into scope. Both are accepted: there is one instance and no other associations, and the role already has `ec2:*` (see the comment in `infra/bootstrap/main.tf`). Changing the zram size or compressor while zram0 is in use applies at the next reboot. The script logs this instead of turning the device off.
 
-**How to check** (as root on the node, e.g. via SSM Run Command):
+**How to check.** The "Ops · Diagnose" runbook (§12) prints swap, zram, PSI and vmstat with no approval needed; nobody runs commands on the node by hand. The checks it covers:
 
 ```sh
 swapon --show                      # /dev/zram0 prio 100 first, /swapfile prio -2
@@ -578,7 +594,7 @@ sysctl vm.swappiness vm.page-cluster
 
 Compare with the baseline above. The target is IO PSI `full` well below 65–75% and swap-in from disk near zero, with `/swapfile` USED shrinking as its pages come back in. If zram fills and `/swapfile` usage grows again, the working set really does exceed RAM, and the `t4g.medium` upgrade is the next step.
 
-**Rollback** (manual, as root on the node): first delete or stop the association (remove `infra/modules/compute/zram.tf`, or in the meantime `aws ssm delete-association`) so the weekly run doesn't undo the rollback. Then run `swapoff /dev/zram0`. This needs enough free RAM plus `/swapfile` room to take zram's pages back. Then run `systemctl stop systemd-zram-setup@zram0.service`, `rm /etc/systemd/zram-generator.conf /etc/sysctl.d/99-glassbox-zram.conf`, `systemctl daemon-reload`, and `sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10`. AL2023's packaged default then keeps zram off across reboots.
+**Rollback** (not scripted; there is no rollback runbook): first remove `infra/modules/compute/zram.tf` in a pull request and apply it through `terraform.yml`, so the weekly run doesn't undo the rollback. The node-side steps that follow would need a new reviewed `glassbox-ops-*` SSM document (§12). Run `swapoff /dev/zram0`. This needs enough free RAM plus `/swapfile` room to take zram's pages back. Then run `systemctl stop systemd-zram-setup@zram0.service`, `rm /etc/systemd/zram-generator.conf /etc/sysctl.d/99-glassbox-zram.conf`, `systemctl daemon-reload`, and `sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10`. AL2023's packaged default then keeps zram off across reboots.
 
 ---
 
@@ -590,7 +606,8 @@ Region: **us-east-1** (Bedrock model availability).
 
 ```
 infra/
-  bootstrap/            # one-time: S3 state bucket, GitHub OIDC provider + CI role
+  bootstrap/            # S3 state bucket, GitHub OIDC provider, CI/release/ops/bootstrap roles;
+                        # its own state is in S3 too, changed only through bootstrap.yml
   envs/prod/
     main.tf             # wires modules together
     variables.tf
@@ -598,11 +615,13 @@ infra/
     backend.tf          # S3 backend with native lockfile
   modules/
     network/            # VPC, 1 public subnet, no NAT gateway
-    compute/            # EC2, security group, IAM instance role, user_data (k3s)
+    compute/            # EC2, security group, IAM instance role, Elastic IP, user_data (k3s), zram (zram.tf)
     # no database module: MySQL runs in-cluster (see 10.5), not RDS
-    edge/                # Cloudflare DNS record + cache rule (Terraform-managed, see 10.3)
+    edge/               # Cloudflare DNS record + cache rule (Terraform-managed, see 10.3)
     secrets/            # SSM parameters
-    budgets/            # AWS Budgets + alerts
+    registry/           # ECR repository and lifecycle policy
+    ops/                # glassbox-ops-* SSM documents behind the Ops runbooks (§12)
+    # no budgets module: the AWS Budgets alert was set up by the owner outside Terraform (10.8)
 ```
 
 ### 10.2 Network
@@ -613,11 +632,11 @@ infra/
 ### 10.3 Edge
 
 - No CloudFront, no S3, no ACM. Cloudflare (already the domain's DNS) is the TLS/edge layer, proxied (orange-cloud) in front of the EC2 node's Elastic IP.
-- **Cloudflare DNS is Terraform-managed** via the official `cloudflare/cloudflare` provider (the `edge/` module) — the A record tracks the EC2 instance's Elastic IP automatically on every apply, no manual dashboard step after the first setup. Requires a Cloudflare API token scoped to `Zone:DNS:Edit` + `Zone:Zone:Read` on just the `basel.engineering` zone (not the global API key), supplied via a Terraform variable (`TF_VAR_cloudflare_api_token` locally, a GitHub Actions secret in CI) — never committed to the repo.
+- **Cloudflare DNS is Terraform-managed** via the official `cloudflare/cloudflare` provider (the `edge/` module) — the A record tracks the EC2 instance's Elastic IP automatically on every apply, no manual dashboard step after the first setup. Requires a Cloudflare API token scoped to `Zone:DNS:Edit` + `Zone:Zone:Read` on just the `basel.engineering` zone (not the global API key), supplied via a Terraform variable from a GitHub environment secret (a read-only token for `terraform-plan`, an edit token for `terraform-prod`) — never committed to the repo, and Terraform no longer runs from a laptop.
 - Traefik routes the site and `/api/*` to one Kubernetes `api` Service. The API image contains the built frontend, and FastAPI mounts its `frontend/dist` at `/` after the API and health routes. This gives the site and API one origin without a separate static-file server.
 - The EC2 security group allows port 80/443 **only** from Cloudflare's published IP ranges (https://www.cloudflare.com/ips/).
 - The `edge/` module also manages a Cloudflare Cache Rule bypassing caching for `/api/*` so the SSE stream is never buffered; static assets use the default cached behavior.
-- No CloudFront-style secret-header origin check by default; origin protection relies on the security group's IP allowlist. A Cloudflare Worker injecting a secret header is a documented stretch for defense-in-depth, not required for launch.
+- No CloudFront-style secret-header origin check by default; origin protection relies on the security group's IP allowlist. A Cloudflare Worker injecting a secret header (planned, not built yet) is a documented stretch for defense-in-depth, not required for launch.
 - Domain: `basel.engineering` (already owned, DNS already on Cloudflare).
 
 ### 10.4 Compute
@@ -627,7 +646,7 @@ infra/
 - IAM instance role with least privilege: `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the two model ARNs, `ssm:GetParameter` on `/glassbox/*`, SSM Session Manager for shell access (no SSH port open).
 - `user_data`: create swap, install k3s, install Flux bootstrap prerequisites. It only runs on first boot, so later host configuration goes through Terraform-managed SSM State Manager associations instead. The first one sets up zram swap (§9.7).
 - Elastic IP so the Cloudflare-proxied origin address survives stop/start.
-- **AMI is pinned after first launch** (`lifecycle { ignore_changes = [ami] }`): the AMI comes from the SSM "latest" parameter, and k3s/MySQL/Redis state lives on the root volume, so a newly published AL2023 image must not force a replacement. Patch in place with `dnf`; to intentionally roll to a new AMI, take a backup and, with owner approval, run `terraform apply -replace=module.compute.aws_instance.glassbox`.
+- **AMI is pinned after first launch** (`lifecycle { ignore_changes = [ami] }`): the AMI comes from the SSM "latest" parameter, and k3s/MySQL/Redis state lives on the root volume, so a newly published AL2023 image must not force a replacement. Patch in place with `dnf`; to intentionally roll to a new AMI, take a backup and, with owner approval, replace `module.compute.aws_instance.glassbox` through a reviewed pull request and the `terraform.yml` apply (the workflow has no `-replace` input today, so that change needs one).
 
 ### 10.5 Database
 
@@ -641,7 +660,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 ### 10.6 Secrets
 
 - Terraform generates the MySQL root/app password (`random_password`) and stores it in SSM Parameter Store as a SecureString (standard tier is free) — same mechanism originally specified for RDS's master password, just naming a self-hosted database's credential instead.
-- A bootstrap step on the node reads SSM via the instance role and creates the Kubernetes Secret the MySQL `StatefulSet` and the API/worker/ingest pods consume. (Stretch: External Secrets Operator to sync automatically.)
+- A bootstrap step on the node reads SSM via the instance role and creates the Kubernetes Secret the MySQL `StatefulSet` and the API/worker/ingest pods consume. (External Secrets Operator to sync automatically: planned, not built yet.)
 - The Cloudflare API token is a separate secret, supplied as a Terraform variable (see §10.3) — not stored in SSM, since Terraform itself needs it before any AWS resources (including the secrets module) exist.
 - No secrets in the repo, in Terraform variables files, or in container images.
 
@@ -651,7 +670,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 ### 10.8 Cost controls
 
-- AWS Budgets: monthly budget of $40 with alerts at 50%, 80%, 100% actual and 100% forecasted. (Setting up a budget is also a $20 onboarding credit task.)
+- AWS Budgets: `Glassbox-Monthly`, $20/month, with actual-spend alerts at 50%, 80% and 100% and a forecast alert (DD4 §4). It was created by the owner outside Terraform (there is no `budgets` module). (Setting up a budget is also a $20 onboarding credit task.)
 - Cost allocation tag `project=glassbox` on every resource via provider `default_tags`.
 
 ---
@@ -687,24 +706,31 @@ It is a plain ASGI middleware that adds headers to the response start and passes
 
 **GitHub Actions**
 
-- On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment). The retrieval eval (section 15) is planned for CI but runs by hand today.
-- On merge to `main`:
-  - Build the single multi-stage application image for arm64 and push to GitHub Container Registry, tagged with the commit SHA. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed.
-  - Update the image tag in `k8s/overlays/prod` (commit by the workflow).
-  - `terraform apply` for infra changes (manual approval via GitHub environment protection).
+- On every pull request and push to `main` (`ci.yml`, required on `main`, no path filters): backend tests against MySQL and Redis service containers with the fake provider (Alembic migrations, `ruff check`, `pytest services/tests`), and frontend lint (oxlint), `npm test` and a production build.
+- Not built yet: running the retrieval eval in CI (section 15); it runs by hand today.
+- On merge to `main` (`release.yml`, when a path the Dockerfile copies changed): a native arm64 runner builds the single multi-stage image and pushes it to Amazon ECR, tagged `build-N`, the short commit SHA and `latest`. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed. The workflow never writes to Git. A manual run must build `main`'s current head (`.github/scripts/release-provenance.sh`), and the release role trusts only `refs/heads/main`.
+- `sync-deploy-branch.yml` merges `main` into the unprotected `deploy` branch that Flux reads and commits image-tag bumps to. A push that loses a race with Flux re-fetches, re-merges and retries up to 5 times, never forced.
+- Third-party actions are pinned by full commit SHA; Dependabot opens one grouped `ci:` pull request a month to update them.
 
-The Terraform workflow uses two exact-subject OIDC roles: a read-only
-`glassbox-ci-plan` role for the protected `terraform-plan` environment and the
-existing deploy role for the protected `terraform-prod` environment. Same-repo
-PRs can plan after a reviewer approves access to production state; fork PRs
-only validate. Both roles and the S3 backend are created by the separately
-applied `infra/bootstrap` root. A plan comment links to the run rather than
-publishing a binary plan, which may contain cleartext secrets. See
-`infra/CI.md` for the required environment setup and bootstrap order.
+The Terraform workflow (`terraform.yml`) runs `terraform fmt -check` and
+`validate` on every pull request, then a plan through the read-only
+`glassbox-ci-plan` role in the unprotected `terraform-plan` environment for
+same-repo PRs and `main` pushes (fork PRs only validate), and an apply after a
+merge only once the owner approves the protected `terraform-prod`
+environment. Not built yet: `tflint` and a misconfiguration scanner. PR plans
+and `main` runs use separate concurrency groups, so a PR plan never cancels
+or replaces a queued `main` apply. A plan comment links to the run rather than
+publishing a binary plan, which may contain cleartext secrets. The roles and
+the S3 backend are created by the `infra/bootstrap` root, which has its own
+pipeline (`bootstrap.yml`): plan on PRs, and an approval-gated apply from
+`main` that runs only if the re-plan's SHA-256 fingerprint matches the
+reviewed plan. See `infra/CI.md`.
+
+**Operations runbooks.** Node operations are push-button too: eight "Ops · ..." workflows (Diagnose, Reboot node, Restart deployment, Flux suspend or resume, Flux reconcile, KEDA on or off, Warm-up CronJob suspend or resume, Apply zram) call the reusable `ops.yml`, which runs fixed, Terraform-managed `glassbox-ops-*` SSM documents (`infra/modules/ops`). Diagnose is read-only, needs no approval and redacts its output; every other action waits for the owner's approval of the `ops` environment and runs a diagnose before and after. Nobody runs AWS, Terraform or `kubectl` commands by hand. Runbook table: `infra/CI.md` "Runbooks".
 
 **Flux (GitOps)**
 
-- Watches `k8s/overlays/prod` in the repo and applies changes.
+- Watches `k8s/overlays/prod` on the `deploy` branch and applies changes. Image Update Automation scans ECR for the highest `build-N` tag and commits the tag bump to `deploy` itself.
 - Pull-based: the cluster reaches out to GitHub, so the Kubernetes API never needs to be exposed to CI.
 - Order: the root `flux-system` Kustomization applies `k8s/overlays/prod` in one pass. The `migrate` Job is recreated per image tag; the `api` and worker pods' `wait-for-migrations` initContainer holds them until it finishes. The `ingest` Job is not in that pass: child Kustomization `app-ready` dependsOn `flux-system` (so it runs only after the root has applied the current revision) and health-checks the `api` and `retrieval-worker` Deployments; `ingest` dependsOn `app-ready` and applies the Job from `k8s/overlays/prod/ingest` with `wait: true`. So ingestion starts only once the new pods are Ready and never overlaps the rollout's memory peak. Its kustomization carries its own `$imagepolicy` setter, which the ImageUpdateAutomation (`update.path: ./k8s/overlays/prod`) bumps in the same commit. Constraint: the root must not `wait` on its children, or it would deadlock with `ingest`.
 - Rollout: `maxSurge: 0, maxUnavailable: 1` on `api` and `retrieval-worker`, so a rollout never adds an extra pod on the 2 GiB node: each old pod stops before its replacement starts. (The single api replica therefore has no old/new overlap; a scaled-out worker replaces replicas one at a time, so old- and new-image workers briefly coexist.) This is a deliberate trade: a few seconds of downtime per release in exchange for memory headroom. Uvicorn drains for up to 25s (`--timeout-graceful-shutdown 25`, `terminationGracePeriodSeconds: 30`), and probes use 5s timeouts plus a `startupProbe` so swap pressure during a rollout doesn't trigger restarts.
@@ -715,10 +741,13 @@ publishing a binary plan, which may contain cleartext secrets. See
 
 Keep it light; the node has little memory to spare.
 
-- **Structured JSON logs** from all services with `request_id`.
-- **The trace panel is the primary observability feature.** The same stage timings are written to the `queries` table and aggregated into the footer stats.
-- **Metrics:** API exposes Prometheus metrics (`/metrics`): request latency histogram, cache hit counters, queue lag, LLM tokens. Stretch: ship them to Grafana Cloud's free tier with Grafana Alloy rather than running Prometheus in-cluster.
-- **Alerts:** AWS Budgets (cost), a CloudWatch alarm on EC2 status checks, and an external uptime ping.
+- **Logs:** plain-text application logs, read through `kubectl logs` or the "Ops · Diagnose" runbook.
+- **The trace panel is the primary observability feature.** The same stage timings are written to the `queries` table.
+- Not built yet: structured JSON logs with `request_id`, and aggregating the stage timings into server-side footer stats (the footer is per browser session, §6.2).
+- **Node health:** "Ops · Diagnose" reports memory, swap and zram, pressure (PSI), pods, Flux and KEDA status, warning events and k3s errors, with no approval needed (§12).
+- **Metrics (not built yet):** a Prometheus `/metrics` endpoint on the API (request latency histogram, cache hit counters, queue lag, LLM tokens), optionally shipped to Grafana Cloud's free tier with Grafana Alloy rather than running Prometheus in-cluster.
+- **Alerts:** AWS Budgets (cost).
+- Not built yet: a CloudWatch alarm on EC2 status checks and an external uptime ping.
 
 ---
 
@@ -753,10 +782,13 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 ## 15. Testing and evaluation
 
 - **Unit tests:** chunkers (per file type), cache key construction and versioning, rate limiter, trace event ordering.
-- **Integration tests:** Docker Compose with MySQL + Redis + fake providers; full ask flow end to end, asserting the SSE event sequence.
-- **Retrieval eval (manual today; not in CI yet):** `eval/run_eval.py` reads `eval/golden.yaml` (or `eval/questions.yaml` until that exists) with the source paths, and optionally the gold text snippets, that should be retrieved. It searches at the production k=8 and reports file-level **recall@5** and **MRR** (kept for continuity), recall@8 and MRR@8, chunk-level recall@8 and MRR@8 (a retrieved chunk from an expected source contains a gold snippet), and **noise@8** (the share of retrieved chunks from `services/tests/` or `docs/superpowers/plans/`), overall, per corpus and per category. A run fails against the stored baseline if the question set changed, recall@5 drops more than 5 points, chunk-level recall@8 drops at all, or noise@8 rises more than 5 points. A free, lexical-only variant is planned to run in CI (DESIGN-005 §5.4, RAG quality plan phase 9); until then the eval runs by hand and the unit tests for its metric math run in CI. This is the RAG equivalent of a regression test and a strong interview talking point.
-- **Load test:** k6 or Locust script against a staging run to measure p50/p95 latency and confirm the KEDA scale-up time.
-- **Infra:** `terraform validate`, `tflint`, `checkov` or `trivy config` for misconfigurations.
+- **Integration tests:** MySQL + Redis (service containers in CI, Docker Compose locally) with fake providers; full ask flow end to end, asserting the SSE event sequence.
+- **Answer eval (manual, no paid run yet):** `eval/golden.yaml` (75 cases in six categories: facts, planned/live status, unanswerable, multi-turn and injection), free deterministic graders (`eval/graders.py`) and `eval/run_answers.py`. Dataset validation and grader tests run in CI.
+- **Retrieval eval (run by hand):** `eval/run_eval.py` reads `eval/golden.yaml` (falling back to `eval/questions.yaml` if it is missing) with the source paths, and optionally the gold text snippets, that should be retrieved. It searches at the production k=8 and reports file-level **recall@5** and **MRR** (kept for continuity), recall@8 and MRR@8, chunk-level recall@8 and MRR@8 (a retrieved chunk from an expected source contains a gold snippet), and **noise@8** (the share of retrieved chunks from `services/tests/` or `docs/superpowers/plans/`), overall, per corpus and per category. A run fails against the stored baseline if the question set changed, recall@5 drops more than 5 points, chunk-level recall@8 drops at all, or noise@8 rises more than 5 points. The unit tests for its metric math and a fake-provider end-to-end run are in CI. This is the RAG equivalent of a regression test and a strong interview talking point.
+  - Not built yet: a free, lexical-only variant of the retrieval eval in CI (DESIGN-005 §5.4, RAG quality plan phase 9).
+- **Load test (not built yet, DD1 Phase 7):** k6 or Locust script against a staging run to measure p50/p95 latency and confirm the KEDA scale-up time.
+- **Infra:** `terraform fmt -check` and `terraform validate` in CI.
+  - Not built yet: `tflint`, and `checkov` or `trivy config` for misconfigurations.
 
 ---
 
@@ -764,92 +796,93 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 
 ```
 glassbox/
-  docs/DESIGN.md              # this doc, plus DESIGN-002/003/004
-  project/                    # CLAUDE.md, SNAPSHOT.md, BACKLOG.md
-  README.md                  # screenshots, live link, architecture summary, "how to run locally"
+  docs/DESIGN.md              # this doc, plus DESIGN-002/003/004/005 and architecture/deep-dive.md
+  project/                    # CLAUDE.md, SNAPSHOT.md, BACKLOG.md, status/, MOBILE_DESIGN.md
+  README.md                  # live link, what Glassbox is, request flow, code map
   frontend/
     src/
-      architecture.ts        # node IDs/positions, also indexed into the corpus
-      components/            # Chat, ArchitecturePanel, CitationChip, StatsBar, StressTestButton
-      lib/sse.ts
-    mock/                    # recorded traces for UI dev
+      architecture.ts        # node IDs/positions (not ingested, see 6.1)
+      components/            # Chat, ArchitecturePanel, StatsBar, PipelineStrip, TopicChips, ContactReveal
+      hooks/                 # useStressTest, useLongPressTooltip, ...
+      lib/                   # sse.ts and unit-tested helpers (chat retry, replies, layout, cluster stream)
+    phone-preview.html       # `npm run phone` phone frames
   services/
     glassbox/
       api/                   # FastAPI app, routes, SSE
       worker/                # stream consumer
       ingest/                # loaders, chunkers, secret scan
-      retrieval/             # vector search, rerank
+      retrieval/             # vector search
       cache/                 # answer/embedding/retrieval caches
-      providers/             # bedrock.py, fake.py
-      db/                    # models, migrations
+      providers/             # base.py, bedrock.py, fake.py, factory.py
+      db/                    # models, migrations, wait_for_migrations
     tests/
     Dockerfile
   corpus/
     about-me/                # curated public Markdown
   eval/
-    questions.yaml
-    run_eval.py
+    golden.yaml, questions.yaml
+    run_eval.py, run_answers.py, graders.py
   k8s/
     base/                    # api, worker, mysql, redis, migrate job, rbac, networkpolicy
     overlays/prod/           # image tag, Flux objects, keda/, keda-scaling/, app-ready/, ingest/
   infra/                     # see 10.1
   docker-compose.yml         # local dev: mysql, redis, api, worker
-  .github/workflows/
+  .github/workflows/          # ci, release, sync-deploy-branch, terraform, bootstrap, ops + eight Ops wrappers
 ```
 
 ---
 
 ## 17. Build plan
 
-Each phase ends in something that works. Hand these to Claude Code one phase at a time.
+Each phase ends in something that works. Hand these to Claude Code one phase at a time. Status as of 2026-10-01: Phases 0 to 6 are done and live. Phase 7 is not started.
 
-**Phase 0: Scaffold and guardrails**
+**Phase 0: Scaffold and guardrails** (done)
 - Repo structure, linting, pre-commit, secret scanning.
 - `infra/bootstrap`: state bucket, GitHub OIDC role. AWS Budgets alerts.
 - *Done when:* `terraform plan` runs from CI with no static keys; budget alerts exist.
 
-**Phase 1: Backend locally**
+**Phase 1: Backend locally** (done)
 - Docker Compose (MySQL, Redis). Schema + migrations. Fake providers.
 - Ingestion for both corpora. API + worker with the full SSE contract.
 - *Done when:* `curl -N` against `/api/ask` streams stage, retrieval, token and done events locally.
 
-**Phase 2: Real models + eval**
+**Phase 2: Real models + eval** (done, with Nova Lite instead of Haiku)
 - Bedrock providers. Three cache layers. Rate limit + daily budget.
 - Retrieval eval with baseline recorded.
 - *Done when:* answers are cited and correct on the eval set; a repeated question hits the answer cache.
 
-**Phase 3: Frontend**
+**Phase 3: Frontend** (done, except the citation popovers and the static fallback card in §4.6 and §4.7)
 - Layout, chat, citations, architecture panel driven by mock traces, then by the local backend.
 - Mobile pipeline strip. Degraded modes.
 - *Done when:* a full question animates end to end against the local backend on desktop and phone widths.
 
-**Phase 4: AWS + Kubernetes**
-- Terraform modules: network, compute (k3s), database, edge, secrets.
+**Phase 4: AWS + Kubernetes** (done)
+- Terraform modules: network, compute (k3s), edge, secrets, registry (MySQL runs in-cluster instead of a database module, §10.5).
 - Kubernetes base manifests, NetworkPolicies, RBAC. Manual first deploy.
 - *Done when:* `https://basel.engineering` serves the site and answers questions.
 
-**Phase 5: Autoscaling demo**
+**Phase 5: Autoscaling demo** (done; KEDA is suspended for now, §9.3)
 - KEDA, synthetic load endpoint, cluster stream, pod dots in the UI.
 - *Done when:* pressing Stress test visibly scales workers from 1 to 3 and back.
 
-**Phase 6: CI/CD + GitOps**
-- Image builds to GHCR, Flux bootstrap, frontend deploy workflow, plan-on-PR.
+**Phase 6: CI/CD + GitOps** (done)
+- Image builds to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation, the frontend built into the API image, plan-on-PR.
 - *Done when:* merging to `main` deploys without touching the server.
 
-**Phase 7: Polish**
-- README with screenshots/GIF, footer stats, suggested questions tuned, load test numbers recorded, Grafana Cloud (optional).
+**Phase 7: Polish (not started)**
+- Not started: README with screenshots/GIF, server-side footer stats, load test numbers recorded, Grafana Cloud (optional).
 
 ---
 
 ## 18. Resume bullets this should earn
 
-Fill in the numbers after Phase 7; don't claim them before they're measured.
+Fill in the numbers after Phase 7; don't claim them before they're measured. None is measured yet.
 
 - Designed and deployed a retrieval-augmented generation service on AWS (Terraform, Kubernetes/k3s, self-hosted MySQL, Redis, Bedrock) serving cited answers at [X] ms p50 latency.
 - Built a three-layer Redis cache (semantic answer, embedding, retrieval) with versioned-key invalidation, reaching a [X]% hit rate and cutting LLM calls by [X]%.
 - Implemented queue-driven autoscaling with KEDA on Redis Streams, scaling workers from 1 to 3 in [X] seconds under synthetic load.
 - Provisioned all infrastructure as modular Terraform with remote state, GitHub OIDC (no static credentials) and pull-based GitOps deploys via Flux.
-- Added a retrieval evaluation harness to CI (recall@5 = [X]) that gates changes to chunking and ranking.
+- Added a retrieval evaluation harness (recall@5 = [X]) that gates changes to chunking and ranking. It runs by hand today; running it in CI is not built yet.
 
 ---
 

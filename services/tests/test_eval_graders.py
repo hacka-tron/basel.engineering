@@ -23,7 +23,7 @@ THIN_STRESS_ANSWER = (
     "jobs so KEDA scales the retrieval-worker Deployment from 1 to 3 pods and back. "
     "If the node does not have enough capacity, a simulated burst plays instead."
 )
-# What prompt v14 (DESIGN-005 §6) should produce: same answer, specifics kept.
+# What prompt v15 (DESIGN-005 §6) should produce: same answer, specifics kept.
 V14_STRESS_ANSWER = (
     "It runs a burst of synthetic retrieval jobs so you can watch the workers autoscale. "
     "A real burst only runs when the node has at least 512 MiB of free memory (two extra "
@@ -44,7 +44,7 @@ def test_thin_stress_test_answer_fails_fact_coverage():
     assert result["failures"] == ["missing_facts"]
 
 
-def test_v14_style_stress_test_answer_passes():
+def test_v15_style_stress_test_answer_passes():
     case = CASES["sugg-system-stress"]
     assert fact_coverage(V14_STRESS_ANSWER, case["must_include"])["score"] == 1.0
     assert grade_case(case, V14_STRESS_ANSWER)["passed"] is True

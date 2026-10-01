@@ -31,12 +31,12 @@
 }
 
 /*
- * Layout breakpoints (project/MOBILE_DESIGN.md "Landscape phones"). A phone
- * held sideways is wider than 768px but at most 500px tall; it keeps the
- * phone layout instead of the two-pane desktop one, so `md` also requires
- * more than 500px of height below 1024px of width. `max-md` is its exact
- * opposite. The same queries are in src/lib/layout.ts for useMediaQuery; a
- * unit test keeps the two copies identical.
+ * Layout breakpoints (project/MOBILE_DESIGN.md "Layout"). `md` needs 768px
+ * of width and more than 500px of height, or 1024px of width, so a phone held
+ * sideways (at most 500px tall) keeps the phone layout under the "turn your
+ * phone upright" screen and turning it back never switches layouts. `max-md`
+ * is its exact opposite. The same query is in src/lib/layout.ts for
+ * useMediaQuery; a unit test keeps the two copies identical.
  */
 @custom-variant md {
   @media (width >= 768px) and (height > 500px), (width >= 1024px) {
@@ -48,10 +48,23 @@
     @slot;
   }
 }
-/* A phone in landscape: everything below md that is wider than tall. */
-@custom-variant phone-landscape {
-  @media (orientation: landscape) and (height <= 500px) and (width < 1024px) {
-    @slot;
+
+/*
+ * The rotate screen's phone icon (components/RotateScreen.tsx): it starts
+ * sideways, turns upright, holds, and repeats. Reduced motion: it stays upright.
+ */
+@keyframes rotate-upright {
+  0%, 20% { transform: rotate(-90deg); }
+  55%, 100% { transform: rotate(0deg); }
+}
+
+.rotate-upright {
+  animation: rotate-upright 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-upright {
+    animation: none;
   }
 }
 
