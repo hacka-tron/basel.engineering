@@ -15,26 +15,33 @@ export const DESKTOP_QUERY = '(width >= 768px) and (height > 500px), (width >= 1
 
 /**
  * A phone-shaped viewport held sideways: wider than tall, at most 500px tall
- * and under 1024px wide. Every phone sideways matches (568x320 to 932x430);
- * tablets (at least 600px tall) and desktops do not at rest. It is the
- * landscape part of `max-md`, so the phone layout is always what sits under
- * the rotate screen.
+ * and under 1024px wide (every phone sideways is 568x320 to 932x430). Its size
+ * limits are the landscape part of `max-md`, so the phone layout is always what
+ * sits under the rotate screen. Used as is only by the dev phone preview, whose
+ * frames have no device orientation of their own; real phones use
+ * ROTATE_QUERY plus the device orientation.
  */
 export const PHONE_LANDSCAPE_VIEWPORT = '(orientation: landscape) and (height <= 500px) and (width < 1024px)'
 
 /**
- * The rotate screen's media query: a phone-shaped landscape viewport on a touch
- * screen. `pointer: coarse` keeps a short desktop browser window (say 900x450,
- * mouse or trackpad) usable.
+ * The rotate screen's size guard: a phone-sized viewport (at most 500px tall,
+ * under 1024px wide) on a touch screen. `pointer: coarse` keeps a short desktop
+ * browser window (say 900x450, mouse or trackpad) usable. Deliberately no
+ * `(orientation: landscape)`: on Android the on-screen keyboard shrinks the
+ * viewport (`interactive-widget=resizes-content`), so a 360x640 phone held
+ * upright becomes about 360x280 while typing, which the viewport calls
+ * landscape. Whether the phone is sideways comes from the device instead
+ * (`isDeviceLandscape`).
  */
-export const ROTATE_QUERY = `${PHONE_LANDSCAPE_VIEWPORT} and (pointer: coarse)`
+export const ROTATE_QUERY = '(height <= 500px) and (width < 1024px) and (pointer: coarse)'
 
 /**
  * A phone's screen is at most this many CSS px on its short side (phones are
  * 320 to 440, the smallest tablets about 600). Unlike the viewport, the screen
  * does not shrink when an on-screen keyboard opens, so a tablet whose keyboard
- * leaves a 500px-tall landscape viewport is not mistaken for a phone, and a
- * zoomed-in desktop browser is excluded by `pointer: coarse` above.
+ * leaves a 500px-tall viewport is not mistaken for a phone. It is re-read
+ * whenever the orientation or the window size changes (a foldable unfolding
+ * changes its screen).
  */
 export const PHONE_SCREEN_MAX_SHORT_SIDE = 500
 
@@ -43,16 +50,36 @@ export function isPhoneScreen(screen: { width: number; height: number }): boolea
 }
 
 /**
- * Whether to show "turn your phone upright" instead of the app: ROTATE_QUERY
- * matches on a phone-sized screen. `preview` (the dev phone preview's
- * landscape frames, `?phone`) skips the touch and screen checks, which a
- * desktop browser showing phone-sized frames can never pass.
+ * Whether the device itself is held sideways (never the viewport's shape, which
+ * the keyboard changes): `screen.orientation.type`, or the legacy
+ * `window.orientation` (90 or -90 sideways) where that API is missing (iOS
+ * before 16.4). Null when neither exists.
  */
-export function showsRotateScreen({ landscapeTouch, landscapeViewport, screen, preview }: {
-  landscapeTouch: boolean
+export function isDeviceLandscape({ orientationType, windowOrientation }: {
+  orientationType?: string | null
+  windowOrientation?: number | null
+}): boolean | null {
+  if (orientationType) return orientationType.startsWith('landscape')
+  if (typeof windowOrientation === 'number') return Math.abs(windowOrientation) === 90
+  return null
+}
+
+/**
+ * Whether to show "turn your phone upright" instead of the app: the device is
+ * sideways, the viewport is phone-sized on a touch screen (ROTATE_QUERY), and
+ * the screen is phone-sized. `preview` (the dev phone preview's landscape
+ * frames, `?phone`) uses the frame's own shape instead
+ * (PHONE_LANDSCAPE_VIEWPORT), since a desktop browser has no touch screen, a
+ * monitor-sized screen and its own device orientation.
+ */
+export function showsRotateScreen({ deviceLandscape, phoneViewport, landscapeViewport, phoneScreen, preview }: {
+  deviceLandscape: boolean | null
+  phoneViewport: boolean
   landscapeViewport: boolean
-  screen: { width: number; height: number }
+  /** isPhoneScreen(window.screen) */
+  phoneScreen: boolean
   preview: boolean
 }): boolean {
-  return preview ? landscapeViewport : landscapeTouch && isPhoneScreen(screen)
+  if (preview) return landscapeViewport
+  return deviceLandscape === true && phoneViewport && phoneScreen
 }

@@ -21,11 +21,12 @@ function RotateScreen() {
   const titleId = useId()
 
   // Take focus so screen readers announce the dialog, and give it back on
-  // the way out. A text field is not refocused: that would pop the keyboard
+  // the way out. Never taken from a text field (the keyboard would close),
+  // and a text field is not refocused either: that would pop the keyboard
   // up the moment the phone is upright again.
   useLayoutEffect(() => {
     const previous = document.activeElement
-    dialogRef.current?.focus({ preventScroll: true })
+    if (!previous || !isTextEntry(previous)) dialogRef.current?.focus({ preventScroll: true })
     return () => {
       if (!(previous instanceof HTMLElement) || previous === document.body || isTextEntry(previous)) return
       // After the commit that removes `inert` from the app.
