@@ -30,56 +30,26 @@ function legacyCopy(text: string): boolean {
   }
 }
 
+/** Sized like the GitHub mark beside it (24px, 28px from sm); the tight viewBox makes the envelope fill it optically. */
 function EnvelopeIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="2 2 20 20" className="size-6 sm:size-7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
     </svg>
   )
 }
 
-const TEXT_CLASS = 'inline-flex min-h-11 items-center px-2 text-sm transition-colors hover:text-primary md:min-h-0 md:px-0'
-const ICON_CLASS = 'relative flex size-11 shrink-0 items-center justify-center transition-colors hover:text-primary'
-
-/** Width of the "Contact me" label, reserved for the longer "Email copied". */
-function TextLabel({ label }: { label: string }) {
-  return (
-    <span className="grid justify-items-end">
-      <span aria-hidden="true" className="invisible col-start-1 row-start-1">Email copied</span>
-      <span aria-live="polite" className="col-start-1 row-start-1">{label}</span>
-    </span>
-  )
-}
-
 /**
- * A small note under the button, right-aligned to it, used below md so the
- * result (and on clipboard failure the address itself) never changes the
- * header row's width. Out of flow, so the row cannot wrap.
+ * Contact: an envelope button (aria-label "Copy email") directly left of the
+ * GitHub icon, at every width. Click/tap copies the address and a toast under
+ * the button says "Email copied" (announced via aria-live). If both the
+ * Clipboard API and the execCommand fallback fail, the toast shows the address
+ * itself for 5s so the visitor can still read it. Hover (on devices that can
+ * hover) or keyboard focus shows a "Copy email" tooltip in the same place.
+ * The bubble is out of flow, so the header row never changes width.
  */
-function Toast({ text }: { text: string }) {
-  return (
-    <span
-      aria-live="polite"
-      className={`pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-[3px] border border-hairline bg-panel px-2 py-1 text-xs text-primary shadow-lg ${text ? '' : 'sr-only'}`}
-    >
-      {text}
-    </span>
-  )
-}
-
-/**
- * "Contact me" is a single button: click/tap copies the email address and
- * flashes "Email copied" (announced via aria-live). If both the Clipboard API and
- * the execCommand fallback fail, the address is shown briefly instead so the
- * visitor can still read it.
- *
- * - `text` (md+): "Contact me"; the result replaces the label inline.
- * - `icon` (below md): an envelope, aria-label "Copy email"; "Email copied",
- *   or the address when copying fails, shows in a toast under the button, so
- *   the header row never changes width.
- */
-function ContactReveal({ variant = 'text' }: { variant?: 'text' | 'icon' }) {
+function ContactReveal() {
   const [status, setStatus] = useState<Status>('idle')
   const timeoutRef = useRef<number | null>(null)
 
@@ -100,24 +70,26 @@ function ContactReveal({ variant = 'text' }: { variant?: 'text' | 'icon' }) {
     timeoutRef.current = window.setTimeout(() => setStatus('idle'), ok ? 2000 : 5000)
   }
 
-  const label = status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : 'Contact me'
-  const colour = status === 'idle' ? 'text-muted' : 'text-primary'
-
-  if (variant === 'icon') {
-    return (
-      <button type="button" onClick={handleClick} aria-label="Copy email" className={`${ICON_CLASS} ${colour}`}>
-        <EnvelopeIcon />
-        <Toast text={status === 'idle' ? '' : label} />
-      </button>
-    )
-  }
+  const result = status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : ''
 
   return (
-    <button type="button" onClick={handleClick} className={`${TEXT_CLASS} ${colour}`}>
-      {/* "Email copied" sits in the width reserved for the longer of the two
-          labels, right-aligned, so the header row never shifts (the GitHub
-          icon stays put beside it). */}
-      <TextLabel label={label} />
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-label="Copy email"
+      className={`group relative flex size-11 shrink-0 items-center justify-center transition-colors hover:text-primary md:size-auto ${status === 'idle' ? 'text-muted' : 'text-primary'}`}
+    >
+      <EnvelopeIcon />
+      {/* Tooltip while idle (hover/focus), the result after a click. */}
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-[3px] border border-hairline bg-panel px-2 py-1 text-xs font-normal text-primary shadow-lg ${
+          result ? 'block' : 'hidden [@media(hover:hover)]:group-hover:block group-focus-visible:block'
+        }`}
+      >
+        {result || 'Copy email'}
+      </span>
+      <span aria-live="polite" className="sr-only">{result}</span>
     </button>
   )
 }
