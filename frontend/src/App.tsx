@@ -16,7 +16,7 @@ import { architectureNodes, questionForComponent, type NodeId } from './architec
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
-import { planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
+import { holdSaveDuringRetry, planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream, podMapFromSnapshot } from './lib/clusterStream'
 import {
@@ -97,6 +97,9 @@ function App() {
   // per streamed token.
   const savedSignatureRef = useRef<Partial<Record<Corpus, string | null>>>({})
   const requestInFlightRef = useRef(false)
+  // The in-flight retry's reply: until it settles, the saved conversation keeps
+  // the failure reply it replaces, so a reload mid-retry still offers Retry.
+  const retryTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
   const pendingComponentRef = useRef<NodeId | null>(null)
   // A question sent while an answer streams (DESIGN-002 §6.4): the current
   // answer is stopped first, and this is asked once that stop has rendered, so
@@ -254,6 +257,10 @@ function App() {
         continue
       }
       if (savedSignatureRef.current[key] === signature) continue
+      // A retry in flight: keep the saved copy (failed question plus its
+      // failure reply) until the new reply settles; then the change is saved.
+      const retry = retryTargetRef.current
+      if (retry?.corpus === key && holdSaveDuringRetry(conversations[key], retry.messageId)) continue
       savedSignatureRef.current[key] = signature
       writeConversation(apiCorpus(key), signature === null ? null : serializeConversation(conversations[key]))
     }
@@ -337,6 +344,7 @@ function App() {
     requestInFlightRef.current = false
     abortControllerRef.current = null
     streamTargetRef.current = null
+    retryTargetRef.current = null
     const pendingComponent = pendingComponentRef.current
     pendingComponentRef.current = null
     if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system', { sendHistory: false })
@@ -356,6 +364,7 @@ function App() {
     const now = Date.now()
     const assistantId = newMessageId()
     streamTargetRef.current = { corpus: targetCorpus, messageId: assistantId }
+    retryTargetRef.current = retry ? { corpus: targetCorpus, messageId: assistantId } : null
     setNodeCacheStatus({})
     setRetrievedChunks([])
     setActiveNode(null)
