@@ -95,7 +95,7 @@ Once M2 is live and usable, layer in, in this order:
 1. **Self-healing (DD2 §3)** — not built yet. Launch Template + Auto Scaling Group, boot script, health-check timer. High value early since it's the difference between "recruiter hits a dead site" and "site heals itself." The Elastic IP reassociation logic is unchanged by the Cloudflare swap — Cloudflare still just points at a stable IP.
 2. **Streaming hardening formalized (DD2 §7)** — the post-deploy CI check is not built yet. Plan: codify the Cloudflare-specific checks from section 3.3 above into the post-deploy CI check.
 3. **Corpus authoring guide + validation (DD2 §4)** — not built yet; only relevant if still hand-authoring Markdown files in-repo at this point (i.e., before M4).
-4. **Conversational chat + live chat UX (DD2 §5, §6)** — shipped: multi-turn memory, follow-up rewriting, Stop button, localStorage persistence, accessibility. DD2 §7's stream heartbeats and server-side Stop have shipped too.
+4. **Conversational chat + live chat UX (DD2 §5, §6)** — shipped: multi-turn memory, follow-up rewriting, Stop button, localStorage persistence, accessibility, typing while an answer streams, Up-arrow recall and Retry on failure replies. DD2 §7's stream heartbeats and server-side Stop have shipped too.
 
 ---
 
