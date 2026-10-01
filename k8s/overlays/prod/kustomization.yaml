@@ -9,4 +9,4 @@ resources:
   - flux/kustomization-ingest.yaml
 images:
   - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
-    newTag: "build-59" # {"$imagepolicy": "flux-system:glassbox:tag"}
+    newTag: "build-60" # {"$imagepolicy": "flux-system:glassbox:tag"}
