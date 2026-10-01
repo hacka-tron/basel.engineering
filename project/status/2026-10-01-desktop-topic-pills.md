@@ -1,6 +1,6 @@
 # Desktop topic chips and a latency readout that lights up
 
-Status: in review (PR opened; see the status index).
+Status: merged 2026-10-01 as PR [#82](https://github.com/hacka-tron/basel.engineering/pull/82); deploys with the next release.
 
 ## TL;DR
 
