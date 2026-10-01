@@ -106,8 +106,17 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 
 ## Security
 
-- **Security pass:** confirm production sets a stable private `GLASSBOX_IP_HASH_SALT` (Terraform SSM → Secret) and that `GLASSBOX_TRUSTED_PROXY_CIDRS` (`k8s/base/configmap-app.yaml`) matches the live ingress peer, so per-IP limits key on the real client and can't be bypassed with a forged `X-Forwarded-For`. Also re-audit for exposed secrets: logs (including public ops workflow output), client-facing error messages, the frontend bundle and git history.
-- **Security audit of automatic Terraform previews:** Before granting anyone else repository write access or accepting privileged previews from new PR sources, review whether a PR can change workflow/Terraform code to read or leak the `terraform-plan` Cloudflare token, AWS read-role credentials, SSM parameters, or production state. Recheck the same-repository/fork guard, GitHub environment protection, OIDC trust and IAM scope, plan logs/comments/artifacts, and whether restoring a preview approval gate is warranted. The same questions now apply to `bootstrap-plan` and `ops-read` (both run without approval). Record the findings and any changes before broadening access.
+Code-level pass done 2026-10-01 (`project/status/2026-10-01-security-pass.md`): no live secret in git history; worker error text, spoofable/shared rate-limit identity and the fail-open salt are fixed in code. Still open:
+
+- **Confirm the security-pass fixes in prod** (owner clicks, listed in the status report's "Owner must confirm in prod"): `api` healthy in **Ops · Diagnose** after deploy (salt check), and the two-network rate-limit test (laptop vs phone on mobile data).
+- **Terraform preview credentials (decide before granting anyone else write access).** Any account that can push a branch runs its own code in `terraform-plan` with no approval: edit `terraform.yml`, or add a `data "external"`/`data "http"` that runs at plan time. It can read the plan Cloudflare token, use `glassbox-ci-plan` to read `envs/prod/terraform.tfstate` (holds the MySQL password and IP-hash salt), and decrypt `/glassbox/*` SSM parameters. `bootstrap-plan` is the same pattern with less to read (IAM, bootstrap state). The fork guard works. Options: restore a required reviewer on `terraform-plan`/`bootstrap-plan`, or only plan after a maintainer approves. Today only the owner has write access, so this is not reachable.
+- **Pin third-party actions to commit SHAs** in jobs that hold OIDC tokens or secrets (`configure-aws-credentials`, `setup-terraform`, `amazon-ecr-login`, `docker/*`, `checkout`), and add Dependabot for `github-actions`.
+- **`/api/cluster/stream` resource cap:** each SSE client opens its own Kubernetes watch and Redis connection with no per-client limit. Share one watch across clients or cap concurrent streams.
+- **Security headers** (HSTS, `X-Content-Type-Options: nosniff`, `frame-ancestors`/CSP), via a Cloudflare response-header rule or a small middleware.
+- **Optional diagnose section** printing whether the `glassbox-app` salt is set (length class only) and the Traefik proxy setup (`externalTrafficPolicy`, `forwardedHeaders` args, pod network) plus the number of live `rl:*` buckets. Owner decision: it reads a production secret's length on the node.
+- `glassbox-ops-read` also trusts the plain `ref:refs/heads/main` subject; drop it if nothing needs it, so only the `ops-read` environment can run diagnose.
+- Add an app-level startup test for a too-short salt (today only the function-level test covers it; review minor on #96).
+- Origin protection is still IP-range-only (see Open decisions). The origin IP is in git history, so anyone can route to it through their own Cloudflare account; Authenticated Origin Pulls would close that.
 
 ## Infrastructure & reliability
 
