@@ -8,7 +8,9 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
+import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
+import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
   historyForRequest,
@@ -59,10 +61,11 @@ function App() {
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
+  const [lastStats, setLastStats] = useState<LastStats | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
   // The last friendly failure reply shown, so the next one is never the same.
   const lastErrorReplyRef = useRef<string | null>(null)
+  const lastIdkReplyRef = useRef<string | null>(null)
   // Which conversation and assistant message the in-flight request writes to;
   // it stays fixed even if the visitor switches tabs mid-answer.
   const streamTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
@@ -353,18 +356,32 @@ function App() {
       onDone: (event) => {
         if (!isCurrent()) return
         revealFinalizeRef.current = () => {
+          // The sources didn't cover the question: swap the plain sentence for a
+          // playful one (not the last shown here, nor the latest saved above).
+          let idkReply: string | null = null
+          if (event.abstained && event.mode === 'full') {
+            const savedIdk = conversationsRef.current[targetCorpus]
+              .findLast((message) => message.role === 'assistant' && message.idk)?.content
+            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, targetCorpus)
+            lastIdkReplyRef.current = idkReply
+          }
           updateStreamingMessage((message) => ({
             ...message,
             // Budget reached or LLM switched off: the sources still came back.
-            content: event.mode === 'retrieval_only' && !message.content
-              ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
-              : message.content,
+            // Only the bare canonical sentence is swapped (never a real answer).
+            ...(idkReply && isCanonicalIdk(message.content) ? { content: idkReply, idk: true } : {
+              content: event.mode === 'retrieval_only' && !message.content
+                ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
+                : message.content,
+            }),
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
+          // No token (sources only): keep firstTokenMs null so the footer
+          // labels the whole-request time as total, not as a first token.
           setLastStats({
-            latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
+            firstTokenMs: firstTokenLatencyRef.current,
+            totalMs: event.total_ms,
             cacheStatus: event.answer_cache,
-            tokensOut: event.tokens_out,
           })
           setQueriesServed((current) => current + 1)
           finishRequest()

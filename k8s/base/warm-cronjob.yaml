@@ -1,0 +1,63 @@
+# Keeps the suggested questions' answers in the semantic answer cache
+# (docs/DESIGN.md §7.3). Asks each one through the api Service exactly like a
+# visitor's first question; cached answers come back as hits and cost no LLM
+# call. Only answers that expired or were invalidated by a corpus change are
+# regenerated: at most one per suggested question per run and at most
+# GLASSBOX_WARM_DAILY_LLM_CAP (10) per UTC day across all runs, counted in
+# Redis; the run also stops at the first rate-limit/budget signal. The same command also runs once
+# after each deploy, at the end of the ingest Job (overlays/prod/ingest).
+#
+# Every 2 hours rather than daily: answers expire 24h after they are written,
+# and a run that finds an entry still cached skips it, so with a daily
+# schedule a run landing just before expiry would leave that answer cold for
+# most of a day. Every 2h bounds that gap at 2h; runs that find everything
+# cached make no Bedrock calls.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: warm-answers
+  namespace: app
+spec:
+  schedule: "17 */2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app: warm-answers
+            # Admitted to the api by networkpolicy-app.yaml (api-from-answer-warmer).
+            glassbox/answer-warmer: "true"
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: warm
+              image: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox:latest
+              command:
+                - python
+                - -m
+                - services.glassbox.warm
+                - --api-url
+                - http://api.app.svc.cluster.local
+              # REDIS_URL and GLASSBOX_WARM_DAILY_LLM_CAP (shared daily cap).
+              envFrom:
+                - configMapRef:
+                    name: glassbox-config
+              # Measured locally (arm64 image, with the redis client for the
+              # daily cap): ~21 MiB cgroup peak, ~31 MiB max RSS.
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 48Mi
