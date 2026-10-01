@@ -1,6 +1,6 @@
 # Ops log redaction: multiline secrets
 
-**Status:** PR open, not merged. Review pending.
+**Status:** PR [#94](https://github.com/hacka-tron/basel.engineering/pull/94) open, not merged. Review pending.
 
 ## TL;DR
 
