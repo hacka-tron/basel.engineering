@@ -13,7 +13,6 @@ if redis.call('EXISTS', KEYS[1]) == 1 then
 end
 return -1
 """
-CONTENT_SHA_READY_KEY = "idx:chunks:content-sha-ready"
 
 
 async def ensure_index(client) -> bool:
@@ -67,29 +66,30 @@ async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
         )
 
 
-async def backfill_content_shas(client, rows) -> None:
-    """Add ``content_sha`` to existing chunk hashes from MySQL ``(id, text)`` rows.
+def chunk_fields(
+    corpus: str, model_id: str, vector: bytes, source_path: str, document_id: int, text: str
+) -> dict:
+    """The one definition of a ``chunk:{id}`` hash; every writer goes through it.
 
-    Hashes written before the field existed would otherwise never get it (ingest
-    skips unchanged documents), and the answer cache treats a missing
-    ``content_sha`` as a changed source. Never creates a key that is gone.
+    ``content_sha`` lets the reconcile step (and the answer cache) check that a key
+    still describes the MySQL row with the same id, without reading the vector.
     """
-    for chunk_id, text in rows:
-        await client.eval(
-            _SET_FIELD_IF_EXISTS, 1, f"chunk:{chunk_id}", "content_sha", chunk_content_sha(text)
-        )
+    return {
+        "corpus": corpus,
+        "model": _model_tag(model_id),
+        "vector": vector,
+        "source_path": source_path,
+        "document_id": document_id,
+        "content_sha": chunk_content_sha(text),
+    }
 
 
 async def replace_document_vectors(
-    client,
-    old_ids: list[int],
-    chunks: list[tuple[int, str, bytes, str, int, str]],
-    model_id: str,
+    client, old_ids: list[int], chunks: list[tuple[int, str, bytes, str, int, str]], model_id: str
 ) -> None:
     """Remove former chunk keys and write new hashes in one Redis pipeline.
 
-    Each chunk is ``(id, corpus, packed vector, source_path, document_id, text)``;
-    the hash stores ``content_sha`` of the text, not the text itself.
+    Each chunk is ``(id, corpus, packed vector, source_path, document_id, text)``.
     """
     async with client.pipeline(transaction=True) as pipeline:
         for chunk_id in old_ids:
@@ -97,13 +97,6 @@ async def replace_document_vectors(
         for chunk_id, corpus, vector, source_path, document_id, text in chunks:
             pipeline.hset(
                 f"chunk:{chunk_id}",
-                mapping={
-                    "corpus": corpus,
-                    "model": _model_tag(model_id),
-                    "vector": vector,
-                    "source_path": source_path,
-                    "document_id": document_id,
-                    "content_sha": chunk_content_sha(text),
-                },
+                mapping=chunk_fields(corpus, model_id, vector, source_path, document_id, text),
             )
         await pipeline.execute()

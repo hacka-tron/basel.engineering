@@ -26,7 +26,7 @@ flowchart LR
 - Each entry stores `sources`: `{chunk id: content_sha}`, the SHA-256 hex of each chunk text the answer was built from. Ingest writes the same `content_sha` field on every `chunk:{id}` hash.
 - Each read compares the two in one pipelined round trip. A missing key, a missing field or a different hash means a source document changed or was deleted, so the entry is deleted and read as a miss. The 3 nearest entries are checked, so a stale entry never hides a fresh one.
 - The write is skipped if a source's text no longer matches by the time the answer is generated. That replaces the old "corpus version unchanged since the read" check.
-- A one-time ingest backfill (marker `idx:chunks:content-sha-ready`) adds `content_sha` from MySQL to chunk hashes written before the field existed. Ingest skips unchanged documents, so without it those hashes would never get the field. The backfill and the model-tag backfill now set fields only on keys that exist, via a Lua `EXISTS`-then-`HSET`, so they can't recreate a deleted key.
+- Chunk hashes written before `content_sha` existed get it from #122's reconcile, which runs at the end of every ingest and rewrites any key whose fields differ from MySQL. Round 1 had its own one-time backfill; it was dropped when #122 merged, leaving one mechanism. The model-tag backfill sets its field only on keys that exist (Lua `EXISTS`-then-`HSET`), so it can't recreate a deleted key.
 
 ## Key design decisions and trade-offs
 
@@ -44,13 +44,13 @@ Fake providers only. No live calls, no RAG eval.
 - In-memory Redis Search stand-in (always runs): a hit survives a re-ingest of an unrelated document (version bumped); a miss after the source document changes (and the entry is deleted); a miss after a source document is deleted (sweep order); a stale nearest entry doesn't hide a valid one; the write is skipped when a source vanished; the key and fields carry no corpus version; legacy `ans:` entries and source-less entries are ignored; the lock key has no version; and the warm-up runs `warmed`, then `cached` after an unrelated re-ingest, then `warmed` again after its own source changes.
 - Existing lock tests (one LLM call for simultaneous misses, bounded wait) pass with the new signature.
 - Real Redis Stack and MySQL (skipped locally, they run in CI): the answer cache against Redis Stack (scoping, missing chunk, legacy entry invisible), the existing repeat-request test, and an end-to-end ingest test. That test edits an unrelated doc (hit), edits the source doc (miss), then deletes a doc with `sweep=apply` (miss).
-- Round 1 added in-memory tests for a reused id holding different text (miss), a hash without `content_sha` (miss), and unverifiable payloads not written. It added a Redis Stack check of the `content_sha` mismatch, and a real-Redis test that both backfills never recreate a deleted key. The ingest test now also asserts that `content_sha` is written.
-- `pytest services/tests`: 533 passed, 26 skipped locally (DB/Redis-backed; CI runs them). `ruff check services eval` is clean.
+- Round 1 added in-memory tests for a reused id holding different text (miss), a hash without `content_sha` (miss), and unverifiable payloads not written. It added a Redis Stack check of the `content_sha` mismatch, and a real-Redis test that the model-tag backfill never recreates a deleted key. The ingest test now also asserts that `content_sha` is written.
+- After merging #122: `pytest services/tests` locally 661 passed, 25 skipped (DB/Redis-backed; CI runs them). `ruff check services eval` is clean.
 
 ## Operational notes and risks
 
 - **One-time cold answer cache at deploy.** The new index starts empty. The ingest Job's warm-up then regenerates the suggested questions, which uses up to 7 of the warm-up's 10/day LLM cap. Visitors' other questions regenerate on first ask.
-- Until the first ingest after deploy backfills `content_sha`, every answer misses and no answer is written. The ingest Job runs right after the app is healthy, so this lasts minutes.
+- Until the first ingest after deploy (its reconcile) back-fills `content_sha`, every answer misses and no answer is written. The ingest Job runs right after the app is healthy, so this lasts minutes.
 - The old `idx:answers` index lingers, empty after 24h. Dropping it is in the backlog.
 - Every writer of `chunk:{id}` hashes must set `content_sha` from the stored text, or answers built from those chunks never cache. This fails safe (cold), never stale, and it's in the reviewer primer.
 - The production sweep runs in `report` mode, so a deleted file's chunks stay indexed and its answers stay cached. That is consistent with retrieval, which also still serves them.

@@ -189,8 +189,8 @@ Redis in Glassbox is `redis/redis-stack-server` 7.2, which includes RediSearch v
 
 Redis structures and keys:
 
-- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id` and `content_sha` (SHA-256 hex of the chunk text, checked by the answer cache). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
-- **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes the source chunk ids. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read.)
+- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id` and `content_sha` (SHA-256 of the chunk text; checked by the answer cache and the reconcile). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
+- **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes each source chunk's id and `content_sha`. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read.)
 - **`emb:{sha256}`**: the embedding cache. 7-day TTL.
 - **`ret:{corpus}:v{version}:{sha256}`**: the retrieval cache. 1-hour TTL.
 - **`chunktxt:{chunk_id}`**: the chunk text cache. 1-day TTL.
@@ -204,9 +204,8 @@ Redis structures and keys:
 - **`glassbox:kill:disable_llm`**: the LLM kill switch.
 - **`demo:load:lock`**: the global stress-test cooldown lock. 5-minute TTL.
 - **`idx:chunks:model-tags-ready`**: a marker recording that existing chunk hashes carry model tags.
-- **`idx:chunks:content-sha-ready`**: a marker recording that existing chunk hashes carry `content_sha`.
 
-Most of Redis can be recreated: chunk vectors come from MySQL and ingestion, caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
+Most of Redis can be recreated: the ingest Job's reconcile rewrites every chunk key from MySQL (see Ingestion pipeline), caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
 
 ## Ingestion pipeline: how content gets into the RAG index
 
@@ -219,11 +218,13 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 - **`about_me`**: every Markdown file under `corpus/about-me/`. Any leading `---` front matter is stripped before chunking.
 - **`about_system`**: files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`. Frontend code and GitHub workflow files are outside these directories and are not part of the corpus.
 
-**Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval-cache entries for that corpus stop being read; cached answers built from the old chunks fail their source check. A one-time backfill adds `content_sha` from MySQL to hashes written before that field existed. A typical release therefore embeds only the documents that changed.
+**Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval results for that corpus stop being read (answers check `content_sha` instead). A typical release therefore embeds only the documents that changed.
 
 **Run bookkeeping.** Each run writes an `ingestion_runs` row with its status and counts, and prints `docs_changed`, `chunks_written` and every skipped file with its reason. A file that fails chunking or embedding is skipped and reported, and the run continues.
 
 **Model tagging.** Every chunk hash in Redis carries a hashed embedding-model tag. If the index predates model tags, ingestion adds the tag field and backfills existing hashes from MySQL. Untagged vectors stay invisible to search in the meantime, so switching embedding models never mixes vector spaces.
+
+**Redis reconcile.** Every run ends by comparing MySQL chunks with Redis `chunk:{id}` keys for the current embedding model (`ingest/reconcile.py`), even when no file changed. A missing key is written from the MySQL row and its stored vector, with no embedding call; a key whose `content_sha`, corpus, model, document or path disagrees with its row is rewritten; a key with no MySQL row is deleted. So a lost Redis volume or a FLUSHALL is repaired by the next ingest run. A corpus with zero MySQL chunks, or one where over 30% of its keys would go, gets no deletions (`REDIS RECONCILE REFUSED`). Only one ingest or reindex runs at a time (Redis lock `ingest:lock`). `--reindex` rewrites every key from MySQL without scanning files.
 
 ## Stale documents: report-only sweep and the --clear command
 
