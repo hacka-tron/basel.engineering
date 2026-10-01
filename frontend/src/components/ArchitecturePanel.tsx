@@ -338,8 +338,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           ref={expandButtonRef}
           type="button"
           aria-disabled="true"
-          aria-expanded="false"
-          className="flex min-h-11 w-full shrink-0 cursor-default items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted"
+          className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted"
         >
           <span className="min-w-0 truncate">{PORTRAIT_DETAILS_HINT}</span>
           <span className="flex shrink-0 items-center opacity-40">

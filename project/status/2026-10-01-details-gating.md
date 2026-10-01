@@ -9,7 +9,7 @@ On phones, the bar under the Diagram view ("Details / N chunks") could be opened
 ## What changed for a visitor
 
 - Phone, Diagram view, nothing selected: a dimmed 44px bar, "Select a component for details", with a faint chevron and no chunk count. Tapping it does nothing.
-- Tap a component: the panel opens with that component and its streamed answer, as before. Collapsed, the bar reads "Worker details · 8 chunks".
+- Tap a component: the panel opens with that component and its streamed answer, as before. Collapsed, the bar shows "Worker details" on the left and "8 chunks" on the right.
 - If the selection is cleared (a question typed in Diagram view, or New chat), the panel closes back to the locked bar.
 - The "Latest answer" block that used to appear in the open panel with nothing selected is gone.
 
@@ -35,7 +35,7 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet.
+Opus review, round 1: APPROVED, nothing Critical or Important. Minors fixed before merge: the locked bar no longer claims `aria-expanded` (it can't expand), its cursor matches the other `aria-disabled` control (footer New chat), and the docs no longer show a "·" the UI doesn't render. One Minor went to the backlog (below).
 
 ## Operational notes and risks
 
@@ -44,9 +44,9 @@ Frontend only; no API or infra change. Low risk. One edge: if the panel's collap
 ## How to verify
 
 - `cd frontend && npm test && npm run lint && npm run build` (new unit test `src/lib/detailsPanel.test.ts`).
-- `npm run phone`, open `/phone-preview.html`: ask a question in Chat, switch to Diagram, check the bar is locked and a tap does nothing; tap a component and check the panel opens; collapse it and check "<Component> details · N chunks".
+- `npm run phone`, open `/phone-preview.html`: ask a question in Chat, switch to Diagram, check the bar is locked and a tap does nothing; tap a component and check the panel opens; collapse it and check it shows "<Component> details" and "N chunks".
 - Checked at 393x852 and 320x568 with headless Chrome: the bar is 44px, the hint fits at 320px, no horizontal scroll, the panel opens on a component tap.
 
 ## Open items
 
-None.
+- **Answers to questions typed in Diagram view are now read in Chat only.** The removed "Latest answer" block was the only place Diagram view showed them, so a sighted visitor sees the nodes light up and then nothing apart from the footer count (screen readers still hear the answer through Chat's live region). Backlog item: a small "Answer ready · View in chat" cue. Owner's call.
