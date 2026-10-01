@@ -214,3 +214,76 @@ def test_grade_result_is_json_serializable():
     import json
 
     json.dumps(grade_case(CASES["sugg-system-stress"], THIN_STRESS_ANSWER))
+
+
+@pytest.mark.parametrize(
+    ("case_id", "answer"),
+    [
+        (
+            "planned-asg",
+            "Currently, no: there's no Auto Scaling Group. A single node needs a manual rebuild.",
+        ),
+        (
+            "planned-asg",
+            "Today, the node does not self-heal; there is a single EC2 instance and a manual "
+            "rebuild.",
+        ),
+        ("planned-metrics", "As of now, Glassbox has no Prometheus endpoint."),
+        (
+            "planned-metrics",
+            "According to the deep dive, there is no Prometheus /metrics endpoint.",
+        ),
+        (
+            "planned-drive",
+            "Currently, Glassbox ingests only files from this repository, not Google Drive.",
+        ),
+        (
+            "planned-live-facts",
+            "Glassbox can't query the cluster today; a live-facts tool for the deployed version "
+            "is planned.",
+        ),
+    ],
+)
+def test_planned_accepts_framed_and_cant_only_answers(case_id, answer):
+    assert grade_case(CASES[case_id], answer)["passed"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Google Drive ingestion is part of Milestone 4, which hasn't been built yet.",
+        "The design describes a Drive connector, but it is not built.",
+    ],
+)
+def test_planned_status_stated_after_the_first_clause_is_a_documented_miss(answer):
+    # Known limitation (status_ok docstring): left for the phase 4 LLM judge.
+    assert status_ok(answer, "planned") is False
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "KEDA is installed but not used at the moment; it is suspended.",
+        "No autoscaling right now: KEDA is installed but suspended.",
+        "Yes, KEDA is installed, but it is scaled to 0 since the memory incident.",
+    ],
+)
+def test_live_but_off_accepts_installed_but_suspended(answer):
+    assert grade_case(CASES["live-keda"], answer)["passed"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "No, KEDA is planned for a future milestone and was never installed.",
+        "KEDA is suspended because it is not built yet.",
+        "KEDA is not installed yet.",
+    ],
+)
+def test_live_but_off_still_rejects_planned_claims(answer):
+    assert status_ok(answer, "live", live_but_off=True) is False
+
+
+def test_live_but_off_only_applies_to_its_case():
+    answer = "No autoscaling right now: KEDA is installed but suspended."
+    assert status_ok(answer, "live") is False

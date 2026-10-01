@@ -2,7 +2,7 @@
 
 **PR:** [#97](https://github.com/hacka-tron/basel.engineering/pull/97) · **Branch:** `feature/rag-p1-golden-set` (from `main` at `2484403`)
 **Plan:** phase 1 of `docs/superpowers/plans/2026-10-01-rag-quality.md` (PR [#92](https://github.com/hacka-tron/basel.engineering/pull/92), design `docs/DESIGN-005-rag-quality.md` §5)
-**Status:** In review, not merged. Review round 1 (Opus) asked for changes; all addressed (see *What review caught*). Needs your review of the About Basel facts (below) before any paid run uses them.
+**Status:** In review, not merged. Review rounds 1 and 2 (Opus) asked for changes; all addressed (see *What review caught*). No further review rounds. Needs your review of the About Basel facts (below) before any paid run uses them.
 
 ## TL;DR
 
@@ -60,6 +60,11 @@ Round 1 (Opus), all fixed:
 - **Important: a paid run needed only `--paid`.** It now needs both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1`, like `run_eval.py`; tests cover each key missing.
 - **Minor:** a failed follow-up rewrite now falls back to the original question like the API (recorded as `rewrite_error`) instead of failing the case; the first-sentence and verbatim-leak limitations are documented in the grader docstrings; the README says how the holdout was picked and that it is frozen; the RDS error in `skills.md` is a BACKLOG item for owner sign-off and has a golden case (`me-site-stack`, `must_not_include` RDS) that should fail until it is fixed.
 
+Round 2 (Opus), all fixed:
+- **The stricter planned rule failed correct answers** (18 of 45 realistic ones): a leading "Currently," / "According to the deep dive," took up the first clause, and "can't"/"only" were not status words. A leading framing phrase is now skipped before the first clause, and `can't`, `cannot` and `only` count. The reviewer measured false failures falling from 18 to 7 with all 8 wrong answers still failing; the six examples are positive tests and every round 1 negative test still passes. The remaining miss (status stated after the first clause, e.g. "Google Drive ingestion is part of Milestone 4, which hasn't been built yet.") is documented and tested as a known limitation for the phase 4 judge.
+- **live-keda failed accurate answers** ("KEDA is installed but not used at the moment; it is suspended."). New case field `live_but_off: true`: a first sentence saying the feature is suspended / scaled to 0 passes unless it also calls it planned or not built.
+- **Expected failures polluted the rates.** New case field `known_failure: <BACKLOG reference>`, validated by the schema, set on `me-site-stack`; the summary lists such cases under `known_failures` and keeps them out of every rate. The README says a future CI gate must ignore them.
+
 ## Operational notes & risks
 
 - **No runtime risk.** No prompt, retrieval or cache change; the token-cap constant has the same value.
@@ -69,8 +74,8 @@ Round 1 (Opus), all fixed:
 
 ## How to see it / verify it
 
-- `pytest services/tests/test_eval_graders.py services/tests/test_eval_golden.py -q`: 59 tests (1 skips without a local MySQL/Redis).
-- Full backend suite: 388 passed, 22 skipped locally (was 330 / 21 on `main`).
+- `pytest services/tests/test_eval_graders.py services/tests/test_eval_golden.py -q`: 59 tests (1 skips without a local MySQL/Redis); 78 after round 2.
+- Full backend suite: 407 passed, 22 skipped locally (was 330 / 21 on `main`).
 - With MySQL/Redis up and the corpus ingested: `GLASSBOX_PROVIDER=fake python -m eval.run_answers`. The local Docker daemon was unresponsive during this work, so the full run (then 74 cases) was done against an in-memory index of the real repo chunks (same runner, a stand-in retriever): 74 rows, 0 errors, per-category summary printed.
 
 ## Open items

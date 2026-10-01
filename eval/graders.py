@@ -18,6 +18,14 @@ CATEGORIES = ANSWERABLE_CATEGORIES | {"unanswerable", "injection"}
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _FIRST_CLAUSE_END = re.compile(r"[,;:—–]|\s-\s")
+# Framing phrases that open an answer without stating anything ("Currently, ...",
+# "According to the deep dive, ..."). Stripped before taking the first clause so
+# the clause that follows them is the one judged.
+_LEADING_FRAMING = re.compile(
+    r"^\W*(?:(?:currently|today|right now|for now|as of (?:now|today)"
+    r"|at (?:the moment|present)|unfortunately|according to [^,]{1,60})\s*[,:—–-]\s*)+",
+    re.IGNORECASE,
+)
 # An answer that opens by affirming ("Yes, ...") says the feature exists today.
 _AFFIRMATIVE_OPENER = re.compile(
     r"^\W*(?:yes|yeah|yep|sure|correct|absolutely|indeed|of course)\b", re.IGNORECASE
@@ -27,7 +35,7 @@ _AFFIRMATIVE_OPENER = re.compile(
 # not need Y" and "X works without extra setup" do not count.
 _NOT_BUILT_SIGNAL = re.compile(
     r"\b(?:no|not|never|planned|future|roadmap|stretch|isn['’]?t|aren['’]?t"
-    r"|doesn['’]?t|don['’]?t|hasn['’]?t|haven['’]?t|won['’]?t)\b",
+    r"|doesn['’]?t|don['’]?t|hasn['’]?t|haven['’]?t|won['’]?t|can['’]?t|cannot|only)\b",
     re.IGNORECASE,
 )
 # A first sentence that claims a live feature is not built.
@@ -36,6 +44,18 @@ _PLANNED_CLAIM = re.compile(
     r"|not (?:yet )?(?:built|implemented|available|in place|installed|used|supported)"
     r"|(?:isn['’]?t|aren['’]?t|is not|are not) (?:yet )?(?:built|implemented|available|used)"
     r"|doesn['’]?t (?:exist|use|support)|does not (?:exist|use|support))\b",
+    re.IGNORECASE,
+)
+
+# For a live case whose feature is installed but switched off (live-keda), an
+# answer saying so is correct even though it reads like "not used" / "No ...".
+_LIVE_BUT_OFF = re.compile(
+    r"\b(?:suspended|scaled (?:down )?to (?:0|zero)|switched off|turned off|paused)\b",
+    re.IGNORECASE,
+)
+_NOT_BUILT_CLAIM = re.compile(
+    r"\b(?:planned|roadmap|future (?:work|milestone|feature)s?"
+    r"|not (?:yet )?(?:built|implemented|installed))\b",
     re.IGNORECASE,
 )
 
@@ -68,7 +88,8 @@ def first_sentence(answer: str) -> str:
 
 
 def first_clause(sentence: str) -> str:
-    return _FIRST_CLAUSE_END.split(sentence, maxsplit=1)[0]
+    """The first clause after any leading framing phrase ("Currently, ...")."""
+    return _FIRST_CLAUSE_END.split(_LEADING_FRAMING.sub("", sentence), maxsplit=1)[0]
 
 
 def fact_coverage(answer: str, patterns: Iterable[str]) -> dict:
@@ -90,14 +111,19 @@ def abstained(answer: str) -> bool:
     return is_abstention(answer)
 
 
-def status_ok(answer: str, category: str) -> bool | None:
+def status_ok(answer: str, category: str, *, live_but_off: bool = False) -> bool | None:
     """Planned/live correctness, judged on the answer's first sentence.
 
     planned: the first sentence must not open by affirming ("Yes, ...") and its
     first clause (up to the first comma, semicolon, colon or dash) must carry a
-    negation or status word ("No", "not yet", "doesn't", "planned"). The case's
-    must_include then requires the planned item itself, so a bare "No." fails.
+    negation or status word ("No", "not yet", "doesn't", "can't", "only",
+    "planned"). A leading framing phrase ("Currently,", "As of now,", "According
+    to the deep dive,") is skipped first. The case's must_include then requires
+    the planned item itself, so a bare "No." fails.
     live: the first sentence must not claim the feature is planned or missing.
+    With live_but_off (a case field, for a feature that is installed but switched
+    off, such as KEDA), a first sentence that says it is suspended / scaled to 0
+    passes unless it also calls it planned or not built.
     Other categories: None (not applicable). Abstaining fails both.
 
     Known limitations (deterministic regexes, not a judge; phase 4's LLM judge
@@ -110,12 +136,19 @@ def status_ok(answer: str, category: str) -> bool | None:
     - Wording is matched, not meaning: "it is no longer planned" reads as a
       planned claim and fails a live case; a planned answer that negates
       something other than the feature in its first clause still passes.
+    - Planned answers must put the status in the first clause. Correct answers
+      that state it later still fail, e.g. "Google Drive ingestion is part of
+      Milestone 4, which hasn't been built yet." and "The design describes an
+      Auto Scaling Group for self-healing, but it is not built." The phase 4
+      LLM judge is meant to cover these.
     """
     if category not in {"planned", "live"}:
         return None
     if abstained(answer):
         return False
     sentence = first_sentence(answer)
+    if category == "live" and live_but_off and _LIVE_BUT_OFF.search(sentence):
+        return not _NOT_BUILT_CLAIM.search(sentence)
     if category == "planned":
         if _AFFIRMATIVE_OPENER.match(sentence):
             return False
@@ -157,7 +190,7 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     coverage = fact_coverage(answer, case.get("must_include", []))
     forbidden = forbidden_hits(answer, case.get("must_not_include", []))
     is_abstain = abstained(answer)
-    status = status_ok(answer, category)
+    status = status_ok(answer, category, live_but_off=bool(case.get("live_but_off")))
     rewrite_result = rewrite_ok(rewrite, case.get("rewrite_must_include", []))
     leaks = leaked_fragments(answer)
     expect_abstain = bool(case.get("expect_abstain", False))

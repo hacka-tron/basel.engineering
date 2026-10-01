@@ -78,6 +78,9 @@ def _valid_case() -> dict:
         (lambda c: c["history"].pop(), "end with an assistant"),
         (lambda c: c.update(history=[]), "need history"),
         (lambda c: c.update(surprise=True), "unknown keys"),
+        (lambda c: c.update(known_failure=""), "known_failure"),
+        (lambda c: c.update(known_failure=3), "known_failure"),
+        (lambda c: c.update(live_but_off=True), "only for live cases"),
     ],
 )
 def test_schema_rejects_malformed_cases(mutate, message):
@@ -147,7 +150,9 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
     assert follow_up["grades"]["rewrite_ok"] is False
 
     summary = run_answers.summarize(rows)
-    assert summary["overall"]["count"] == len(cases)
+    known = [c["id"] for c in cases if c.get("known_failure")]
+    assert summary["overall"]["count"] == len(cases) - len(known)
+    assert [item["id"] for item in summary["known_failures"]] == sorted(known)
     assert set(summary["by_category"]) == {
         "fact",
         "planned",
@@ -159,7 +164,9 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
     # The stub returns no About Basel sources (abstain) but returns About This System
     # sources, where the fake model answers: 5 of the 10 unanswerable cases abstain.
     assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == 0.5
-    assert summary["holdout"]["count"] == sum(bool(c.get("holdout")) for c in cases)
+    assert summary["holdout"]["count"] == sum(
+        bool(c.get("holdout")) and not c.get("known_failure") for c in cases
+    )
     json.dumps(summary)
 
 
@@ -176,6 +183,29 @@ def test_a_failing_case_is_recorded_and_the_run_continues():
     assert [row["error"] for row in rows] == ["RuntimeError: redis down"] * 2
     assert not any(row["passed"] for row in rows)
     assert run_answers.summarize(rows)["overall"]["errors"] == 2
+
+
+def test_known_failures_are_reported_apart_and_kept_out_of_rates():
+    cases = [c for c in load_golden() if c["id"] in {"me-site-stack", "me-education"}]
+    assert next(c for c in cases if c["id"] == "me-site-stack")["known_failure"]
+    rows = asyncio.run(
+        run_answers.run_cases(
+            cases,
+            embedder=FakeEmbeddingProvider(),
+            llm=FakeLLMProvider(),
+            retrieve=_stub_retriever([]),
+        )
+    )
+    summary = run_answers.summarize(rows)
+    assert summary["overall"]["count"] == 1
+    assert summary["failed"] == ["me-education"]
+    assert summary["known_failures"] == [
+        {
+            "id": "me-site-stack",
+            "reference": 'BACKLOG "About Basel corpus error: RDS (owner sign-off)"',
+            "passed": False,
+        }
+    ]
 
 
 def test_case_filters():

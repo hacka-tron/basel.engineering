@@ -28,6 +28,8 @@ _CASE_KEYS = frozenset(
         "needs_owner_review",
         "origin",
         "notes",
+        "live_but_off",
+        "known_failure",
     }
 )
 _ORIGINS = frozenset({"questions.yaml", "suggested", "new"})
@@ -105,6 +107,14 @@ def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
         _fail(case_id, "unanswerable cases must set expect_abstain: true")
     if category in ANSWERABLE_CATEGORIES and case.get("expect_abstain"):
         _fail(case_id, "an answerable case cannot expect an abstention")
+
+    known_failure = case.get("known_failure")
+    if known_failure is not None and (
+        not isinstance(known_failure, str) or not known_failure.strip()
+    ):
+        _fail(case_id, "known_failure must be a short BACKLOG reference string")
+    if "live_but_off" in case and (category != "live" or case["live_but_off"] is not True):
+        _fail(case_id, "live_but_off: true is only for live cases")
 
     history = case.get("history", [])
     if category == "multi_turn" and not history:

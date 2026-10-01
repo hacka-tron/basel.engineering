@@ -326,6 +326,7 @@ cases:
     corpus: about_me
     category: fact
     needs_owner_review: true
+    known_failure: 'BACKLOG "About Basel corpus error: RDS (owner sign-off)"'
     notes: >-
       corpus/about-me/skills.md says this site runs on "Terraform, EC2, RDS, and
       Kubernetes (k3s)", but MySQL runs in the cluster, not on RDS. Expected to
@@ -555,6 +556,7 @@ cases:
     corpus: about_system
     category: live
     notes: KEDA is installed but suspended since the 2026-09-30 memory incident.
+    live_but_off: true
     question: Is KEDA installed on the Glassbox cluster?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:

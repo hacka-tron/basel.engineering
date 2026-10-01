@@ -113,6 +113,7 @@ async def run_case(
         "category": case["category"],
         "corpus": case["corpus"],
         "holdout": bool(case.get("holdout", False)),
+        "known_failure": case.get("known_failure"),
         "question": case["question"],
         "history_turns": len(case.get("history", [])),
         "prompt_version": _PROMPT_VERSION,
@@ -236,15 +237,24 @@ def summarize(rows: list[dict]) -> dict:
             "median_answer_words": statistics.median(words) if words else None,
         }
 
-    categories = sorted({row["category"] for row in rows})
+    # Known failures (a BACKLOG item, e.g. a corpus fix awaiting the owner) are
+    # reported on their own and kept out of every rate, so a gate is not blocked
+    # by an expected failure and a fix shows up as a change in this list.
+    known = [row for row in rows if row.get("known_failure")]
+    scored = [row for row in rows if not row.get("known_failure")]
+    categories = sorted({row["category"] for row in scored})
     return {
-        "overall": metrics(rows),
-        "holdout": metrics([row for row in rows if row["holdout"]]),
+        "overall": metrics(scored),
+        "holdout": metrics([row for row in scored if row["holdout"]]),
         "by_category": {
-            category: metrics([row for row in rows if row["category"] == category])
+            category: metrics([row for row in scored if row["category"] == category])
             for category in categories
         },
-        "failed": sorted(row["id"] for row in rows if not row["passed"]),
+        "failed": sorted(row["id"] for row in scored if not row["passed"]),
+        "known_failures": [
+            {"id": row["id"], "reference": row["known_failure"], "passed": row["passed"]}
+            for row in sorted(known, key=lambda row: row["id"])
+        ],
     }
 
 
