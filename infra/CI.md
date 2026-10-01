@@ -61,19 +61,18 @@ Two safeguards keep that honest:
   every new run whatever commit it builds, a manual run on another branch or
   tag, or on a `main` commit that is no longer the head (for example a run
   that queued behind another release while a merge landed), would get the
-  highest number and Flux would roll production back to it. Two layers stop
+  highest number and Flux would roll production back to it. Three layers stop
   that:
-  - **The gate: the `release` environment's deployment-branch policy (owner
-    setting).** GitHub → Settings → Environments → `release` → Deployment
-    branches and tags → Selected branches and tags → `main` only. A manual
-    run executes the `release.yml` of the ref it was started on, so any
-    branch or tag cut before the in-workflow check existed has no check at
-    all; and the release role's OIDC trust matches only
-    `...:environment:release`, which any ref can claim while the environment
-    is unrestricted. Restricting the environment to `main` is what refuses
-    those runs (GitHub never issues the `release` environment's token, so
-    the role can't be assumed). **Until the owner sets it, a manual run on
-    an old branch or tag can still deploy that ref.**
+  - **The gate: the release role's trust requires `refs/heads/main`** (see
+    "Release role trust" below; applied 2026-10-01). A manual run executes
+    the `release.yml` of the ref it was started on, so a branch or tag cut
+    before the in-workflow check existed has no check at all, but its token
+    carries that branch's or tag's ref, so AWS refuses the role and nothing
+    is built or pushed.
+  - **The `release` environment's deployment-branch policy (owner setting):**
+    GitHub → Settings → Environments → `release` → Deployment branches and
+    tags → Selected branches and tags → `main` only. A second layer: GitHub
+    then never issues the environment's token to another ref.
   - **The in-workflow check, for refs that contain it.** The first step
     (`.github/scripts/release-provenance.sh`) refuses a manual run before
     AWS credentials are requested unless `github.ref` is `refs/heads/main`
@@ -254,14 +253,11 @@ write access.
 
 ## Release role trust
 
-**Status: pending apply (PR #98).** The `ref` condition below is in the
-code but takes effect only once the owner applies it through the Bootstrap
-workflow (Actions → Bootstrap on `main`, then approval). Until then the live
-trust matches only the `environment:release` subject.
+Applied through the Bootstrap workflow on 2026-10-01 (PR #98).
 
 `glassbox-ci-release` (`release_trust` in `infra/bootstrap/main.tf`) is
-assumed only by `release.yml`'s `build-and-push` job. Once applied, its trust
-requires both:
+assumed only by `release.yml`'s `build-and-push` job. Its trust requires
+both:
 
 - `sub` = `<immutable prefix>:environment:release`, and
 - `token.actions.githubusercontent.com:ref` = `refs/heads/main`.
