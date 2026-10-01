@@ -67,3 +67,16 @@ permissions, and the one-time manual apply that creates them, are in
 `infra/CI.md` ("Runbooks", "Bootstrap via pipeline", "One-time owner
 setup"). After that one apply, bootstrap changes go through the Bootstrap
 workflow instead of a local `terraform apply`.
+
+If this root's state ever has to be rebuilt by import, these roles need
+importing too:
+
+```sh
+for r in glassbox-ops-read glassbox-ops glassbox-bootstrap-plan glassbox-bootstrap; do
+  terraform import "aws_iam_role.runbook[\"$r\"]" "$r"
+done
+terraform import aws_iam_role_policy.ops_read glassbox-ops-read:glassbox-ops-read
+terraform import aws_iam_role_policy.ops glassbox-ops:glassbox-ops
+terraform import aws_iam_role_policy.bootstrap_plan glassbox-bootstrap-plan:glassbox-bootstrap-plan
+terraform import aws_iam_role_policy.bootstrap glassbox-bootstrap:glassbox-bootstrap
+```
