@@ -33,7 +33,7 @@ locals {
   # allowed value here also needs the matching choice in ops.yml.
   documents = {
     diagnose = {
-      description = "Read-only snapshot: node memory/PSI/swap, pods, events, Flux, recent k3s errors. Changes nothing."
+      description = "Read-only snapshot: node memory/PSI/swap, pods, events, Flux, recent k3s errors, LLM budget counters and query-log counts. Changes nothing."
       script      = "diagnose.sh"
       fixed_args  = []
       parameters  = []
