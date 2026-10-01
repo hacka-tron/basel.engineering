@@ -6,11 +6,13 @@ on:
     paths:
       - infra/**
       - .github/workflows/terraform.yml
+      - .github/scripts/**
   push:
     branches: [main]
     paths:
       - infra/**
       - .github/workflows/terraform.yml
+      - .github/scripts/**
 
 permissions:
   contents: read
@@ -38,6 +40,22 @@ jobs:
         run: |
           terraform -chdir=infra/envs/prod init -backend=false -lockfile=readonly
           terraform -chdir=infra/envs/prod validate
+      # Each glassbox-ops-* SSM document runs lib.sh + one action script as
+      # a single bash program, so check them that way.
+      - name: Shellcheck runbook scripts
+        run: |
+          scripts=infra/modules/ops/scripts
+          for script in "$scripts"/*.sh; do
+            [ "$script" = "$scripts/lib.sh" ] && continue
+            echo "shellcheck lib.sh + ${script##*/}"
+            cat "$scripts/lib.sh" "$script" | shellcheck -s bash -
+          done
+          shellcheck -x -P SCRIPTDIR .github/scripts/*.sh
+          shellcheck -x -P SCRIPTDIR infra/modules/ops/tests/*.sh
+      - name: Test runbook output redaction
+        run: |
+          bash infra/modules/ops/tests/redact-test.sh
+          bash infra/modules/ops/tests/ops-run-test.sh
 
   plan:
     needs: validate

@@ -17,3 +17,8 @@ output "release_role_arn" {
   description = "GitHub Actions role ARN for pushing the application image to ECR."
   value       = aws_iam_role.release.arn
 }
+
+output "runbook_role_arns" {
+  description = "GitHub Actions role ARNs for ops.yml (glassbox-ops-read, glassbox-ops) and bootstrap.yml (glassbox-bootstrap-plan, glassbox-bootstrap)."
+  value       = { for name, role in aws_iam_role.runbook : name => role.arn }
+}

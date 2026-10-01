@@ -16,6 +16,9 @@ outside Git, and always run `terraform plan` before changing anything, since a
 diff against stale state can propose destroying real resources. After the
 migration the S3 object is the source of truth (the bucket is versioned,
 encrypted, and protected against deletion).
+Once the migration and the one-time owner setup in `infra/CI.md` ("One-time
+owner setup") are done, changes go through `.github/workflows/bootstrap.yml`
+(plan on PRs, apply after owner approval) instead of a manual local apply.
 
 ```sh
 terraform init
@@ -27,15 +30,15 @@ terraform output plan_role_arn
 terraform output release_role_arn
 ```
 
-The owner applies changes to this module manually with their own AWS CLI
-credentials — CI cannot bootstrap itself, since the roles it would assume
+The first apply and the one-time setup are manual, with the owner's own AWS
+CLI credentials: CI cannot bootstrap itself, since the roles it would assume
 don't exist until this module has already run. `infra/envs/prod/backend.tf`
 already references the real bucket this module created; `state_bucket_name`
 only needs re-checking if this module is ever re-run against a fresh
 account.
 
-After a bootstrap code change, the owner must review and apply this
-local-state root manually before merging a workflow that depends on the
+Before the pipeline is set up, a bootstrap code change must be reviewed and
+applied manually by the owner before merging a workflow that depends on the
 changed roles. `glassbox-ci-plan` can read production state and project SSM
 parameters, and can write only the production state lockfile.
 `glassbox-ci-release` can only push to the `glassbox` ECR repository.
@@ -61,8 +64,8 @@ to this one state bucket — it has no access to any application data bucket.
 
 `versions.tf` now has a `backend "s3"` block (same bucket, region, encryption
 and `use_lockfile = true` as `infra/envs/prod/backend.tf`, key
-`bootstrap/terraform.tfstate`). Bootstrap stays human-applied: CI cannot read
-or write this key. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
+`bootstrap/terraform.tfstate`). Only the `glassbox-bootstrap*` pipeline roles (PR #62) and the owner can
+read or write this key; the app CI roles are denied by the bucket policy. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
 
 Prerequisite: other pending bootstrap changes (PR #55's SSM permissions on
 branch `fix/zram-swap`, PR #62's runbook roles) must be **merged to `main`
@@ -123,3 +126,29 @@ suffix), and `random_id.state_bucket.hex` must then equal `ab88985b66efc96f`.
 Finish with `terraform plan` until it shows no changes. To recover only the
 state file, restore the latest good version of
 `bootstrap/terraform.tfstate` from the bucket's version history.
+
+## Runbook and bootstrap-pipeline roles
+
+`runbooks.tf` adds four more OIDC roles. `glassbox-ops-read` and
+`glassbox-ops` are for `.github/workflows/ops.yml` (push-button node
+operations through Terraform-managed SSM documents only).
+`glassbox-bootstrap-plan` and `glassbox-bootstrap` are for
+`.github/workflows/bootstrap.yml`, which plans and, after owner approval,
+applies this root from CI once its state is in S3. Their trust conditions and
+permissions, and the one-time manual apply that creates them, are in
+`infra/CI.md` ("Runbooks", "Bootstrap via pipeline", "One-time owner
+setup"). After that one apply, bootstrap changes go through the Bootstrap
+workflow instead of a local `terraform apply`.
+
+If this root's state ever has to be rebuilt by import, these roles need
+importing too:
+
+```sh
+for r in glassbox-ops-read glassbox-ops glassbox-bootstrap-plan glassbox-bootstrap; do
+  terraform import "aws_iam_role.runbook[\"$r\"]" "$r"
+done
+terraform import aws_iam_role_policy.ops_read glassbox-ops-read:glassbox-ops-read
+terraform import aws_iam_role_policy.ops glassbox-ops:glassbox-ops
+terraform import aws_iam_role_policy.bootstrap_plan glassbox-bootstrap-plan:glassbox-bootstrap-plan
+terraform import aws_iam_role_policy.bootstrap glassbox-bootstrap:glassbox-bootstrap
+```

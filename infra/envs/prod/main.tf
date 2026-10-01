@@ -28,6 +28,12 @@ module "registry" {
   source = "../../modules/registry"
 }
 
+# Runbook actions (glassbox-ops-* SSM documents) that .github/workflows/ops.yml
+# runs on the node. See infra/CI.md "Runbooks".
+module "ops" {
+  source = "../../modules/ops"
+}
+
 module "edge" {
   source               = "../../modules/edge"
   cloudflare_api_token = var.cloudflare_api_token
