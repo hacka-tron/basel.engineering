@@ -8,17 +8,15 @@ trusts the protected `terraform-plan` environment), and `glassbox-ci-release`
 **Already applied to the real AWS account** (`404379474987`) — this is not a
 placeholder module.
 
-This root's state is moving from a local `terraform.tfstate` to the bucket it
-created, under the key `bootstrap/terraform.tfstate` (see "Moving state to S3"
-below). Until the owner runs that one-time migration, the local file is still
-the only record of what exists here — keep it and any backups private and
-outside Git, and always run `terraform plan` before changing anything, since a
-diff against stale state can propose destroying real resources. After the
-migration the S3 object is the source of truth (the bucket is versioned,
-encrypted, and protected against deletion).
-Once the migration and the one-time owner setup in `infra/CI.md` ("One-time
-owner setup") are done, changes go through `.github/workflows/bootstrap.yml`
-(plan on PRs, apply after owner approval) instead of a manual local apply.
+**Status (2026-10-01):** this root's state lives in the bucket it created,
+under the key `bootstrap/terraform.tfstate`. The owner ran the one-time
+migration (see "Moving state to S3" below) and the one-time setup in
+`infra/CI.md` ("One-time owner setup"). The S3 object is the source of truth
+(the bucket is versioned, encrypted, and protected against deletion). Changes
+now go through `.github/workflows/bootstrap.yml` (plan on PRs, apply after
+owner approval, only if the re-plan's fingerprint matches the reviewed plan)
+instead of a local apply; its first live run applied the zram association IAM
+fixes (#64, #66). The commands below are for disaster recovery only.
 
 ```sh
 terraform init

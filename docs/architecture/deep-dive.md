@@ -19,10 +19,11 @@ Glassbox components, one line each:
 - **Amazon Bedrock**: Amazon Titan Text Embeddings V2 (512-dimensional vectors) for embeddings and Amazon Nova Lite for answers and follow-up rewrites.
 - **Ingest Job**: a Kubernetes Job that scans the corpus files baked into the image, chunks them, embeds changed files and writes MySQL rows and Redis vectors.
 - **Migrate Job**: runs `alembic upgrade head` against MySQL for each release.
-- **KEDA**: scales the retrieval worker from 1 to 3 replicas based on Redis Streams backlog.
+- **Answer warm-up CronJob** (`warm-answers`): keeps the suggested questions' answers cached.
+- **KEDA**: installed to scale the retrieval worker from 1 to 3 replicas on Redis Streams backlog; currently suspended and scaled to 0, so nothing autoscales right now.
 - **Flux**: GitOps controllers that detect new images in Amazon ECR and apply the Kubernetes manifests.
-- **Terraform**: provisions the AWS network, EC2 node, IAM, ECR, SSM parameters and Cloudflare DNS.
-- **GitHub Actions**: runs tests, builds the ARM64 image and pushes it to ECR.
+- **Terraform**: provisions the AWS network, EC2 node, IAM, ECR, SSM parameters, zram swap and Cloudflare DNS.
+- **GitHub Actions**: runs tests, builds the ARM64 image and pushes it to ECR, and runs the operations runbooks.
 
 ## Purpose: why Glassbox exists and why it is built this way
 
@@ -95,9 +96,13 @@ Trace events drive the diagram. When a `stage` event with `status: start` arrive
 
 The nodes are also interactive. Hovering or keyboard-focusing a node shows its description and implementation without making a model request. Selecting a node switches to the About This System corpus and asks a component-specific question, such as "How does the Queue component (Redis Streams) work in the current Glassbox system?" That question is sent without chat history so it stays eligible for the semantic answer cache. If an answer is still streaming, the component question waits until it finishes.
 
-On phones (below the 768 px breakpoint) the chat takes the full width, a compact pipeline strip of node dots sits above the input, and a "View architecture" button opens the full diagram as an accessible bottom sheet. Only one React Flow instance is mounted at a time. The diagram declares fixed node dimensions and connection-handle positions so nodes and arrows stay visible during rapid trace updates.
+Only one React Flow instance is mounted at a time. The diagram declares fixed node dimensions and connection-handle positions so nodes and arrows stay visible during rapid trace updates, and it refits itself whenever its container is resized (a `ResizeObserver`), never on trace updates.
 
 The worker node also shows live Kubernetes state during a stress test: one dot per `retrieval-worker` pod (filled when Ready) and a queue backlog counter. That data comes from a separate SSE endpoint, described in "Stress test and KEDA autoscaling".
+
+## Mobile layout: the chat and the diagram on phones
+
+On phones (below the 768 px breakpoint) the chat takes the full width. The row above the ask box shows a compact strip of live stage dots and a Chat | Diagram switch. Choosing Diagram replaces the messages in place with the full diagram in a two-column portrait layout and a capped, collapsible details panel; browser Back or Escape returns to the chat. Until a request runs, the status text in that row reads "Select a component", and tapping a node asks about it just as on desktop. The phone header is a single row: the name, an envelope icon that copies Basel's email address ("Copy email"; it confirms "Email copied", or shows the address if copying fails), and the GitHub icon. The topic choice sits as a pair of chips ("Asking about" Basel or System) directly above the ask box, in the Chat view only; the Diagram view removes them to give the diagram more height, and a question typed there still goes to the current topic. Every tap on the stress-test control also switches to the Diagram view so the visitor sees the pods react. While the ask box has focus, the header and footer slide out of the way (focus mode) to leave room for the on-screen keyboard. The footer keeps the last request's latency as a bare millisecond value, a "+" New chat icon and the tiger or bunny capacity icon, each with a tooltip on long-press. The header shows the full name "Basel Abdel-Rahman" when it fits and the short form "Basel A-R" when it would crowd the icons (only on screens narrower than about 300 px). Chat messages and the ask box both use 13 px text; on iOS only, the page adds `maximum-scale=1` to the viewport so focusing the ask box does not zoom the page (pinch-zoom still works).
 
 ## Caching layers: embedding, retrieval, chunk and semantic answer caches
 
@@ -113,6 +118,10 @@ The order on a first question is: embedding cache, then (on a miss) Bedrock embe
 Invalidation uses versioned keys instead of scan-and-delete. The integer `corpus:ver:{corpus}` is part of every answer-cache and retrieval-cache key. The ingest Job increments it after it commits a changed document, so older entries stop being read and simply expire.
 
 Follow-up questions skip the semantic answer cache in both directions: no read, no lock and no write. A follow-up's answer depends on the conversation, not just the words, so a cached first-question answer is never replayed for a follow-up, and a follow-up answer never enters the cache. Follow-ups still use the embedding, retrieval and chunk caches, keyed on the rewritten query.
+
+## Answer warm-up: keeping suggested answers cached
+
+The suggested-question chips are the questions visitors ask most, so a Kubernetes CronJob, `warm-answers` (`k8s/base/warm-cronjob.yaml`), runs `python -m services.glassbox.warm` every 2 hours (at minute 17, UTC) and once more at the end of each release's ingest Job. It asks each suggested question through the `api` Service exactly like a visitor's first question. A cached answer comes back as a hit and costs nothing; only an answer that expired or was invalidated by a corpus change is regenerated, at most one per question per run and at most 10 generated answers per UTC day across all runs (`GLASSBOX_WARM_DAILY_LLM_CAP`, counted in Redis). A run stops at the first rate-limit or budget signal. The CronJob is running; an operator can pause it with the "Warm-up CronJob suspend or resume" runbook, but Flux re-applies the manifest and has turned a manual suspend back off before, so a lasting pause has to be made in Git. The warm-up runs only first questions, so it never touches conversation history, and it uses the same rate limits and daily budget checks as visitors; a run that finds every answer cached makes no Bedrock calls at all.
 
 ## Conversational chat: history, per-tab conversations and follow-up rewrite
 
@@ -237,7 +246,7 @@ Embeddings come from the same provider interface the API uses. In production tha
 
 ## Stress test and KEDA autoscaling of retrieval workers
 
-The Glassbox stress-test button shows queue-driven autoscaling live. It floods the Redis Stream `retrieval:jobs` with synthetic work so KEDA scales the `retrieval-worker` Deployment from 1 to 3 pods and back.
+The Glassbox stress-test button is built to show queue-driven autoscaling live. It floods the Redis Stream `retrieval:jobs` with synthetic work so KEDA scales the `retrieval-worker` Deployment from 1 to 3 pods and back.
 
 **Capacity gate.** The node has only 2 GiB of memory, so a real burst runs only when the node has room. `GET /api/demo/capacity` uses the api ServiceAccount to list nodes and read live node memory usage from metrics-server (bundled with k3s). It approves a burst only when there is exactly one node, its `MemoryPressure` condition is `False`, and live free memory (allocatable minus current usage) is at least 512 MiB: two extra workers at their 128 MiB limit plus a 256 MiB safety margin. Anything it cannot confirm counts as a denial. The page shows a tiger icon when a real burst is possible and a bunny when it is not.
 
@@ -245,19 +254,23 @@ The Glassbox stress-test button shows queue-driven autoscaling live. It floods t
 
 **Simulated burst.** If capacity is insufficient, the cooldown is active, or the cluster view is unavailable (for example in local development), a click plays a visual-only simulation instead: pod dots grow from 1 to 3 and shrink back while a backlog counter falls from 300. No jobs are queued. Every click also triggers a short screen-shake effect (skipped when the visitor prefers reduced motion), and the button has a 9-second client-side cooldown.
 
-**KEDA scaling.** KEDA 2.21 is installed by a Flux HelmRelease. A `ScaledObject` named `retrieval-worker` uses the `redis-streams` trigger on stream `retrieval:jobs` and consumer group `workers`, with `lagCount: 10` (target backlog per replica), a 5-second polling interval, `minReplicaCount: 1` and `maxReplicaCount: 3`. KEDA drives a Horizontal Pod Autoscaler. Scale-down uses a 45-second stabilization window and may remove all extra replicas every 15 seconds, so workers return to 1 about a minute after the backlog drains. The worker Deployment deliberately has no fixed `replicas` field, so Flux and the HPA never fight over it.
+**KEDA scaling (when KEDA is on).** KEDA 2.21 is installed by a Flux HelmRelease. A `ScaledObject` named `retrieval-worker` uses the `redis-streams` trigger on stream `retrieval:jobs` and consumer group `workers`, with `lagCount: 10` (target backlog per replica), a 5-second polling interval, `minReplicaCount: 1` and `maxReplicaCount: 3`. KEDA drives a Horizontal Pod Autoscaler. Scale-down uses a 45-second stabilization window and may remove all extra replicas every 15 seconds, so workers return to 1 about a minute after the backlog drains. The worker Deployment deliberately has no fixed `replicas` field, so Flux and the HPA never fight over it.
 
 **Live cluster view.** `GET /api/cluster/stream` is an SSE endpoint that lists and watches pods labeled `app=retrieval-worker` in the `app` namespace, and polls the consumer group's lag (the same metric KEDA uses) every 2 seconds. It forwards only pod name, phase and readiness, plus the backlog number. The browser subscribes with native `EventSource`. When there is no in-cluster Kubernetes access, the endpoint sends `cluster_unavailable` and the diagram falls back to the plain worker node.
 
+## KEDA status: suspended since the memory incident
+
+KEDA is installed, but since the 2026-09-30 memory incident (see "Node memory: the budget and the 2026-09-30 incident") its Flux Kustomizations and HelmRelease are suspended and its Deployments in the `keda` namespace are scaled to 0, which frees roughly 150 MiB. While KEDA is off, nothing autoscales: the retrieval worker stays at its single replica, and the KEDA HelmRelease still shows the failed state left by the incident's install timeout. The capacity gate below still runs on every check. With the node's free memory under its 512 MiB threshold since the incident, the button has been playing the simulated burst rather than a real one. KEDA comes back through the runbooks (resume the HelmRelease and the KEDA Kustomizations, then switch KEDA on) once the node shows steady headroom.
+
 ## Kubernetes on k3s: namespaces, workloads and resource budget
 
-Glassbox runs on k3s, a certified Kubernetes distribution, installed as a single-node server on the EC2 instance. The kubelet runs with `fail-swap-on=false` because the node has a 1 GiB swap file. Kubernetes manifests live in `k8s/base` (all long-running workloads plus the migrate Job) and `k8s/overlays/prod` (image tag pinning, Flux objects, KEDA and the ingest Job).
+Glassbox runs on k3s, a certified Kubernetes distribution, installed as a single-node server on the EC2 instance. The kubelet runs with `fail-swap-on=false` because the node uses swap: compressed RAM swap (zram) first, and a 1 GiB swap file on disk as overflow. Kubernetes manifests live in `k8s/base` (all long-running workloads plus the migrate Job) and `k8s/overlays/prod` (image tag pinning, Flux objects, KEDA and the ingest Job).
 
 Namespaces and workloads:
 
-- **`app`**: `api` (Deployment, 1 replica, container port 8000, requests 100m CPU and 120 MiB, limit 256 MiB), `retrieval-worker` (Deployment, 1 to 3 replicas managed by KEDA, requests 50m and 64 MiB, limit 128 MiB), `migrate` (Job running `alembic upgrade head`, limit 192 MiB), and `ingest` (Job, limit 384 MiB).
+- **`app`**: `api` (Deployment, 1 replica, container port 8000, requests 100m CPU and 120 MiB, limit 256 MiB), `retrieval-worker` (Deployment, 1 to 3 replicas managed by KEDA, requests 50m and 64 MiB, limit 128 MiB), `migrate` (Job running `alembic upgrade head`, limit 192 MiB), `ingest` (Job, limit 384 MiB), and `warm-answers` (CronJob every 2 hours, request 32 MiB, limit 48 MiB).
 - **`data`**: `mysql` (StatefulSet, MySQL 8.0, 4 GiB volume, requests 200 MiB, limit 350 MiB) and `redis` (StatefulSet, redis-stack-server 7.2, 1 GiB volume, limit 150 MiB), each with a headless Service and a ClusterIP Service.
-- **`keda`**: the KEDA operator, metrics server and admission webhooks, capped at 150 MiB, 100 MiB and 64 MiB so KEDA fits its share of the node.
+- **`keda`**: the KEDA operator, metrics server and admission webhooks, capped at 150 MiB, 100 MiB and 64 MiB so KEDA fits its share of the node. These Deployments are currently scaled to 0 (KEDA is suspended).
 - **`flux-system`**: the Flux controllers, including the source, kustomize, helm, image-reflector and image-automation controllers.
 - **`kube-system`**: k3s defaults, including Traefik, CoreDNS and metrics-server.
 
@@ -265,7 +278,15 @@ Traffic enters through two Traefik Ingress objects for host `basel.engineering`,
 
 Configuration comes from the `glassbox-config` ConfigMap: MySQL host and database, the Redis URL, `GLASSBOX_PROVIDER=bedrock`, the AWS region, the Bedrock model IDs (Titan Text Embeddings V2 and the Nova Lite US inference profile), the daily LLM cap and the trusted proxy range. Secrets (`glassbox-mysql` and `glassbox-app`) are created on the node by `k8s/bootstrap-secrets.sh`, which reads SSM Parameter Store through the instance role. Images are pulled from private Amazon ECR with an image pull secret (`regcred`). A systemd timer on the node refreshes that secret every 6 hours, because ECR tokens expire after 12.
 
-Memory is the binding constraint on the 2 GiB `t4g.small`. The design budget is roughly 500 to 600 MiB for k3s itself, 100 MiB for Traefik, CoreDNS and metrics-server, about 150 MiB each for KEDA and Flux, 60 to 100 MiB for Redis, 200 to 350 MiB for MySQL, about 120 MiB for the API, and up to 384 MiB for three workers at peak. Measurements on the live node showed it already using swap before any burst. That is why rollouts never add extra pods, why ingestion waits until the rollout finishes, and why autoscaling stops at 3 workers.
+## Node memory: the budget and the 2026-09-30 incident
+
+Memory is the binding constraint on the 2 GiB `t4g.small` (about 1.84 GiB allocatable to pods). The design budget is roughly 500 to 600 MiB for k3s itself, 100 MiB for Traefik, CoreDNS and metrics-server, about 150 MiB each for KEDA and Flux, 60 to 100 MiB for Redis, 200 to 350 MiB for MySQL, about 120 MiB for the API, and up to 384 MiB for three workers at peak. Measurements on the live node showed it already using swap before any burst. That is why rollouts never add extra pods, why ingestion waits until the rollout finishes, and why autoscaling stops at 3 workers.
+
+On 2026-09-30 the 2 GiB node ran out of memory headroom. Its only swap was the swap file on the EBS root volume, the same disk that holds k3s's SQLite datastore and MySQL, so heavy swapping stalled disk I/O. k3s's datastore timed out, KEDA's Helm upgrade failed and retried, Traefik stopped reporting ready, and Cloudflare returned error 521 to visitors. The site came back after a reboot of the node, a move to compressed swap, suspending KEDA (its Flux Kustomizations and HelmRelease suspended, its Deployments scaled to 0) and briefly pausing the `warm-answers` CronJob. Flux later re-applied the CronJob manifest, which turned the pause off again, so the warm-up runs as normal. After the fix the node showed about 3% memory pressure (the kernel's PSI "some" average over 300 seconds) and about 357 MiB of memory available. KEDA stays suspended until the node shows steady headroom under normal traffic. The lesson for this node is that disk-backed swap on the same volume as the cluster's datastore turns a memory shortage into an outage, so swap now goes to compressed RAM first, and incident actions are buttons rather than hand-typed commands.
+
+## Compressed swap (zram) on the node
+
+Swap now goes to compressed RAM first: `/dev/zram0` with priority 100, the `lzo-rle` compressor (the only zram compressor this Amazon Linux 2023 kernel builds), and about 920 MB of uncompressed capacity (half of RAM, capped at 1 GiB). The disk swap file stays as overflow at priority -2, so the kernel fills zram before it writes to disk. Only the compressed pages use RAM, so a few hundred megabytes of swapped pages cost a fraction of that. Amazon Linux's own `zram-generator` creates the device on every boot; the setup script only overrides the packaged rule that disables zram on machines with more than 800 MiB of RAM, and then tunes `swappiness` to 150 and `page-cluster` to 0. Terraform delivers this as an SSM document plus a State Manager association (`infra/modules/compute/zram.tf`) that runs once when created, again whenever the script changes, and weekly to repair drift. The script holds a lock (`flock`) so two runs never overlap, and an exit trap rolls back the swap tuning if zram is not active at the end, because high swappiness with only disk swap would make thrashing worse. To check it, run the "Ops · Diagnose" workflow, which prints swap devices, zram usage and memory and I/O pressure; the "Ops · Apply zram" runbook re-runs the setup on demand, for example if a reboot ever comes up without `/dev/zram0`.
 
 ## Kubernetes security: RBAC, NetworkPolicies and node access
 
@@ -277,9 +298,9 @@ Memory is the binding constraint on the 2 GiB `t4g.small`. The design budget is 
 - In `data`, `mysql-from-app` accepts TCP 3306 only from `app` pods labeled `api`, `retrieval-worker`, `migrate` or `ingest`.
 - In `data`, `redis-from-app` accepts TCP 6379 only from `app` pods labeled `api`, `retrieval-worker` or `ingest`, plus the `keda` namespace, because KEDA's redis-streams scaler polls Redis directly from its operator pod.
 
-**Node access.** The EC2 node has no SSH port open and no public Kubernetes API. Administration happens only through AWS Systems Manager (SSM) Session Manager, which the instance role enables with the `AmazonSSMManagedInstanceCore` policy. The security group accepts only TCP 80 and 443, and only from Cloudflare's published IPv4 and IPv6 ranges, so the origin cannot be reached directly. Instance metadata requires IMDSv2 tokens with a hop limit of 2, so containerized Flux controllers can use the node's IAM role to read ECR.
+**Node access.** The EC2 node has no SSH port open and no public Kubernetes API. Administration happens only through AWS Systems Manager (SSM), which the instance role enables with the `AmazonSSMManagedInstanceCore` policy: routine operations run as fixed SSM documents from the approval-gated runbook workflows, and an interactive Session Manager session remains for anything those do not cover. The security group accepts only TCP 80 and 443, and only from Cloudflare's published IPv4 and IPv6 ranges, so the origin cannot be reached directly. Instance metadata requires IMDSv2 tokens with a hop limit of 2, so containerized Flux controllers can use the node's IAM role to read ECR.
 
-**Deploy credentials.** Deployment is pull-based: Flux inside the cluster pulls from GitHub and ECR, so continuous integration never needs cluster credentials. GitHub Actions reaches AWS only through OIDC federation into narrowly scoped IAM roles, with no long-lived access keys. Workloads call Bedrock through the node's instance role, which allows invoking only the specific Titan embedding model and the Nova Lite and Claude Haiku inference profiles, and reading only SSM parameters under `/glassbox/`.
+**Deploy credentials.** Deployment is pull-based: Flux inside the cluster pulls from GitHub and ECR, so continuous integration never needs cluster credentials. GitHub Actions reaches AWS only through OIDC federation into narrowly scoped IAM roles, with no long-lived access keys. Workloads call Bedrock through the node's instance role, which allows invoking only the specific Titan embedding model and the US cross-region inference profiles for Nova Lite (the model in use) and Claude Haiku, and reading only SSM parameters under `/glassbox/`.
 
 ## Kubernetes rollouts: probes, migration gate and graceful shutdown
 
@@ -312,7 +333,7 @@ Every Glassbox change reaches production through GitHub pull requests into `main
 
 **Amazon ECR.** Terraform manages the `glassbox` repository, which has scan-on-push enabled and a lifecycle rule that expires untagged images after 7 days (the leftovers from reassigning `latest`).
 
-**Terraform workflow.** Changes under `infra/` run a separate workflow: `terraform fmt` and `validate` on every pull request, a read-only `plan` through an OIDC plan role, and `apply` after a merge to `main` only once the owner approves the protected `terraform-prod` GitHub environment.
+**Terraform workflows.** Changes under `infra/` run a separate workflow (`terraform.yml`): `terraform fmt` and `validate` on every pull request, a read-only `plan` through an OIDC plan role, and `apply` after a merge to `main` only once the owner approves the protected `terraform-prod` GitHub environment. The bootstrap root has its own workflow (`bootstrap.yml`), described in "Bootstrap pipeline and Terraform state". Nobody runs Terraform from a laptop any more: every infrastructure change goes through a pull request and an approval click.
 
 ## Deployment pipeline: Flux GitOps, image automation and ordered Kustomizations
 
@@ -338,19 +359,28 @@ All Glassbox cloud resources are defined in Terraform under `infra/` and live in
 
 **Terraform layout.**
 
-- `infra/bootstrap`: a one-time root with local state. It creates the S3 state bucket (versioned, encrypted, public access blocked), the GitHub OIDC identity provider, and IAM roles: the Terraform apply role, a read-only plan role and the image release role. Each role trusts only a specific GitHub environment of this repository.
-- `infra/envs/prod`: the production root. It uses an S3 backend with Terraform's native lockfile (no DynamoDB table) and wires five modules together.
+- `infra/bootstrap`: the root that creates the S3 state bucket (versioned, encrypted, public access blocked, TLS-only, protected from deletion by a bucket policy and `prevent_destroy`), the GitHub OIDC identity provider, and the IAM roles CI uses: the Terraform apply role, a read-only plan role, the image release role, two operations-runbook roles and two bootstrap-pipeline roles. Each role trusts only a specific GitHub environment of this repository.
+- `infra/envs/prod`: the production root. It uses an S3 backend with Terraform's native lockfile (no DynamoDB table) and wires six modules together.
 - `modules/network`: one VPC, one public subnet in one availability zone, an internet gateway and a route table. There is no NAT gateway, which would cost more than everything else combined.
-- `modules/compute`: the EC2 instance, security group, IAM instance role and profile, and an Elastic IP.
+- `modules/compute`: the EC2 instance, security group, IAM instance role and profile, an Elastic IP, and the compressed-swap setup (`zram.tf`).
+- `modules/ops`: the SSM documents behind the operations runbooks.
 - `modules/registry`: the ECR repository and its lifecycle policy.
 - `modules/secrets`: randomly generated MySQL password and IP-hash salt, stored as SSM Parameter Store SecureStrings.
 - `modules/edge`: Cloudflare resources through the official Cloudflare provider.
 
 **The EC2 node.** One `t4g.small` (ARM64 Graviton, 2 vCPUs, 2 GiB RAM) running Amazon Linux 2023, with a 20 GB encrypted gp3 root volume. CPU credits are set to `standard`, so sustained load is throttled instead of billed as unlimited burst. User data creates a 1 GiB swap file, installs k3s and the Flux CLI, and installs the systemd timer that refreshes the ECR pull secret. The AMI comes from AWS's "latest Amazon Linux 2023" SSM parameter, but the instance ignores AMI changes after launch (`ignore_changes = [ami]`). A newly published image therefore cannot force a replacement that would wipe k3s, MySQL and Redis data on the root volume. OS updates happen in place.
 
-**Amazon Bedrock access.** The instance role can invoke Titan Text Embeddings V2 directly, plus the US cross-region inference profiles for Amazon Nova Lite and Claude Haiku. Nova Lite is the model in use. The underlying foundation models are callable only through those profiles.
-
 **Cloudflare edge.** Cloudflare hosts DNS for basel.engineering. Terraform manages a proxied apex A record pointing at the node's Elastic IP, so the record follows the instance automatically. It also manages a Cache Rule that disables caching for `/api/*`, so SSE streams and API responses are never cached or buffered, while static assets use Cloudflare's default caching. Cloudflare terminates TLS for visitors and connects to the origin over HTTPS in "Full" mode against Traefik's self-signed certificate. The origin security group allows ports 80 and 443 only from Cloudflare's published IP ranges, and origin protection relies on that allowlist. Cloudflare API tokens are scoped to the zone and live only in GitHub environment secrets, separately for plan (read) and apply (edit).
+
+## Operations: push-button runbooks and GitHub environments
+
+**Push-button runbooks.** Incident actions are GitHub Actions workflows rather than hand-typed commands. Eight "Ops · ..." workflows (Diagnose, Reboot node, Restart deployment, Flux suspend or resume, Flux reconcile, KEDA on or off, Warm-up CronJob suspend or resume, and Apply zram) each show only their own inputs and call one reusable workflow, `.github/workflows/ops.yml`. Each action runs a fixed, Terraform-managed SSM Command document (`glassbox-ops-*`, nine of them, including a read-only `boot-id` check) with inputs limited to an allowed list, so nothing can run on the node that was not reviewed in this repository; the generic "run any shell script" document is never used. Diagnose is read-only, needs no approval, and redacts its output because workflow logs in this public repository are public: it reports memory, swap and zram, pressure (PSI), pods, Flux and KEDA status, warning events and k3s error counts, without printing Secrets or environment variables. Every other action waits for the owner to approve the protected `ops` GitHub environment, and runs a diagnose before and after. Reboot node is a plain EC2 API call, so it works even when the node is too sick to run commands, and it proves the reboot happened by waiting for the kernel's boot ID to change. Only one runbook runs at a time, and timeouts are generous (SSM retries delivery for 10 minutes and the workflow polls for up to 20), because a swapping node is slow to answer. An action missing from the list becomes a new reviewed `glassbox-ops-*` document rather than a one-off command.
+
+**GitHub environments and roles.** Each kind of access has its own GitHub environment and IAM role, trusted through GitHub OIDC with no stored AWS keys: `ops-read` (no approval, `main` only) for `glassbox-ops-read`, which can run only the diagnose document; `ops` (owner approval) for `glassbox-ops`, which can run the `glassbox-ops-*` documents and reboot the tagged instance; `bootstrap-plan` (no approval) for the read-only `glassbox-bootstrap-plan`; and `bootstrap` (owner approval, `main` only) for `glassbox-bootstrap`. The existing `terraform-plan`, `terraform-prod` and `release` environments cover the production Terraform root and image releases.
+
+## Bootstrap pipeline and Terraform state
+
+`.github/workflows/bootstrap.yml` plans `infra/bootstrap` on every pull request that touches it and posts the result. An apply is started from `main`: the plan job prints the plan and a SHA-256 fingerprint of the change set, the owner approves the `bootstrap` environment, and the apply job re-plans and applies only if the new fingerprint matches the reviewed one. The plan file never leaves the runner. The bootstrap root's own state moved from a file on the owner's laptop into the S3 state bucket it created, under `bootstrap/terraform.tfstate`; the Terraform CI roles may use only the `envs/prod/*` keys, so CI cannot rewrite the state that defines its own permissions. The pipeline is how that root changes now and its first live apply delivered the IAM fixes the zram association needed. Two IAM details surfaced on the way: SSM `CreateAssociation` is authorized against both the instance and the document, and the `aws:RequestTag` condition is not populated for the document, so a tag-based condition on it denies the call.
 
 ## Observability and health checks
 
@@ -365,6 +395,8 @@ Glassbox keeps observability light because the 2 GiB node has little memory to s
 **Ingestion bookkeeping.** Each ingest run writes an `ingestion_runs` row (status, documents changed, chunks written) and prints every skipped file with its reason to the Job's logs.
 
 **Logs.** The API, worker, migrate and ingest processes log through Python's standard `logging` module to stdout, read with `kubectl logs` over an SSM session. Failures include the request ID or Redis message ID. The `wait-for-migrations` initContainer logs the database's current and expected Alembic revisions while it waits. Flux status is read with `flux get kustomizations`, and KEDA's scaling decisions appear in the HPA it manages.
+
+**Node diagnostics.** The "Ops · Diagnose" workflow is the first step in any incident. It needs no approval and prints a redacted, time-bounded snapshot of the node into the workflow log: uptime, memory, swap and zram, memory, I/O and CPU pressure (PSI), the largest processes, node conditions, `kubectl top`, every pod, Deployment, CronJob and Job, Flux Kustomizations and HelmReleases, KEDA, the newest warning events, recent k3s error counts and kernel out-of-memory kills.
 
 **Retrieval evaluation.** `eval/run_eval.py` measures recall@5 and mean reciprocal rank over 30 public-safe questions in `eval/questions.yaml`, through the real Redis vector-search path. It runs manually. The recorded baseline with real Titan embeddings is recall@5 of about 0.87 and MRR of about 0.69.
 
@@ -417,6 +449,7 @@ Everything in this section is planned or proposed design. None of it is implemen
 - **Metrics and tracing.** Not built. There is no Prometheus `/metrics` endpoint, no Grafana Cloud export, no OpenTelemetry tracing, no CloudWatch status-check alarm and no external uptime ping. Logs are plain text rather than structured JSON.
 - **Retrieval evaluation in CI.** Not built. The recall@5 and MRR harness runs manually and does not gate pull requests.
 - **Citation deep links.** Not built. Sources show a title, path and score but do not link to the file and line range on GitHub at the deployed commit.
+- **Landscape phone layout.** Not built. The mobile layout is tuned for portrait phones; a pass for phones rotated to landscape (short screens) is planned.
 - **Polish (DD1 Phase 7).** Not started: recorded load-test numbers, footer statistics beyond the last request, and README screenshots.
 - **Stronger edge and network posture.** Not built. This covers a trusted origin certificate for Cloudflare "Full (strict)" mode, a free S3 gateway VPC endpoint, private subnets with VPC endpoints for Bedrock and SSM, Cloudflare WAF rules, and the External Secrets Operator.
 - **Stretch ideas.** An EKS variant to prove manifest portability, a multi-node or managed control plane, and a "live facts" tool that answers "what version is deployed right now?" from the cluster.
