@@ -1,6 +1,6 @@
 # Quirky "I don't know" replies
 
-**PR:** opened against `main` (number in the index below) · **Branch:** `feature/quirky-idk` (from `main` at `75bfbf6`)
+**PR:** [#58](https://github.com/hacka-tron/basel.engineering/pull/58) · **Branch:** `feature/quirky-idk` (from `main` at `75bfbf6`)
 **Status:** In review, not merged.
 
 ## TL;DR
