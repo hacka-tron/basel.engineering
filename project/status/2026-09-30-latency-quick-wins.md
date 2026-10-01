@@ -1,7 +1,7 @@
 # Latency quick wins
 
 **PR:** [#54](https://github.com/hacka-tron/basel.engineering/pull/54) · **Branch:** `feature/latency-quick-wins` (targets `main`; #48 has merged) · **Spec:** `docs/DESIGN.md` §6.1, §7.3, §9.2, §9.6, `k8s/README.md`
-**Status:** In review, Codex round 1 fixes done. Not merged, not live. Nothing was changed on the live cluster.
+**Status:** In review, Codex round 2 fixes done. Not merged, not live. Nothing was changed on the live cluster.
 
 ## TL;DR
 
@@ -26,9 +26,9 @@ flowchart LR
 
 1. **Single list of questions.** The chips moved from `Chat.tsx` into `frontend/src/suggested-questions.json`. The frontend imports it, and the Dockerfile copies it into the runtime image for the warm command.
 2. **`services/glassbox/warm.py`** uses the standard library for HTTP, plus the redis client for its daily counter. For each question it POSTs `{question, corpus}` and reads the SSE stream until `done`, because the API writes the answer cache just before `done`. Each question comes out as `cached` (a hit, free), `warmed` (one LLM answer), `no_sources`, or `failed`.
-3. **Cost guards.** The warm-up goes through the same per-IP rate limiter (10 per 10 min) and daily budget (100 answers) as visitors. Any ask that may have reached generation counts, not just successful ones: the stream showed the `llm` stage start, or the connection broke after the response opened. Only a hit, a no-sources answer, or an error before generation is free. The caps are:
+3. **Cost guards.** The warm-up goes through the same per-IP rate limiter (10 per 10 min) and daily budget (100 answers) as visitors. Any ask that may have reached generation counts, not just successful ones. An ask is free only when it's certain nothing was generated: a hit, a no-sources answer, an error event before the `llm` stage, a 4xx or 429, or a connection refused or DNS failure before the request was sent. A timeout, a reset or a 5xx after sending counts, because the POST may already have reached the api. The caps are:
    - **Per run:** at most `--max-llm-calls`, 7 by default.
-   - **Per UTC day, shared by every run** (the CronJob and each deploy's run): at most `GLASSBOX_WARM_DAILY_LLM_CAP`, 10 by default, set in the ConfigMap. Enforced with an atomic Redis `INCR` on `warm:budget:{date}` (48h TTL). A slot is reserved before each ask. If that pushes the count past the cap, it is undone and the run stops. The slot is handed back when the ask provably made no LLM call.
+   - **Per UTC day, shared by every run** (the CronJob and each deploy's run): at most `GLASSBOX_WARM_DAILY_LLM_CAP`, 10 by default, set in the ConfigMap. Enforced with an atomic Redis `INCR` on `warm:budget:{date}` (48h TTL). A slot is reserved before each ask. If that pushes the count past the cap, it is undone and the run stops. The reservation keeps its day key, so a slot handed back after midnight goes to the day it was taken from, never to the new day.
 
    The run also stops at the first `rate_limited`/`budget_exhausted` error, HTTP 429/503, or `retrieval_only` answer, which is what the API sends when the budget is spent or the kill switch is on. A stop for limits exits 0. A failed request exits 1, so the Job shows it.
 4. **Kubernetes.** `k8s/base/warm-cronjob.yaml`: `concurrencyPolicy: Forbid`, `backoffLimit: 0`, 10-minute deadline, no service-account token, requests 10m CPU and 32Mi, limit 48Mi, and the ConfigMap via `envFrom` (for `REDIS_URL` and the cap). The ingest Job's command is now `ingest.run && { warm || echo ignored; }`, so a warm-up failure can never fail or retry ingestion. A new NetworkPolicy, `api-from-answer-warmer`, admits pods labelled `glassbox/answer-warmer: "true"` from the `app` namespace to the api on port 8000 only. Both pods carry that label. The data-namespace `redis-from-app` policy now also admits `app: warm-answers`, only so it can reach the daily counter (no MySQL access). The ingest pod already had Redis access.
@@ -65,6 +65,10 @@ Codex round 1 (changes needed, all fixed):
 - **Important:** the per-run cap counted only successful warms, so an ask that errored after generation started didn't count. Now every ask that may have reached generation counts.
 - **Important:** warm-ups could eat the visitors' shared daily budget: 12 CronJob runs × 7, plus uncapped per-deploy runs. Added the shared daily cap of 10 LLM calls in Redis.
 - **Minor:** the mobile footer showed `cached` without the dot. It now shows `· cached` on the second line.
+
+Codex round 2 (changes needed, both fixed):
+- **Important:** a refund recomputed the day key, so a slot taken at 23:59:59 and refunded after midnight lowered the new day's count. Refunds now go to the reserving day's key. There's a test for this.
+- **Important:** a timeout before response headers was refunded, even though the POST may have reached the api. Only certain no-send failures are free now.
 
 Codex also checked, with no issues found: the rendered manifests, the NetworkPolicy selectors, the ingest ordering, and that leaving `ask.py` unchanged is reasonable.
 

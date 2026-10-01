@@ -29,6 +29,7 @@ import argparse
 import json
 import logging
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -47,7 +48,15 @@ _DAILY_KEY_TTL_S = 48 * 3600
 
 
 class StopWarmup(Exception):
-    """A shared limit was hit; asking more would only spend visitors' budget."""
+    """A shared limit was hit; asking more would only spend visitors' budget.
+
+    ``llm_attempted`` is True when the stop came from a response that doesn't
+    prove nothing was generated (an HTTP 503 from a proxy), so its slot is kept.
+    """
+
+    def __init__(self, message: str, *, llm_attempted: bool = False):
+        super().__init__(message)
+        self.llm_attempted = llm_attempted
 
 
 @dataclass
@@ -57,9 +66,10 @@ class Outcome:
     result: str  # "cached", "warmed", "no_sources", "failed"
     total_ms: int | None = None
     detail: str = ""
-    # True when this ask may have made an LLM call. Conservative: only a
-    # stream that shows no generation (hit, no sources, error before the llm
-    # stage) sets False, so an unknown outcome counts against the caps.
+    # True when this ask may have made an LLM call. Conservative: False only
+    # when it is certain nothing was generated (a hit, no sources, an error
+    # event before the llm stage, a 4xx, or a connection that failed before the
+    # request was sent). Anything uncertain counts against both caps.
     llm_attempted: bool = True
 
 
@@ -74,18 +84,20 @@ class DailyCap:
     def _key(self) -> str:
         return f"warm:budget:{self.now().date().isoformat()}"
 
-    def reserve(self) -> bool:
+    def reserve(self) -> str | None:
+        """Take one slot; returns its day key (pass it to ``refund``), or None if full."""
         key = self._key()
         used = self.client.incr(key)
         if used == 1:
             self.client.expire(key, _DAILY_KEY_TTL_S)
         if used > self.cap:
             self.client.decr(key)
-            return False
-        return True
+            return None
+        return key
 
-    def refund(self) -> None:
-        self.client.decr(self._key())
+    def refund(self, key: str) -> None:
+        """Give back a slot on the day it was taken, even if the date has changed."""
+        self.client.decr(key)
 
 
 def load_questions(path: Path) -> list[tuple[str, str]]:
@@ -180,27 +192,42 @@ def ask(api_url: str, corpus: str, question: str, *, timeout: float = REQUEST_TI
         },
         method="POST",
     )
-    progress: dict = {"llm": False, "opened": False}
+    progress: dict = {"llm": False}
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            progress["opened"] = True
             # Read to `done`: the API writes the answer cache just before it,
             # and leaving early would log the request as stopped, uncached.
             return classify(corpus, question, parse_sse(response), progress)
     except urllib.error.HTTPError as exc:
-        if exc.code in {429, 503}:
-            raise StopWarmup(f"HTTP {exc.code}") from exc
-        return Outcome(corpus, question, "failed", detail=f"HTTP {exc.code}", llm_attempted=False)
+        if exc.code == 429:
+            raise StopWarmup("HTTP 429") from exc
+        # A 4xx is the API refusing the request; a 5xx (often a proxy) can't
+        # prove the api didn't start generating.
+        attempted = exc.code >= 500
+        if exc.code == 503:
+            raise StopWarmup("HTTP 503", llm_attempted=attempted) from exc
+        return Outcome(
+            corpus, question, "failed", detail=f"HTTP {exc.code}", llm_attempted=attempted
+        )
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        # Before the response opened nothing ran; once it did, the server may be
-        # generating even if we never saw the llm stage, so count it.
         return Outcome(
             corpus,
             question,
             "failed",
             detail=f"{type(exc).__name__}: {exc}",
-            llm_attempted=progress["llm"] or progress["opened"],
+            llm_attempted=not _never_sent(exc),
         )
+
+
+def _never_sent(exc: BaseException) -> bool:
+    """True only when the request certainly never reached the server.
+
+    A refused connection or a failed DNS lookup happen before anything is sent.
+    Everything else (timeouts, resets, a broken stream) may come after the POST
+    arrived, so the server may already be generating.
+    """
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    return isinstance(reason, ConnectionRefusedError | socket.gaierror)
 
 
 def warm(
@@ -218,20 +245,22 @@ def warm(
     for corpus, question in questions:
         if llm_calls >= max_llm_calls:
             return outcomes, f"reached --max-llm-calls={max_llm_calls}"
-        if daily_cap is not None and not daily_cap.reserve():
-            return outcomes, f"reached the daily warm-up cap ({daily_cap.cap} LLM calls)"
+        slot = None
+        if daily_cap is not None:
+            slot = daily_cap.reserve()
+            if slot is None:
+                return outcomes, f"reached the daily warm-up cap ({daily_cap.cap} LLM calls)"
         try:
             outcome = ask_fn(api_url, corpus, question)
         except StopWarmup as exc:
-            # Every limit signal arrives before generation starts.
-            if daily_cap is not None:
-                daily_cap.refund()
+            if slot is not None and not exc.llm_attempted:
+                daily_cap.refund(slot)
             return outcomes, str(exc)
         outcomes.append(outcome)
         if outcome.llm_attempted:
             llm_calls += 1
-        elif daily_cap is not None:
-            daily_cap.refund()
+        elif slot is not None:
+            daily_cap.refund(slot)
         LOGGER.info(
             "%-10s %-12s %5sms  %s%s",
             outcome.result,

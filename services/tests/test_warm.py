@@ -3,6 +3,7 @@
 import io
 import json
 import re
+import socket
 import urllib.error
 from pathlib import Path
 
@@ -212,7 +213,7 @@ def test_ask_counts_a_stream_that_broke_after_opening(monkeypatch):
     assert outcome.result == "failed" and outcome.llm_attempted
 
     def refuse(request, timeout):
-        raise urllib.error.URLError("connection refused")
+        raise urllib.error.URLError(ConnectionRefusedError(61, "refused"))
 
     monkeypatch.setattr(warm.urllib.request, "urlopen", refuse)
     assert not warm.ask("http://api", "about_me", "Q?").llm_attempted
@@ -264,8 +265,8 @@ def test_daily_cap_reserves_atomically_and_expires():
     assert not cap.reserve()  # over the cap: the increment is undone
     assert client.values == {"warm:budget:2026-09-30": 2}
     assert client.ttls == {"warm:budget:2026-09-30": 48 * 3600}
-    cap.refund()
-    assert cap.reserve()
+    cap.refund("warm:budget:2026-09-30")
+    assert cap.reserve() == "warm:budget:2026-09-30"
 
 
 def test_daily_cap_is_shared_across_runs_and_hits_are_refunded():
@@ -315,3 +316,80 @@ def test_daily_cap_needs_redis(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:1/0")
     monkeypatch.setenv("GLASSBOX_WARM_DAILY_LLM_CAP", "3")
     assert warm.daily_cap_from_env().cap == 3
+
+
+# --- round 2: refunds stay on their day; uncertain asks are never refunded ---
+
+
+def test_refund_after_midnight_goes_to_the_reservation_day():
+    from datetime import UTC, datetime
+
+    clock = {"now": datetime(2026, 9, 30, 23, 59, 59, tzinfo=UTC)}
+    client = FakeRedis()
+    cap = warm.DailyCap(client, 10, now=lambda: clock["now"])
+    for _ in range(10):
+        assert cap.reserve()
+
+    def ask_fn(api_url, corpus, question):
+        clock["now"] = datetime(2026, 10, 1, 0, 0, 1, tzinfo=UTC)  # the ask spans midnight
+        return warm.Outcome(corpus, question, "cached", 5, llm_attempted=False)
+
+    client.values["warm:budget:2026-09-30"] = 9  # leave one slot for the run below
+    warm.warm("http://api", QUESTIONS[:1], max_llm_calls=7, daily_cap=cap, ask_fn=ask_fn)
+    assert client.values["warm:budget:2026-09-30"] == 9  # the slot came back to Sept 30
+    assert client.values.get("warm:budget:2026-10-01", 0) == 0  # never negative
+    for _ in range(10):
+        assert cap.reserve()
+    assert cap.reserve() is None  # the new day still stops at 10
+
+
+def _raise(exc):
+    def urlopen(request, timeout):
+        raise exc
+
+    return urlopen
+
+
+@pytest.mark.parametrize(
+    ("exc", "attempted"),
+    [
+        (urllib.error.URLError(ConnectionRefusedError(61, "refused")), False),
+        (urllib.error.URLError(socket.gaierror(8, "no such host")), False),
+        (TimeoutError("timed out before headers"), True),  # the POST may have arrived
+        (urllib.error.URLError(TimeoutError("timed out")), True),
+        (ConnectionResetError(54, "reset after send"), True),
+        (urllib.error.HTTPError("http://api", 422, "Unprocessable", {}, None), False),
+        (urllib.error.HTTPError("http://api", 502, "Bad Gateway", {}, None), True),
+        (urllib.error.HTTPError("http://api", 504, "Gateway Timeout", {}, None), True),
+    ],
+)
+def test_ask_is_conservative_about_uncertain_failures(monkeypatch, exc, attempted):
+    monkeypatch.setattr(warm.urllib.request, "urlopen", _raise(exc))
+    outcome = warm.ask("http://api", "about_me", "Q?")
+    assert outcome.result == "failed"
+    assert outcome.llm_attempted is attempted
+
+
+def test_uncertain_failures_keep_their_daily_slot_and_count_per_run():
+    client = FakeRedis()
+
+    def ask_fn(api_url, corpus, question):
+        return warm.Outcome(corpus, question, "failed", detail="TimeoutError", llm_attempted=True)
+
+    _, stopped = warm.warm(
+        "http://api", QUESTIONS, max_llm_calls=2, daily_cap=FakeCap(10, client), ask_fn=ask_fn
+    )
+    assert "max-llm-calls=2" in stopped
+    assert sum(client.values.values()) == 2  # neither slot was refunded
+
+
+def test_http_503_stops_and_keeps_its_slot(monkeypatch):
+    monkeypatch.setattr(
+        warm.urllib.request,
+        "urlopen",
+        _raise(urllib.error.HTTPError("http://api", 503, "Unavailable", {}, None)),
+    )
+    client = FakeRedis()
+    _, stopped = warm.warm("http://api", QUESTIONS, max_llm_calls=7, daily_cap=FakeCap(10, client))
+    assert stopped == "HTTP 503"
+    assert sum(client.values.values()) == 1
