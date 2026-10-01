@@ -311,8 +311,12 @@ async def clear(
     dry_run: bool = False,
     engine: Engine | None = None,
     redis_client=None,
+    documents=None,
 ):
-    """Wipe one corpus/model scope's documents, chunks and Redis keys."""
+    """Wipe one corpus/model scope's documents, chunks and Redis keys.
+
+    ``documents`` limits the wipe to an already listed (and confirmed) set.
+    """
     model_id = model_id or get_embedding_provider().model_id
     own_engine = engine is None
     own_redis = redis_client is None and not dry_run
@@ -320,7 +324,9 @@ async def clear(
     if redis_client is None and not dry_run:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
     try:
-        return await clear_scope(engine, redis_client, corpus, model_id, dry_run=dry_run)
+        return await clear_scope(
+            engine, redis_client, corpus, model_id, dry_run=dry_run, documents=documents
+        )
     finally:
         if own_redis:
             await redis_client.aclose()
@@ -377,10 +383,40 @@ def _confirm_clear(corpus: str, model_id: str, count: int) -> bool:
     return answer.strip() == corpus
 
 
+def _print_refusals(plans: list[SweepPlan]) -> None:
+    """Make a refused sweep impossible to miss in the Job log (stdout and stderr).
+
+    There is no column on ``ingestion_runs`` for it, and a refusal deliberately
+    doesn't fail the run (a retry would refuse again and skip the warm-up).
+    """
+    for plan in plans:
+        if plan.refused:
+            banner = (
+                f"!!! STALE SWEEP REFUSED for {plan.corpus} ({plan.model_id}): {plan.refused}. "
+                "Nothing was deleted for this corpus. !!!"
+            )
+            print(banner)
+            print(banner, file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("services.glassbox.ingest").setLevel(logging.INFO)
     args = _parser().parse_args(argv)
+    conflicts = [
+        (args.clear and args.force_sweep, "--force-sweep has no effect with --clear"),
+        (args.dry_run and args.sweep, "--sweep can't be combined with --dry-run"),
+        (args.dry_run and args.no_sweep, "--no-sweep can't be combined with --dry-run"),
+        (args.yes and not args.clear, "--yes is only used with --clear"),
+        (
+            args.model and not (args.clear or args.dry_run),
+            "--model is only used with --clear or --dry-run (ingest uses the configured model)",
+        ),
+    ]
+    for conflict, message in conflicts:
+        if conflict:
+            print(message, file=sys.stderr)
+            return 2
     if args.clear:
         if not args.corpus:
             print("--clear requires --corpus", file=sys.stderr)
@@ -388,18 +424,28 @@ def main(argv: list[str] | None = None) -> int:
         try:
             model_id = args.model or get_embedding_provider().model_id
             planned = asyncio.run(clear(args.corpus, model_id=model_id, dry_run=True))
-            if args.dry_run:
-                print(f"dry run: would clear {len(planned)} {args.corpus} documents ({model_id})")
-                return 0
-            if not planned:
-                print(f"nothing to clear for {args.corpus} ({model_id})")
-                return 0
-            if not args.yes and not _confirm_clear(args.corpus, model_id, len(planned)):
-                print("clear cancelled", file=sys.stderr)
-                return 2
-            cleared = asyncio.run(clear(args.corpus, model_id=model_id))
+        except Exception:
+            LOGGER.exception("Clear dry run failed")
+            return 1
+        if args.dry_run:
+            print(f"dry run: would clear {len(planned)} {args.corpus} documents ({model_id})")
+            return 0
+        if not planned:
+            print(f"nothing to clear for {args.corpus} ({model_id})")
+            return 0
+        if not args.yes and not _confirm_clear(args.corpus, model_id, len(planned)):
+            print("clear cancelled", file=sys.stderr)
+            return 2
+        try:
+            cleared = asyncio.run(clear(args.corpus, model_id=model_id, documents=planned))
         except Exception:
             LOGGER.exception("Clear failed")
+            print(
+                f"CLEAR FAILED part-way for {args.corpus} ({model_id}). Redis keys may already "
+                "be gone while MySQL rows remain, and a normal ingest will not repair that "
+                "(the files are unchanged). Re-run --clear to finish, then ingest.",
+                file=sys.stderr,
+            )
             return 1
         print(f"cleared {len(cleared)} {args.corpus} documents ({model_id})")
         return 0
@@ -413,11 +459,12 @@ def main(argv: list[str] | None = None) -> int:
             LOGGER.exception("Dry run failed")
             return 1
         for plan in plans:
-            status = f"REFUSED ({plan.refused})" if plan.refused else "ok"
+            status = "REFUSED" if plan.refused else "ok"
             print(
                 f"dry run {plan.corpus}: would delete {len(plan.stale)} of {plan.known} "
                 f"documents; {status}"
             )
+        _print_refusals(plans)
         return 0
     sweep = "apply" if args.sweep else "off" if args.no_sweep else None
     try:
@@ -433,8 +480,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"skipped {source_path}: {reason}")
     for plan in result.sweep:
         action = "deleted" if plan.deleted else "would delete"
-        status = f" REFUSED ({plan.refused})" if plan.refused else ""
-        print(f"sweep {plan.corpus}: {action} {len(plan.stale)} of {plan.known}{status}")
+        print(f"sweep {plan.corpus}: {action} {len(plan.stale)} of {plan.known}")
+    _print_refusals(result.sweep)
     return 0
 
 

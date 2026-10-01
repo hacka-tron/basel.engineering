@@ -12,22 +12,27 @@ def _docs(*paths: str) -> list[ScopedDocument]:
 
 
 def test_plan_has_nothing_stale_when_every_known_file_was_seen():
-    plan = plan_sweep("about_system", "m", _docs("a.md", "b.md"), {"a.md", "b.md", "new.md"})
+    plan = plan_sweep(
+        "about_system",
+        "m",
+        _docs("docs/a.md", "docs/b.md"),
+        {"docs/a.md", "docs/b.md", "docs/n.md"},
+    )
     assert plan.stale == [] and plan.refused is None
     assert (plan.known, plan.seen_files) == (2, 3)
 
 
 def test_plan_lists_missing_files_within_the_threshold():
-    known = _docs(*(f"f{i}.md" for i in range(10)))
-    seen = {f"f{i}.md" for i in range(10)} - {"f3.md", "f7.md", "f1.md"}
+    known = _docs(*(f"docs/f{i}.md" for i in range(10)))
+    seen = {f"docs/f{i}.md" for i in range(10)} - {"docs/f3.md", "docs/f7.md", "docs/f1.md"}
     plan = plan_sweep("about_system", "m", known, seen, max_fraction=0.3)
-    assert [doc.source_path for doc in plan.stale] == ["f1.md", "f3.md", "f7.md"]
+    assert [doc.source_path for doc in plan.stale] == ["docs/f1.md", "docs/f3.md", "docs/f7.md"]
     assert plan.refused is None
 
 
 def test_plan_refuses_a_drop_above_the_threshold_unless_forced():
-    known = _docs(*(f"f{i}.md" for i in range(10)))
-    seen = {f"f{i}.md" for i in range(6)}  # 4 of 10 missing = 40%
+    known = _docs(*(f"docs/f{i}.md" for i in range(10)))
+    seen = {f"docs/f{i}.md" for i in range(6)}  # 4 of 10 missing = 40%
     refused = plan_sweep("about_system", "m", known, seen, max_fraction=0.3)
     assert refused.refused and "40%" in refused.refused and len(refused.stale) == 4
     forced = plan_sweep("about_system", "m", known, seen, max_fraction=0.3, force=True)
@@ -36,7 +41,12 @@ def test_plan_refuses_a_drop_above_the_threshold_unless_forced():
 
 def test_plan_always_allows_a_small_absolute_sweep():
     # Renaming two of the five About Basel files is 40% but must still work.
-    plan = plan_sweep("about_me", "m", _docs("a", "b", "c", "d", "e"), {"a", "b", "c"})
+    plan = plan_sweep(
+        "about_me",
+        "m",
+        _docs(*(f"corpus/about-me/{name}.md" for name in "abcde")),
+        {f"corpus/about-me/{name}.md" for name in "abc"},
+    )
     assert plan.refused is None and len(plan.stale) == sweep.ALWAYS_ALLOWED_STALE
 
 
@@ -44,6 +54,37 @@ def test_plan_refuses_when_the_scan_found_zero_files_even_when_forced():
     for known in (_docs("a.md"), _docs(*(f"f{i}" for i in range(20)))):
         plan = plan_sweep("about_me", "m", known, set(), force=True)
         assert plan.refused and "zero files" in plan.refused
+
+
+def test_plan_refuses_when_a_whole_source_directory_disappears():
+    # docs/ is 2 of 10 documents (20%, under the limit) but produced zero files,
+    # which is what an image that stopped copying docs/ looks like.
+    known = _docs("docs/a.md", "docs/b.md", *(f"infra/f{i}.tf" for i in range(8)))
+    seen = {f"infra/f{i}.tf" for i in range(8)}
+    plan = plan_sweep("about_system", "m", known, seen)
+    assert plan.refused and "docs" in plan.refused and "zero scanned files" in plan.refused
+    assert len(plan.stale) == 2
+    forced = plan_sweep("about_system", "m", known, seen, force=True)
+    assert forced.refused is None
+
+
+def test_directory_guard_names_every_missing_directory_and_about_me():
+    known = _docs("k8s/a.yaml", "docs/b.md", "services/c.py")
+    plan = plan_sweep("about_system", "m", known, {"services/c.py"})
+    assert "docs, k8s" in plan.refused
+    about_me = plan_sweep("about_me", "m", _docs("corpus/about-me/a.md"), {"corpus/x.md"})
+    assert "corpus/about-me" in about_me.refused
+
+
+def test_a_file_missing_from_a_directory_that_still_has_files_is_not_a_directory_drop():
+    known = _docs("docs/a.md", "docs/b.md")
+    plan = plan_sweep("about_system", "m", known, {"docs/a.md"})
+    assert plan.refused is None and [doc.source_path for doc in plan.stale] == ["docs/b.md"]
+
+
+def test_source_root():
+    assert sweep.source_root("corpus/about-me/bio.md") == "corpus/about-me"
+    assert sweep.source_root("infra/modules/x/main.tf") == "infra"
 
 
 def test_plan_with_no_known_documents_is_a_no_op_even_with_zero_files():
@@ -250,9 +291,16 @@ def cli(monkeypatch):
         calls["dry_run"] = kwargs
         return []
 
-    async def fake_clear(corpus, *, model_id=None, dry_run=False, **kwargs):
+    planned = _docs("corpus/about-me/a.md")
+
+    async def fake_clear(corpus, *, model_id=None, dry_run=False, documents=None, **kwargs):
         calls.setdefault("clear", []).append((corpus, model_id, dry_run))
-        return _docs("corpus/about-me/a.md")
+        calls.setdefault("clear_documents", []).append(documents)
+        if calls.get("clear_fails") and not dry_run:
+            raise RuntimeError("mysql went away")
+        return planned if documents is None else documents
+
+    calls["planned"] = planned
 
     monkeypatch.setattr(ingest_run, "ingest", fake_ingest)
     monkeypatch.setattr(ingest_run, "dry_run_sweep", fake_dry_run)
@@ -313,3 +361,49 @@ def test_cli_clear_with_yes_deletes(cli):
 async def test_ingest_rejects_an_unknown_sweep_mode_before_touching_any_store():
     with pytest.raises(ValueError):
         await ingest_run.ingest(sweep="delete-everything", engine=object(), redis_client=object())
+
+
+def test_cli_clear_deletes_exactly_the_confirmed_list(cli):
+    assert ingest_run.main(["--clear", "--corpus", "about_me", "--yes"]) == 0
+    # The dry run lists without a fixed set; the delete gets that same list back.
+    assert cli["clear_documents"] == [None, cli["planned"]]
+
+
+def test_cli_clear_failure_says_to_rerun_clear(cli, capsys):
+    cli["clear_fails"] = True
+    assert ingest_run.main(["--clear", "--corpus", "about_me", "--yes"]) == 1
+    assert "Re-run --clear" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--clear", "--corpus", "about_me", "--force-sweep"],
+        ["--dry-run", "--sweep"],
+        ["--dry-run", "--no-sweep"],
+        ["--yes"],
+        ["--model", "titan"],
+    ],
+)
+def test_cli_rejects_flags_that_would_be_ignored(cli, argv):
+    assert ingest_run.main(argv) == 2
+    assert "ingest" not in cli and "clear" not in cli and "dry_run" not in cli
+
+
+def test_cli_dry_run_accepts_a_model(cli):
+    assert ingest_run.main(["--dry-run", "--model", "titan"]) == 0
+    assert cli["dry_run"]["model_id"] == "titan"
+
+
+def test_cli_prints_an_unmissable_banner_for_a_refused_sweep(monkeypatch, capsys):
+    refused = sweep.SweepPlan("about_system", "titan", known=10, seen_files=0)
+    refused.refused = "scan found zero files"
+
+    async def fake_ingest(**kwargs):
+        return ingest_run.RunResult(sweep=[refused])
+
+    monkeypatch.setattr(ingest_run, "ingest", fake_ingest)
+    assert ingest_run.main([]) == 0
+    out = capsys.readouterr()
+    for stream in (out.out, out.err):
+        assert "!!! STALE SWEEP REFUSED for about_system (titan): scan found zero files" in stream

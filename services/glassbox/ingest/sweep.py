@@ -6,7 +6,12 @@ Two entry points share the same delete path:
   were not seen by a completed scan. It fails closed: a scan that found no files
   for a corpus, or one that would remove more than ``max_fraction`` of the
   documents already indexed for that scope, is refused unless ``force`` is set
-  (the zero-file guard can't be overridden; use ``--clear`` for that).
+  (the zero-file guard can't be overridden; use ``--clear`` for that). So is one
+  where a source directory that has indexed documents (``infra``, ``k8s``,
+  ``services``, ``docs``, ``corpus/about-me``) produced zero scanned files: each
+  directory alone is under the fraction limit, so an image that stopped copying,
+  say, ``docs/`` would otherwise lose every docs document quietly. ``force``
+  overrides the directory guard (for a deliberate removal), never the zero-file one.
 * ``clear_scope`` targets every document in one corpus and model scope.
 
 Delete order (see BACKLOG, "Redis write inside an open MySQL transaction"):
@@ -16,6 +21,11 @@ raises if a KNN match has no MySQL row, so the opposite order could leave Redis
 keys pointing at deleted rows if the second step failed. With this order a
 failure after the Redis step leaves MySQL rows without vectors: invisible to
 retrieval, and removed by the next sweep because the file is still missing.
+
+``--clear`` has no such self-repair: its files still exist, so after a failure
+between the Redis and MySQL steps an incremental ingest skips them (unchanged
+hash and model) and their vectors stay missing. Re-run ``--clear`` to finish,
+then ingest.
 """
 
 import logging
@@ -76,6 +86,13 @@ def max_fraction_from_env() -> float:
     return value
 
 
+def source_root(source_path: str) -> str:
+    """The scanned directory a path came from: ``corpus/about-me`` or its top-level dir."""
+    if source_path.startswith("corpus/about-me/"):
+        return "corpus/about-me"
+    return source_path.split("/", 1)[0]
+
+
 def plan_sweep(
     corpus: str,
     model_id: str,
@@ -98,6 +115,18 @@ def plan_sweep(
         plan.refused = (
             f"scan found zero files for {corpus}; refusing to delete all {len(known)} "
             "indexed documents (use --clear for a deliberate wipe)"
+        )
+        return plan
+    missing_roots = sorted(
+        {source_root(doc.source_path) for doc in plan.stale}
+        - {source_root(path) for path in seen_paths}
+    )
+    if missing_roots and not force:
+        plan.refused = (
+            f"source director{'ies' if len(missing_roots) > 1 else 'y'} "
+            f"{', '.join(missing_roots)} produced zero scanned files but "
+            f"{'have' if len(missing_roots) > 1 else 'has'} indexed {corpus} documents; "
+            "refusing to sweep (is it missing from the image? override with --force-sweep)"
         )
         return plan
     fraction = len(plan.stale) / len(known)
@@ -235,12 +264,22 @@ async def run_sweep(
 
 
 async def clear_scope(
-    engine: Engine, redis_client, corpus: str, model_id: str, *, dry_run: bool
+    engine: Engine,
+    redis_client,
+    corpus: str,
+    model_id: str,
+    *,
+    dry_run: bool,
+    documents: list[ScopedDocument] | None = None,
 ) -> list[ScopedDocument]:
-    """Remove every document in one corpus/model scope (or list them on a dry run)."""
-    documents = sorted(
-        load_scope_documents(engine, corpus, model_id), key=lambda doc: doc.source_path
-    )
+    """Remove every document in one corpus/model scope (or list them on a dry run).
+
+    Pass ``documents`` (from an earlier dry run) to delete exactly the list that was
+    confirmed, rather than re-reading the scope.
+    """
+    if documents is None:
+        documents = load_scope_documents(engine, corpus, model_id)
+    documents = sorted(documents, key=lambda doc: doc.source_path)
     verb = "would clear" if dry_run else "clearing"
     for document in documents:
         LOGGER.warning(

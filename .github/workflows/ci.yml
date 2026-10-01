@@ -61,7 +61,7 @@ jobs:
       - name: Ruff
         run: ruff check services eval
       - name: Pytest
-        run: pytest services/tests -q
+        run: pytest services/tests -q -rs
 
   frontend-checks:
     runs-on: ubuntu-latest

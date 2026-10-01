@@ -16,6 +16,7 @@ from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest import sweep as sweep_module
 from services.glassbox.ingest.run import chunker_for_path, dry_run_sweep, ingest
 from services.glassbox.ingest.scanner import (
+    SYSTEM_DIRECTORIES,
     scan_file,
     scan_sources,
     secret_reason,
@@ -155,6 +156,14 @@ def dockerfile_copy_sources(dockerfile: str) -> set[str]:
             if top and top != ".":
                 sources.add(top)
     return sources
+
+
+def test_dockerfile_copies_every_scanned_source_directory():
+    # The stale sweep refuses when a source directory vanishes from the image, but
+    # the image should never drop one in the first place.
+    repo_root = Path(__file__).resolve().parents[2]
+    copied = dockerfile_copy_sources((repo_root / "Dockerfile").read_text())
+    assert set(SYSTEM_DIRECTORIES) | {"corpus"} <= copied
 
 
 def test_dockerfile_copy_sources_parser_handles_continuations_flags_and_json():

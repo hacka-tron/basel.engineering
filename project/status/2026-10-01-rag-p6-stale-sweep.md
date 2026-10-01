@@ -30,14 +30,23 @@ flowchart LR
 ## Key design decisions and trade-offs
 
 - **Report by default, apply behind a flag.** The plan says the deploy that ships this deletes production rows and keys. Deleting from the live index while the owner is asleep isn't something to do on a merge, so the code default and the Job both say `report`. The Job sets `GLASSBOX_INGEST_SWEEP: report` explicitly, so the switch is visible where it gets flipped.
-- **Fail closed.** Zero files scanned for a corpus means no sweep, even with `--force-sweep` (that's what `--clear` is for). More than 30% of a corpus's documents missing means no sweep unless forced (`GLASSBOX_INGEST_SWEEP_MAX_FRACTION`). Up to 2 deletions are always allowed, so renaming two of the five About Basel files still works. An unknown mode value is an error, not "off". A refusal logs at ERROR but doesn't fail the Job, because a non-zero exit would retry ingestion (backoffLimit 2) and skip the warm-up for no gain.
+- **Fail closed.** Zero files scanned for a corpus means no sweep, even with `--force-sweep` (that's what `--clear` is for). A source directory with indexed documents that produced no files means no sweep unless forced. More than 30% of a corpus's documents missing means no sweep unless forced (`GLASSBOX_INGEST_SWEEP_MAX_FRACTION`). Up to 2 deletions are always allowed, so renaming two of the five About Basel files still works. An unknown mode value is an error, not "off". A refusal logs at ERROR but doesn't fail the Job, because a non-zero exit would retry ingestion (backoffLimit 2) and skip the warm-up for no gain.
 - **Delete order: Redis, version bump, MySQL.** The worker raises when a KNN match has no MySQL row, so the opposite order could break answers if the second step failed. With this order, a failure leaves MySQL rows with no vectors. Retrieval can't see them, and the next sweep removes them. The version bump comes before the MySQL delete, so retrieval-cache entries naming those chunk ids stop being read first. No MySQL transaction is open during Redis I/O, unlike the per-document write path (that BACKLOG item stays open and is annotated).
 - **`--dry-run` is read-only.** It scans paths and reads MySQL. It embeds nothing, writes nothing and doesn't touch Redis. The plan called it `--dry-run-sweep`; `--dry-run` also covers `--clear`.
 - **`--clear` confirmation:** without `--yes` it needs an interactive terminal and the corpus name typed back. With no terminal it refuses with exit code 2.
 
 ## What review caught
 
-Not yet reviewed (Codex/Opus gate pending).
+Round 1 approved merging in report mode, and every finding is fixed in this PR.
+
+- **Important:** a whole missing source directory could be swept silently. The scanner skips a directory that isn't there, and `infra/` (24% of about_system), `k8s/` (27%) and `docs/` (9%) are each under the 30% limit. An image that stopped copying `docs/` would therefore, in apply mode, delete every docs document with only WARNING lines. Fix: the sweep now refuses when any source directory with indexed documents (`infra`, `k8s`, `services`, `docs`, `corpus/about-me`) produced zero scanned files. A new test checks that the Dockerfile copies every scanned directory plus `corpus/`.
+- **Minor:**
+  - Refusals now print a `!!! STALE SWEEP REFUSED ... !!!` banner to stdout and stderr. `ingestion_runs` has no column for it; that's noted in BACKLOG.
+  - A failed `--clear` can't repair itself, because ingest skips unchanged files. The CLI error and the module docstring now say to re-run `--clear`.
+  - `--clear` deletes exactly the list it showed for confirmation.
+  - Flags that would be silently ignored now exit 2: `--force-sweep` with `--clear`, `--sweep`/`--no-sweep` with `--dry-run`, `--yes` without `--clear`, and `--model` without `--clear`/`--dry-run`.
+  - The 2-document allowance (2 of 5 About Basel files, 40%) is documented in DESIGN-003 §1.1.
+  - CI prints skip reasons (`pytest -rs`).
 
 ## Operational notes and risks
 
@@ -48,11 +57,13 @@ Not yet reviewed (Codex/Opus gate pending).
 
 ## How to see it / verify it
 
-- Unit tests: `services/tests/test_ingest_sweep.py` (26 tests: thresholds, zero-file guard, model scoping, report/apply/off, delete order, Redis failure leaves MySQL untouched, CLI).
+- Unit tests: `services/tests/test_ingest_sweep.py` (39 tests: thresholds, the directory guard, zero-file guard, model scoping, report/apply/off, delete order, Redis failure leaves MySQL untouched, CLI).
 - Integration test: `test_stale_sweep_dry_run_apply_and_clear_against_real_stores` in `services/tests/test_ingest_run.py`. It ingests two files, deletes one, then checks: the dry run and report mode delete nothing; apply removes that file's rows and keys and keeps the other file; the version goes up once; `--clear` dry run lists and the real run wipes.
 - After merge: in the ingest Job log, look for `sweep about_system: would delete N of M` and the per-path lines.
 
 ## Open items
+
+- **Before flipping to apply:** (1) this PR, with the directory guard, is merged and released; (2) the owner has read one release's ingest log, the `would delete` lines and any `STALE SWEEP REFUSED` banner.
 
 - Owner: read one release's ingest log, then set `GLASSBOX_INGEST_SWEEP: apply` (BACKLOG "Decide: turn the stale sweep on").
 - Owner: corpus-scope decision (DESIGN-005 §9 item 4) unblocks the rest of phase 6: scanner exclusions, the `kind` tag, `ensure_index` restructure, and the paid retrieval eval.
