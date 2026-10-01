@@ -94,6 +94,8 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs
 
+- ~~**Redis chunk index never rebuilt from MySQL (found 2026-10-01, fix in review: branch `fix/redis-reconcile-from-mysql`, status report `project/status/2026-10-01-redis-reconcile.md`).**~~ Incremental ingest skipped any document whose content hash and model matched MySQL, and `backfill_model_tags` only tagged keys that already existed, so nothing rewrote `chunk:{id}` keys after Redis lost data (a lost `redis-data` PVC, a FLUSHALL, an OOM kill before the last save) or after a MySQL restore. `idx:chunks` stayed empty or partial and every answer abstained; DESIGN.md claimed "Redis is rebuilt from MySQL on restart". Fixed by a reconcile at the end of every ingest run (repair missing, rewrite mismatched by `content_sha`, remove orphans, zero-MySQL guard) plus `--reindex`. Follow-up, not blocking: Redis data loss is only repaired at the next ingest run (a release); a startup or periodic check (e.g. the API's `/readyz` noticing an empty index, or a CronJob running `--reindex`) would shorten that window.
+
 ## Feature work (priority)
 
 Owner wants this worked first, ahead of the security/infra/data-pipeline groups below. Done and removed on 2026-10-01: conversational memory and per-topic chats (#41), Stop/auto-scroll/persistence (#48), suggested-question chips hidden once a conversation starts, hover-to-reveal node technology on the diagram (#33).

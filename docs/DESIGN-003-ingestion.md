@@ -30,17 +30,18 @@ Each stage has one job and can be rerun independently. Later stages can always b
 
 **Guiding rule:** container images contain code only. Content flows through storage the system reads at runtime.
 
-### 1.1 What the current ingest Job does about deleted files
+### 1.1 What the current ingest Job does about deleted files and Redis drift
 
 Everything else in this document describes the connector pipeline. The ingest Job that runs today (`services/glassbox/ingest/run.py`, DD1 6.4) still reads the files baked into the image. Since 2026-10-01 it handles deleted and renamed files like this:
 
 - **On by default (report only):** after a run has walked every file, it logs each indexed document whose file is gone, per corpus and embedding model ("would delete ..."). Nothing is deleted; those documents stay searchable.
 - **Off by default (switch: `GLASSBOX_INGEST_SWEEP=apply` on the Job, or `--sweep`):** the same list is deleted: Redis `chunk:{id}` keys first, then the `corpus:ver:{corpus}` bump, then the MySQL chunk and document rows. A document keeps its row while it still has chunks for another embedding model.
 - **Guards (both modes):** no sweep for a corpus whose scan found zero files; none when a source directory that has indexed documents (`infra`, `k8s`, `services`, `docs`, `corpus/about-me`) produced zero scanned files, since each is under the fraction limit on its own and an image that stopped copying one would otherwise lose it quietly; and none when more than 30% of a corpus's indexed documents would go (`GLASSBOX_INGEST_SWEEP_MAX_FRACTION`). Two or fewer deletions are always allowed, so renaming files in the five-file About Basel corpus works, which also means 2 of its 5 documents (40%) can go in one run without tripping the limit. `--force-sweep` lifts the directory and fraction guards, never the zero-file one. A refusal logs at `ERROR` and prints a `!!! STALE SWEEP REFUSED ... !!!` banner; the run still succeeds and nothing is recorded on `ingestion_runs`.
-- **A failed `--clear`:** if it fails after deleting Redis keys, the MySQL rows remain and a normal ingest doesn't restore the vectors (the files are unchanged). Re-run `--clear` to finish, then ingest.
-- **Operator commands:** `python -m services.glassbox.ingest.run --dry-run` prints the list without ingesting or writing anything. `--clear --corpus about_me|about_system [--model M] [--dry-run] [--yes]` wipes one corpus and model's documents, chunks and Redis keys for a clean re-ingest; it asks you to type the corpus name unless `--yes` is given, and the Job never runs it.
+- **A failed `--clear`:** if it fails after deleting Redis keys, the MySQL rows remain, and the next ingest's reconcile (below) writes their keys back instead of finishing the wipe. Re-run `--clear` to finish, then ingest.
+- **Redis reconcile (every run, since 2026-10-01):** after the scan and the sweep, the Job compares MySQL chunks with Redis `chunk:{id}` keys for the configured embedding model and repairs drift from MySQL alone (text, metadata and the stored vector; no embedding call): a missing key is written, a key whose `content_sha` (SHA-256 of the chunk text), corpus, model tag, document id or path disagrees with its row is rewritten (keys written before `content_sha` existed are rewritten once), and a key with no MySQL row is deleted along with its `chunktxt:{id}` cache. It runs even when no file changed. Before it, a lost Redis volume, a FLUSHALL or a MySQL restore left `idx:chunks` empty or partial with nothing to rebuild it, and every answer abstained. Guard: a corpus with zero MySQL chunks but Redis keys gets no deletions (`ERROR` plus a `!!! REDIS RECONCILE REFUSED ... !!!` banner). `corpus:ver:{corpus}` is bumped only when something changed, and the Job log prints `reconcile <corpus>: repaired=N rewritten=N removed=N`. `--reindex` rewrites every key from MySQL without scanning files (for after a MySQL restore); it is idempotent. Assumes one ingest at a time.
+- **Operator commands:** `python -m services.glassbox.ingest.run --dry-run` prints the list without ingesting or writing anything. `--clear --corpus about_me|about_system [--model M] [--dry-run] [--yes]` wipes one corpus and model's documents, chunks and Redis keys for a clean re-ingest; it asks you to type the corpus name unless `--yes` is given, and the Job never runs it. `--reindex` rebuilds the Redis chunk keys from MySQL (see the reconcile above).
 
-The connector design below (sections 8 and 11) replaces this with event-driven deletes and nightly reconciliation.
+The connector design below (sections 8 and 11) replaces this with event-driven deletes and nightly reconciliation; the MySQL-to-Redis rows of section 11's table ("Chunks in MySQL missing from Redis index", "Vectors in Redis with no MySQL chunk") already run in every ingest Job.
 
 ---
 
@@ -496,7 +497,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 | Delete event arrives before the preceding update event | Update ignored as stale by sequencer |
 | Bedrock throttles during ingestion | Message retried by SQS; DLQ after 3 attempts; alert |
 | Node dies mid-ingest | Message becomes visible again after 5 minutes; replacement node's Job reprocesses idempotently |
-| Redis wiped (node replaced) | Reindex from `chunk_embeddings` for the active index version (DD2 3.3) |
+| Redis wiped (node replaced) | Reindex from `chunk_embeddings` for the active index version (DD2 3.3). Today: the ingest Job's reconcile rewrites every chunk key from MySQL `chunks` (section 1.1) |
 | An S3 event is lost | Reconciliation repairs it overnight and reports drift |
 | New embedding model is worse | Fails eval gate; never activated. Or, if activated, flip `index:active` back |
 | Doc moved out of the shared folder | Treated as deleted; removed from answers within 15 minutes |

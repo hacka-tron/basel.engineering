@@ -23,6 +23,7 @@ from services.glassbox.ingest.chunkers.code import chunk_code
 from services.glassbox.ingest.chunkers.markdown import chunk_markdown
 from services.glassbox.ingest.chunkers.terraform import chunk_terraform
 from services.glassbox.ingest.chunkers.yaml_doc import chunk_yaml
+from services.glassbox.ingest.reconcile import ReconcileReport, reconcile
 from services.glassbox.ingest.redis_index import (
     backfill_model_tags,
     ensure_index,
@@ -63,6 +64,7 @@ class RunResult:
     chunks_written: int = 0
     errors: dict[str, str] = field(default_factory=dict)
     sweep: list[SweepPlan] = field(default_factory=list)
+    reconcile: list[ReconcileReport] = field(default_factory=list)
 
 
 def chunker_for_path(path: Path):
@@ -76,6 +78,21 @@ def _now() -> datetime:
 def _title(content: str, path: Path) -> str:
     match = _HEADING.search(content)
     return (match.group(1).strip() if match else path.name)[:512]
+
+
+async def prepare_index(sessions, redis_client) -> None:
+    """Create or migrate ``idx:chunks`` and finish any pending model-tag backfill."""
+    index_changed = await ensure_index(redis_client)
+    # Retry the backfill if an earlier run stopped after FT.ALTER but before
+    # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
+    if index_changed or not await redis_client.get("idx:chunks:model-tags-ready"):
+        with sessions() as session:
+            rows = session.execute(select(DbChunk.id, DbChunk.embedding_model)).all()
+        await backfill_model_tags(redis_client, rows)
+        # Old retrieval-cache entries may include mixed-model matches.
+        for corpus in CORPORA:
+            await redis_client.incr(f"corpus:ver:{corpus}")
+        await redis_client.set("idx:chunks:model-tags-ready", "1")
 
 
 def seen_source_paths(root: Path) -> dict[str, set[str]]:
@@ -100,6 +117,9 @@ async def ingest(
     After every file has been walked, the stale sweep runs in ``sweep`` mode
     (``off``, ``report`` or ``apply``; default from ``GLASSBOX_INGEST_SWEEP``,
     which defaults to ``report``: log what would be deleted, delete nothing).
+    Last, the Redis reconcile (``ingest/reconcile.py``) makes ``idx:chunks`` match
+    MySQL again: it runs even when no file changed, since unchanged files are
+    skipped above and would otherwise never get lost Redis keys back.
     """
     sweep = sweep_mode_from_env() if sweep is None else sweep
     if sweep not in SWEEP_MODES:
@@ -123,17 +143,7 @@ async def ingest(
             session.add(run)
             session.flush()
             run_id = run.id
-        index_changed = await ensure_index(redis_client)
-        # Retry the backfill if an earlier run stopped after FT.ALTER but before
-        # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
-        if index_changed or not await redis_client.get("idx:chunks:model-tags-ready"):
-            with sessions() as session:
-                rows = session.execute(select(DbChunk.id, DbChunk.embedding_model)).all()
-            await backfill_model_tags(redis_client, rows)
-            # Old retrieval-cache entries may include mixed-model matches.
-            for corpus in ("about_me", "about_system"):
-                await redis_client.incr(f"corpus:ver:{corpus}")
-            await redis_client.set("idx:chunks:model-tags-ready", "1")
+        await prepare_index(sessions, redis_client)
         provider = get_embedding_provider()
         seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
         for source in scan_sources(root):
@@ -224,7 +234,7 @@ async def ingest(
                     session.add(row)
                     session.flush()
                     new_vectors.append(
-                        (row.id, source.corpus, packed, source.source_path, document.id)
+                        (row.id, source.corpus, packed, source.source_path, document.id, chunk.text)
                     )
                 await replace_document_vectors(
                     redis_client, old_ids, new_vectors, provider.model_id
@@ -244,6 +254,9 @@ async def ingest(
             max_fraction=sweep_max_fraction,
             force=force_sweep,
         )
+        # After the sweep, so keys it just removed are not counted, and on every
+        # run: no embedding call, only id sets, one hash per key and MySQL vectors.
+        result.reconcile = await reconcile(engine, redis_client, provider.model_id)
         with sessions.begin() as session:
             run = session.get(IngestionRun, run_id)
             run.status = "succeeded"
@@ -260,6 +273,29 @@ async def ingest(
                 run.docs_changed = result.docs_changed
                 run.chunks_written = result.chunks_written
         raise
+    finally:
+        if own_redis:
+            await redis_client.aclose()
+        if own_engine:
+            engine.dispose()
+
+
+async def reindex(*, engine: Engine | None = None, redis_client=None) -> list[ReconcileReport]:
+    """Rewrite every Redis chunk key of the configured model from MySQL (``--reindex``).
+
+    For after a MySQL restore or a suspect index. Scans no files and calls no
+    embedding API (the vectors come from MySQL); idempotent. Orphan keys are
+    removed under the same zero-row guard as the reconcile in every ingest run.
+    """
+    model_id = get_embedding_provider().model_id
+    own_engine = engine is None
+    own_redis = redis_client is None
+    engine = engine or create_db_engine()
+    if redis_client is None:
+        redis_client = redis.from_url(os.environ["REDIS_URL"])
+    try:
+        await prepare_index(sessionmaker(bind=engine), redis_client)
+        return await reconcile(engine, redis_client, model_id, force=True)
     finally:
         if own_redis:
             await redis_client.aclose()
@@ -354,6 +390,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="wipe one corpus/model scope instead of ingesting (needs --corpus)",
     )
+    mode.add_argument(
+        "--reindex",
+        action="store_true",
+        help="rewrite every Redis chunk key from MySQL (no file scan, no embedding calls); "
+        "use after a MySQL restore or Redis data loss",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -383,6 +425,23 @@ def _confirm_clear(corpus: str, model_id: str, count: int) -> bool:
     return answer.strip() == corpus
 
 
+def _print_reconcile(reports: list[ReconcileReport]) -> None:
+    for report in reports:
+        print(
+            f"reconcile {report.corpus}: repaired={len(report.repaired)} "
+            f"rewritten={len(report.rewritten)} removed={len(report.removed)} "
+            f"skipped={len(report.skipped)} (mysql_chunks={report.mysql_chunks} "
+            f"redis_keys={report.redis_keys})"
+        )
+        if report.refused:
+            banner = (
+                f"!!! REDIS RECONCILE REFUSED for {report.corpus} ({report.model_id}): "
+                f"{report.refused}. No Redis key was deleted for this corpus. !!!"
+            )
+            print(banner)
+            print(banner, file=sys.stderr)
+
+
 def _print_refusals(plans: list[SweepPlan]) -> None:
     """Make a refused sweep impossible to miss in the Job log (stdout and stderr).
 
@@ -407,6 +466,8 @@ def main(argv: list[str] | None = None) -> int:
         (args.clear and args.force_sweep, "--force-sweep has no effect with --clear"),
         (args.dry_run and args.sweep, "--sweep can't be combined with --dry-run"),
         (args.dry_run and args.no_sweep, "--no-sweep can't be combined with --dry-run"),
+        (args.reindex and args.dry_run, "--reindex can't be combined with --dry-run"),
+        (args.reindex and args.force_sweep, "--force-sweep has no effect with --reindex"),
         (args.yes and not args.clear, "--yes is only used with --clear"),
         (
             args.model and not (args.clear or args.dry_run),
@@ -442,8 +503,9 @@ def main(argv: list[str] | None = None) -> int:
             LOGGER.exception("Clear failed")
             print(
                 f"CLEAR FAILED part-way for {args.corpus} ({model_id}). Redis keys may already "
-                "be gone while MySQL rows remain, and a normal ingest will not repair that "
-                "(the files are unchanged). Re-run --clear to finish, then ingest.",
+                "be gone while MySQL rows remain; the next ingest's reconcile would restore "
+                "those keys from MySQL rather than finish the wipe. Re-run --clear to finish, "
+                "then ingest.",
                 file=sys.stderr,
             )
             return 1
@@ -452,6 +514,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.corpus:
         print("--corpus is only used with --clear", file=sys.stderr)
         return 2
+    if args.reindex:
+        try:
+            reports = asyncio.run(reindex())
+        except Exception:
+            LOGGER.exception("Reindex failed")
+            return 1
+        _print_reconcile(reports)
+        return 0
     if args.dry_run:
         try:
             plans = dry_run_sweep(model_id=args.model, force_sweep=args.force_sweep)
@@ -482,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
         action = "deleted" if plan.deleted else "would delete"
         print(f"sweep {plan.corpus}: {action} {len(plan.stale)} of {plan.known}")
     _print_refusals(result.sweep)
+    _print_reconcile(result.reconcile)
     return 0
 
 

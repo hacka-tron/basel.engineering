@@ -1,5 +1,7 @@
 """Redis Search index for 512-dimensional chunk embeddings."""
 
+import hashlib
+
 from redis.exceptions import ResponseError
 
 from services.glassbox.cache.answer import _model_tag
@@ -58,22 +60,42 @@ async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
             await client.hset(key, "model", _model_tag(model_id))
 
 
+def content_sha(text: str) -> str:
+    """SHA-256 hex of a chunk's text exactly as stored in MySQL (``chunks.text``)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def chunk_fields(
+    corpus: str, model_id: str, vector: bytes, source_path: str, document_id: int, text: str
+) -> dict:
+    """The one definition of a ``chunk:{id}`` hash; every writer goes through it.
+
+    ``content_sha`` lets the reconcile step (and the answer cache) check that a key
+    still describes the MySQL row with the same id, without reading the vector.
+    """
+    return {
+        "corpus": corpus,
+        "model": _model_tag(model_id),
+        "vector": vector,
+        "source_path": source_path,
+        "document_id": document_id,
+        "content_sha": content_sha(text),
+    }
+
+
 async def replace_document_vectors(
-    client, old_ids: list[int], chunks: list[tuple[int, str, bytes, str, int]], model_id: str
+    client, old_ids: list[int], chunks: list[tuple[int, str, bytes, str, int, str]], model_id: str
 ) -> None:
-    """Remove former chunk keys and write new hashes in one Redis pipeline."""
+    """Remove former chunk keys and write new hashes in one Redis pipeline.
+
+    Each chunk is ``(id, corpus, packed vector, source_path, document_id, text)``.
+    """
     async with client.pipeline(transaction=True) as pipeline:
         for chunk_id in old_ids:
             pipeline.delete(f"chunk:{chunk_id}")
-        for chunk_id, corpus, vector, source_path, document_id in chunks:
+        for chunk_id, corpus, vector, source_path, document_id, text in chunks:
             pipeline.hset(
                 f"chunk:{chunk_id}",
-                mapping={
-                    "corpus": corpus,
-                    "model": _model_tag(model_id),
-                    "vector": vector,
-                    "source_path": source_path,
-                    "document_id": document_id,
-                },
+                mapping=chunk_fields(corpus, model_id, vector, source_path, document_id, text),
             )
         await pipeline.execute()

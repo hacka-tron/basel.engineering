@@ -190,7 +190,7 @@ Redis in Glassbox is `redis/redis-stack-server` 7.2, which includes RediSearch v
 
 Redis structures and keys:
 
-- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path` and `document_id`. Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
+- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id` and `content_sha` (SHA-256 of the chunk text). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
 - **`idx:answers` over `ans:{corpus}:v{version}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus`, `version` and `model` tags and a JSON payload. 24-hour TTL.
 - **`emb:{sha256}`**: the embedding cache. 7-day TTL.
 - **`ret:{corpus}:v{version}:{sha256}`**: the retrieval cache. 1-hour TTL.
@@ -206,7 +206,7 @@ Redis structures and keys:
 - **`demo:load:lock`**: the global stress-test cooldown lock. 5-minute TTL.
 - **`idx:chunks:model-tags-ready`**: a marker recording that existing chunk hashes carry model tags.
 
-Most of Redis can be recreated: chunk vectors come from MySQL and ingestion, caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
+Most of Redis can be recreated: the ingest Job's reconcile rewrites every chunk key from MySQL (see Ingestion pipeline), caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
 
 ## Ingestion pipeline: how content gets into the RAG index
 
@@ -224,6 +224,8 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 **Run bookkeeping.** Each run writes an `ingestion_runs` row with its status and counts, and prints `docs_changed`, `chunks_written` and every skipped file with its reason. A file that fails chunking or embedding is skipped and reported, and the run continues.
 
 **Model tagging.** Every chunk hash in Redis carries a hashed embedding-model tag. If the index predates model tags, ingestion adds the tag field and backfills existing hashes from MySQL. Untagged vectors stay invisible to search in the meantime, so switching embedding models never mixes vector spaces.
+
+**Redis reconcile.** Every run ends by comparing MySQL chunks with Redis `chunk:{id}` keys for the current embedding model (`ingest/reconcile.py`), even when no file changed. A missing key is written from the MySQL row and its stored vector, with no embedding call; a key whose `content_sha`, corpus, model, document or path disagrees with its row is rewritten; a key with no MySQL row is deleted. So a lost Redis volume or a FLUSHALL is repaired by the next ingest run. A corpus with zero MySQL chunks gets no deletions (`REDIS RECONCILE REFUSED`). `--reindex` rewrites every key from MySQL without scanning files.
 
 ## Stale documents: report-only sweep and the --clear command
 

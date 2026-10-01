@@ -528,3 +528,107 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
         if redis_keys:
             await client.delete(*redis_keys)
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_unchanged_ingest_rebuilds_lost_redis_keys_from_mysql(
+    tmp_path, integration_stack, monkeypatch
+):
+    """The bug: Redis loses its chunk keys, files are unchanged, every answer abstained.
+
+    A re-run of ingest must restore them from MySQL (no re-embedding) so search
+    returns results again; --reindex rewrites them; an orphan key is removed.
+    """
+    from services.glassbox.cache.answer import _model_tag
+    from services.glassbox.ingest.redis_index import content_sha
+    from services.glassbox.retrieval.search import search_chunks
+
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    name = tmp_path.name.replace("-", "_")
+    about_me = tmp_path / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    source_path = f"corpus/about-me/reconcile_{name}.md"
+    (tmp_path / source_path).write_text(f"# Reconcile {name}\n\nSurvives a Redis flush.\n")
+    orphan_key = f"chunk:{2**62 + abs(hash(name)) % 1000}"
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+    redis_keys = [orphan_key]
+    try:
+        first = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert first.docs_changed == 1
+        with Session(engine) as session:
+            rows = session.execute(
+                select(DbChunk.id, DbChunk.text)
+                .join(Document, DbChunk.document_id == Document.id)
+                .where(Document.source_path == source_path)
+            ).all()
+        assert rows
+        ids = [row.id for row in rows]
+        redis_keys += [f"chunk:{chunk_id}" for chunk_id in ids]
+        for row in rows:
+            assert await client.hget(f"chunk:{row.id}", "content_sha") == (
+                content_sha(row.text).encode()
+            )
+        (vector,) = await FakeEmbeddingProvider().embed([rows[0].text])
+
+        async def found():
+            matches = await search_chunks(client, vector, "about_me", "fake-v1", top_k=8)
+            return rows[0].id in {match["chunk_id"] for match in matches}
+
+        assert await found()
+
+        # Lose the keys (as a lost PVC or FLUSHALL would) and plant an orphan.
+        await client.delete(*(f"chunk:{chunk_id}" for chunk_id in ids))
+        await client.hset(
+            orphan_key,
+            mapping={"corpus": "about_me", "model": _model_tag("fake-v1"), "document_id": 0},
+        )
+        assert not await found()
+        version = int(await client.get("corpus:ver:about_me"))
+
+        def no_embedding():
+            raise AssertionError("an unchanged ingest must not embed")
+
+        class NoEmbed(FakeEmbeddingProvider):
+            async def embed(self, texts):
+                no_embedding()
+
+        monkeypatch.setattr(ingest_run, "get_embedding_provider", NoEmbed)
+        second = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert second.docs_changed == 0 and second.chunks_written == 0
+        about_me_report = next(r for r in second.reconcile if r.corpus == "about_me")
+        assert set(ids) <= set(about_me_report.repaired)
+        assert int(orphan_key.removeprefix("chunk:")) in about_me_report.removed
+        assert await client.exists(*(f"chunk:{chunk_id}" for chunk_id in ids)) == len(ids)
+        assert not await client.exists(orphan_key)
+        assert int(await client.get("corpus:ver:about_me")) == version + 1
+        assert await found()
+
+        # Healthy index: a further run changes nothing and bumps nothing.
+        third = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert not any(report.changed for report in third.reconcile)
+        assert int(await client.get("corpus:ver:about_me")) == version + 1
+
+        # --reindex rewrites every key from MySQL and is idempotent.
+        for _ in range(2):
+            reports = await ingest_run.reindex(engine=engine, redis_client=client)
+            rewritten = next(r for r in reports if r.corpus == "about_me").rewritten
+            assert set(ids) <= set(rewritten)
+            assert await found()
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                Document.__table__.delete().where(Document.source_path == source_path)
+            )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        await client.delete(*redis_keys)
+        await client.aclose()
