@@ -39,7 +39,10 @@ export function pickErrorReply(avoid: Avoid = null, random: () => number = Math.
   return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
 }
 
-export type FailedRequest = { code: string; retry_after_s?: number }
+// Exported so Retry can leave it out: retrying won't help until tomorrow.
+export const BUDGET_EXHAUSTED_REPLY = "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
+
+export type FailedRequest ={ code: string; retry_after_s?: number }
 
 /** The chat reply for a failed request. */
 // Limits are per client IP, which several visitors can share, so these
@@ -55,8 +58,6 @@ export function errorReplyFor(
       : 'a moment'
     return `The site's getting a lot of questions right now. Give it ${wait}, then ask again and I'll be ready.`
   }
-  if (failure.code === 'budget_exhausted') {
-    return "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
-  }
+  if (failure.code === 'budget_exhausted') return BUDGET_EXHAUSTED_REPLY
   return pickErrorReply(avoid, random)
 }

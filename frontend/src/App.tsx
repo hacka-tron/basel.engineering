@@ -11,10 +11,11 @@ import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
-import { questionForComponent, type NodeId } from './architecture'
+import { architectureNodes, questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
+import { planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
@@ -44,6 +45,10 @@ const TOPIC_CHIPS: TopicChip<Corpus>[] = [
 function apiCorpus(corpus: Corpus): ApiCorpus {
   return corpus === 'basel' ? 'about_me' : 'about_system'
 }
+
+// Component questions are sent without history (they stay answer-cache
+// eligible); Retry recognises them by their exact wording.
+const COMPONENT_QUESTIONS: ReadonlySet<string> = new Set(architectureNodes.map((node) => questionForComponent(node.id)))
 
 function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
   const seen = new Set<string>()
@@ -92,6 +97,10 @@ function App() {
   const savedSignatureRef = useRef<Partial<Record<Corpus, string | null>>>({})
   const requestInFlightRef = useRef(false)
   const pendingComponentRef = useRef<NodeId | null>(null)
+  // A question sent while an answer streams (DESIGN-002 §6.4): the current
+  // answer is stopped first, and this is asked once that stop has rendered, so
+  // its history includes the stopped answer exactly as it was saved.
+  const queuedAskRef = useRef<{ question: string; corpus: Corpus } | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   // `done.total_ms` (server-measured) spans the entire request, including
   // however long the LLM took to generate and stream the whole answer -
@@ -245,6 +254,15 @@ function App() {
     }
   }, [conversations])
 
+  // Runs after the effect above has refreshed conversationsRef, so a question
+  // sent mid-answer sees the stopped answer in its history.
+  useEffect(() => {
+    const queued = queuedAskRef.current
+    if (!queued || isStreaming || requestInFlightRef.current) return
+    queuedAskRef.current = null
+    handleAsk(queued.question, queued.corpus)
+  })
+
   // Multiple browser tabs: last write wins, and a change saved in another
   // tab refreshes that conversation here unless this tab is streaming into it.
   useEffect(() => {
@@ -319,7 +337,7 @@ function App() {
     if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system', { sendHistory: false })
   }
 
-  function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true } = {}) {
+  function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true, retry }: { sendHistory?: boolean; retry?: RetryPlan } = {}) {
     if (requestInFlightRef.current) return
     requestInFlightRef.current = true
     const controller = new AbortController()
@@ -328,7 +346,8 @@ function App() {
     // question is appended. Component questions are self-contained, so they
     // skip history (and so keep their answer-cache eligibility), but they are
     // still recorded in About This System's conversation for later follow-ups.
-    const history = sendHistory ? historyForRequest(conversationsRef.current[targetCorpus]) : []
+    // A retry sends what the failed request sent: the turns before its question.
+    const history = sendHistory ? historyForRequest(retry ? retry.before : conversationsRef.current[targetCorpus]) : []
     const now = Date.now()
     const assistantId = newMessageId()
     streamTargetRef.current = { corpus: targetCorpus, messageId: assistantId }
@@ -337,11 +356,16 @@ function App() {
     setActiveNode(null)
     setConversations((current) => ({
       ...current,
-      [targetCorpus]: [
+      // A retry keeps the failed question in place and replaces its failure
+      // reply with the new answer; otherwise the question is appended.
+      [targetCorpus]: (retry ? [
+        ...withoutFailedAttempt(current[targetCorpus], retry.userMessageId),
+        { id: assistantId, role: 'assistant', content: '', state: 'pending', createdAt: now },
+      ] : [
         ...current[targetCorpus],
         { id: newMessageId(), role: 'user', content: question, createdAt: now },
         { id: assistantId, role: 'assistant', content: '', state: 'pending', createdAt: now },
-      ].slice(-MAX_DISPLAY_MESSAGES) as ChatMessage[],
+      ]).slice(-MAX_DISPLAY_MESSAGES) as ChatMessage[],
     }))
     setIsStreaming(true)
     revealBufferRef.current = ''
@@ -431,7 +455,17 @@ function App() {
           // Partial text stays visible and is marked `error` too.
           const target = streamTargetRef.current
           if (target) {
-            const errorReply: ChatMessage = { id: newMessageId(), role: 'assistant', content: reply, state: 'error', createdAt: Date.now() }
+            const errorReply: ChatMessage = {
+              id: newMessageId(),
+              role: 'assistant',
+              content: reply,
+              state: 'error',
+              // Retry waits out the rate limit instead of hitting it again.
+              ...(event.code === 'rate_limited' && event.retry_after_s && event.retry_after_s > 0
+                ? { retryAt: Date.now() + event.retry_after_s * 1000 }
+                : {}),
+              createdAt: Date.now(),
+            }
             setConversations((current) => ({
               ...current,
               [target.corpus]: current[target.corpus].flatMap((message) => {
@@ -469,6 +503,30 @@ function App() {
     controller.abort()
     updateStreamingMessage((message) => ({ ...message, content: message.content + pendingText, state: 'stopped' }))
     finishRequest()
+  }
+
+  // Sending while an answer streams stops that answer first (DESIGN-002 §6.4),
+  // through the same path as the Stop button. The new question is asked by
+  // the queued-ask effect once the stop has rendered. A component question queued
+  // behind the stopped answer is dropped: the visitor's newer question wins.
+  function handleSend(question: string) {
+    setSelectedNode(null)
+    if (!requestInFlightRef.current) {
+      handleAsk(question)
+      return
+    }
+    queuedAskRef.current = { question, corpus }
+    pendingComponentRef.current = null
+    handleStop()
+  }
+
+  // Retry (DESIGN-002 §6.1 `error`): re-ask the failed question in place of its
+  // failure reply. Never while a request is in flight, so it can't stack calls.
+  function handleRetry() {
+    if (requestInFlightRef.current) return
+    const plan = planRetry(conversationsRef.current[corpus])
+    if (!plan) return
+    handleAsk(plan.question, corpus, { sendHistory: !COMPONENT_QUESTIONS.has(plan.question), retry: plan })
   }
 
   function handleNewChat() {
@@ -651,8 +709,9 @@ function App() {
           corpus={corpus}
           messages={messages}
           isStreaming={isStreaming}
-          onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
+          onAsk={handleSend}
           onStop={handleStop}
+          onRetry={handleRetry}
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
           replacement={showDiagramView ? (

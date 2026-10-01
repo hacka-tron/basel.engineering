@@ -26,7 +26,6 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 **Roadmap after that** (owner's earlier list; details in the sections below):
 
 - Release pipeline hardening (manual-dispatch build-number trust, `sync-deploy-branch` push race).
-- Chat UX leftovers: Retry on error replies, typing while an answer streams, Up-arrow recall.
 - Security pass: IP-hash salt and trusted proxy CIDRs verified in production, Terraform preview credential audit.
 - Self-healing node (ASG + EIP reassociation, M3).
 - Google Drive content pipeline (M4).
@@ -105,7 +104,6 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 - **Answer thinness (prompt tuning).** See RESUME HERE item 2: answers drop specifics (numbers, thresholds, cooldowns) that the retrieved chunks contain. Tune the prompt toward including the concrete facts, bump the prompt version, re-ask live.
 - **Phone rotated to landscape: adjust the mobile layout.** Header name shortening (Basel A-R), footer (stats / + / capacity icon), the Chat|Diagram view and the diagram's portrait graph were all tuned for portrait; check 667x375, 740x360 and 896x414 landscape and fix what looks off (e.g. short height squeezing the message area, the diagram choosing the portrait layout in landscape). Use the phone preview (`npm run phone`; add landscape frames) rather than a shrunk window. Owner request 2026-09-30. Not started.
 - **Minor cleanups from the #78 review (Opus, left as minors):** (a) `frontend/src/App.tsx` topic nav still carries mobile-only classes (`order-3 w-full justify-center`, `min-h-11` / `md:min-h-0`) although the nav now renders only on desktop; remove them, keeping desktop pixel-identical. (b) If a topic chip has focus when the window widens past md (e.g. a tablet rotated with keyboard focus), the chips unmount and focus goes to the hidden Diagram toggle, so it falls to `body`; move focus to the desktop topic nav instead.
-- **Live chat UX leftovers (M3, DD2 §6.4):** input enabled while an answer streams (sending stops the current answer), Up-arrow recall of the last question, and a Retry control on error replies.
 
 ## Security
 

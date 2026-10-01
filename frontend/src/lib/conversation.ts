@@ -24,6 +24,9 @@ export type ChatMessage = {
   idk?: boolean
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
   rewrittenQuery?: string
+  // Live-only, on a rate-limited failure reply: when Retry may be pressed again
+  // (epoch ms, from the server's retry-after). Not persisted.
+  retryAt?: number
   createdAt: number
 }
 
