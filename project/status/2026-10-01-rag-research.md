@@ -1,6 +1,6 @@
 # RAG quality: research, design and plan
 
-**Status:** in review (docs only, nothing built). Design: `docs/DESIGN-005-rag-quality.md`. Plan: `docs/superpowers/plans/2026-10-01-rag-quality.md`.
+**Status:** in review, PR [#92](https://github.com/hacka-tron/basel.engineering/pull/92) (docs only, nothing built). Design: `docs/DESIGN-005-rag-quality.md`. Plan: `docs/superpowers/plans/2026-10-01-rag-quality.md`.
 
 ## TL;DR
 
