@@ -39,8 +39,6 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 ### Non-goals
 
 - A highly available control plane (options documented in 3.6, not built).
-
-Note for section 3, as of 2026-10-01: MySQL runs in-cluster on the node's root volume (DD1 §10.5), not on RDS as section 3 assumed. Replacing the node today means an empty database: the corpus re-ingests from the image, but the `queries` log is lost unless the volume is moved or backed up first. Git holds all configuration.
 - Server-side chat sessions or stored conversation history per visitor.
 - WebSockets. SSE remains the transport (see 7.1).
 
@@ -50,7 +48,7 @@ Note for section 3, as of 2026-10-01: MySQL runs in-cluster on the node's root v
 
 ### 3.1 Problem (not built)
 
-DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. This design was written when the data was meant to live on RDS; see the note at the end of section 2 for what a replacement means for the in-cluster MySQL.
+DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. This design was written when the data was meant to live on RDS; section 3a, after this feature, describes what a replacement means for the in-cluster MySQL today, and 3.9 revises the plan.
 
 ### 3.2 Design (not built)
 
@@ -113,6 +111,31 @@ Recorded here as the production answer, with trade-offs:
 ### 3.8 Cost (not built)
 
 No change. Auto Scaling groups and launch templates are free; there is still one instance.
+
+### 3.9 Revised plan: backups first, then the Auto Scaling group (planned, not built yet)
+
+The scoped plan is `docs/superpowers/plans/2026-10-01-self-healing-node.md`; this is its summary. Why the original 3.1 to 3.8 had to change is in the next section, which describes the node as it runs today.
+
+- **Phase 1:** CloudWatch recover and reboot alarms with an email topic, and a free uptime probe. About $0.20 a month, no downtime. The alarms cover the standalone instance only and are replaced by the group's health checks and notifications at the cutover.
+- **Phase 2:** nightly `mysqldump` to a private S3 bucket (30-day retention), plus "Ops" runbooks to back up now, check a restore in a scratch database, and restore. Under $0.05 a month, no downtime.
+- **Phase 3:** a two-way reindex/reconcile between MySQL and Redis (separate PR), pinned k3s and Flux versions, and an idempotent boot script that enforces the order MySQL, restore, Flux, migrate, app, ingest, then the Elastic IP last. It also includes a tag-targeted zram association and a Flux credential decision (preferably no write key on the node), plus a branch ruleset that limits deploy keys to `deploy`.
+- **Phase 4:** a launch template and a size-1 group at capacity 0, then a rehearsal on an isolated group with its own template and role, no Elastic IP, read-only Flux and its CronJobs suspended. Then a cutover: the old node is retagged, the new node takes the Elastic IP once its local `/readyz` passes (seconds of downtime), and the old node is stopped. A prepared rollback restarts the old node and moves the address back.
+- **Not chosen first:** a persistent data volume (best recovery point, but more failure modes and a maintenance window to move the data); daily EBS snapshots as an optional extra safety net.
+- **Owner decisions:** cost ceiling, acceptable downtime, whether the question log matters (nightly versus hourly dumps, or a persistent volume), the Flux credential, the alert address, and the go-ahead for the cutover.
+
+
+---
+
+## 3a. Where the node's state lives today
+
+Note for section 3, as of 2026-10-01: this section describes the running system, for comparison with Feature 1 above. MySQL runs in-cluster as a StatefulSet on a `local-path` volume on the node's root disk (DD1 §10.5), not on RDS as section 3 assumed, and Redis does the same. Git holds all configuration. Replacing the node today means an empty database, and the following would go with the instance:
+
+- The k3s datastore (SQLite on the root volume) and both data volumes, including the `queries` log, which is the only table not rebuilt from Git.
+- Flux's Git credential, which exists only as a Secret in the cluster.
+- The Kubernetes Secrets made by hand from SSM with `k8s/bootstrap-secrets.sh` (their values stay safe in SSM).
+- The zram association's target, which is the instance ID.
+
+Documents and chunks would be rebuilt from the corpus baked into the image by the `migrate` and `ingest` Jobs, for a few cents of embeddings; the `queries` log is lost unless the volume is moved or backed up first. Ingest skips documents whose content hash is unchanged, so a Redis index lost on its own is not rebuilt from MySQL today. The EC2 default of simplified automatic recovery moves the instance to new hardware on a failed system status check and keeps its disk and address.
 
 ---
 
