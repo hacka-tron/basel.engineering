@@ -10,11 +10,13 @@ import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { DESKTOP_QUERY, PHONE_LANDSCAPE_QUERY } from './lib/layout'
 import { useStressTest } from './hooks/useStressTest'
-import { questionForComponent, type NodeId } from './architecture'
+import { architectureNodes, questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
+import { planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
@@ -44,6 +46,10 @@ const TOPIC_CHIPS: TopicChip<Corpus>[] = [
 function apiCorpus(corpus: Corpus): ApiCorpus {
   return corpus === 'basel' ? 'about_me' : 'about_system'
 }
+
+// Component questions are sent without history (they stay answer-cache
+// eligible); Retry recognises them by their exact wording.
+const COMPONENT_QUESTIONS: ReadonlySet<string> = new Set(architectureNodes.map((node) => questionForComponent(node.id)))
 
 function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
   const seen = new Set<string>()
@@ -92,6 +98,10 @@ function App() {
   const savedSignatureRef = useRef<Partial<Record<Corpus, string | null>>>({})
   const requestInFlightRef = useRef(false)
   const pendingComponentRef = useRef<NodeId | null>(null)
+  // A question sent while an answer streams (DESIGN-002 §6.4): the current
+  // answer is stopped first, and this is asked once that stop has rendered, so
+  // its history includes the stopped answer exactly as it was saved.
+  const queuedAskRef = useRef<{ question: string; corpus: Corpus } | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   // `done.total_ms` (server-measured) spans the entire request, including
   // however long the LLM took to generate and stream the whole answer -
@@ -245,6 +255,15 @@ function App() {
     }
   }, [conversations])
 
+  // Runs after the effect above has refreshed conversationsRef, so a question
+  // sent mid-answer sees the stopped answer in its history.
+  useEffect(() => {
+    const queued = queuedAskRef.current
+    if (!queued || isStreaming || requestInFlightRef.current) return
+    queuedAskRef.current = null
+    handleAsk(queued.question, queued.corpus)
+  })
+
   // Multiple browser tabs: last write wins, and a change saved in another
   // tab refreshes that conversation here unless this tab is streaming into it.
   useEffect(() => {
@@ -319,7 +338,7 @@ function App() {
     if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system', { sendHistory: false })
   }
 
-  function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true } = {}) {
+  function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true, retry }: { sendHistory?: boolean; retry?: RetryPlan } = {}) {
     if (requestInFlightRef.current) return
     requestInFlightRef.current = true
     const controller = new AbortController()
@@ -328,7 +347,8 @@ function App() {
     // question is appended. Component questions are self-contained, so they
     // skip history (and so keep their answer-cache eligibility), but they are
     // still recorded in About This System's conversation for later follow-ups.
-    const history = sendHistory ? historyForRequest(conversationsRef.current[targetCorpus]) : []
+    // A retry sends what the failed request sent: the turns before its question.
+    const history = sendHistory ? historyForRequest(retry ? retry.before : conversationsRef.current[targetCorpus]) : []
     const now = Date.now()
     const assistantId = newMessageId()
     streamTargetRef.current = { corpus: targetCorpus, messageId: assistantId }
@@ -337,11 +357,16 @@ function App() {
     setActiveNode(null)
     setConversations((current) => ({
       ...current,
-      [targetCorpus]: [
+      // A retry keeps the failed question in place and replaces its failure
+      // reply with the new answer; otherwise the question is appended.
+      [targetCorpus]: (retry ? [
+        ...withoutFailedAttempt(current[targetCorpus], retry.userMessageId),
+        { id: assistantId, role: 'assistant', content: '', state: 'pending', createdAt: now },
+      ] : [
         ...current[targetCorpus],
         { id: newMessageId(), role: 'user', content: question, createdAt: now },
         { id: assistantId, role: 'assistant', content: '', state: 'pending', createdAt: now },
-      ].slice(-MAX_DISPLAY_MESSAGES) as ChatMessage[],
+      ]).slice(-MAX_DISPLAY_MESSAGES) as ChatMessage[],
     }))
     setIsStreaming(true)
     revealBufferRef.current = ''
@@ -431,7 +456,17 @@ function App() {
           // Partial text stays visible and is marked `error` too.
           const target = streamTargetRef.current
           if (target) {
-            const errorReply: ChatMessage = { id: newMessageId(), role: 'assistant', content: reply, state: 'error', createdAt: Date.now() }
+            const errorReply: ChatMessage = {
+              id: newMessageId(),
+              role: 'assistant',
+              content: reply,
+              state: 'error',
+              // Retry waits out the rate limit instead of hitting it again.
+              ...(event.code === 'rate_limited' && event.retry_after_s && event.retry_after_s > 0
+                ? { retryAt: Date.now() + event.retry_after_s * 1000 }
+                : {}),
+              createdAt: Date.now(),
+            }
             setConversations((current) => ({
               ...current,
               [target.corpus]: current[target.corpus].flatMap((message) => {
@@ -471,6 +506,30 @@ function App() {
     finishRequest()
   }
 
+  // Sending while an answer streams stops that answer first (DESIGN-002 §6.4),
+  // through the same path as the Stop button. The new question is asked by
+  // the queued-ask effect once the stop has rendered. A component question queued
+  // behind the stopped answer is dropped: the visitor's newer question wins.
+  function handleSend(question: string) {
+    setSelectedNode(null)
+    if (!requestInFlightRef.current) {
+      handleAsk(question)
+      return
+    }
+    queuedAskRef.current = { question, corpus }
+    pendingComponentRef.current = null
+    handleStop()
+  }
+
+  // Retry (DESIGN-002 §6.1 `error`): re-ask the failed question in place of its
+  // failure reply. Never while a request is in flight, so it can't stack calls.
+  function handleRetry() {
+    if (requestInFlightRef.current) return
+    const plan = planRetry(conversationsRef.current[corpus])
+    if (!plan) return
+    handleAsk(plan.question, corpus, { sendHistory: !COMPONENT_QUESTIONS.has(plan.question), retry: plan })
+  }
+
   function handleNewChat() {
     if (requestInFlightRef.current) return
     setConversations((current) => ({ ...current, [corpus]: [] }))
@@ -488,12 +547,17 @@ function App() {
       handleAsk(questionForComponent(id), 'system', { sendHistory: false })
     }
   }
-  // Matches Tailwind's `md` breakpoint. Drives which ArchitecturePanel /
-  // React Flow instance is mounted so only one ever exists at a time — see
-  // the comment above the desktop panel render below.
-  const isDesktop = useMediaQuery('(min-width: 768px)')
+  // Matches Tailwind's `md` breakpoint (redefined in index.css so a phone held
+  // sideways keeps the phone layout). Drives which ArchitecturePanel / React
+  // Flow instance is mounted so only one ever exists at a time — see the
+  // comment above the desktop panel render below.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const isPhoneLandscape = useMediaQuery(PHONE_LANDSCAPE_QUERY)
   const showDiagramView = !isDesktop && mobileView === 'diagram'
   const focusMode = !isDesktop && askFocused
+  // A phone held sideways is too short for the header and the diagram, so
+  // the header slides away in Diagram view (the footer stays: stress test).
+  const headerOpen = !focusMode && !(isPhoneLandscape && showDiagramView)
 
   // The diagram view is a history entry, so the browser's Back button (and
   // Escape, "Chat", or "Continue in chat") returns to the conversation.
@@ -557,6 +621,17 @@ function App() {
     }
   }, [])
 
+  // Focus rescue when the chips unmount while holding focus: on a switch to
+  // Diagram view it goes to the Diagram toggle; when the window widens past md
+  // (chips replaced by the desktop topic nav) it goes to the nav button for the
+  // current topic. Runs after the commit, so isDesktopRef and the nav are current.
+  const rescueChipFocus = () => {
+    const target = isDesktopRef.current
+      ? navRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+      : diagramButtonRef.current
+    target?.focus()
+  }
+
   const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
   // Component questions always go to About This System's conversation.
   const systemMessages = conversations.system
@@ -570,8 +645,6 @@ function App() {
     : systemMessages.slice(questionIndex + 1).findLast((message) => message.role === 'assistant')
   const selectedAnswer = selectedReply ? selectedReply.content
     : selectedNode ? 'Waiting for the current answer…' : null
-
-  const latestAnswer = messages.findLast((message) => message.role === 'assistant' && message.state !== 'pending')?.content || null
 
   const headerRef = useRef<HTMLElement>(null)
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
@@ -587,12 +660,12 @@ function App() {
   // md+ only; below md the topic is chosen with the chips above the ask box
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
-      <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
+      <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
         <button
           type="button"
           aria-pressed={corpus === 'basel'}
           onClick={() => selectTopic('basel')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
         >
           About Basel
         </button>
@@ -601,7 +674,7 @@ function App() {
           type="button"
           aria-pressed={corpus === 'system'}
           onClick={() => selectTopic('system')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
+          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
         >
           About This System
         </button>
@@ -610,8 +683,8 @@ function App() {
 
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
-      <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
+      <Collapsible open={headerOpen}>
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0 phone-landscape:py-0`}>
         {/*
           Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
           chips sit above the ask box in Chat view). The envelope sits directly
@@ -651,21 +724,22 @@ function App() {
           corpus={corpus}
           messages={messages}
           isStreaming={isStreaming}
-          onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
+          onAsk={handleSend}
           onStop={handleStop}
+          onRetry={handleRetry}
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
           replacement={showDiagramView ? (
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
               <ArchitecturePanel
                 portrait
-                fitMinZoom={0.75}
+                landscape={isPhoneLandscape}
+                fitMinZoom={isPhoneLandscape ? 0.65 : 0.75}
                 activeNode={activeNode}
                 nodeCacheStatus={nodeCacheStatus}
                 retrievedChunks={retrievedChunks}
                 selectedNode={selectedNode}
                 answerText={selectedAnswer}
-                latestAnswer={latestAnswer}
                 onContinueInChat={() => showMobileView('chat')}
                 onInspect={handleInspectComponent}
                 workerPods={shownWorkerPods}
@@ -674,7 +748,7 @@ function App() {
             </div>
           ) : undefined}
           inputTopic={isDesktop || showDiagramView ? undefined : (
-            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={() => diagramButtonRef.current?.focus()} />
+            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip

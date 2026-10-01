@@ -10,7 +10,7 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 
 1. **Bring KEDA back** once zram has had a day of normal traffic (not before 2026-10-02) and **Ops · Diagnose** shows headroom (memory PSI low, little `si`/`so`, no Slow SQL bursts, free memory comfortably above the stress test's 512 MiB gate). Sequence, all through the runbooks with owner approval clicks: **Ops · Flux suspend or resume** (resume) `helmrelease-keda`, then `keda`, then `keda-scaling` (if it was suspended); then **Ops · KEDA on or off** `on (1)`; then **Ops · Diagnose** again. The HelmRelease is in a failed state from the outage's install timeout, so watch that the resume actually upgrades it (a **Flux reconcile** may be needed). `k8s/README.md`'s "…incident over" row lists KEDA on first; reconcile the two orders when doing it and fix the README to match what worked. Update SNAPSHOT, the deep dive ("Stress test and KEDA autoscaling", "Operations") and the status index once KEDA is back.
 2. **Answer thinness:** the stress-test answer omitted the 512 MiB rule and the 5-minute cooldown even though both chunks were retrieved. Tune the answer prompt (prompt version bump invalidates cached answers) and re-ask the stress-test question live.
-3. **Landscape phone layout** (owner request; item under Feature work).
+3. **Landscape phone layout:** built on `feature/landscape-phone` (PR #100 open, not merged; decisions marked proposed in `MOBILE_DESIGN.md`). Owner to review the before/after compare page (status report `2026-10-01-landscape-phone.md`) and the phone preview's new landscape frames; then the usual review gate and merge.
 
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 
@@ -18,7 +18,6 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 - **"About Basel can't answer" → fall back to About This System:** proposed, **NOT approved** by the owner. Don't build it until the owner says so.
 - **Optional chat bubble tightening** (less padding, more Claude-like): offered, **not approved**.
 - **Contact clipboard-failure fallback layout:** #78 shows the address in an absolutely positioned bubble for 5s when copying fails (checked at 320px in the preview). Still worth one look on a real phone, where the clipboard can actually fail.
-- **ops `redact()` multiline values:** still open (checked 2026-10-01); see Infrastructure & reliability.
 - **iOS focus zoom on a real phone:** #77's iOS-only `maximum-scale=1` is not verified on a real iPhone. Ask the owner to try it.
 - **First change-type Ops runbook approval prompt:** not yet observed live since the per-action split (#68); confirm the `ops` approval prompt appears on the first non-diagnose run.
 - **Leftover branches for the owner to decide on (delete or keep):** `debug/oidc-token-claims` (local only), `docs/claude-session-handoff`, `fix/ghcr-pat-auth`, `docs/orchestration-codex-review` (local and on origin). Stale merged branches on origin can also go.
@@ -26,7 +25,6 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 **Roadmap after that** (owner's earlier list; details in the sections below):
 
 - Release pipeline hardening (manual-dispatch build-number trust, `sync-deploy-branch` push race).
-- Chat UX leftovers: Retry on error replies, typing while an answer streams, Up-arrow recall.
 - Security pass: IP-hash salt and trusted proxy CIDRs verified in production, Terraform preview credential audit.
 - Self-healing node (ASG + EIP reassociation, M3).
 - Google Drive content pipeline (M4).
@@ -94,16 +92,17 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs
 
-- **Mobile Diagram view: the "Details / N chunks" toggle shows the latest chat answer when no component is selected (owner, 2026-10-01).** Opening the details panel under the portrait diagram before tapping any component shows the most recent chat answer and its chunks, which reads as unrelated. Owner's suggestion: disable the toggle (or keep it closed and non-interactive) until a component is selected, and show a short "Select a component" hint instead. Look at `frontend/src/components/ArchitecturePanel.tsx` (portrait readout/collapse state) and how `retrievedChunks` and the selected node feed it. Keep 44px targets and an accessible disabled state (`aria-disabled`, focusable or not, decided consistently). Not implemented yet; pick up when the owner asks.
-
 ## Feature work (priority)
 
 Owner wants this worked first, ahead of the security/infra/data-pipeline groups below. Done and removed on 2026-10-01: conversational memory and per-topic chats (#41), Stop/auto-scroll/persistence (#48), suggested-question chips hidden once a conversation starts, hover-to-reveal node technology on the diagram (#33).
 
+- **Diagram view: cue when a typed answer is ready (from the #90 review).** Since #90, an answer to a question typed in mobile Diagram view appears only in Chat, so a sighted visitor watches the nodes light up and then sees nothing. Idea: a small "Answer ready · View in chat" link near the Chat|Diagram switch once the answer completes. Owner decision before building.
+
 - **Answer thinness (prompt tuning).** See RESUME HERE item 2: answers drop specifics (numbers, thresholds, cooldowns) that the retrieved chunks contain. Tune the prompt toward including the concrete facts, bump the prompt version, re-ask live.
-- **Phone rotated to landscape: adjust the mobile layout.** Header name shortening (Basel A-R), footer (stats / + / capacity icon), the Chat|Diagram view and the diagram's portrait graph were all tuned for portrait; check 667x375, 740x360 and 896x414 landscape and fix what looks off (e.g. short height squeezing the message area, the diagram choosing the portrait layout in landscape). Use the phone preview (`npm run phone`; add landscape frames) rather than a shrunk window. Owner request 2026-09-30. Not started.
-- **Minor cleanups from the #78 review (Opus, left as minors):** (a) `frontend/src/App.tsx` topic nav still carries mobile-only classes (`order-3 w-full justify-center`, `min-h-11` / `md:min-h-0`) although the nav now renders only on desktop; remove them, keeping desktop pixel-identical. (b) If a topic chip has focus when the window widens past md (e.g. a tablet rotated with keyboard focus), the chips unmount and focus goes to the hidden Diagram toggle, so it falls to `body`; move focus to the desktop topic nav instead.
-- **Live chat UX leftovers (M3, DD2 §6.4):** input enabled while an answer streams (sending stops the current answer), Up-arrow recall of the last question, and a Retry control on error replies.
+- **Phone rotated to landscape: adjust the mobile layout.** Header name shortening (Basel A-R), footer (stats / + / capacity icon), the Chat|Diagram view and the diagram's portrait graph were all tuned for portrait; check 667x375, 740x360 and 896x414 landscape and fix what looks off (e.g. short height squeezing the message area, the diagram choosing the portrait layout in landscape). Use the phone preview (`npm run phone`; add landscape frames) rather than a shrunk window. Owner request 2026-09-30. **Built, PR open (2026-10-01), pending owner review:** see `project/status/2026-10-01-landscape-phone.md`. Follow-ups: (a) check the real on-screen keyboard in landscape on a phone; if the message area is too short while typing, also slide the pipeline strip away in focus mode. (b) At 568x320 with the details open the graph pans slightly; centring the refit on the selected component would avoid that if the owner minds.
+- **Chat | Diagram segments are 40px tall (pre-existing, found in the #100 review).** `PipelineStrip.tsx` draws the two segments `h-10` inside a 2px-padded group and extends the tap area to 48px with a pseudo-element; the visible box is under the 44px rule. Decide whether the pseudo-element is enough or make the segments `h-11`.
+- **Landscape 568x320 with details open (from #100):** the details panel takes 40vw, so the three-row graph (zoom floor 0.65) pans slightly and clips the outer columns at the smallest landscape phone. Options: centre the refit on the selected component, narrow the panel at that width, or accept it.
+- **Chat UX follow-ups (from the #93 review):** (1) a reload during a retry loses the failure reply and the Retry button, because the conversation is saved before the new answer settles; (2) screen-reader announcements: during stop-and-send the live region holds the stopped partial for one render, there is no "answer stopped" announcement, and nothing announces that Retry became available after a rate-limit countdown; (3) on phones focus falls to `<body>` after Retry (deliberate, so the keyboard doesn't pop up; revisit); (4) stop-and-send looks the same as Send to sighted users, only the accessible name changes (owner design call); (5) component questions are recognised by wording only (`COMPONENT_QUESTIONS` in `frontend/src/App.tsx`); (6) no tests for the App wiring (queued-ask effect, `isCurrent` guard, retry wiring): consider extracting a hook or adding a component-test setup.
 
 ## Security
 
@@ -122,7 +121,6 @@ Code-level pass done 2026-10-01 (`project/status/2026-10-01-security-pass.md`): 
 ## Infrastructure & reliability
 
 - **Bring KEDA back** (RESUME HERE item 1). KEDA is suspended and scaled to 0 since the 2026-09-30 incident.
-- **ops `redact()`: multiline secret values (key on one line, value on the next) are not masked; process whole outputs, not line by line.** `infra/modules/ops/scripts/lib.sh` runs `sed` per line, so `password:\n  value` leaks the value. Make it handle whole outputs, and extend `infra/modules/ops/tests/redact-test.sh`. (Checked 2026-10-01: `redact()` is still a per-line `sed`, so this is open.)
 - **Release pipeline hardening:** a manual `workflow_dispatch` release run against an old ref could mint a higher `build-N` and get deployed (build number alone doesn't prove current-`main` provenance); `sync-deploy-branch.yml` and Flux both push to `deploy` with no retry, so a race could drop a sync. (The release path filter was fixed in #51; migrate-before-api ordering in #47; ingest-after-app in #49.)
 - **Release-time memory pressure and stalled chats.** Mitigated by #47 (probe timeouts, `maxSurge: 0`, graceful drain), #49 (ingest after rollout), #48 (client watchdog and Stop) and zram (#55). Still worth a check on the first releases after KEDA returns: probe timeouts, swap in/out, and whether an in-flight SSE request survives a pod replacement.
 - **M3 (DD2) remainder:** self-healing node (ASG + Elastic IP reassociation). Also §7.5 scripted `curl -N` timing check through Cloudflare after each deploy, and TTFT logging (`queries.ttft_ms`, §9.3).
