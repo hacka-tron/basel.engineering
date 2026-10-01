@@ -5,7 +5,8 @@
 
 ## TL;DR
 
-- A manual **Release** run can no longer deploy an old commit. It is refused unless it runs on `main` and builds `main`'s current head. Before, any manual run (old ref, feature branch, or a run that queued while a merge landed) got the highest `build-N` and Flux would have deployed it.
+- A manual **Release** run on `main` that no longer builds `main`'s head (for example one that queued while a merge landed) is now refused by a check inside the workflow. Before, it got the highest `build-N` and Flux would have deployed it.
+- **That check only protects refs that contain it.** A manual run uses the `release.yml` of the branch or tag it was started on, so the 15 older branches on origin, and any tag, have no check. **Owner action (closes the old-ref hole): GitHub → Settings → Environments → `release` → Deployment branches and tags → Selected branches and tags → `main` only.** Until that is set, a manual run on an old branch can still deploy it.
 - The **main → deploy sync** no longer loses a race with Flux. When Flux pushes a tag bump between the sync's fetch and push, the sync re-fetches, re-merges and pushes again (up to 5 attempts). It never force-pushes, so Flux's commit is never dropped.
 - Both behaviours live in small scripts with offline tests against local bare git repositories, run in CI.
 
@@ -51,9 +52,18 @@ flowchart LR
 - Mutation check: with `--force` added to the push, 11 checks fail; with retries disabled, 6 fail. So the tests catch both regressions.
 - Not exercised live: a real manual Release run, and a real race on GitHub. Neither was triggered (agents may not dispatch workflows).
 
+## Owner action before or after merge
+
+**GitHub → Settings → Environments → `release` → Deployment branches and tags → Selected branches and tags → add `main` only.** This is the item that actually closes the old-ref hole: a manual run on any other branch or tag is then refused by GitHub before the job starts, so it never gets the release role's credentials, whatever that ref's `release.yml` says. Push releases are unaffected (they run on `main`). It can be done before or after merging; the in-workflow check is the second layer for runs on `main`.
+
 ## What review caught
 
-Pending.
+| Round | Finding | Resolution |
+|---|---|---|
+| R1 (Opus) | **Important:** `workflow_dispatch` runs the selected ref's `release.yml`, so branches and tags cut before this PR have no provenance step; the `release` environment has no branch policy and the release role trusts any `environment:release` subject, so an old-ref dispatch still pushes the highest `build-N`. Docs overstated the fix. | Docs corrected (in-workflow check covers refs that contain it; the environment branch policy is the gate). Owner action added above. IAM-trust tightening investigated and left as a follow-up (see Open items). |
+| R1 | Minor: docs said a re-run of an old manual run mints the highest number; a re-run keeps its `run_number`. | Reason corrected in `infra/CI.md` and `release.yml`. |
+| R1 | Minor: a re-run of an old push run moves `:latest` to the old commit (mutable ECR tags). | Noted in `infra/CI.md`; production unaffected, Flux uses `build-N` only. |
+| R1 | Sync half: sound. | No change. |
 
 ## Operational notes & risks
 
@@ -70,4 +80,6 @@ Pending.
 
 ## Open items
 
-- None blocking. Possible later: a scheduled check that `deploy` contains `main`, so an exhausted sync is noticed without watching Actions.
+- **Owner:** restrict the `release` environment to `main` (above).
+- **Follow-up, not in this PR (needs owner go-ahead and the Bootstrap workflow):** also bind the release role's trust to `main` in code. As far as AWS documents, IAM trust policies for a generic OIDC provider can condition only on a few registered claims (`aud`, `sub`, and similar), not on GitHub's `ref` or `job_workflow_ref`, so a `ref` condition can't simply be added to `release_trust` (needs confirming before relying on it either way). The code route is GitHub's OIDC subject customization (a repo setting) to include `ref` in the subject, then a trust `sub` that pins `environment:release` plus `ref:refs/heads/main` (exact format to be read off a real token). That changes the subject format for every role in `infra/bootstrap` at once and interacts with the immutable-subject format, so it needs its own careful PR. The environment branch policy gives the same protection with one setting.
+- Possible later: a scheduled check that `deploy` contains `main`, so an exhausted sync is noticed without watching Actions.

@@ -2,7 +2,10 @@ name: Release
 
 on:
   # Manual runs are for rebuilding main's current head (e.g. after a failed
-  # or flaky run); any other commit or ref is refused, see the provenance step.
+  # or flaky run). The provenance step refuses any other commit or ref, but
+  # only on refs whose release.yml contains it: the real gate for old
+  # branches/tags is the `release` environment restricted to `main`
+  # (owner setting, see infra/CI.md "Release and the deploy branch").
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -48,7 +51,9 @@ jobs:
       # main and build main's current head, or it would mint the highest
       # number for a stale commit and Flux would roll production back to it.
       # Checked here, before AWS credentials or the build; push runs skip it.
-      # A re-run of an old manual run keeps its old SHA and is refused too.
+      # (A re-run keeps its run_number, so it can't outrank newer builds; an
+      # old manual run's re-run is refused anyway, its SHA no longer being
+      # main's head.)
       - name: Check release provenance
         env:
           EVENT_NAME: ${{ github.event_name }}

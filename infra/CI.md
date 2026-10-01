@@ -56,19 +56,42 @@ Two safeguards keep that honest:
 
 - **Manual runs build only `main`'s current head.** Actions → Release → Run
   workflow is for rebuilding after a failed or flaky run. Because N grows with
-  every run whatever commit it builds, a manual run on another branch or tag,
-  or on a `main` commit that is no longer the head (for example a run that
-  queued behind another release while a merge landed, or a re-run of an old
-  manual run), would get the highest number and Flux would roll production
-  back to it. The first step (`.github/scripts/release-provenance.sh`)
-  refuses such runs before AWS credentials are requested: it requires
-  `github.ref` to be `refs/heads/main` and `github.sha` to equal
-  `git ls-remote origin refs/heads/main`. Equality, not "is an ancestor of
-  main": every old release is an ancestor. If it refuses, start a new run on
-  `main`. Push runs skip the check: they only fire on `main`, and the
-  `release-main` concurrency group runs them in order, so a newer commit
-  always gets a higher number. (Re-running an old push run re-pushes its own,
-  lower, `build-N`, which Flux ignores.)
+  every new run whatever commit it builds, a manual run on another branch or
+  tag, or on a `main` commit that is no longer the head (for example a run
+  that queued behind another release while a merge landed), would get the
+  highest number and Flux would roll production back to it. Two layers stop
+  that:
+  - **The gate: the `release` environment's deployment-branch policy (owner
+    setting).** GitHub → Settings → Environments → `release` → Deployment
+    branches and tags → Selected branches and tags → `main` only. A manual
+    run executes the `release.yml` of the ref it was started on, so any
+    branch or tag cut before the in-workflow check existed has no check at
+    all; and the release role's OIDC trust matches only
+    `...:environment:release`, which any ref can claim while the environment
+    is unrestricted. Restricting the environment to `main` is what refuses
+    those runs (GitHub never issues the `release` environment's token, so
+    the role can't be assumed). **Until the owner sets it, a manual run on
+    an old branch or tag can still deploy that ref.**
+  - **The in-workflow check, for refs that contain it.** The first step
+    (`.github/scripts/release-provenance.sh`) refuses a manual run before
+    AWS credentials are requested unless `github.ref` is `refs/heads/main`
+    and `github.sha` equals `git ls-remote origin refs/heads/main`.
+    Equality, not "is an ancestor of main": every old release is an
+    ancestor. With the branch policy in place, this is what still catches
+    a run on `main` whose commit is no longer the head. If it refuses,
+    start a new run on `main`.
+
+  Push runs skip the check: they only fire on `main`, and the `release-main`
+  concurrency group runs them in order, so a newer commit always gets a
+  higher number. A **re-run** of any earlier run keeps its `run_number`
+  (only `run_attempt` changes), so it re-pushes its own `build-N`, which
+  can't outrank newer builds; a re-run of an old manual run is refused
+  anyway, because its commit is no longer `main`'s head. One side effect
+  remains: a re-run of an old push run also moves `:latest` (and its SHA
+  tag) to that old commit, because ECR tags are mutable
+  (`infra/modules/registry`). Production is unaffected, since Flux selects
+  only by the numeric `build-N` policy, but don't treat `:latest` as "what
+  is deployed".
 - **The deploy-branch sync retries instead of losing a race.**
   `sync-deploy-branch.yml` merges `main` into `deploy` on every push to
   `main`; Flux's `ImageUpdateAutomation` commits tag bumps to the same
