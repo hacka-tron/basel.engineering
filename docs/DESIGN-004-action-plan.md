@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Draft v1 |
+| **Status** | Milestones 0 to 2 are done and live (apart from Phase 7 polish). Milestone 3 is partly shipped. Milestone 4 is deferred. |
 | **Owner** | Basel |
-| **Last updated** | 2026-09-28 |
+| **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` ("DD1"), `DESIGN-002-followups.md` ("DD2"), `DESIGN-003-ingestion.md` ("DD3") |
 
 ---
@@ -27,7 +27,7 @@ DD1, DD2 and DD3 specify the system. This document is the execution plan: what g
 |---|---|---|
 | M0 | — (new) | Accounts, tooling, and repo ready to build |
 | M1 | DD1 Phases 0–3 | Full system running locally via Docker Compose: chat, RAG, streaming, live architecture panel, mock and real data |
-| M2 | DD1 Phases 4–7 (edge adjusted) | Live at `basel.engineering` on AWS: k3s on EC2, RDS, Redis, Bedrock, KEDA autoscaling, CI/CD |
+| M2 | DD1 Phases 4–7 (edge adjusted) | Live at `basel.engineering` on AWS: k3s on EC2, in-cluster MySQL (not RDS), Redis, Bedrock, KEDA autoscaling (installed, suspended since 2026-09-30), CI/CD, push-button ops runbooks. Phase 7 polish is not started. |
 | M3 (shipped part) | DD2 | Conversational memory, chat UX polish, streaming heartbeats and server-side Stop |
 | M3 (not built yet) | DD2 | Self-healing (ASG), post-deploy streaming check in CI |
 | M4 | DD3 | Production content pipeline: author "About Basel" in Google Docs, S3/SQS event pipeline, reconciliation, blue-green re-embedding |
@@ -40,7 +40,7 @@ Each milestone ends with something real: M1 ends with a working demo on your lap
 
 DD1 and DD2 have been updated in place to specify Cloudflare (already managing DNS for `basel.engineering`) as the TLS/edge layer, replacing CloudFront + S3 — see DD1 §5.1, §5.3, §6.1, §10.3, §11, §14, and DD2 §7. No separate deviation to track here; the source designs are current.
 
-The short version: Traefik on the EC2 node serves both the built frontend and `/api/*` directly (single origin, no S3), the security group allowlists Cloudflare's published IP ranges instead of CloudFront's prefix list, and a Cloudflare Cache Rule bypasses caching on `/api/*` so the SSE stream isn't buffered (DD2 §7.3).
+The short version: Traefik on the EC2 node routes both the site and `/api/*` to the `api` Service, which serves the built frontend from its image (single origin, no S3), the security group allowlists Cloudflare's published IP ranges instead of CloudFront's prefix list, and a Cloudflare Cache Rule bypasses caching on `/api/*` so the SSE stream isn't buffered (DD2 §7.3).
 
 ---
 
@@ -52,7 +52,7 @@ Owner tasks — manual, console/CLI work that can't be delegated to Claude Code.
 - [x] Install and configure the AWS CLI locally. Authentication was verified; needed for local Bedrock calls in M1 Phase 2 and for Terraform later.
 - [x] Confirm 512-dimension Titan Text Embeddings V2 access in `us-east-1`. A small real call returned a 512-dimensional vector on 2026-09-29. A prior nonstreaming Haiku call succeeded; a later `converse_stream` attempt reported missing model use-case details, so streaming access still needs verification before Phase 2 acceptance.
 - [x] Set up AWS Budgets before deploying resources: `Glassbox-Monthly` is set to $20/month, per the owner's updated limit. The previous session recorded actual-spend alerts at 50/80/100% and a forecast alert; the budget amount was verified again by CLI.
-- [ ] **Decision checkpoint before M2**: AWS account is currently on the Free plan, which auto-closes the account after 6 months or when credits run out — this would take the live site down mid-search with no warning beyond the budget alerts. Decide Free vs. Paid before the first `terraform apply` against real AWS resources in M2.
+- [ ] **Decision checkpoint before M2**: AWS account is currently on the Free plan, which auto-closes the account after 6 months or when credits run out — this would take the live site down mid-search with no warning beyond the budget alerts. Decide Free vs. Paid before the first `terraform apply` against real AWS resources in M2. Still open: M2 went live on the current plan without this decision.
 - [ ] Confirm Cloudflare proxy mode (orange-cloud/proxied) is intentional for `basel.engineering`, and that DNS is otherwise untouched (no conflicting records).
 - [ ] Local tooling: Docker (for Compose), Node.js, Python 3.12. No Kubernetes tooling needed locally (decided in section 6).
 
@@ -77,12 +77,12 @@ Unchanged from DD1 §17 Phases 0–3, run entirely with Docker Compose (MySQL, R
 
 | Phase | Work | Done when |
 |---|---|---|
-| 4 | Terraform: `network` (VPC, no NAT), `compute` (EC2 t4g.small + k3s user_data), `database` (RDS MySQL), `secrets` (SSM), `budgets`. **No `edge` module.** Cloudflare DNS record → Elastic IP. Security group scoped to Cloudflare's IP ranges. Traefik serves static frontend + `/api/*`. K8s base manifests, RBAC, NetworkPolicies, manual first deploy | `https://basel.engineering` serves the site and answers questions |
-| 5 | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI | Stress test visibly scales workers 1→3 and back |
-| 6 | GitHub Actions (GHCR images), Flux bootstrap, frontend deploy step (now: sync built files onto the node instead of S3+CloudFront invalidation — e.g., include the frontend build in the API/Traefik image, or a small `scp`/`rsync` step in the deploy workflow), plan-on-PR, post-deploy Cloudflare streaming check (section 3.3) | Merging to `main` deploys without touching the server |
-| 7 | README with screenshots, footer stats, suggested questions tuned, load test numbers recorded | Polish complete |
+| 4 (done) | Terraform: `network` (VPC, no NAT), `compute` (EC2 t4g.small + k3s user_data), `secrets` (SSM), `registry` (ECR), and an `edge` module after all (Cloudflare DNS record → Elastic IP, `/api/*` cache rule). MySQL runs in-cluster instead of a `database` (RDS) module; the AWS Budgets alert was set up outside Terraform instead of a `budgets` module. Security group scoped to Cloudflare's IP ranges. Traefik routes the site and `/api/*` to the API, which serves the frontend. K8s base manifests, RBAC, NetworkPolicies, manual first deploy | `https://basel.engineering` serves the site and answers questions |
+| 5 (done) | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI. KEDA has been suspended since the 2026-09-30 memory incident, so the stress test plays its simulation for now | Stress test visibly scales workers 1→3 and back |
+| 6 (done) | GitHub Actions building images to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation onto a `deploy` branch, the frontend build baked into the API image, Terraform plan-on-PR with approval-gated apply, the bootstrap pipeline and the "Ops · ..." runbooks. The post-deploy Cloudflare streaming check is not built yet | Merging to `main` deploys without touching the server |
+| 7 (not started) | README with screenshots, footer stats, load test numbers recorded | Polish complete |
 
-I did **not** design the exact frontend-delivery mechanism for phase 6 in detail (options: bake the static build into the API container image and let Traefik serve it from a volume, or a tiny separate static-file container in the same pod/deployment) — worth a quick decision when you reach that phase, not now.
+Frontend delivery (decided in Phase 6): the static build is baked into the API image and FastAPI serves it at `/`; there is no separate static-file container.
 
 Local dev stays exactly as in M1 for the whole project — nothing in M2 changes the Docker Compose loop.
 
@@ -107,19 +107,18 @@ Build when hand-editing Markdown files and redeploying to update "About Basel" c
 
 ## 9. Cost model (updated)
 
-DD1 §14's baseline is ~$31–36/month + LLM (already updated there) — CloudFront/S3 were already near-$0 in the original table, so removing them just removes Terraform complexity, not meaningful cost. No Route 53 hosted zone cost either, since DNS stays on Cloudflare.
+DD1 §14 is the current cost model. CloudFront/S3 were already near-$0 in the original table, so removing them just removed Terraform complexity, not meaningful cost. No Route 53 hosted zone cost either, since DNS stays on Cloudflare. RDS was dropped too: MySQL runs in-cluster (DD1 §10.5).
 
 | Item | Monthly |
 |---|---|
-| EC2 `t4g.small` (24/7) | ~$12.30 |
+| EC2 `t4g.small` (24/7) | $0 during the AWS T4g free trial (through Dec 31 2026); ~$12.30 after |
 | EBS 20 GB gp3 | ~$1.60 |
 | Public IPv4 (Elastic IP) | ~$3.65 |
-| RDS `db.t4g.micro` single-AZ (24/7) | ~$11.70 |
-| RDS storage 20 GB | ~$2.30 |
+| MySQL (in-cluster, not RDS) | $0 |
 | Cloudflare (DNS + proxy + TLS) | $0 |
 | Bedrock embeddings | pennies |
 | Bedrock LLM (capped at 100 answers/day) | ~$1–5, worst case ~$15 |
-| **Baseline total** | **~$31 to $36 + LLM** |
+| **Baseline total** | **~$5 to $6 + LLM during the EC2 trial, ~$17 to $18 + LLM after** |
 
 Same credit/runway math as DD1 §14 applies — and it's tied directly to the Free-vs-Paid decision flagged in section 4.
 
@@ -129,8 +128,8 @@ Same credit/runway math as DD1 §14 applies — and it's tied directly to the Fr
 
 | Decision | From | Status |
 |---|---|---|
-| AWS account: Free vs. Paid | New | Must decide before M2 (section 4) |
+| AWS account: Free vs. Paid | New | Still open; M2 went live on the current plan (section 4) |
 | Cloudflare origin-header injection (Worker) vs. IP-range-only origin protection | New (section 3.1) | IP-range-only is sufficient for M2; revisit if abuse becomes a concern |
-| Frontend delivery mechanism on the node (baked into image vs. separate static container) | New (section 6) | Decide at Phase 6 |
+| Frontend delivery mechanism on the node (baked into image vs. separate static container) | New (section 6) | Resolved: baked into the API image |
 | Name: Glassbox or other | DD1 §19 | Owner's call, unchanged |
-| Keep RDS after credits run out | DD1 §19 | Revisit based on job-search status, unchanged |
+| Keep RDS after credits run out | DD1 §19 | Resolved: RDS was never used; MySQL runs in-cluster (DD1 §10.5) |

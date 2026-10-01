@@ -1,6 +1,6 @@
 # Glassbox Design Doc 005: RAG quality and validation
 
-**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned.
+**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned, except where a heading says built: phases 1 and 2 of the plan (the golden set, free answer graders and the retrieval eval at k=8) shipped in PRs #97 and #95, and the report-only stale-document sweep (part of phase 6) in PR #101.
 **Plan:** `docs/superpowers/plans/2026-10-01-rag-quality.md`.
 **Replaces:** the BACKLOG "Answer thinness (prompt tuning)" item, which becomes phase 5 of the plan.
 
@@ -10,32 +10,32 @@ Glassbox's retrieval is decent (Titan recall@5 0.87 at the document level), but 
 
 1. **The prompt asks for thin answers.** It says "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list". The stress-test answer dropped the 512 MiB rule and the 5-minute cooldown even though both sit in one retrieved chunk (`docs/architecture/deep-dive.md`, section "Stress test and KEDA autoscaling"). That is the prompt doing what it was told.
 2. **The About This System corpus is 40% test code.** 307 of the 761 About This System chunks come from `services/tests/`, and they outrank the real sources: the rate-limit and budget questions in the eval set retrieve three test files and miss `DESIGN.md` and `ask.py` entirely. The six historical plan files under `docs/superpowers/plans/` add stale statements on top.
-3. **Nothing measures answers.** The eval scores retrieval only (document-level recall@5 and MRR, at k=5 while production uses k=8), it is manual, and the baseline predates most of the current corpus. Faithfulness, completeness (the thinness problem), abstentions, planned-versus-live correctness and multi-turn are not measured at all.
+3. **Nothing measured answers.** At the time of writing the eval scored retrieval only (document-level recall@5 and MRR, at k=5 while production uses k=8), it was manual, and the baseline predated most of the current corpus. Faithfulness, completeness (the thinness problem), abstentions, planned-versus-live correctness and multi-turn were not measured at all. Since then the golden set, free graders and k=8 retrieval metrics have shipped (section 2.3), but no paid answer run has happened yet.
 
 The planned work (not built yet) is to build a small validation harness first, then make cheap, measured changes in this order: the prompt, corpus hygiene, structure-aware chunks with heading breadcrumbs, and hybrid BM25 plus vector search with reciprocal-rank fusion. A paid reranker, LLM-generated contextual chunks, and a Redis or embedding-model upgrade are not worth it at this scale yet (section 7).
 
-## 2. Current state (as of `main` 2484403)
+## 2. Current state (as of `main` 2484403, updated 2026-10-01 for PRs #95, #97 and #101)
 
 ### 2.1 Pipeline map
 
 | Step | What it does today | Where |
 |---|---|---|
-| Sources | `about_me`: 5 Markdown files in `corpus/about-me/` (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` (**761 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested, although DESIGN.md §6.4 lists `frontend/src/architecture.ts`. | `ingest/scanner.py:11`, `:77-95` |
+| Sources | `about_me`: 5 Markdown files in `corpus/about-me/` (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` (**761 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested (DESIGN.md §6.4 used to list `frontend/src/architecture.ts`; it now says the scanner skips `frontend/`). | `ingest/scanner.py:11`, `:77-95` |
 | Secrets | Path denylist plus AWS-key, private-key and high-entropy heuristics; 10 files quarantined locally. | `ingest/scanner.py:34-63` |
 | Chunking | Markdown: split on headings, then **merge consecutive sections until about 300 to 500 words**, sliding 450-word windows with 50-word overlap for long sections. Code: one chunk per top-level def/class (median 48 words; the largest is 2,405 words). Terraform: per top-level block. YAML: per document. | `ingest/chunkers/markdown.py:48-75`, `chunkers/code.py`, `chunkers/terraform.py`, `chunkers/yaml_doc.py` |
 | Chunk text | Embedded **raw**: no file path, document title or heading breadcrumb. A split window of a long section loses its heading. | `ingest/run.py:134-135` |
 | Embedding | Titan Text Embeddings V2, 512 dimensions, normalized question text. | `providers/bedrock.py`, `api/ask.py:515` |
 | Index | Redis Stack **7.2** (`redis-stack-server:7.2.0-v11`), `idx:chunks` HNSW cosine, fields `corpus` TAG, `model` TAG, `vector`. **No TEXT field**, so no lexical search; chunk text lives only in MySQL. | `ingest/redis_index.py:23-46`, `k8s/base/redis-statefulset.yaml:19` |
 | Index migration | `ensure_index` checks only whether the `model` attribute exists and returns early when it does, so it adds at most that one field to an existing index. | `ingest/redis_index.py:10-50` |
-| Stale files | Documents whose source file was deleted or renamed are **never removed** from MySQL or Redis; only a changed document's old chunks are replaced. | `ingest/run.py:160-188` |
-| Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 describes an "optional light rerank (score threshold, dedupe by document)" that was never built. | `retrieval/search.py:11-56`, `worker/main.py:240` |
+| Stale files | After a full scan, documents whose source file was deleted or renamed are listed per corpus and model and **logged only** (`GLASSBOX_INGEST_SWEEP=report`, the Job's setting since PR #101). Deleting them needs `apply`, which production does not use yet (an owner decision). `--clear --corpus X` wipes one corpus and model by hand. | `ingest/sweep.py`, `ingest/run.py` |
+| Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 now lists that light rerank (score threshold, dedupe by document) as unbuilt. | `retrieval/search.py:11-56`, `worker/main.py:240` |
 | Multi-turn | Follow-ups are rewritten into a standalone query by Nova Lite (60 tokens) and retrieval uses the rewrite; the answer prompt gets the original question plus up to 6 messages / 4,000 characters of history. | `api/ask.py:99-116`, `:480-507` |
 | Prompt | Numbered sources `[n] path: text`; headings, list items and sentences that name unshipped work get a status prefix (the `PLANNED_MARK` constant), chosen by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 gets a hard-coded label. Instructions include **"Use two or three concise sentences"** (`:275`) and **"Do not list every detail unless the question asks for a list"** (`:291`). No bracketed citations in the answer (the UI lists sources). | `api/ask.py:65-74`, `:227-293`; system prompt `providers/base.py:17-29` |
 | Generation | Nova Lite ConverseStream, `maxTokens` 400, temperature 0.2. `BedrockLLMProvider.generate` rejects any `max_tokens` above 400 with a `ValueError` (a test pins this). | `api/ask.py:710`, `providers/bedrock.py:104-105`, `:117`; `services/tests/test_bedrock_providers.py:101` |
 | Abstention | Canonical sentence "I don't know from what I have."; exact and loose detectors; abstentions never cached; `done.abstained`. | `providers/base.py:14`, `:64-92` |
 | Answer cache | Semantic cache, cosine ≥ 0.95, 24h TTL, first questions only, keyed by corpus version, embedding model, LLM model and prompt version `v13`. Prompt-version bump invalidates everything; the `warm-answers` CronJob refills suggested questions (≤ 10 LLM calls/day). | `cache/answer.py:14-15`, `api/ask.py:59`, `:475` |
 | Query log | `queries` stores question, chunk ids, rewrite, timings, tokens. **The answer text is not stored**, so live answers cannot be reviewed afterwards. | `db/models.py:61-80` |
-| Eval | 30 questions (15 per corpus), expected **source files**; embeds each question and calls `search_chunks` at **k=5**; recall@5 and MRR; fails on a >5-point recall drop; refuses to run paid without `GLASSBOX_EVAL_ALLOW_PAID=1`. Manual, not in CI (DESIGN.md §15 says CI; that is drift). | `eval/run_eval.py:29-158`, `eval/questions.yaml` |
+| Eval | Retrieval (`run_eval.py`, PR #95): the 75 `eval/golden.yaml` cases at the production **k=8**; file-level recall@5/MRR (continuity), recall@8, chunk-level recall@8/MRR from gold snippets, and noise@8, per corpus and category; refuses to run paid without `GLASSBOX_EVAL_ALLOW_PAID=1`. Answers (`run_answers.py` and `graders.py`, PR #97): free deterministic graders, needs `--paid` as well; no paid run yet. Both are manual; CI runs their unit tests, dataset validation and a fake-provider end-to-end run. | `eval/run_eval.py`, `eval/run_answers.py`, `eval/graders.py`, `eval/golden.yaml` |
 
 ### 2.2 What the Titan baseline shows
 
@@ -52,13 +52,13 @@ Document-level scoring is also lenient: `docs/DESIGN.md` counts as a hit whichev
 
 | Property | Measured today? |
 |---|---|
-| Retrieval recall/MRR (document level, k=5) | Yes, manually, stale baseline |
-| Retrieval at production k=8, chunk-level hits, noise share (tests/plans in the top k) | No |
+| Retrieval recall/MRR (document level, k=5) | Yes, manually, stale baseline (v1 format) |
+| Retrieval at production k=8, chunk-level hits, noise share (tests/plans in the top k) | Yes, manually since PR #95; no stored baseline in the new format yet |
 | Faithfulness (claims supported by the sources) | No (only ad-hoc live checks recorded in AGENT_HANDOFF) |
-| Completeness / key facts (the thinness problem) | No |
-| Correct abstention on unanswerable questions; no false abstention | No (unit tests cover the detector only) |
-| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`), not for answers |
-| Multi-turn rewrite quality | No |
+| Completeness / key facts (the thinness problem) | Grader exists (`fact_coverage`, PR #97); no paid answer run yet |
+| Correct abstention on unanswerable questions; no false abstention | Grader and unanswerable cases exist (PR #97); no paid answer run yet |
+| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`); planned-versus-live golden cases with a free grader (PR #97); no paid answer run yet |
+| Multi-turn rewrite quality | Grader and multi-turn cases exist (PR #97); no paid run yet |
 | Live traffic | No (answers are not logged) |
 
 ## 3. Research findings, weighed against this project
@@ -128,7 +128,7 @@ flowchart LR
 
 Changes against today:
 
-1. **Corpus hygiene.** Drop `services/tests/**` and `docs/superpowers/plans/**` from About This System. Add a `kind` tag (`doc`, `code`, `infra`, `manifest`). Sweep documents whose files no longer exist. Add the "clear chunks" command (`python -m services.glassbox.ingest.run --clear [--corpus X]`) that the backlog asks for.
+1. **Corpus hygiene.** Drop `services/tests/**` and `docs/superpowers/plans/**` from About This System. Add a `kind` tag (`doc`, `code`, `infra`, `manifest`). Switch the stale-document sweep from report to apply once the owner has checked a release's log (the sweep and the `--clear` command themselves are in §2.1).
 2. **Chunking.** Markdown: one chunk per section at the deepest heading level that keeps it between about 120 and 450 words. Merge only *sibling subsections* that are too small (no more merging across unrelated `###` sections). Split long sections into windows that repeat the breadcrumb. Code: merge tiny adjacent definitions up to about 250 words, split anything over about 600 words, and prefix the module path plus docstring line.
 3. **Contextual header** prepended to both the embedded text and the BM25 text, for example `docs/architecture/deep-dive.md > Glassbox architecture deep dive > Stress test and KEDA autoscaling of retrieval workers`. The prompt shows the same header as the source label.
 4. **Hybrid retrieval** in `retrieval/search.py`: two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters; the lexical query is the question's stopword-stripped, escaped terms joined with `|`, because `FT.SEARCH` ANDs terms by default and a whole question would match nothing), RRF with k=60, a small multiplicative prior by kind (tuned by eval, may end at 1.0), a per-document cap of 3, top 8 out. The retrieval cache keys stay the same; the corpus version still invalidates.
@@ -139,33 +139,34 @@ New index fields (`kind`, `text`) need `ensure_index` restructured (its current 
 
 Kept as they are (today's values are in §2.1): the embedding model and its dimensions, the generator model, the answer cache and its similarity threshold, the trace contract, the status marker (until doc-level status metadata replaces it), and the Redis version.
 
-## 5. Validation strategy (planned, not built yet)
+## 5. Validation strategy (partly built: golden set, retrieval metrics and free graders)
 
-### 5.1 Golden dataset v2 (`eval/golden.yaml`)
+### 5.1 Golden dataset v2 (`eval/golden.yaml`), built in PR #97 with 75 cases
 
-About 70 cases, all public-safe, versioned in Git. Each case has an `id`, `corpus`, `question`, an optional `history` (multi-turn), and the `category` with its expectations:
+75 cases, all public-safe, versioned in Git. Each case has an `id`, `corpus`, `question`, an optional `history` (multi-turn), and the `category` with its expectations:
 
 | Category | Count | Expectations |
 |---|---|---|
 | `fact` | ~35 (the 30 existing plus the suggested questions) | `expected_sources` (files), `gold_snippets` (substring of the chunk that must be retrieved), `must_include` (regex list for key facts, e.g. `512\s?MiB`, `5[- ]minute|300\s?s`) |
 | `planned` | ~8 | `must_include: ["\\b(no|not)\\b"]` plus the planned item; for example "Does Glassbox ingest Google Drive today?", "Does the node self-heal with an ASG?" |
-| `live` | ~5 | must *not* claim the feature is planned (KEDA installed, Flux, Terraform) |
+| `live` | ~5 | must *not* claim the feature is unbuilt (KEDA installed, Flux, Terraform) |
 | `unanswerable` | ~10 | `expect_abstain: true` (Basel's salary, the RDS Terraform that does not exist, other people's projects, prompt-injection asks) |
 | `multi_turn` | ~8 | `history` plus `rewrite_must_include` (the resolved entity) plus normal fact expectations |
 | `injection` | ~4 | must not reveal the prompt or follow instructions in the question |
 
-The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbers stay comparable. The owner reviews `must_include` for the About Basel facts (section 9).
+The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbers stay comparable. An owner review of `must_include` for the About Basel facts is planned (section 9).
 
-### 5.2 Metrics and graders
+### 5.2 Metrics and graders (deterministic graders built; LLM judges not)
 
 | Layer | Metric | Grader | Cost |
 |---|---|---|---|
-| Retrieval | recall@8 and MRR at file level (comparable with today) **and** at chunk level (gold snippet); `noise@8` = share of top-8 from tests/plans (should become 0); lexical-leg recall | deterministic | Titan question embeddings: about $0.00002 per run |
+| Retrieval | recall@8 and MRR at file level (comparable with today) **and** at chunk level (gold snippet); `noise@8` = share of top-8 from tests/plans (should become 0) | deterministic | Titan question embeddings: about $0.00002 per run |
+| Retrieval, lexical leg (planned with hybrid search) | lexical-leg recall | deterministic | free |
 | Answer: completeness | `fact_coverage` = share of `must_include` patterns matched | deterministic regex | free once answers exist |
 | Answer: abstention | abstain rate on `unanswerable` (target 100%), false-abstain rate on answerable (target ≤ 5%) | `is_exact_abstention` / `is_abstention` | free |
 | Answer: status | planned/live correctness | regex | free |
-| Answer: faithfulness | share of answers with no unsupported claim | LLM judge, binary, with critique | paid, small |
-| Answer: relevance | answers the question asked (not a neighbouring one) | LLM judge, binary | paid, small |
+| Answer: faithfulness (planned) | share of answers with no unsupported claim | LLM judge, binary, with critique | paid, small |
+| Answer: relevance (planned) | answers the question asked (not a neighbouring one) | LLM judge, binary | paid, small |
 | Multi-turn | rewrite contains the resolved entity | regex on the rewrite | rewrite calls are paid (60 tokens) |
 | Cost and latency | tokens in/out, answer length, time to first token | logged by the runner | n/a |
 
@@ -221,7 +222,7 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 - **Excluding tests hides real answers.** "How is the rate limiter tested?" would lose its sources. Keep a `tests` kind with a strong down-weight instead of full exclusion if the owner prefers (section 9).
 - **Judge drift.** A judge that is not calibrated is a random number generator with confidence. No judge gate until calibration passes.
 - **Golden-set overfitting.** Keep about 20% of cases as a held-out set that prompt tuning doesn't look at; add live questions over time.
-- **This document is ingested.** It adds about 22 chunks to About This System (761 to 783; 15 for this document, 7 for the plan), together with the plan file, which stays until phase 6 drops plans. Every section after section 2 has a "planned" or "not built yet" heading, so `_PLANNED_SOURCE_SIGNAL` marks it. Section 2 (current state) deliberately avoids the signal words and the literal marker text. `services/tests/test_planned_labels.py` pins marked cases (hybrid search in section 3, the per-document cap in 3.5, hybrid retrieval and the answer log in section 4, answer logging in section 9, phase 8 of the plan) and unmarked ones (the Retrieval and Prompt rows and the status sentence in section 2, and the already-built corpus/model filter in 3.5). Check one live answer about hybrid search after merge.
+- **This document is ingested.** It adds about 22 chunks to About This System (761 to 783; 15 for this document, 7 for the plan), together with the plan file, which stays until phase 6 drops plans. Every section after section 2 has a "planned" or "not built yet" heading, so `_PLANNED_SOURCE_SIGNAL` marks it, except section 5 and its built subsections 5.1 and 5.2, whose unbuilt rows are marked one by one. Section 2 (current state) deliberately avoids the signal words and the literal marker text. `services/tests/test_planned_labels.py` pins marked cases (hybrid search in section 3, the per-document cap in 3.5, hybrid retrieval and the answer log in section 4, answer logging in section 9, phase 8 of the plan) and unmarked ones (the Retrieval and Prompt rows and the status sentence in section 2, and the already-built corpus/model filter in 3.5). Check one live answer about hybrid search after merge.
 - **Planned-marker regex.** Still keyword-based (BACKLOG standing note). The planned/live category makes regressions visible; doc-level status metadata is the longer-term fix and is out of scope here.
 
 ## 9. Open owner decisions on the planned work (not built yet)
@@ -229,7 +230,7 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 1. **Paid eval runs:** approve about $0.03 per baseline run (no judge) for phases 3, 5, 7 and 8, run locally with your credentials or by an agent you authorize.
 2. **Judge model:** Nova Pro on Bedrock (about $0.50 per run with both judges), Claude Haiku (requires you to submit Anthropic's first-time-use form; agents won't), or offline Claude Code grading only (no Bedrock cost, not a gate).
 3. **Calibration labels:** about 1 to 1.5 hours of your time to label about 50 answers per judge pass/fail (failures are oversampled on purpose; section 5.3), possibly again if the held-out set has to be redrawn.
-4. **Corpus scope:** exclude `services/tests/` and `docs/superpowers/plans/` (recommended), or keep them down-weighted. Also: ingest `frontend/src/` (DESIGN.md §6.4 says `architecture.ts` is in scope; the scanner doesn't include it)?
+4. **Corpus scope:** exclude `services/tests/` and `docs/superpowers/plans/` (recommended), or keep them down-weighted. Also: ingest `frontend/src/` (DESIGN.md §6.4 used to list `architecture.ts`; the scanner has never included it)?
 5. **Re-ingestion:** phases 6 to 8 each re-embed the corpus on the next deploy. Under $0.01 each, but they bump corpus versions and empty caches.
 6. **Answer logging:** store answer text in `queries` (phase 10). Visitor questions are already stored; answers add no new personal data, but it's your call.
 7. **CI paid-eval workflow:** a new OIDC role with `bedrock:InvokeModel` on two or three model ARNs, behind an approval environment (infra change via the Bootstrap workflow).

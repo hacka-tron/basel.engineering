@@ -302,7 +302,7 @@ LIVE_UNITS = [
     ("docs/DESIGN.md", "| KEDA | Scales workers on Redis Stream backlog"),
     ("docs/DESIGN.md", "| Kubernetes (k3s) | Runs API, workers, Redis, ingestion"),
     ("docs/DESIGN-004-action-plan.md", "## 6. Milestone 2: Live on AWS"),
-    ("docs/DESIGN-004-action-plan.md", "| 5 | KEDA, synthetic load endpoint"),
+    ("docs/DESIGN-004-action-plan.md", "| 5 (done) | KEDA, synthetic load endpoint"),
     ("docs/DESIGN-004-action-plan.md", "| M2 |"),
     # DESIGN-005: the current-state pipeline map must stay unmarked.
     ("docs/DESIGN-005-rag-quality.md", "| Retrieval | KNN **top 8**"),
@@ -319,7 +319,39 @@ LIVE_UNITS = [
     ),
     ("docs/DESIGN-004-action-plan.md", "**Conversational chat + live chat UX (DD2 §5, §6)**"),
     ("docs/DESIGN-002-followups.md", "## 5. Feature 3: Conversational chat"),
-    ("project/SNAPSHOT.md", "Phases 4-6 done: live at `https://basel.engineering`"),
+    ("project/SNAPSHOT.md", "Phases 4–6 done and live (Terraform, k3s, CI/CD"),
+    # 2026-10-01 drift pass: live infra and shipped features stay unmarked, including
+    # sentences that say KEDA is suspended (installed, just off) and zram is on.
+    ("docs/DESIGN.md", "// event: reconnect"),
+    ("docs/DESIGN.md", "KEDA is installed but suspended since the 2026-09-30 memory incident"),
+    ("docs/DESIGN.md", "Live status: KEDA 2.21 is installed through Flux"),
+    ("docs/DESIGN.md", "| `keda` | KEDA operator + metrics server |"),
+    ("docs/DESIGN.md", "#### Swap: zram first, `/swapfile` as overflow"),
+    ("docs/DESIGN.md", "- **Retrieval eval (run by hand):**"),
+    ("docs/DESIGN.md", "- On every pull request and push to `main` (`ci.yml`"),
+    ("docs/DESIGN.md", "**Operations runbooks.** Node operations are push-button too"),
+    ("docs/DESIGN.md", "- **Logs:** plain-text application logs"),
+    ("docs/DESIGN.md", "- **Alerts:** AWS Budgets (cost)."),
+    ("docs/DESIGN.md", "- AWS Budgets: `Glassbox-Monthly`"),
+    ("docs/DESIGN.md", "Phases 0 to 6 are done and live."),
+    ("docs/DESIGN.md", "Built: the answer is plain prose without citation markers"),
+    ("docs/DESIGN-002-followups.md", "Heartbeats and server-side Stop are live."),
+    ("docs/DESIGN-002-followups.md", "- **Up-arrow recall.**"),
+    ("docs/DESIGN-002-followups.md", "### 6.8 Playful daily-budget replies"),
+    ("docs/DESIGN-002-followups.md", "- Built: the Cloudflare Cache Rule for `/api/*`"),
+    ("docs/DESIGN-003-ingestion.md", "## 1.1 What runs today: the current ingest Job"),
+    ("docs/DESIGN-003-ingestion.md", "- **On by default (report only):**"),
+    ("docs/DESIGN-004-action-plan.md", "Milestones 0 to 2 are done and live"),
+    ("docs/DESIGN-004-action-plan.md", "| 6 (done) | GitHub Actions building images to Amazon ECR"),
+    ("docs/DESIGN-005-rag-quality.md", "| Stale files | After a full scan"),
+    ("docs/DESIGN-005-rag-quality.md", "| Eval | Retrieval (`run_eval.py`, PR #95)"),
+    ("docs/DESIGN-005-rag-quality.md", "### 5.1 Golden dataset v2 (`eval/golden.yaml`), built"),
+    ("docs/DESIGN-005-rag-quality.md", "| `live` | ~5 |"),
+    ("docs/architecture/deep-dive.md", "A **Retry** button under the latest failure reply"),
+    ("docs/architecture/deep-dive.md", "## KEDA status: suspended since the memory incident"),
+    ("docs/architecture/deep-dive.md", "## Compressed swap (zram) on the node"),
+    ("docs/architecture/deep-dive.md", "## Operations: push-button runbooks"),
+    ("docs/architecture/deep-dive.md", "## Stale documents: report-only sweep"),
 ]
 
 # (path, text inside a unit that describes work not built yet)
@@ -352,7 +384,37 @@ PLANNED_UNITS = [
     ("docs/DESIGN-004-action-plan.md", "## 8. Milestone 4: DD3 production ingestion pipeline"),
     ("docs/DESIGN-004-action-plan.md", "| M4 | DD3 |"),
     ("project/SNAPSHOT.md", "| M4 — DD3: production ingestion pipeline"),
-    ("project/SNAPSHOT.md", "Phase 7 (README polish, load-test numbers) not started."),
+    ("project/SNAPSHOT.md", "Phase 7 polish (load-test numbers, README screenshots) not started."),
+    # 2026-10-01 drift pass: unbuilt parts of the design docs carry their own marker.
+    ("docs/DESIGN.md", "Not built yet: citation chips that open a popover"),
+    ("docs/DESIGN.md", "A static fallback card with resume and GitHub links"),
+    ("docs/DESIGN.md", "- Not built yet: `GET /api/stats`"),
+    ("docs/DESIGN.md", "- Not built yet: a light rerank"),
+    ("docs/DESIGN.md", "- Not built yet: a nightly ingest CronJob."),
+    ("docs/DESIGN.md", "A nightly CronJob is not built yet"),
+    ("docs/DESIGN.md", "- **Metrics (not built yet):**"),
+    ("docs/DESIGN.md", "- Not built yet: a CloudWatch alarm"),
+    ("docs/DESIGN.md", "- Not built yet: a free, lexical-only variant"),
+    ("docs/DESIGN.md", "Not built yet: `tflint` and a misconfiguration scanner."),
+    ("docs/DESIGN.md", "**Phase 7: Polish (not started)**"),
+    ("docs/DESIGN.md", "- Not started: README with screenshots/GIF"),
+    ("docs/DESIGN.md", "Phase 7 is not started."),
+    ("docs/DESIGN-002-followups.md", "Plus one small network change"),
+    ("docs/DESIGN-002-followups.md", "### 4.4 Optional front matter (not built yet)"),
+    ("docs/DESIGN-002-followups.md", "- **Scripted check:**"),
+    ("docs/DESIGN-002-followups.md", "## 8. Network: S3 gateway endpoint (not built yet)"),
+    ("docs/DESIGN-002-followups.md", "ALTER TABLE documents ADD COLUMN metadata JSON NULL;"),
+    ("docs/DESIGN-002-followups.md", "ADD COLUMN ttft_ms"),
+    ("docs/DESIGN-002-followups.md", "The scripted post-deploy streaming check"),
+    ("docs/DESIGN-003-ingestion.md", "### 4.2 Why a raw zone at all (planned)"),
+    ("docs/DESIGN-003-ingestion.md", "### 8.2 Processing one message (planned)"),
+    ("docs/DESIGN-004-action-plan.md", "| 7 (not started) |"),
+    ("docs/DESIGN-004-action-plan.md", "post-deploy Cloudflare streaming check is not built"),
+    ("docs/DESIGN-005-rag-quality.md", "| Retrieval, lexical leg (planned with hybrid search) |"),
+    ("docs/DESIGN-005-rag-quality.md", "| Answer: faithfulness (planned) |"),
+    ("docs/DESIGN-005-rag-quality.md", "### 5.3 Judge design (planned)"),
+    ("docs/architecture/deep-dive.md", "**Streaming checks (DD2).**"),
+    ("docs/architecture/deep-dive.md", "**Deleting stale documents automatically.**"),
 ]
 
 
@@ -373,6 +435,55 @@ def test_a_chunk_mixing_live_and_planned_marks_only_the_planned_parts():
     marked = _mark_planned(_chunk_containing("docs/DESIGN-004-action-plan.md", "| M4 | DD3 |"))
     assert _is_marked(marked, "| M4 | DD3 |")
     assert not _is_marked(marked, "| M2 |")
+
+
+def _real_chunks(path: str) -> list[str]:
+    source = REPO / path
+    if not source.exists():
+        pytest.skip(f"{path} not present")
+    return [chunk.text for chunk in chunk_markdown(source.read_text(), path)]
+
+
+def test_every_design_003_chunk_is_marked_except_what_runs_today():
+    # DD3 is unbuilt M4 design (only section 1.1 describes the running ingest Job).
+    # Every heading carries the marker so each real chunk is marked even without
+    # the whole-document label, including chunks that start at a ### heading.
+    for text in _real_chunks("docs/DESIGN-003-ingestion.md"):
+        if text.startswith("## 1.1 What runs today"):
+            assert PLANNED_MARK not in _mark_planned(text)
+        else:
+            assert PLANNED_MARK in _mark_planned(text), text[:80]
+
+
+def test_real_deep_dive_marks_only_its_planned_section():
+    # Live infra (KEDA installed but suspended, zram, k3s, Flux, ops runbooks) must
+    # never carry the marker; the one planned section must be marked throughout.
+    chunks = _real_chunks("docs/architecture/deep-dive.md")
+    planned = [text for text in chunks if text.startswith("## Planned / not built yet")]
+    assert len(planned) == 1
+    for text in chunks:
+        marked = _mark_planned(text)
+        if text in planned:
+            lines = [line for line in marked.split("\n") if line.strip()]
+            assert all(line.startswith(PLANNED_MARK) for line in lines)
+        else:
+            assert PLANNED_MARK not in marked, text[:80]
+
+
+@pytest.mark.parametrize(
+    "shipped",
+    ["Up-arrow", "Retry", "Landscape phone layout", "Pruning deleted files"],
+)
+def test_deep_dive_planned_section_lists_no_shipped_feature(shipped):
+    # Shipped on 2026-10-01: stop-and-send, Up-arrow and Retry (#93), landscape phones
+    # (#100) and the report-only stale sweep (#101). Listing them as planned made the
+    # bot deny live features.
+    (planned,) = (
+        text
+        for text in _real_chunks("docs/architecture/deep-dive.md")
+        if text.startswith("## Planned / not built yet")
+    )
+    assert shipped not in planned
 
 
 def _deep_dive_chunks(section: str) -> list[str]:

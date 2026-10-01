@@ -60,7 +60,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 - Claude orchestrates and implements (Opus/Sonnet/Haiku subagents, parallel worktrees). Codex (`gpt-6-sol`) is the review gate when it has usage; while Codex is out of usage, an Opus subagent reviews with the same primer brief (`project/orchestration/reviewer-primer.md`). Review-round cap, auto-merge after review and green CI, and the other standing owner instructions are in `project/CLAUDE.md` "Working style" and `project/orchestration/README.md`.
 - Owner-facing reports per change in `project/status/` (index in its README).
-- Docs: `docs/architecture/deep-dive.md` (ingested into About This System; keep it accurate), `docs/DESIGN*.md` (design; some drift, see BACKLOG).
+- Docs: `docs/architecture/deep-dive.md` (ingested into About This System; keep it accurate), `docs/DESIGN*.md` (design; drift pass 2026-10-01: unbuilt parts say "not built yet" or "(planned)" so the grounding marker catches them).
 
 ## Target architecture (full detail in docs/DESIGN.md)
 
