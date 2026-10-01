@@ -49,6 +49,42 @@ The apply job computes a fresh plan after approval, so review any drift visible
 in its log. GitHub environment approval is the production change gate; a merge
 alone does not apply infrastructure.
 
+## Concurrency: PR plans never cancel a main apply
+
+Until 2026-10-01 every Terraform run (PR plans, Dependabot included, and the
+main plan and apply) shared one group, `terraform-prod-state`. GitHub's rule
+for a concurrency group is: at most one run in progress, and with the default
+queue (`single`) at most one pending; a newly queued run **replaces** the
+pending one. `cancel-in-progress: false` doesn't change that, it only spares
+the running one. So each merge cancelled the previous main run, and a
+Dependabot PR's plan replaced main's queued apply before it ever reached the
+`terraform-prod` approval.
+
+Now the groups are split by event (workflow-level `concurrency`):
+
+| Run | Group | Cancel in progress | Locking |
+|---|---|---|---|
+| Terraform, PR | `terraform-pr-<number>` | yes (a new push supersedes the old plan) | `plan -lock=false` |
+| Terraform, push to `main` | `terraform-prod-main` | no | `plan`/`apply -lock-timeout=10m` |
+| Bootstrap, PR | `bootstrap-pr-<number>` | yes | `plan -lock=false` (always was) |
+| Bootstrap, Run workflow | `terraform-bootstrap-state` | no | plan `-lock=false`, apply re-plan locks |
+
+- PR plans can't touch a main run's queue, and since they don't lock, they
+  can't make an apply fail with "Error acquiring the state lock" either. A
+  PR plan that overlaps an apply reads the state before or after the write
+  (S3 writes are atomic); it's a preview, and the main run re-plans anyway.
+- Main runs are one at a time end to end: a run waiting for approval holds
+  the group. Merges that land meanwhile queue behind it, and only the newest
+  stays pending (older pending ones show as cancelled). That is intended:
+  the newest run plans and applies `main`'s head, so it covers every merge
+  before it, and the owner approves once instead of once per merge. Reject a
+  waiting run you don't want, and the pending one starts.
+- `-lock-timeout=10m` on the main plan and apply covers a lock still held by
+  something else (for example a PR run started from an older copy of this
+  workflow, which still locked).
+- GitHub also offers `queue: max` (up to 100 pending, FIFO). Not used: it
+  would make the owner approve every superseded main run in turn.
+
 ## Release and the deploy branch
 
 `release.yml` builds the image on every push to `main` that touches an image
@@ -244,6 +280,18 @@ PR #59 denies `bootstrap/*` to `glassbox-ci`, `glassbox-ci-plan` and
 `glassbox-ci-release` by ARN. The bootstrap roles aren't in that list, so
 they can read and write the bootstrap state. The ops roles have no S3 grants
 at all. Bucket deletion stays denied to everyone.
+
+**Bucket policy in the plan.** The state bucket policy names the CI roles
+it denies `bootstrap/*` to. It used to take their ARNs from
+`aws_iam_role.*.arn`, so whenever one of those roles had a pending change
+(PR #98's release-role trust edit), Terraform deferred reading the policy
+document to apply time and the plan also listed
+`aws_s3_bucket_policy.state` as "updated in-place ... (known after apply)".
+Apply then found the JSON identical and changed nothing ("2 to change", 1
+changed). The ARNs are now built from the account ID and role names (same
+strings), with `depends_on` on the roles, so a role change plans as just
+that role. It was never a perpetual diff: plans with no role change were
+already clean.
 
 `glassbox-bootstrap-plan` trusts only `bootstrap-plan` (no reviewer, any
 branch, like `terraform-plan`). It has IAM `Get*`/`List*`, bucket-level

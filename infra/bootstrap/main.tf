@@ -54,6 +54,22 @@ resource "aws_s3_bucket_public_access_block" "state" {
 #     delete this root's own state (bootstrap/*). That state defines the CI
 #     roles' permissions, so CI must not be able to tamper with it. The roles'
 #     IAM policies don't grant it either; this explicit deny is a second layer.
+#
+# The denied role ARNs are built from the account ID and the role names, not
+# read from aws_iam_role.*.arn. A reference to a role makes Terraform defer
+# reading this document to apply time whenever that role has any pending
+# change (a trust-policy edit, say), so the plan then also shows the bucket
+# policy as "updated in-place ... (known after apply)" even though the JSON
+# comes out identical and apply changes nothing. The resulting ARNs are the
+# same strings (the roles have no path); depends_on on the bucket policy below
+# keeps the roles created before the policy names them.
+locals {
+  bootstrap_state_denied_role_arns = [
+    for name in ["glassbox-ci", "glassbox-ci-plan", "glassbox-ci-release"] :
+    "arn:aws:iam::${var.aws_account_id}:role/${name}"
+  ]
+}
+
 data "aws_iam_policy_document" "state_bucket" {
   statement {
     sid       = "DenyInsecureTransport"
@@ -92,12 +108,8 @@ data "aws_iam_policy_document" "state_bucket" {
     resources = ["${aws_s3_bucket.state.arn}/bootstrap/*"]
 
     principals {
-      type = "AWS"
-      identifiers = [
-        aws_iam_role.ci.arn,
-        aws_iam_role.plan.arn,
-        aws_iam_role.release.arn,
-      ]
+      type        = "AWS"
+      identifiers = local.bootstrap_state_denied_role_arns
     }
   }
 }
@@ -106,8 +118,14 @@ resource "aws_s3_bucket_policy" "state" {
   bucket = aws_s3_bucket.state.id
   policy = data.aws_iam_policy_document.state_bucket.json
 
-  # Public access block settings must be in place before a policy is attached.
-  depends_on = [aws_s3_bucket_public_access_block.state]
+  # Public access block settings must be in place before a policy is attached,
+  # and S3 rejects a policy naming a role that doesn't exist yet.
+  depends_on = [
+    aws_s3_bucket_public_access_block.state,
+    aws_iam_role.ci,
+    aws_iam_role.plan,
+    aws_iam_role.release,
+  ]
 }
 
 resource "aws_iam_openid_connect_provider" "github" {

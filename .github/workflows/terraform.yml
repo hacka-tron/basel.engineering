@@ -17,6 +17,25 @@ on:
 permissions:
   contents: read
 
+# One group per PR, one for main, so a PR plan can never cancel or delay a
+# main run (they used to share "terraform-prod-state", and GitHub keeps only
+# the newest pending run per group: a Dependabot plan replaced main's queued
+# apply). GitHub semantics this relies on (docs: "Control the concurrency of
+# workflows and jobs"): at most one run in progress per group; with the
+# default queue (single) a newly queued run replaces the group's pending run,
+# whatever cancel-in-progress says; cancel-in-progress only decides whether
+# the running one is cancelled too.
+#   - PR (terraform-pr-<number>): a new push cancels that PR's older plan.
+#     PR plans run with -lock=false, so they never take or leave the state
+#     lock and can't collide with a main apply.
+#   - main (terraform-prod-main): never cancelled midway. A run waiting for
+#     terraform-prod approval holds the group; if several merges land
+#     meanwhile, only the newest stays pending, which is fine because it
+#     plans and applies main's head and so covers the merges before it.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('terraform-pr-{0}', github.event.pull_request.number) || 'terraform-prod-main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
@@ -69,9 +88,6 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: terraform-plan
-    concurrency:
-      group: terraform-prod-state
-      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -100,8 +116,16 @@ jobs:
         run: |
           test -n "$TF_VAR_cloudflare_api_token"
           test -n "$TF_VAR_cloudflare_zone_id"
+          # PR plans are previews: read state without locking, so they can
+          # never block (or be blocked by) a main apply. Main plans lock,
+          # waiting a while for any lock still held.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            lock_args=(-lock=false)
+          else
+            lock_args=(-lock-timeout=10m)
+          fi
           set +e
-          terraform -chdir=infra/envs/prod plan -detailed-exitcode -no-color
+          terraform -chdir=infra/envs/prod plan "${lock_args[@]}" -detailed-exitcode -no-color
           result=$?
           set -e
           case "$result" in
@@ -123,9 +147,6 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: terraform-prod
-    concurrency:
-      group: terraform-prod-state
-      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -150,4 +171,4 @@ jobs:
         run: |
           test -n "$TF_VAR_cloudflare_api_token"
           test -n "$TF_VAR_cloudflare_zone_id"
-          terraform -chdir=infra/envs/prod apply -no-color -auto-approve
+          terraform -chdir=infra/envs/prod apply -lock-timeout=10m -no-color -auto-approve
