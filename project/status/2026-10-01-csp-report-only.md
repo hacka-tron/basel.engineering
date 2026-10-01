@@ -1,6 +1,6 @@
 # Content-Security-Policy, Report-Only, with a report endpoint
 
-**PR:** _pending_ · **Branch:** `security/csp-report-only` · **Docs:** `docs/DESIGN.md` §11, `docs/architecture/deep-dive.md` (one sentence), `infra/CI.md` (diagnose row), `project/MOBILE_DESIGN.md` (where the iOS zoom fix lives)
+**PR:** [#121](https://github.com/hacka-tron/basel.engineering/pull/121) · **Branch:** `security/csp-report-only` · **Docs:** `docs/DESIGN.md` §11, `docs/architecture/deep-dive.md` (one sentence), `infra/CI.md` (diagnose row), `project/MOBILE_DESIGN.md` (where the iOS zoom fix lives)
 **Status:** PR open, not reviewed yet. No production access was used (no AWS, kubectl, Terraform plan or apply, or workflow runs). No live `/api/ask` calls; the audit faked `/api/ask` on a local server.
 
 ## TL;DR
