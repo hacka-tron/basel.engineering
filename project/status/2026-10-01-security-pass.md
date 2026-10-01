@@ -1,7 +1,7 @@
 # Security pass: secrets, error leaks, client IP, preview credentials
 
 **PR:** [#96](https://github.com/hacka-tron/basel.engineering/pull/96) · **Branch:** `security/code-audit` · **Docs:** `docs/architecture/deep-dive.md` ("Per-IP rate limit"), `project/BACKLOG.md` "Security"
-**Status:** In review. Code-level audit only: no production access was used (no AWS, SSM, kubectl, Terraform plan/apply, workflow runs or GitHub settings changes). One live check: plain GETs of the public page and its JS bundle.
+**Status:** Review round 1 approved; follow-ups pushed. Code-level audit only: no production access was used (no AWS, SSM, kubectl, Terraform plan/apply, workflow runs or GitHub settings changes). One live check: plain GETs of the public page and its JS bundle.
 
 ## TL;DR
 
@@ -61,6 +61,13 @@ flowchart LR
 - **Fixed text in both the worker and the API.** The API-side mapping also covers old workers during a rolling deploy.
 - **A diagnose check for the salt and proxy setup was not added.** It would read a production secret's length on the node, and the agent permission system blocked writing it. Left as an owner decision in the backlog.
 
+## What review caught
+
+Round 1 (Opus reviewer, same brief as Codex): **APPROVED, safe to deploy.** Two small follow-ups were made in the same PR:
+- **The shared-bucket fallback is now visible in the logs.** If `CF-Connecting-IP` is missing or invalid on a proxied request (one that has `X-Forwarded-For`) and the key falls back to the trusted proxy, i.e. one bucket shared by everyone, the API logs a warning with no addresses, at most once a minute per process. This would surface Cloudflare's "Remove visitor IP headers" transform if it were ever switched on. The in-cluster warmer sends no forwarding headers, so it doesn't trigger the warning.
+- **IPv4-mapped IPv6 is normalized:** `::ffff:1.2.3.4` and `1.2.3.4` now share one rate-limit key.
+- Minors moved to open items: the origin IP is still in git history, and there is no app-level test for a short salt (the short-salt case is covered at function level).
+
 ## Owner must confirm in prod
 
 Each item is a click or a look, not a command.
@@ -78,3 +85,5 @@ Each item is a click or a look, not a command.
 - Cap or share `/api/cluster/stream` watches.
 - Security headers via a Cloudflare transform rule or middleware.
 - Optional diagnose section for salt length and proxy settings (owner decision: it reads a secret's length on the node).
+- The origin IP stays in git history (history is not rewritten). The mitigation is the origin-protection decision, e.g. Cloudflare Authenticated Origin Pulls, so only this zone's requests reach the origin.
+- No app-level startup test for a short salt: `test_api_refuses_to_start_without_required_salt` covers a missing salt, and the short case is tested only on `validate_ip_hash_salt()` directly.

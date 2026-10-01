@@ -118,6 +118,7 @@ Code-level pass done 2026-10-01 (`project/status/2026-10-01-security-pass.md`): 
 - **Security headers** (HSTS, `X-Content-Type-Options: nosniff`, `frame-ancestors`/CSP), via a Cloudflare response-header rule or a small middleware.
 - **Optional diagnose section** printing whether the `glassbox-app` salt is set (length class only) and the Traefik proxy setup (`externalTrafficPolicy`, `forwardedHeaders` args, pod network) plus the number of live `rl:*` buckets. Owner decision: it reads a production secret's length on the node.
 - `glassbox-ops-read` also trusts the plain `ref:refs/heads/main` subject; drop it if nothing needs it, so only the `ops-read` environment can run diagnose.
+- Add an app-level startup test for a too-short salt (today only the function-level test covers it; review minor on #96).
 - Origin protection is still IP-range-only (see Open decisions). The origin IP is in git history, so anyone can route to it through their own Cloudflare account; Authenticated Origin Pulls would close that.
 
 ## Infrastructure & reliability

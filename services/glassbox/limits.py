@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import ipaddress
+import logging
 import os
 import time
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ from typing import Protocol
 
 from fastapi import Request
 
+LOGGER = logging.getLogger(__name__)
 RATE_WINDOW_MS = 10 * 60 * 1000
 RATE_CAPACITY = 10
 _LOCAL_SALT = os.urandom(32)
@@ -154,6 +156,29 @@ def _is_trusted(address, networks) -> bool:
     return address is not None and any(address in network for network in networks)
 
 
+# At most one "trusted proxy fallback" warning per interval per process.
+_FALLBACK_WARNING_INTERVAL_S = 60.0
+_last_fallback_warning = float("-inf")
+
+
+def _warn_trusted_proxy_fallback() -> None:
+    """Make a missing client IP header visible without flooding the log.
+
+    If Cloudflare stops sending CF-Connecting-IP (for example its "Remove
+    visitor IP headers" managed transform is switched on), every visitor would
+    silently share the proxy's single rate-limit bucket. No addresses logged.
+    """
+    global _last_fallback_warning
+    now = time.monotonic()
+    if now - _last_fallback_warning < _FALLBACK_WARNING_INTERVAL_S:
+        return
+    _last_fallback_warning = now
+    LOGGER.warning(
+        "Client IP header missing or invalid on a proxied request; rate limit is "
+        "keyed on the trusted proxy fallback (one shared bucket)"
+    )
+
+
 def client_address(request: Request) -> str:
     """The visitor's IP, believing forwarding headers only from trusted proxies.
 
@@ -188,14 +213,21 @@ def client_address(request: Request) -> str:
             break
         if not _is_trusted(address, networks):
             return str(address)
+    # Only proxied requests carry X-Forwarded-For (Traefik always sets it); the
+    # in-cluster answer warmer calls the api directly without it.
+    if header and hops:
+        _warn_trusted_proxy_fallback()
     return peer
 
 
 def _rate_limit_identity(address: str) -> str:
     # One IPv6 subscriber usually holds a whole /64, so key on the /64;
     # otherwise rotating addresses inside it would give a fresh bucket each time.
+    # An IPv4-mapped address (::ffff:1.2.3.4) is the same visitor as 1.2.3.4.
     parsed = _parse_ip(address)
-    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is None:
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.ipv4_mapped is not None:
+            return str(parsed.ipv4_mapped)
         return str(ipaddress.ip_network(f"{parsed}/64", strict=False))
     return address
 

@@ -254,6 +254,60 @@ def test_ipv6_visitors_share_a_bucket_per_64(proxy_env, monkeypatch):
     assert hashed("203.0.113.4") != hashed("203.0.113.5")
 
 
+def test_ipv4_mapped_ipv6_shares_the_ipv4_bucket(proxy_env, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "cf-connecting-ip")
+
+    def hashed(address: str) -> str:
+        return client_ip_hash(_request("10.42.0.9", None, cf_connecting_ip=address))
+
+    assert hashed("::ffff:203.0.113.4") == hashed("203.0.113.4")
+    assert hashed("::ffff:203.0.113.4") != hashed("::ffff:203.0.113.5")
+
+
+@pytest.fixture
+def fallback_warnings(proxy_env, monkeypatch, caplog):
+    from services.glassbox import limits
+
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "cf-connecting-ip")
+    monkeypatch.setattr(limits, "_last_fallback_warning", float("-inf"))
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(limits.time, "monotonic", lambda: clock["now"])
+    caplog.set_level("WARNING", logger="services.glassbox.limits")
+
+    def count() -> int:
+        return sum("trusted proxy fallback" in record.getMessage() for record in caplog.records)
+
+    return clock, count, caplog
+
+
+def test_missing_client_ip_header_warns_at_most_once_a_minute(fallback_warnings):
+    clock, count, caplog = fallback_warnings
+    # Header stripped: Traefik's XFF holds only a trusted hop, so the key
+    # falls back to the proxy (one shared bucket).
+    stripped = _request("10.42.0.9", "10.42.0.3")
+    assert client_address(stripped) == "10.42.0.9"
+    client_address(stripped)
+    assert count() == 1
+    clock["now"] += 30
+    client_address(_request("10.42.0.9", "10.42.0.3", cf_connecting_ip="garbage"))
+    assert count() == 1
+    clock["now"] += 31
+    client_address(stripped)
+    assert count() == 2
+    # No addresses in the log line.
+    assert all("10.42" not in record.getMessage() for record in caplog.records)
+
+
+def test_no_fallback_warning_when_header_present_or_not_proxied(fallback_warnings):
+    _, count, _ = fallback_warnings
+    client_address(_request("10.42.0.9", "10.42.0.3", cf_connecting_ip="203.0.113.4"))
+    # The in-cluster warmer: trusted peer, no forwarding headers at all.
+    client_address(_request("10.42.0.9"))
+    # Untrusted peer: headers are ignored anyway.
+    client_address(_request("198.51.100.1", "10.42.0.3"))
+    assert count() == 0
+
+
 def test_salt_is_optional_unless_required(monkeypatch):
     monkeypatch.delenv("GLASSBOX_REQUIRE_IP_HASH_SALT", raising=False)
     monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
