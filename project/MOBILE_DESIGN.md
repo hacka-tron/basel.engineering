@@ -65,3 +65,16 @@ Each frame is a real phone-width page, so media queries and the measured layouts
 - **API:** `/api` is proxied to the live site, so answers are real, and the rate limits, the daily budget and the shared stress-test cooldown all apply. Set `GLASSBOX_API_PROXY=http://localhost:8000` to use a local API instead.
 - **Limits:** press-and-hold works with a mouse. Touch-only behaviour, such as the on-screen keyboard resizing the layout or iOS safe areas, still needs a real phone.
 - **Agents:** when an agent opens this for the owner, it starts `npm run phone` in a worktree and opens the page with `open http://localhost:5230/phone-preview.html`. The Chrome extension isn't needed. Stop the server when the owner is done.
+
+## Owner decisions (index)
+
+One line per standing mobile/UI decision, so a session can check them at a glance. The sections above (and the code comments they point to) have the detail; record new decisions both there and here.
+
+- **Text size:** 13px chat messages and a 13px ask box at every width; `maximum-scale=1` is added on iOS/iPadOS only, to stop focus zoom without blocking pinch-zoom elsewhere (2026-09-30, #77).
+- **Header name:** the full name shows whenever its measured natural width fits beside the other row items with at least 16px to spare; otherwise "Basel A-R". Returning to the full name needs 8px more room, so a width on the threshold can't flicker (`lib/headerName.ts`, `useFullNameFits`; #72).
+- **Diagram status text:** "Select a component" until a request runs (#76, #79).
+- **Stress test on mobile:** every tap switches to the Diagram view, at tap time (#67, #70).
+- **New chat on mobile:** an icon-only "+" on the right of the footer, beside the capacity icon (#69).
+- **Header layout, topic chips, Contact (PR #78, in review on 2026-10-01):** a one-row mobile header with `py-2`; the topic chips show in Chat view only; Contact is an envelope icon at every width. Once #78 merges, the Layout section above carries the detail and replaces the "topic nav collapses in Diagram view" rule.
+- **Error replies never blame the visitor:** failures read as the backend's fault ("something's wrong with the backend", "my thoughts got tangled"), never "your question" or "you" (`lib/errorReplies.ts`).
+- **"I don't know" swaps are exact-match only:** the playful replies replace the answer only when it is exactly the canonical abstention ("I don't know from what I have.", flagged `done.abstained`); a partial answer that merely contains the phrase is shown as written. History always keeps the canonical sentence (`lib/idkReplies.ts`).

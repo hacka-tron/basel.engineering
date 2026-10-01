@@ -14,6 +14,11 @@ Read the relevant design doc before implementing a feature. If an implementation
 
 - Scope new features with a subagent (see `orchestration/README.md`), not in the main conversation, so the orchestrator's context stays short.
 - When current work is waiting on review or owner approval, pick up the next backlog item instead of idling.
+- **Merge without asking** once a PR's review is APPROVED and CI is green: run `gh pr merge` as its own command (not chained with other commands). Exception: changes that need the owner's explicit go-ahead (see `orchestration/README.md` "What checked in means", step 6).
+- **Reviewer:** Codex by default. When Codex is out of usage, an Opus subagent reviews with the same brief (`orchestration/codex-reviewer.md` prompt, `orchestration/reviewer-primer.md` first). **Round cap:** after 2 review rounds, only Critical findings or Important findings with a reachable failure scenario block the merge; everything else goes to `BACKLOG.md`. Keep track of each open PR's review state (round, verdict, what is fixed).
+- **The owner never runs AWS or Terraform by hand.** Production changes go through the Terraform, Bootstrap and "Ops · ..." workflows (`infra/CI.md`); ask the owner for approval clicks, never for commands to paste. Every infra dispatch (implementer or reviewer) restates the hard rules: never read, open or copy any `terraform.tfstate` or plan file; no `terraform apply` and no live AWS/Kubernetes writes from agents.
+- **Mobile testing:** use the phone preview (`cd frontend && npm run phone`, see `MOBILE_DESIGN.md`) and side-by-side comparison pages when the owner has to choose between designs, not a shrunk browser window. Record each mobile design decision in `MOBILE_DESIGN.md`.
+- **Status reports** for every substantial change (section below), and add generalizable lessons to the `~/Coding/template` repo as you go, in the guide they belong to.
 
 ## Session memory (read this before scanning the repo)
 
