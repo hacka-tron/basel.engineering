@@ -11,6 +11,7 @@ Briefings for the project owner. After each substantial feature or change, the a
 
 | Date | Report | Summary | Status |
 |---|---|---|---|
+| 2026-09-30 | [Mobile layout A: diagram in place, focus mode](2026-09-30-mobile-layout-a.md) — PR pending | Below 768px the diagram replaces the chat in place (portrait graph, capped collapsible details, Back returns); header and footer hide while typing; New chat moves to the footer (label or "+" by measured width). Desktop pixel-identical. | In review |
 | 2026-09-30 | [Quirky "I don't know" replies](2026-09-30-quirky-idk.md) — PR [#58](https://github.com/hacka-tron/basel.engineering/pull/58) | `done.abstained` flag; the chat swaps the flat refusal for one of 20 playful replies (some blame Basel). History keeps the canonical sentence. | In review |
 | 2026-09-30 | [Stress control: labelled button when there is room](2026-09-30-stress-control-responsive.md) — PR [#56](https://github.com/hacka-tron/basel.engineering/pull/56) | Labelled "Stress test" button plus details-only icon from 640px; icon-only below; footer gutter 16px + safe-area. | In review |
 | 2026-09-30 | [Latency quick wins](2026-09-30-latency-quick-wins.md) — PR [#54](https://github.com/hacka-tron/basel.engineering/pull/54) | Footer shows time to first token and `· cached`; suggested questions' answers kept warm (CronJob every 2h + after each deploy's ingest; at most 10 LLM calls/day across all runs, stops on limits); follow-up overlap measured as not worth doing. | In review (Codex round 2 fixes done) |
