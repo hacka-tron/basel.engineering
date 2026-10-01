@@ -142,7 +142,7 @@ function StatsBar({
           </span>
         </button>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
-          {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
+          {queriesServed} <span className="hidden sm:inline">{queriesServed === 1 ? 'query' : 'queries'} served</span><span className="sm:hidden">{queriesServed === 1 ? 'query' : 'queries'}</span>
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
