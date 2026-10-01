@@ -8,7 +8,7 @@
 - **Security headers on every response.** The API now sets HSTS (180 days, apex only, no preload), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` plus CSP `frame-ancestors 'none'`, and a `Permissions-Policy` that turns off unused browser features. They apply to the page, static assets, API JSON, 404s and both SSE streams, and streaming still works. **Live on the release that follows the merge.** Security pass finding 12.
 - **App-level short-salt test.** A salt that is too short now has a test proving the app itself refuses to start, not just the helper function (review minor on #96). Test only, no behavior change.
 - **`glassbox-ops-read` trusts only the `ops-read` environment.** The plain `main` subject it also trusted had no user. Removing it means a future `main` job can't run diagnose without going through the environment. **Live only after the owner runs the Bootstrap workflow.** Security pass finding 3.
-- Not in this PR: a CSP that restricts scripts and styles. It needs a Vite build audit and a Report-Only phase first (plan below).
+- Not in this PR: a CSP that restricts scripts and styles. It needs a Vite build audit and a Report-Only phase first (plan below; the Report-Only step is now in review, see `2026-10-01-csp-report-only.md`).
 
 ## What changed for a visitor
 
@@ -71,5 +71,5 @@ _Pending._
 
 ## Open items
 
-- **Script/style CSP, Report-Only first.** Move the inline iOS zoom `<script>` in `frontend/index.html` to a file in `public/` (or hash it at build time). Check React Flow and Tailwind for `<style>` injection or `style` attributes set from markup (React's `style` prop uses CSSOM and isn't affected). Then send `Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`. Collect violations, either from a small rate-limited report endpoint or by watching consoles in the phone preview and desktop browsers for a few days. Then enforce.
+- **Script/style CSP, Report-Only first: step 1 done, in review** (PR #121, `project/status/2026-10-01-csp-report-only.md`). The iOS zoom script is now `frontend/public/ios-zoom.js`. The API sends `Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report; report-to csp` plus `Reporting-Endpoints`. The audit found no React Flow or Tailwind `<style>` injection or style markup (React sets styles through CSSOM) and no `data:` images, so neither `'unsafe-inline'` nor `data:` is needed. `frame-ancestors` stays only in the enforced header (it is ignored in Report-Only). Reports go to a rate-limited `/api/csp-report` that logs three sanitized fields and is counted in **Ops · Diagnose**. Step 2, enforcing after a week of clean reports, is in `project/BACKLOG.md`.
 - `includeSubDomains` and a longer max-age once every name in the zone is known to be HTTPS.

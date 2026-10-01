@@ -73,15 +73,30 @@ class DailyBudget(Protocol):
 
 
 class RedisRateLimiter:
-    def __init__(self, client, *, capacity: int = RATE_CAPACITY, window_ms: int = RATE_WINDOW_MS):
+    def __init__(
+        self,
+        client,
+        *,
+        capacity: int = RATE_CAPACITY,
+        window_ms: int = RATE_WINDOW_MS,
+        key_prefix: str = "rl",
+    ):
         self.client = client
         self.capacity = capacity
         self.window_ms = window_ms
+        # "rl" is the /api/ask question bucket. Other endpoints pass their own
+        # prefix so they never spend a visitor's question budget.
+        self.key_prefix = key_prefix
 
     async def allow(self, client_hash: str, *, now_ms: int | None = None) -> tuple[bool, int]:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
         allowed, retry = await self.client.eval(
-            _TOKEN_BUCKET_SCRIPT, 1, f"rl:{client_hash}", now_ms, self.capacity, self.window_ms
+            _TOKEN_BUCKET_SCRIPT,
+            1,
+            f"{self.key_prefix}:{client_hash}",
+            now_ms,
+            self.capacity,
+            self.window_ms,
         )
         return bool(allowed), int(retry)
 
