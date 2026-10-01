@@ -13,15 +13,12 @@ test("the owner's example is in, emoticon and all", () => {
   assert.ok(BUDGET_REPLIES.some((reply) => reply.startsWith('Basel ran out of money to pay for tokens D:')))
 })
 
-test('timing is hedged: a bare "Back tomorrow." promise never ends a reply', () => {
-  for (const reply of BUDGET_REPLIES) assert.doesNotMatch(reply, /(\. Back tomorrow|are back tomorrow|chatty again tomorrow|explain them tomorrow)[.!]$/, reply)
+test('no line makes a firm return promise', () => {
+  for (const reply of BUDGET_REPLIES) assert.doesNotMatch(reply, /\b(back|return|returns|ready) (tomorrow|at|by|in)\b(?!-ish)|\bwill be back\b/i, reply)
 })
 
-test('every reply points to the sources and hedges when answers come back', () => {
-  for (const reply of BUDGET_REPLIES) {
-    assert.match(reply, /\bsources\b/i, reply)
-    assert.match(reply, /\b(tomorrow|later|eventually|soon)\b/i, reply)
-  }
+test('every reply points to the sources', () => {
+  for (const reply of BUDGET_REPLIES) assert.match(reply, /\bsources\b/i, reply)
 })
 
 test('no precise reset times or amounts, and no blaming the visitor', () => {

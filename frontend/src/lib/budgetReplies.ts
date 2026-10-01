@@ -6,7 +6,8 @@
 // reloads. History sends the canonical sentence below for such a turn, never
 // the joke. The lines are written for the daily budget (the common cause); a
 // few joke about money even when the rare kill switch is the cause. None
-// promises a precise reset time or names an amount. Kept free of imports so it can be unit tested with Node's
+// promises a precise reset time or names an amount, and none makes a firm
+// promise of when answers return. Kept free of imports so it can be unit tested with Node's
 // test runner.
 
 /** What history carries for a retrieval_only turn (the reply the chat used to show). */
@@ -16,26 +17,26 @@ export const CANONICAL_BUDGET_REPLY = "I can't write a full answer right now, bu
 export const LEGACY_BUDGET_ERROR_REPLY = "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
 
 export const BUDGET_REPLIES: readonly string[] = [
-  'Basel ran out of money to pay for tokens D: The sources below still show what matched. Answers are back tomorrow or a bit later.',
-  "My answer allowance is spent for now. Basel's wallet needs a nap. The sources below still point the way; try me tomorrow.",
-  "I've talked myself hoarse. The sources below are what matched; come back tomorrow and I'll put them into words.",
-  "Basel put me on a strict word diet, and I'm out of words for now. The sources below still show what matched. Back tomorrow-ish!",
-  'The answer machine is resting. The sources below show what I found; full answers return tomorrow or soon after.',
-  "Out of thinking tokens! Blame Basel's budget spreadsheet. The matching sources are below, and I'll be chatty again soon.",
-  "I'd answer, but Basel cut off my allowance for now. The sources below show what matched. Check back tomorrow.",
-  "My brain's on a break, but my filing cabinet isn't: the sources below are what matched. Answers come back later.",
-  "No new answers for now. The sources below still match your question, and I'll be back to explain them tomorrow or a bit later.",
-  "Basel's piggy bank is empty, so no answer from me right now. The sources below show what matched. Try again tomorrow?",
-  "I'm off the clock for now. The sources below are what I'd have read from; come back tomorrow for the full answer.",
-  'The AI meter ran out, and Basel will top it up eventually. Meanwhile, the sources below show what matched.',
-  "No more answers for now; Basel's keeping me on a tight leash. The matching sources are below. Ask again tomorrow!",
-  "I've hit my limit for now. I did find sources, though: they're just below. Full answers are back tomorrow or a bit later.",
-  "Basel only bought so many tokens, and they're gone for now. The sources below still show what matched. See you tomorrow!",
-  "Writing answers is paused for now, but searching isn't: the sources below are what matched. Try again tomorrow.",
-  "Running on fumes, so I'll let the sources below do the talking. Proper answers return tomorrow or later.",
-  "The answer budget is tapped out, and I'm choosing to blame Basel, fondly. The sources below show what matched. Back soon.",
-  "I'm saving my words for tomorrow. The sources below already show what matched your question.",
-  'Basel turned my answer tap down to a drip. The sources below still show what matched; full answers come back later.',
+  'Basel ran out of money to pay for tokens D: The sources below still show what matched. Answers are back tomorrow-ish.',
+  'I asked Basel for more tokens. He said "do I look like I\'m made of tokens?" The sources below are all I\'ve got.',
+  'My answer budget just filed for bankruptcy. The sources below survived the audit. Try me tomorrow.',
+  'Basel is checking the couch cushions for spare tokens. Meanwhile, the sources below show what matched.',
+  'Finance put me in airplane mode (finance is Basel). The sources below still know things.',
+  'Answer generator: out of order. Duct tape: also out. The sources below are still working, though.',
+  "I've used up all my words. This sentence was borrowed. The sources below show what matched.",
+  "Basel set my budget with a straight face. I'm tapped out. The sources below did the reading; ask me again later.",
+  'My token allowance has left the building. The sources below stayed behind to help. Try me tomorrow.',
+  "I'd love to answer, but my wallet is just a moth now. The sources below show what matched.",
+  "Payment required: Basel's wallet not found. The sources below are free, though. Try again later.",
+  "I'm on a mandatory nap, Basel's orders. Here are the sources I was reading before I dozed off.",
+  "Out of tokens. I'm selling lemonade to afford more. The sources below will have to do for now!",
+  "Basel's AI budget is like his sleep schedule: gone by evening. The sources below still show what matched.",
+  'My thoughts are free, but saying them costs money, and Basel is tapped. Sources below; try me tomorrow.',
+  "Plot twist: the AI is broke. The sources below are what I'd have quoted, if I could afford to talk.",
+  'I spent my last token on this apology. Worth it. The sources below show what matched.',
+  'Basel promised "unlimited AI" with his fingers crossed. I\'m out for now; the sources below still help.',
+  'The token jar is empty, and someone (Basel) ate the last one. Sources below; answers back soon.',
+  'Conserving words like a telegram. STOP. Sources below. STOP. Try again later. STOP.',
 ]
 
 /** Replies to avoid: the last one shown, and the latest one saved in the conversation. */
