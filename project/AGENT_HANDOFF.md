@@ -4,11 +4,7 @@
 
 Merged after #80, both reviewed and CI green:
 - **#81:** the envelope and GitHub header icons are 24px from `md`; phones are unchanged.
-- **#82:**
-  - "Asking about (Basel) (System)" topic chips now sit above the desktop ask box as well. The desktop header nav is removed, so the header is name ... envelope, GitHub on every screen.
-  - The footer latency readout lights up on hover, focus or press, like the bunny.
-  - The chips' label is screen-reader-only at 768–799px and below 320px.
-  - Status report: `project/status/2026-10-01-desktop-topic-pills.md`.
+- **#82, then a partial revert:** #82 put "Asking about (Basel) (System)" pills above the desktop ask box and removed the desktop header nav. After trying it, the owner asked to go back to the header tabs, so the pills part was reverted (desktop has "About Basel | About This System" in the header again). #82's footer latency hover/focus/press highlight was kept. Mobile still uses pills above the ask box, in Chat view only (#78). The outcome is recorded in `project/status/2026-10-01-desktop-topic-pills.md` and `project/MOBILE_DESIGN.md` "Owner decisions".
 
 Nothing is in flight: no open PRs from this session, no worktrees, no preview servers. To resume, read `project/BACKLOG.md` "> RESUME HERE", then `project/SNAPSHOT.md` "Live state". Standing owner instructions are in `project/CLAUDE.md` "Working style" and `project/orchestration/README.md`. Mobile and desktop UI decisions are indexed in `project/MOBILE_DESIGN.md` "Owner decisions".
 
