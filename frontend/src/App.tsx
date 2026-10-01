@@ -21,6 +21,7 @@ import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream, podMapFromSnapshot } from './lib/clusterStream'
 import {
   historyForRequest,
+  latestQuestionAnswered,
   loadConversation,
   MAX_DISPLAY_MESSAGES,
   newMessageId,
@@ -574,9 +575,13 @@ function App() {
       // after deselecting it) shows that answer again instead of queueing
       // the same question a second time.
       pendingComponentRef.current = inFlightQuestionRef.current === questionForComponent(id) ? null : id
-    } else {
+    } else if (!latestQuestionAnswered(conversationsRef.current.system, questionForComponent(id))) {
       handleAsk(questionForComponent(id), 'system', { sendHistory: false })
     }
+    // Otherwise its answer is already the latest one (say, re-selected after
+    // the chevron or an empty-space tap): selecting shows it again, with no
+    // duplicate turn and no rate-limited request. A failed answer is asked
+    // again, as before (Retry also exists).
   }
   // Matches Tailwind's `md` breakpoint (redefined in index.css so a phone held
   // sideways keeps the phone layout). Drives which ArchitecturePanel / React

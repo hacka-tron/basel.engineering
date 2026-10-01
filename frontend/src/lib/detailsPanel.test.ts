@@ -20,4 +20,6 @@ test('other keys never deselect', () => {
 test('an Escape another handler already used, or one ending an IME composition, is ignored', () => {
   assert.equal(deselectsOnKey({ ...escape, defaultPrevented: true }, true), false)
   assert.equal(deselectsOnKey({ ...escape, isComposing: true }, true), false)
+  assert.equal(deselectsOnKey({ ...escape, keyCode: 229 }, true), false) // Safari IME
+  assert.equal(deselectsOnKey({ ...escape, keyCode: 27 }, true), true)
 })

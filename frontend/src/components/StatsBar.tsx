@@ -1,6 +1,7 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
 import { useLongPressTooltip } from '../hooks/useLongPressTooltip'
+import { tooltipShowing } from '../lib/escapeKey'
 import { lastStatsDetails, lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
@@ -93,16 +94,23 @@ function StatsBar({
     }
   }, [wideTooltipOpen])
 
-  // Escape dismisses the wide tooltip; blurring also drops the CSS focus-visible one.
+  // Escape dismisses the wide tooltip; blurring also drops the CSS focus-visible
+  // one. A showing tooltip uses the Escape up (see useLongPressTooltip).
+  const wideTooltipOpenRef = useRef(wideTooltipOpen)
+  useEffect(() => {
+    wideTooltipOpenRef.current = wideTooltipOpen
+  }, [wideTooltipOpen])
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      setWideTooltipOpen(false)
       const active = document.activeElement as HTMLElement | null
-      if (active?.closest?.('[data-stress-details]')) active.blur()
+      const details = active?.closest?.('[data-stress-details]') ?? null
+      if (tooltipShowing(wideTooltipOpenRef.current, details)) e.preventDefault()
+      setWideTooltipOpen(false)
+      if (details) active?.blur()
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   const newChatTooltipId = useId()

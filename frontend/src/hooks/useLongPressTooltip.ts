@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
+import { tooltipShowing } from '../lib/escapeKey'
 
 const LONG_PRESS_MS = 500
 const LONG_PRESS_SLOP_PX = 10
@@ -104,14 +105,23 @@ export function useLongPressTooltip<T extends HTMLElement>(onTap?: () => void) {
   }, [open])
 
   // Escape dismisses the tooltip; blurring also drops the CSS focus-visible one.
+  // When a tooltip was actually showing, the Escape is used up
+  // (preventDefault), so it doesn't also deselect a diagram component or leave
+  // the phone Diagram view. Window capture phase, so it runs before those
+  // document listeners (lib/escapeKey.ts).
+  const openRef = useRef(open)
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      if (tooltipShowing(openRef.current, ref.current)) e.preventDefault()
       setOpen(false)
       if (ref.current?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   useEffect(() => clearTimer, [])

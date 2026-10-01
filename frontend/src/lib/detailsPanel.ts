@@ -9,15 +9,17 @@
 
 export const PORTRAIT_DETAILS_HINT = 'Select a component for details'
 
-type KeyEventLike = { key: string; defaultPrevented: boolean; isComposing?: boolean }
+type KeyEventLike = { key: string; defaultPrevented: boolean; isComposing?: boolean; keyCode?: number }
 
 /**
  * Escape clears the selection before it does anything else in the diagram:
  * on phones the first Escape deselects and the next one returns to Chat
  * (`diagramNav`, which skips events that were already handled). Nothing to
  * deselect, a key another handler already used, or an Escape that ends an
- * IME composition in the ask box leaves the event alone.
+ * IME composition in the ask box leaves the event alone (Safari reports that
+ * last one as keyCode 229 rather than isComposing). Order of all Escape
+ * handlers: lib/escapeKey.ts.
  */
 export function deselectsOnKey(event: KeyEventLike, hasSelection: boolean): boolean {
-  return hasSelection && event.key === 'Escape' && !event.defaultPrevented && !event.isComposing
+  return hasSelection && event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229
 }

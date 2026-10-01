@@ -199,3 +199,18 @@ export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
   }
   return turns.slice(start)
 }
+
+/**
+ * True when `question` is the conversation's latest question and its reply
+ * finished normally (`done` or `retrieval_only`). Re-selecting a diagram
+ * component then just shows that reply instead of asking again, which would
+ * append a duplicate turn and spend one of the visitor's rate-limited
+ * questions (the limiter runs before the answer cache). A failed reply
+ * (Retry exists for it), a stopped one, or one still streaming returns false.
+ */
+export function latestQuestionAnswered(messages: readonly ChatMessage[], question: string): boolean {
+  const questionIndex = messages.findLastIndex((message) => message.role === 'user')
+  if (questionIndex === -1 || messages[questionIndex].content !== question) return false
+  const reply = messages.slice(questionIndex + 1).findLast((message) => message.role === 'assistant')
+  return reply?.state === 'done' || reply?.state === 'retrieval_only'
+}
