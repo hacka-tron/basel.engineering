@@ -68,7 +68,7 @@ Workflows (`.github/workflows/`):
 - Required checks cannot be path-filtered; the default `GITHUB_TOKEN` never triggers workflows on PRs it opens; environment gates (`terraform-prod`) are the apply control, so check plan jobs never get write credentials.
 - Concurrency groups keep one running and one pending run; a newly queued run replaces the pending one even with `cancel-in-progress: false`. PR plans and main applies must never share a group (`terraform-pr-<n>` vs `terraform-prod-main`, same split in bootstrap.yml), and PR plans run `-lock=false` so they can't hold the state lock against an apply.
 - Run `actionlint`; read `permissions:`, `if:` fork guards, and which secrets each job can see.
-- Third-party actions are pinned by SHA with a version comment; Dependabot updates them.
+- Third-party actions are pinned by full SHA with a plain `# vX.Y.Z` comment (the form Dependabot keeps updated; reject the old `# vX (vX.Y.Z)` form). Dependabot sends one grouped monthly `ci:` PR. Runners are pinned to `ubuntu-24.04` (not `ubuntu-latest`) until Ubuntu 26 images are proven.
 
 ## Per-area checklist (run it yourself and paste summary lines)
 
