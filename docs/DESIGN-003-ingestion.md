@@ -2,15 +2,15 @@
 
 | | |
 |---|---|
-| **Status** | Draft v1 |
+| **Status** | Planned for Milestone 4, not built yet. Only §1.1 describes code that runs today. |
 | **Owner** | Basel |
-| **Last updated** | 2026-09-28 |
+| **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` ("DD1") and `DESIGN-002-followups.md` ("DD2") |
 | **Supersedes** | DD1 6.4 (ingestion job) and parts of DD1 7.1 and DD2 4.x (see section 16) |
 
 ---
 
-## 1. Summary
+## 1. Summary (planned, not built yet)
 
 DD1 baked corpus files into the ingest container image and re-ran ingestion on every deploy. That couples content to code, forces a redeploy to fix a typo, and would leak private content through the public image registry.
 
@@ -30,7 +30,7 @@ Each stage has one job and can be rerun independently. Later stages can always b
 
 **Guiding rule:** container images contain code only. Content flows through storage the system reads at runtime.
 
-### 1.1 What the current ingest Job does about deleted files and Redis drift
+## 1.1 What runs today: the current ingest Job, deleted files and Redis drift
 
 Everything else in this document describes the connector pipeline. The ingest Job that runs today (`services/glassbox/ingest/run.py`, DD1 6.4) still reads the files baked into the image. Since 2026-10-01 it handles deleted and renamed files like this:
 
@@ -45,9 +45,9 @@ The connector design below (sections 8 and 11) replaces this with event-driven d
 
 ---
 
-## 2. Goals and non-goals
+## 2. Goals and non-goals (planned, not built yet)
 
-### Goals
+### Goals (planned)
 
 - **Easy authoring:** "About Basel" content is written in Google Docs, editable from any device, live in the chatbot within about 15 minutes.
 - **Private content stays private:** raw documents are never published in a public repo or image.
@@ -57,7 +57,7 @@ The connector design below (sections 8 and 11) replaces this with event-driven d
 - **Safe model changes:** switching embedding models happens with zero downtime and an instant rollback.
 - **Visible:** "is my latest edit live?" is answerable in seconds.
 
-### Non-goals
+### Non-goals (planned)
 
 - Permission-aware retrieval (all content is public-safe; see 15).
 - Non-Doc Drive files (Sheets, PDFs, images) in v1. They are skipped with a warning.
@@ -65,7 +65,7 @@ The connector design below (sections 8 and 11) replaces this with event-driven d
 
 ---
 
-## 3. Sources
+## 3. Sources (planned, not built yet)
 
 | Corpus | Authoring source | Connector | Identity |
 |---|---|---|---|
@@ -78,9 +78,9 @@ A `corpus-sample/` folder of fake "about me" docs lives in the public repo so an
 
 ---
 
-## 4. Raw zone (S3)
+## 4. Raw zone (S3) (planned, not built yet)
 
-### 4.1 Bucket
+### 4.1 Bucket (planned)
 
 `glassbox-corpus-<account-id>`, one bucket with prefixes:
 
@@ -96,15 +96,15 @@ quarantine/about_me/gdrive/<drive-file-id>.md
 - **Lifecycle:** noncurrent versions expire after 30 days; `quarantine/` objects expire after 30 days.
 - Versioning means any bad write can be rolled back by restoring the previous object version.
 
-### 4.2 Why a raw zone at all
+### 4.2 Why a raw zone at all (planned)
 
 The raw zone holds exact copies of what came from the source. If the chunking strategy or embedding model changes, everything is re-processed from S3 without touching Google or GitHub again. It also decouples connectors from ingestion: a connector's only job is "get the source's current state into S3."
 
 ---
 
-## 5. Google Drive connector
+## 5. Google Drive connector (planned, not built yet)
 
-### 5.1 Access
+### 5.1 Access (planned)
 
 - A Google Cloud **service account** (for example `glassbox-reader@<project>.iam.gserviceaccount.com`).
 - The "Glassbox Corpus" folder is shared with that email as **Viewer**. It can see nothing else.
@@ -112,7 +112,7 @@ The raw zone holds exact copies of what came from the source. If the chunking st
 - The service account key JSON is stored in SSM Parameter Store (SecureString) and loaded into a Kubernetes Secret at boot, like other secrets (DD1 10.6).
 - **Upgrade path:** Workload Identity Federation, where Google trusts the AWS instance role directly and no key file exists. Recorded as a stretch goal.
 
-### 5.2 Folder layout = labels
+### 5.2 Folder layout = labels (planned)
 
 ```
 Glassbox Corpus/
@@ -127,7 +127,7 @@ The first subfolder name (lowercased, singularized) becomes `type`. Docs at the 
 
 **Authoring rule:** use real heading styles (Heading 1, Heading 2) for section titles. The Markdown export turns these into `#` headings, which the chunker splits on. Bold text is not a heading.
 
-### 5.3 Sync algorithm
+### 5.3 Sync algorithm (planned)
 
 Runs as a Kubernetes **CronJob every 15 minutes**. At this scale (dozens of docs), the simplest correct approach is to list the whole folder tree every run rather than track incremental change tokens.
 
@@ -149,7 +149,7 @@ S3 events from steps 2 and 3 drive ingestion (section 7). The connector never to
 
 ---
 
-## 6. Git connector (system corpus)
+## 6. Git connector (system corpus) (planned, not built yet)
 
 A GitHub Actions job on merge to `main` in the public repo:
 
@@ -170,9 +170,9 @@ Git history is the version history for this corpus, and pull request CI is the v
 
 ---
 
-## 7. Events and queues
+## 7. Events and queues (planned, not built yet)
 
-### 7.1 Flow
+### 7.1 Flow (planned)
 
 - S3 event notifications on prefix `raw/` for `s3:ObjectCreated:*` and `s3:ObjectRemoved:*` go to SQS queue `glassbox-ingest`.
 - Queue policy allows `s3.amazonaws.com` to send, restricted by `aws:SourceArn` (the bucket) and `aws:SourceAccount`.
@@ -180,7 +180,7 @@ Git history is the version history for this corpus, and pull request CI is the v
 - **Long polling:** 20 seconds.
 - **Redrive policy:** after `maxReceiveCount = 3`, messages move to `glassbox-ingest-dlq` (retention 14 days).
 
-### 7.2 Event realities the design must handle
+### 7.2 Event realities the design must handle (planned)
 
 | Reality | Handling |
 |---|---|
@@ -189,7 +189,7 @@ Git history is the version history for this corpus, and pull request CI is the v
 | Events can be **missed** (rare) | Nightly reconciliation (section 11) |
 | S3 sends a **test event** when notifications are configured | Ignored by type |
 
-### 7.3 Dead-letter handling
+### 7.3 Dead-letter handling (planned)
 
 - A CloudWatch alarm on `ApproximateNumberOfMessagesVisible > 0` for the DLQ notifies by email through SNS.
 - `make dlq-inspect` prints DLQ messages with the matching `sync_state.last_error`.
@@ -197,9 +197,9 @@ Git history is the version history for this corpus, and pull request CI is the v
 
 ---
 
-## 8. Ingestion worker
+## 8. Ingestion worker (planned, not built yet)
 
-### 8.1 Runtime: KEDA ScaledJob
+### 8.1 Runtime: KEDA ScaledJob (planned)
 
 Ingestion runs only when there is work. KEDA watches the SQS queue and launches a Kubernetes Job when messages appear; the Job drains the queue and exits.
 
@@ -248,7 +248,7 @@ spec:
 
 This uses KEDA two ways in one system: a `ScaledObject` scaling long-running retrieval workers on a Redis Stream (DD1 9.3), and a `ScaledJob` launching batch Jobs from an SQS queue.
 
-### 8.2 Processing one message
+### 8.2 Processing one message (planned)
 
 ```
 receive batch (up to 10, long poll 20s)
@@ -284,7 +284,7 @@ Rules:
 - **Mutual exclusion:** the Job takes a MySQL advisory lock (`GET_LOCK('glassbox_ingest', 0)`) so ingestion and reconciliation never run at the same time. If the lock is held, the Job exits and KEDA retries on the next poll.
 - **Errors:** record `last_error` and increment `attempts` in `sync_state`, do not delete the message. SQS retries it, and after 3 attempts it lands in the DLQ.
 
-### 8.3 Stable document IDs
+### 8.3 Stable document IDs (planned)
 
 | Source | `doc_uid` | Rename behavior |
 |---|---|---|
@@ -293,9 +293,9 @@ Rules:
 
 ---
 
-## 9. Data model changes
+## 9. Data model changes (planned, not built yet)
 
-### 9.1 New tables
+### 9.1 New tables (planned)
 
 ```sql
 CREATE TABLE sync_state (
@@ -350,7 +350,7 @@ CREATE TABLE chunk_embeddings (
 );
 ```
 
-### 9.2 Changes to DD1 tables
+### 9.2 Changes to DD1 tables (planned)
 
 ```sql
 ALTER TABLE documents
@@ -369,7 +369,7 @@ Embeddings move to `chunk_embeddings` so two embedding models can coexist during
 
 ---
 
-## 10. Validation and quarantine
+## 10. Validation and quarantine (planned, not built yet)
 
 Checks (from DD2 4.5), now run in both connectors:
 
@@ -387,7 +387,7 @@ Checks (from DD2 4.5), now run in both connectors:
 
 ---
 
-## 11. Reconciliation
+## 11. Reconciliation (planned, not built yet)
 
 A CronJob at 03:00 UTC. Events make the pipeline fast; reconciliation makes it correct.
 
@@ -407,7 +407,7 @@ Writes a `connector_runs` row with `drift_found`. **Non-zero drift is a signal**
 
 ---
 
-## 12. Re-embedding: blue-green index
+## 12. Re-embedding: blue-green index (planned, not built yet)
 
 Vectors from different embedding models are not comparable, so a model change must never mix them.
 
@@ -422,7 +422,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 13. Observability
+## 13. Observability (planned, not built yet)
 
 **Metrics** (Prometheus, from the ingest Job and connectors):
 
@@ -440,7 +440,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 14. Local development
+## 14. Local development (planned, not built yet)
 
 - Docker Compose adds **LocalStack** (S3 + SQS) alongside MySQL and Redis.
 - A `filesystem` connector syncs `corpus-sample/` into the local bucket, standing in for Google Drive.
@@ -448,7 +448,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 15. Security
+## 15. Security (planned, not built yet)
 
 | Concern | Control |
 |---|---|
@@ -474,7 +474,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 16. What this supersedes
+## 16. What this supersedes (planned, not built yet)
 
 | Earlier design | Replaced by |
 |---|---|
@@ -488,7 +488,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 17. Failure scenarios
+## 17. Failure scenarios (planned, not built yet)
 
 | Scenario | Outcome |
 |---|---|
@@ -504,7 +504,7 @@ During steps 1 to 3, ingestion writes new or changed documents to **both** index
 
 ---
 
-## 18. Infrastructure additions (Terraform)
+## 18. Infrastructure additions (Terraform) (planned, not built yet)
 
 New module `modules/ingestion`:
 
@@ -520,7 +520,7 @@ Kubernetes (`k8s/base/ingestion/`): ScaledJob + TriggerAuthentication, Drive con
 
 ---
 
-## 19. Cost
+## 19. Cost (planned, not built yet)
 
 | Item | Monthly |
 |---|---|
@@ -534,7 +534,7 @@ Kubernetes (`k8s/base/ingestion/`): ScaledJob + TriggerAuthentication, Drive con
 
 ---
 
-## 20. Build plan
+## 20. Build plan (planned, not built yet)
 
 | Phase | Work | Done when |
 |---|---|---|
@@ -549,7 +549,7 @@ Recommended ordering relative to DD1: I-1 and I-2 during DD1 Phase 1 and 2; I-3 
 
 ---
 
-## 21. How to explain it in an interview
+## 21. How to explain it in an interview (planned, not built yet)
 
 - "Connectors land raw content in S3; S3 events feed SQS; KEDA launches ingestion Jobs only when there's work."
 - "Processing is idempotent by content hash and ordered by S3 sequencer, so duplicate and out-of-order events are harmless."
@@ -560,7 +560,7 @@ Recommended ordering relative to DD1: I-1 and I-2 during DD1 Phase 1 and 2; I-3 
 
 ---
 
-## 22. Resume bullets
+## 22. Resume bullets (planned, not built yet)
 
 Fill in numbers only after measuring.
 
@@ -570,7 +570,7 @@ Fill in numbers only after measuring.
 
 ---
 
-## 23. Open questions
+## 23. Open questions (planned, not built yet)
 
 | Question | Options | Leaning |
 |---|---|---|

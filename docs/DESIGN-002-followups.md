@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Draft v1 |
+| **Status** | Partly built. Features 3 and 4 (conversational chat, live chat UX) and the heartbeat and Stop parts of feature 5 are live. Each unbuilt section says so in its heading. |
 | **Owner** | Basel |
-| **Last updated** | 2026-09-28 |
+| **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` (referred to below as "DD1") |
 
 ---
@@ -14,12 +14,13 @@
 This document adds five features to the base design:
 
 1. **Self-healing node recovery** with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies.
-2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index.
-3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups.
-4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll.
-5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production.
+2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).
+3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups (live).
+4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll (live, with stop-and-send, Up-arrow recall and Retry).
+5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production. Heartbeats and server-side Stop are live.
+   The scripted post-deploy streaming check and time-to-first-token logging are not built yet.
 
-Plus one small network change: a free **S3 gateway endpoint**.
+Plus one small network change: a free **S3 gateway endpoint** (not built yet).
 
 Section 8 lists every change to DD1's contracts and schema in one place. Section 9 maps the work onto DD1's build phases.
 
@@ -29,15 +30,17 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 
 ### Goals
 
-- **Recovery without a human:** if the node is terminated, the site returns on its own within 10 minutes, with no data loss.
+- **Recovery without a human (not built yet):** if the node is terminated, the site returns on its own within 10 minutes, with no data loss.
 - **Follow-up questions work:** "tell me more about that" retrieves the right documents and answers in context.
 - **Stopping means stopping:** pressing Stop ends LLM token spend within about a second.
-- **Streaming in production matches local:** time to first token through Cloudflare is within 300 ms of local.
-- **Content quality is enforced:** badly structured corpus files produce warnings in CI, not silently bad answers.
+- **Streaming in production matches local (not measured yet):** time to first token through Cloudflare is within 300 ms of local.
+- **Content quality is enforced (not built yet):** badly structured corpus files produce warnings in CI, not silently bad answers.
 
 ### Non-goals
 
 - A highly available control plane (options documented in 3.6, not built).
+
+Note for section 3, as of 2026-10-01: MySQL runs in-cluster on the node's root volume (DD1 §10.5), not on RDS as section 3 assumed. Replacing the node today means an empty database: the corpus re-ingests from the image, but the `queries` log is lost unless the volume is moved or backed up first. Git holds all configuration.
 - Server-side chat sessions or stored conversation history per visitor.
 - WebSockets. SSE remains the transport (see 7.1).
 
@@ -47,7 +50,7 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 
 ### 3.1 Problem (not built)
 
-DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. The design already keeps all durable state outside the node (RDS for data, Git for configuration), so the node itself is replaceable. Recovery just needs to be automatic.
+DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. This design was written when the data was meant to live on RDS; see the note at the end of section 2 for what a replacement means for the in-cluster MySQL.
 
 ### 3.2 Design (not built)
 
@@ -96,7 +99,7 @@ Recorded here as the production answer, with trade-offs:
 | Option | How it works | Cost impact |
 |---|---|---|
 | 3 k3s servers with embedded etcd | Replicated state with leader election; survives losing 1 of 3 | 3x node cost |
-| k3s with an external datastore | k3s stores cluster state in MySQL; 2+ stateless servers behind a load balancer. Could use a separate database on the existing RDS instance | 2x node cost + load balancer |
+| k3s with an external datastore | k3s stores cluster state in MySQL; 2+ stateless servers behind a load balancer. Would need a managed database such as RDS (there is none today) | 2x node cost + load balancer |
 | EKS | AWS runs a multi-AZ control plane | Control plane fee + nodes |
 
 ### 3.7 Verification ("game day") (not built)
@@ -122,11 +125,13 @@ The only required labeling is **location**. Folder decides corpus:
 | Location | Corpus |
 |---|---|
 | `corpus/about-me/**/*.md` | `about_me` |
-| Allowlisted repo paths (DD1 6.4): `infra/`, `k8s/`, `services/`, `frontend/src/architecture.ts`, `docs/`, `DESIGN*.md` | `about_system` |
+| Allowlisted repo paths (DD1 6.4): `infra/`, `k8s/`, `services/`, `docs/` (`frontend/` is not scanned) | `about_system` |
 
-The ingest job derives everything else automatically: source path, title (nearest heading), line range, chunk type (by extension), and GitHub URL at the deployed commit.
+The ingest job derives everything else automatically: source path, title (nearest heading), line range and chunk type (by extension). Not built yet: the GitHub URL at the deployed commit.
 
 ### 4.2 Recommended `about_me` file set
+
+A recommendation, not the live list: the corpus today is `bio.md`, `google.md`, `microsoft.md`, `projects.md` and `skills.md`.
 
 ```
 corpus/about-me/
@@ -149,7 +154,9 @@ corpus/about-me/
 
 ### 4.4 Optional front matter
 
-Files may start with a small YAML block. Nothing requires it; it enables filtering and boosting later.
+Built: files may start with a small YAML block between `---` lines; the scanner strips it (`strip_front_matter` in `services/glassbox/ingest/scanner.py`) so it never reaches the index. Nothing requires it.
+
+Not built yet: reading its values for filtering and boosting, in this format:
 
 ```yaml
 ---
@@ -159,7 +166,7 @@ priority: normal      # normal | high (high gets a small ranking boost)
 ---
 ```
 
-Stored in a new `documents.metadata` JSON column and copied to the Redis chunk hashes as tag fields so vector search can filter on them.
+Not built yet: storing it in a new `documents.metadata` JSON column and copying it to the Redis chunk hashes as tag fields so vector search can filter on them.
 
 ### 4.5 Ingest validation (not built)
 
@@ -208,7 +215,7 @@ Server-side limits (enforced, not trusted from the client):
 
 - **Input:** the last few messages + the new question.
 - **Output:** a standalone question, e.g. "What else did Basel work on at YouTube beyond the ingestion pipeline?"
-- **Model:** the same Haiku-class model, max 60 output tokens.
+- **Model:** the answer model, Amazon Nova Lite (Haiku streaming is blocked by the account's first-time-use form), max 60 output tokens.
 - **Skipped** when history is empty (first question), so the common recruiter path pays nothing extra.
 - The rewrite is used for **retrieval**. The **answer** prompt gets the original question plus history, so the reply still sounds conversational.
 - The rewrite appears as its own stage (`rewrite`) on the diagram, and the rewritten query is shown in small text under the sources, which makes the mechanism visible to engineers.
@@ -268,7 +275,7 @@ type StoredConversation = {
 - **Versioned key.** The `v1` in the key lets a future format change ignore old data instead of crashing on it.
 - **Fail safe.** Every read and write is wrapped in `try/catch`. If storage is unavailable, full, blocked (some private browsing modes), or holds data that fails validation, the app falls back to in-memory only and works normally.
 - **New chat.** A "New chat" button clears the current corpus's key and resets the view. Suggested-question chips reappear when a conversation is empty.
-- **Multiple tabs.** Last write wins. Optional stretch: listen for the `storage` event to refresh a conversation changed in another tab.
+- **Multiple tabs.** Last write wins, and a change saved in another tab refreshes that conversation here through the `storage` event, unless this tab is streaming into it (`App.tsx`).
 - **Privacy note.** Data stays in the visitor's own browser. On desktop a small line under the input ("Chats are saved in this browser. New chat clears it.") keeps that transparent, which matters on shared computers. Below 768px New chat sits in the footer instead (DD1 §4.2): its tooltip carries the note, and a line under the suggested questions repeats it.
 
 **Restored-state behavior:** restored assistant messages render with their sources, but the architecture panel starts idle (traces are not persisted; they describe a past request, and replaying them would be misleading).
@@ -376,7 +383,7 @@ Any layer that buffers or compresses the response delays tokens until the buffer
 
 The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is open. Browsers ignore comment lines, but they keep the connection active through proxies during slow stages, such as a cold Bedrock call.
 
-### 7.5 Verification
+### 7.5 Verification (not built yet)
 
 - **Scripted check:** `curl -N` against `https://basel.engineering/api/ask` (through Cloudflare), recording the arrival time of each event. Tokens must arrive spread over time, not in one burst at the end.
 - **Metric:** time to first token (TTFT), measured in the browser and logged. Target: production TTFT within 300 ms of local TTFT.
@@ -389,7 +396,7 @@ The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is 
 
 ---
 
-## 8. Network: S3 gateway endpoint
+## 8. Network: S3 gateway endpoint (not built yet)
 
 - Add `aws_vpc_endpoint` (type `Gateway`, service `com.amazonaws.us-east-1.s3`) associated with the public and private route tables.
 - **Free**, and any S3 traffic from inside the VPC then stays on the AWS network.
@@ -419,26 +426,28 @@ type AskRequest = {
 
 ### 9.3 MySQL
 
+Built: `mode` `stopped` (Alembic `0004`), `turn_index` and `rewritten_query` (`0003`). Not built yet: `documents.metadata` (§4.4) and `ttft_ms` (§7.5).
+
 ```sql
-ALTER TABLE documents ADD COLUMN metadata JSON NULL;
+ALTER TABLE documents ADD COLUMN metadata JSON NULL;  -- not built yet
 
 ALTER TABLE queries
   MODIFY COLUMN mode ENUM('full','retrieval_only','stopped') NOT NULL,
   ADD COLUMN turn_index      TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0 = first question
   ADD COLUMN rewritten_query VARCHAR(1000) NULL,
-  ADD COLUMN ttft_ms         INT NULL;
+  ADD COLUMN ttft_ms         INT NULL;  -- not built yet
 ```
 
 ### 9.4 Redis
 
-- Chunk hashes gain optional tag fields from front matter (`type`, `tags`) for filtered search.
-- Budget counter increments by 0.25 for rewrites (store as integer quarter-units).
+- Not built yet: chunk hashes gain optional tag fields from front matter (`type`, `tags`) for filtered search.
+- Rewrites count 0.25 of an answer: quarter-units in a separate `budget:llm:rw:{date}` counter (built; see §5.3.1).
 
 ### 9.5 Terraform
 
-- `modules/compute`: `aws_instance` replaced by `aws_launch_template` + `aws_autoscaling_group`; new IAM statements (3.5); new SSM parameters for the k3s token and Flux deploy key.
-- `modules/network`: S3 gateway endpoint.
-- Cloudflare zone: Cache Rule for `/api/*` (7.3) — managed via the Cloudflare dashboard or API, not Terraform's `modules/edge` (removed; see `DESIGN-004-action-plan.md`).
+- Not built yet: in `modules/compute`, `aws_instance` replaced by a launch template + Auto Scaling group; new IAM statements (3.5); new SSM parameters for the k3s token and Flux deploy key.
+- Not built yet: in `modules/network`, the S3 gateway endpoint.
+- Built: the Cloudflare Cache Rule for `/api/*` (7.3) is managed by Terraform's `modules/edge`, next to the apex DNS record (DD1 §10.3).
 
 ---
 
@@ -446,14 +455,14 @@ ALTER TABLE queries
 
 | DD1 phase | Adds from this doc |
 |---|---|
-| Phase 0: Scaffold | Corpus validation step in CI (4.5) |
-| Phase 1: Backend locally | History in request, rewrite stage, follow-up cache rules, disconnect handling (5, 6.2) |
-| Phase 2: Real models + eval | Add 10 follow-up question pairs to the eval set, scored after rewriting |
-| Phase 3: Frontend | Message states, Stop, auto-scroll, input behavior, accessibility (6); localStorage persistence and New chat (5.5) |
-| Phase 4: AWS + Kubernetes | Launch template + ASG, boot script, health timer, S3 endpoint, Cloudflare streaming settings (3, 7.3, 8) |
+| Phase 0: Scaffold | Corpus validation step in CI (4.5), not built yet |
+| Phase 1: Backend locally | History in request, rewrite stage, follow-up cache rules, disconnect handling (5, 6.2): built |
+| Phase 2: Real models + eval | Add follow-up question pairs to the eval set, scored after rewriting: the multi-turn cases are in `eval/golden.yaml`; no paid run has scored them yet |
+| Phase 3: Frontend | Message states, Stop, auto-scroll, input behavior, accessibility (6); localStorage persistence and New chat (5.5): built |
+| Phase 4: AWS + Kubernetes | Cloudflare Cache Rule bypassing `/api/*` (7.3): built. Launch template + ASG, boot script, health timer, S3 endpoint (3, 8): not built yet |
 | Phase 5: Autoscaling demo | No change |
-| Phase 6: CI/CD | Post-deploy streaming check (7.5) |
-| Phase 7: Polish | Game day recovery test with measured time in README (3.7) |
+| Phase 6: CI/CD | Post-deploy streaming check (7.5), not built yet |
+| Phase 7: Polish | Game day recovery test with measured time in README (3.7), not built yet |
 
 ---
 
@@ -471,6 +480,6 @@ Fill in numbers only after measuring.
 
 | Question | Options | Leaning |
 |---|---|---|
-| Rewrite model | Same Haiku-class model vs. a smaller, cheaper one | Same model; volume is tiny |
-| History length | 3 exchanges vs. 5 | 3; recruiters rarely go deeper |
-| Game day cadence | Once vs. monthly | Once before sharing the site, again after major infra changes |
+| Rewrite model | Same model as answers vs. a smaller, cheaper one | Resolved: the answer model, Nova Lite; volume is tiny |
+| History length | 3 exchanges vs. 5 | Resolved: 3 (6 messages); recruiters rarely go deeper |
+| Game day cadence | Once or monthly | Open until self-healing is built (not built yet): once before sharing the site, again after major infra changes |
