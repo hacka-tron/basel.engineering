@@ -8,6 +8,8 @@ type StatsBarProps = {
   lastStats?: LastStats | null
   queriesServed?: number
   onStressTest?: () => void
+  /** Called on every stress-test tap, including ones ignored while disabled (a run in flight or counting down). */
+  onStressTap?: () => void
   stressTestCooldownSeconds?: number | null
   stressTestSubmitting?: boolean
   stressTestCapacity?: DemoCapacity
@@ -43,6 +45,7 @@ function StatsBar({
   lastStats,
   queriesServed = 0,
   onStressTest,
+  onStressTap,
   stressTestCooldownSeconds = null,
   stressTestSubmitting = false,
   stressTestCapacity = { sufficient: false, reason: 'Checking cluster capacity…' },
@@ -71,7 +74,7 @@ function StatsBar({
   const tooltipId = useId()
   const wideTooltipId = useId()
   const [wideTooltipOpen, setWideTooltipOpen] = useState(false)
-  const { open: stressPressOpen, ref: stressPressRef, ...stressPressHandlers } = useLongPressTooltip<HTMLButtonElement>(() => { if (!disabled) onStressTest?.() })
+  const { open: stressPressOpen, ref: stressPressRef, ...stressPressHandlers } = useLongPressTooltip<HTMLButtonElement>(() => { onStressTap?.(); if (!disabled) onStressTest?.() })
   const tooltipOpen = stressPressOpen
   const latencyTooltipId = useId()
   const { open: latencyPressOpen, ref: latencyPressRef, ...latencyPressHandlers } = useLongPressTooltip<HTMLButtonElement>()
@@ -190,7 +193,7 @@ function StatsBar({
           aria-label={onCooldown
             ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining`
             : `Run stress test (${stressTestCapacity.sufficient ? 'real' : 'simulated'})`}
-          onClick={() => { if (!disabled) onStressTest?.() }}
+          onClick={() => { onStressTap?.(); if (!disabled) onStressTest?.() }}
           className={`hidden min-h-11 shrink-0 touch-manipulation rounded-[3px] border px-4 py-2 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-cyan sm:inline-block md:min-h-0 ${
             disabled
               ? 'cursor-not-allowed border-hairline text-muted'
