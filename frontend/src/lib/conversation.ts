@@ -2,6 +2,7 @@
 // stateless: the browser keeps each corpus's conversation, persists it in
 // localStorage, and sends recent turns as `history` with each question.
 
+import { CANONICAL_BUDGET_REPLY, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { CANONICAL_IDK } from './idkReplies.ts'
 
 export type ApiCorpus = 'about_me' | 'about_system'
@@ -22,6 +23,10 @@ export type ChatMessage = {
   // The shown text is a playful stand-in for the server's abstention (lib/idkReplies.ts).
   // History sends the canonical sentence instead. Optional, so older saves load unchanged.
   idk?: boolean
+  // The shown text is a playful daily-budget reply (lib/budgetReplies.ts): on a
+  // retrieval_only answer, or a `budget_exhausted` failure (which Retry skips).
+  // History sends the canonical sentence instead. Optional, as for `idk`.
+  budget?: boolean
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
   rewrittenQuery?: string
   // Live-only, on a rate-limited failure reply: when Retry may be pressed again
@@ -42,6 +47,7 @@ type StoredConversation = {
     state?: StoredState
     sources?: MessageSource[]
     idk?: boolean
+    budget?: boolean
     createdAt: number
   }[]
 }
@@ -113,13 +119,20 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
     if (message.state !== undefined && (typeof message.state !== 'string' || !STORED_STATES.has(message.state))) return null
     if (message.sources !== undefined && (!Array.isArray(message.sources) || !message.sources.every(isSource))) return null
     if (message.idk !== undefined && typeof message.idk !== 'boolean') return null
+    if (message.budget !== undefined && typeof message.budget !== 'boolean') return null
+    // Only assistant replies carry these flags; a user message never does.
+    // Saves from before the budget flag carry the one fixed budget failure reply.
+    const assistant = message.role === 'assistant'
+    const budget = assistant && (message.budget === true
+      || (message.state === 'error' && message.content === LEGACY_BUDGET_ERROR_REPLY))
     messages.push({
       id: message.id,
       role: message.role,
       content: message.content,
       state: message.state as StoredState | undefined,
       sources: message.sources as MessageSource[] | undefined,
-      ...(message.idk === true ? { idk: true } : {}),
+      ...(assistant && message.idk === true ? { idk: true } : {}),
+      ...(budget ? { budget: true } : {}),
       createdAt: message.createdAt,
     })
   }
@@ -160,13 +173,14 @@ export function serializeConversation(messages: ChatMessage[], now = Date.now())
   const stored: StoredConversation = {
     version: 1,
     updatedAt: now,
-    messages: settled.map(({ id, role, content, state, sources, idk, createdAt }) => ({
+    messages: settled.map(({ id, role, content, state, sources, idk, budget, createdAt }) => ({
       id,
       role,
       content,
       ...(role === 'assistant' && state && STORED_STATES.has(state) ? { state: state as StoredState } : {}),
       ...(sources && sources.length > 0 ? { sources } : {}),
       ...(role === 'assistant' && idk ? { idk: true } : {}),
+      ...(role === 'assistant' && budget ? { budget: true } : {}),
       createdAt,
     })),
   }
@@ -182,13 +196,19 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
   }
 }
 
+function canonicalContent(message: ChatMessage): string {
+  if (message.idk) return CANONICAL_IDK
+  if (message.budget) return CANONICAL_BUDGET_REPLY
+  return message.content
+}
+
 /** The recent settled turns sent as `history` (the server re-applies its own limits). */
 export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
   const turns = messages.filter((message, index) => isHistoryTurn(message, messages[index + 1])).slice(-MAX_HISTORY_MESSAGES)
     .map((message) => ({
       role: message.role,
-      // A quirky stand-in goes back as the sentence the server actually said.
-      content: (message.idk ? CANONICAL_IDK : message.content).slice(0, MAX_HISTORY_CHARS),
+      // A quirky stand-in goes back as its canonical sentence, never the joke.
+      content: canonicalContent(message).slice(0, MAX_HISTORY_CHARS),
     }))
   // Mirror the server's total-character cap, dropping the oldest turns first.
   let total = 0
