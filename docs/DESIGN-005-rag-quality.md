@@ -3,6 +3,7 @@
 **Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned, except where a heading says built: phases 1 and 2 of the plan (the golden set, free answer graders and the retrieval eval at k=8) shipped in PRs #97 and #95, and the report-only stale-document sweep (part of phase 6) in PR #101.
 **Plan:** `docs/superpowers/plans/2026-10-01-rag-quality.md`.
 **Replaces:** the BACKLOG "Answer thinness (prompt tuning)" item, which becomes phase 5 of the plan.
+**Ingested:** this document is part of About This System (about 15 chunks, plus 7 for its plan file). Section 2 avoids status words on purpose; every later section states its status in its heading, and section 5 marks its unbuilt rows one by one. `services/tests/test_planned_labels.py` pins which units carry the marker.
 
 ## 1. Summary
 
@@ -30,10 +31,10 @@ The planned work (not built yet) is to build a small validation harness first, t
 | Stale files | After a full scan, documents whose source file was deleted or renamed are listed per corpus and model and **logged only** (`GLASSBOX_INGEST_SWEEP=report`, the Job's setting since PR #101). Deleting them needs `apply`, which production does not use yet (an owner decision). `--clear --corpus X` wipes one corpus and model by hand. | `ingest/sweep.py`, `ingest/run.py` |
 | Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 now lists that light rerank (score threshold, dedupe by document) as unbuilt. | `retrieval/search.py:11-56`, `worker/main.py:240` |
 | Multi-turn | Follow-ups are rewritten into a standalone query by Nova Lite (60 tokens) and retrieval uses the rewrite; the answer prompt gets the original question plus up to 6 messages / 4,000 characters of history. | `api/ask.py:99-116`, `:480-507` |
-| Prompt | Numbered sources `[n] path: text`; headings, list items and sentences that name unshipped work get a status prefix (the `PLANNED_MARK` constant), chosen by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 gets a hard-coded label. Instructions include **"Use two or three concise sentences"** (`:275`) and **"Do not list every detail unless the question asks for a list"** (`:291`). No bracketed citations in the answer (the UI lists sources). | `api/ask.py:65-74`, `:227-293`; system prompt `providers/base.py:17-29` |
+| Prompt | Numbered sources `[n] path: text`; headings, list items and sentences that name unshipped work get a status prefix (the `PLANNED_MARK` constant), chosen by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 marks its own unbuilt headings (no hard-coded label since prompt v14). Instructions include **"Use two or three concise sentences"** (`:275`) and **"Do not list every detail unless the question asks for a list"** (`:291`). No bracketed citations in the answer (the UI lists sources). | `api/ask.py:65-74`, `:227-293`; system prompt `providers/base.py:17-29` |
 | Generation | Nova Lite ConverseStream, `maxTokens` 400, temperature 0.2. `BedrockLLMProvider.generate` rejects any `max_tokens` above 400 with a `ValueError` (a test pins this). | `api/ask.py:710`, `providers/bedrock.py:104-105`, `:117`; `services/tests/test_bedrock_providers.py:101` |
 | Abstention | Canonical sentence "I don't know from what I have."; exact and loose detectors; abstentions never cached; `done.abstained`. | `providers/base.py:14`, `:64-92` |
-| Answer cache | Semantic cache, cosine ≥ 0.95, 24h TTL, first questions only, keyed by corpus version, embedding model, LLM model and prompt version `v13`. Prompt-version bump invalidates everything; the `warm-answers` CronJob refills suggested questions (≤ 10 LLM calls/day). | `cache/answer.py:14-15`, `api/ask.py:59`, `:475` |
+| Answer cache | Semantic cache, cosine ≥ 0.95, 24h TTL, first questions only, keyed by corpus version, embedding model, LLM model and prompt version `v14` (v14, on 2026-10-01, only dropped DD3's fixed whole-document label). Prompt-version bump invalidates everything; the `warm-answers` CronJob refills suggested questions (≤ 10 LLM calls/day). | `cache/answer.py:14-15`, `api/ask.py:59`, `:475` |
 | Query log | `queries` stores question, chunk ids, rewrite, timings, tokens. **The answer text is not stored**, so live answers cannot be reviewed afterwards. | `db/models.py:61-80` |
 | Eval | Retrieval (`run_eval.py`, PR #95): the 75 `eval/golden.yaml` cases at the production **k=8**; file-level recall@5/MRR (continuity), recall@8, chunk-level recall@8/MRR from gold snippets, and noise@8, per corpus and category; refuses to run paid without `GLASSBOX_EVAL_ALLOW_PAID=1`. Answers (`run_answers.py` and `graders.py`, PR #97): free deterministic graders, needs `--paid` as well; no paid run yet. Both are manual; CI runs their unit tests, dataset validation and a fake-provider end-to-end run. | `eval/run_eval.py`, `eval/run_answers.py`, `eval/graders.py`, `eval/golden.yaml` |
 
@@ -122,7 +123,7 @@ flowchart LR
         BM --> F
         F --> TOP[top 8 to the prompt]
     end
-    TOP --> P[prompt v14<br/>keep specifics, length follows the question]
+    TOP --> P[prompt v15<br/>keep specifics, length follows the question]
     P --> LLM[Nova Lite]
 ```
 
@@ -132,7 +133,7 @@ Changes against today:
 2. **Chunking.** Markdown: one chunk per section at the deepest heading level that keeps it between about 120 and 450 words. Merge only *sibling subsections* that are too small (no more merging across unrelated `###` sections). Split long sections into windows that repeat the breadcrumb. Code: merge tiny adjacent definitions up to about 250 words, split anything over about 600 words, and prefix the module path plus docstring line.
 3. **Contextual header** prepended to both the embedded text and the BM25 text, for example `docs/architecture/deep-dive.md > Glassbox architecture deep dive > Stress test and KEDA autoscaling of retrieval workers`. The prompt shows the same header as the source label.
 4. **Hybrid retrieval** in `retrieval/search.py`: two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters; the lexical query is the question's stopword-stripped, escaped terms joined with `|`, because `FT.SEARCH` ANDs terms by default and a whole question would match nothing), RRF with k=60, a small multiplicative prior by kind (tuned by eval, may end at 1.0), a per-document cap of 3, top 8 out. The retrieval cache keys stay the same; the corpus version still invalidates.
-5. **Prompt v14** (section 6).
+5. **Prompt v15** (section 6).
 6. **Answer log**: store `answer` and `abstained` in `queries` (next Alembic revision) so live traffic can be sampled into the golden set and reviewed.
 
 New index fields (`kind`, `text`) need `ensure_index` restructured (its current behaviour is in the §2.1 "Index migration" row): it should compare the full expected schema and `FT.ALTER` each missing field.
@@ -148,7 +149,7 @@ Kept as they are (today's values are in §2.1): the embedding model and its dime
 | Category | Count | Expectations |
 |---|---|---|
 | `fact` | ~35 (the 30 existing plus the suggested questions) | `expected_sources` (files), `gold_snippets` (substring of the chunk that must be retrieved), `must_include` (regex list for key facts, e.g. `512\s?MiB`, `5[- ]minute|300\s?s`) |
-| `planned` | ~8 | `must_include: ["\\b(no|not)\\b"]` plus the planned item; for example "Does Glassbox ingest Google Drive today?", "Does the node self-heal with an ASG?" |
+| planned-category cases | ~8 | `must_include: ["\\b(no|not)\\b"]` plus the unshipped item; for example "Does Glassbox ingest Google Drive today?", "Does a dead node rebuild itself today?" |
 | `live` | ~5 | must *not* claim the feature is unbuilt (KEDA installed, Flux, Terraform) |
 | `unanswerable` | ~10 | `expect_abstain: true` (Basel's salary, the RDS Terraform that does not exist, other people's projects, prompt-injection asks) |
 | `multi_turn` | ~8 | `history` plus `rewrite_must_include` (the resolved entity) plus normal fact expectations |
@@ -177,15 +178,15 @@ The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbe
 - **Calibration.** Natural answers are mostly passes, so 30 random labels would hold only 2 to 5 failures. Instead, the label set **oversamples known failures**: the thin v13 answers, answers to unanswerable questions with abstention disabled, and answers generated with deliberately perturbed sources (a number changed, a planned feature stated as live). The aim is about 50 labelled answers with at least 15 per class for each judge. They are split once, by a fixed seed, into a **dev set** (about 40%: few-shot examples and prompt iteration) and a **held-out test set** (about 60%, at least 10 per class), which is never shown to the judge-prompt author. Per-class agreement (true-positive and true-negative rate) is reported **on the held-out set only**, and must be ≥ 0.85 for both classes before the judge gates anything. Disagreements on the dev set may become few-shot examples; disagreements on the test set may not (fix the prompt and draw new test labels instead). Re-check whenever the judge prompt or model changes.
 - **Never** grade on a 1 to 5 scale, and never let the judge see the expected answer for faithfulness (it grades support by the sources only).
 
-### 5.4 Where each check runs (planned)
+### 5.4 Where each check runs
 
 | Run | Trigger | What | Paid? |
 |---|---|---|---|
-| **CI (every PR)** | `ci.yml`, existing MySQL/Redis services | Unit tests for graders and prompt contract; dataset schema validation; a **lexical-only retrieval eval** against the real corpus (BM25 leg, deterministic, fake embeddings not used for scoring); hygiene assertions (no tests/plans indexed, no stale docs). Gates: dataset valid, lexical recall must not drop more than 5 points from its committed baseline, noise@8 = 0. | No |
-| **Paid eval (manual)** | `GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid` locally (both switches required) with owner credentials, later a `workflow_dispatch` "Eval · RAG quality" behind an approval environment | Titan retrieval eval plus Nova Lite answers for all ~70 cases, deterministic graders, optional judge. Writes `eval/runs/<date>-<prompt>-<git sha>.json` and updates `eval/baselines/answers-<model>.json` when asked. | Yes, about $0.03 without judge, about $0.50 with Nova Pro judge |
-| **Online (weekly, manual)** | script over `queries` | Sample 20 live answers, run deterministic checks and optionally the judge; abstention rate and answer length trends; promote interesting questions into the golden set. | Optional |
+| **CI (every PR)** | `ci.yml`, existing MySQL/Redis services | Built: unit tests for the graders and the prompt contract, and dataset schema validation. Planned: a **lexical-only retrieval eval** against the real corpus (BM25 leg, deterministic, fake embeddings not used for scoring); hygiene assertions (no tests/plans indexed, no stale docs). Planned gates: dataset valid, lexical recall must not drop more than 5 points from its committed baseline, noise@8 = 0. | No |
+| **Paid eval (manual; planned, no paid run yet)** | `GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid` locally (both switches required) with owner credentials, later a `workflow_dispatch` "Eval · RAG quality" behind an approval environment | Titan retrieval eval plus Nova Lite answers for all ~70 cases, deterministic graders, optional judge. Writes `eval/runs/<date>-<prompt>-<git sha>.json` and updates `eval/baselines/answers-<model>.json` when asked. | Yes, about $0.03 without judge, about $0.50 with Nova Pro judge |
+| **Online (weekly, manual; planned)** | script over `queries` | Sample 20 live answers, run deterministic checks and optionally the judge; abstention rate and answer length trends; promote interesting questions into the golden set. | Optional |
 
-**Release gate for any retrieval or prompt change** (checked in its PR from a paid run attached to the PR): chunk-level recall@8 does not drop; `fact_coverage` ≥ 0.90 (and it must improve for the thinness fix); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; faithfulness pass ≥ 0.95 once the judge is calibrated.
+**Release gate for any retrieval or prompt change (planned)** (checked in its PR from a paid run attached to the PR): chunk-level recall@8 does not drop; `fact_coverage` ≥ 0.90 (and it must improve for the thinness fix); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; faithfulness pass ≥ 0.95 once the judge is calibrated.
 
 ### 5.5 Cost estimate (planned runs)
 
@@ -193,8 +194,8 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 
 ## 6. How this fixes answer thinness (planned)
 
-1. **Measure first.** Phase 1 adds the `must_include` facts for the stress-test, caching and rate-limit questions. Phase 3 records the v13 baseline; the stress-test case should fail it.
-2. **Prompt v14.** Replace "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list" with: *"Answer directly in the first sentence, then give the specific details from the sources that answer the question: numbers, thresholds, limits, durations, names and conditions. Do not round or drop a number the sources give. Use a short paragraph, or a short list when there are several steps or items. Leave out details that don't bear on the question."* Raise `maxTokens` from 400 to 500 (a cost increase of about $0.00002 per answer). This also needs the provider's output-token guard raised to match (see the §2.1 "Generation" row). Otherwise the fake-provider run passes and every live answer fails. Bump `_PROMPT_VERSION`; the answer cache invalidates and `warm-answers` refills it within its cap.
+1. **Measure first.** Phase 1 adds the `must_include` facts for the stress-test, caching and rate-limit questions. Phase 3 records the v14 baseline (same answer wording as v13); the stress-test case should fail it.
+2. **Prompt v15.** Replace "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list" with: *"Answer directly in the first sentence, then give the specific details from the sources that answer the question: numbers, thresholds, limits, durations, names and conditions. Do not round or drop a number the sources give. Use a short paragraph, or a short list when there are several steps or items. Leave out details that don't bear on the question."* Raise `maxTokens` from 400 to 500 (a cost increase of about $0.00002 per answer). This also needs the provider's output-token guard raised to match (see the §2.1 "Generation" row). Otherwise the fake-provider run passes and every live answer fails. Bump `_PROMPT_VERSION`; the answer cache invalidates and `warm-answers` refills it within its cap.
 3. **Better context.** Breadcrumb headers and section-sized chunks mean the chunk that holds "512 MiB" is labelled "Stress test and KEDA autoscaling", which helps both retrieval and the model's reading. Excluding tests frees prompt space for the real sources.
 4. **Gate.** `fact_coverage` must rise and every other answer metric must hold.
 
@@ -216,13 +217,13 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 
 ## 8. Risks of the planned work (not built yet)
 
-- **Over-long answers.** v14 could swing to verbose. The gate also tracks answer length (median words) and relevance; the instruction says to leave out details that don't bear on the question.
+- **Over-long answers.** v15 could swing to verbose. The gate also tracks answer length (median words) and relevance; the instruction says to leave out details that don't bear on the question.
 - **Prompt bump empties the answer cache.** It's a 24h cache, and the warm-up refills suggested questions within its 10-call cap. Expect a day of slightly higher latency and LLM use. Batch prompt changes rather than bumping often.
 - **Re-ingest on deploy.** Chunking or header changes re-embed every chunk on the next ingest Job (well under $0.01, a minute of node CPU) and bump both corpus versions, which invalidates all caches. Schedule the merge away from a KEDA bring-back or other node work.
 - **Excluding tests hides real answers.** "How is the rate limiter tested?" would lose its sources. Keep a `tests` kind with a strong down-weight instead of full exclusion if the owner prefers (section 9).
 - **Judge drift.** A judge that is not calibrated is a random number generator with confidence. No judge gate until calibration passes.
 - **Golden-set overfitting.** Keep about 20% of cases as a held-out set that prompt tuning doesn't look at; add live questions over time.
-- **This document is ingested.** It adds about 22 chunks to About This System (761 to 783; 15 for this document, 7 for the plan), together with the plan file, which stays until phase 6 drops plans. Every section after section 2 has a "planned" or "not built yet" heading, so `_PLANNED_SOURCE_SIGNAL` marks it, except section 5 and its built subsections 5.1 and 5.2, whose unbuilt rows are marked one by one. Section 2 (current state) deliberately avoids the signal words and the literal marker text. `services/tests/test_planned_labels.py` pins marked cases (hybrid search in section 3, the per-document cap in 3.5, hybrid retrieval and the answer log in section 4, answer logging in section 9, phase 8 of the plan) and unmarked ones (the Retrieval and Prompt rows and the status sentence in section 2, and the already-built corpus/model filter in 3.5). Check one live answer about hybrid search after merge.
+- **Marker regressions.** An edit here can drop or add a status word and silently change which text the grounding marks (see the "Ingested" note at the top). Check one live answer about hybrid search after merge.
 - **Planned-marker regex.** Still keyword-based (BACKLOG standing note). The planned/live category makes regressions visible; doc-level status metadata is the longer-term fix and is out of scope here.
 
 ## 9. Open owner decisions on the planned work (not built yet)

@@ -14,7 +14,7 @@
 This document adds five features to the base design:
 
 1. **Self-healing node recovery** with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies.
-2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index. The front matter and the validation step are not built yet.
+2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).
 3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups (live).
 4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll (live, with stop-and-send, Up-arrow recall and Retry).
 5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production. Heartbeats and server-side Stop are live.
@@ -39,6 +39,8 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 ### Non-goals
 
 - A highly available control plane (options documented in 3.6, not built).
+
+Note for section 3, as of 2026-10-01: MySQL runs in-cluster on the node's root volume (DD1 §10.5), not on RDS as section 3 assumed. Replacing the node today means an empty database: the corpus re-ingests from the image, but the `queries` log is lost unless the volume is moved or backed up first. Git holds all configuration.
 - Server-side chat sessions or stored conversation history per visitor.
 - WebSockets. SSE remains the transport (see 7.1).
 
@@ -48,7 +50,7 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 
 ### 3.1 Problem (not built)
 
-DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. This design was written when the data was meant to live on RDS. MySQL now runs in-cluster on the node's root volume (DD1 §10.5), so a replacement node would come up with an empty database: the corpus re-ingests from the image, but the `queries` log would be lost unless the data volume is moved or backed up first. Git still holds all configuration.
+DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. This design was written when the data was meant to live on RDS; see the note at the end of section 2 for what a replacement means for the in-cluster MySQL.
 
 ### 3.2 Design (not built)
 
@@ -150,9 +152,11 @@ corpus/about-me/
 4. **Aim for 100 to 400 words per section.** Much shorter chunks lack context; much longer ones get split at arbitrary points.
 5. **Only public-safe content.** Everything in the corpus can be quoted to any visitor.
 
-### 4.4 Optional front matter (not built yet)
+### 4.4 Optional front matter
 
-Files may start with a small YAML block. Nothing requires it; it enables filtering and boosting later.
+Built: files may start with a small YAML block between `---` lines; the scanner strips it (`strip_front_matter` in `services/glassbox/ingest/scanner.py`) so it never reaches the index. Nothing requires it.
+
+Not built yet: reading its values for filtering and boosting, in this format:
 
 ```yaml
 ---
@@ -162,7 +166,7 @@ priority: normal      # normal | high (high gets a small ranking boost)
 ---
 ```
 
-Stored in a new `documents.metadata` JSON column and copied to the Redis chunk hashes as tag fields so vector search can filter on them.
+Not built yet: storing it in a new `documents.metadata` JSON column and copying it to the Redis chunk hashes as tag fields so vector search can filter on them.
 
 ### 4.5 Ingest validation (not built)
 
@@ -271,7 +275,7 @@ type StoredConversation = {
 - **Versioned key.** The `v1` in the key lets a future format change ignore old data instead of crashing on it.
 - **Fail safe.** Every read and write is wrapped in `try/catch`. If storage is unavailable, full, blocked (some private browsing modes), or holds data that fails validation, the app falls back to in-memory only and works normally.
 - **New chat.** A "New chat" button clears the current corpus's key and resets the view. Suggested-question chips reappear when a conversation is empty.
-- **Multiple tabs.** Last write wins. Optional stretch: listen for the `storage` event to refresh a conversation changed in another tab.
+- **Multiple tabs.** Last write wins, and a change saved in another tab refreshes that conversation here through the `storage` event, unless this tab is streaming into it (`App.tsx`).
 - **Privacy note.** Data stays in the visitor's own browser. On desktop a small line under the input ("Chats are saved in this browser. New chat clears it.") keeps that transparent, which matters on shared computers. Below 768px New chat sits in the footer instead (DD1 §4.2): its tooltip carries the note, and a line under the suggested questions repeats it.
 
 **Restored-state behavior:** restored assistant messages render with their sources, but the architecture panel starts idle (traces are not persisted; they describe a past request, and replaying them would be misleading).

@@ -349,6 +349,15 @@ LIVE_UNITS = [
     ("docs/DESIGN-005-rag-quality.md", "| `live` | ~5 |"),
     ("docs/architecture/deep-dive.md", "A **Retry** button under the latest failure reply"),
     ("docs/architecture/deep-dive.md", "## KEDA status: suspended since the memory incident"),
+    # Review round 1 of #120: live facts split out of planned rows and sections.
+    ("docs/DESIGN.md", "Idempotent. It ends with the answer warm-up."),
+    ("docs/DESIGN-002-followups.md", "Note for section 3, as of 2026-10-01"),
+    ("docs/DESIGN-002-followups.md", "Built: files may start with a small YAML block"),
+    ("docs/DESIGN-002-followups.md", "- **Multiple tabs.**"),
+    ("docs/DESIGN-005-rag-quality.md", "| planned-category cases |"),
+    ("docs/DESIGN-005-rag-quality.md", "Built: unit tests for the graders"),
+    ("docs/DESIGN-005-rag-quality.md", "**Ingested:** this document is part of About This System"),
+    ("docs/architecture/deep-dive.md", "Phones are portrait-only"),
     ("docs/architecture/deep-dive.md", "## Compressed swap (zram) on the node"),
     ("docs/architecture/deep-dive.md", "## Operations: push-button runbooks"),
     ("docs/architecture/deep-dive.md", "## Stale documents: report-only sweep"),
@@ -400,7 +409,11 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "- Not started: README with screenshots/GIF"),
     ("docs/DESIGN.md", "Phase 7 is not started."),
     ("docs/DESIGN-002-followups.md", "Plus one small network change"),
-    ("docs/DESIGN-002-followups.md", "### 4.4 Optional front matter (not built yet)"),
+    ("docs/DESIGN-002-followups.md", "Not built yet: reading its values for filtering"),
+    ("docs/DESIGN.md", "A Cloudflare Worker injecting a secret header"),
+    ("docs/DESIGN.md", "External Secrets Operator to sync automatically"),
+    ("docs/DESIGN-005-rag-quality.md", "Planned: a **lexical-only retrieval eval**"),
+    ("docs/DESIGN-005-rag-quality.md", "| **Online (weekly, manual; planned)** |"),
     ("docs/DESIGN-002-followups.md", "- **Scripted check:**"),
     ("docs/DESIGN-002-followups.md", "## 8. Network: S3 gateway endpoint (not built yet)"),
     ("docs/DESIGN-002-followups.md", "ALTER TABLE documents ADD COLUMN metadata JSON NULL;"),
@@ -444,15 +457,30 @@ def _real_chunks(path: str) -> list[str]:
     return [chunk.text for chunk in chunk_markdown(source.read_text(), path)]
 
 
-def test_every_design_003_chunk_is_marked_except_what_runs_today():
-    # DD3 is unbuilt M4 design (only section 1.1 describes the running ingest Job).
-    # Every heading carries the marker so each real chunk is marked even without
-    # the whole-document label, including chunks that start at a ### heading.
-    for text in _real_chunks("docs/DESIGN-003-ingestion.md"):
+def _rendered_source(path: str, text: str) -> str:
+    prompt = _prompt(
+        "Is this built now?",
+        [WorkerChunk(n=1, chunk_id=1, text=text, source_path=path, title="t", score=0.8)],
+    )
+    line_start = prompt.index(f"[1] {path}")
+    return prompt[line_start : prompt.index("\n\nQuestion:", line_start)]
+
+
+def test_every_design_003_chunk_is_marked_in_the_prompt_except_what_runs_today():
+    # DD3 is unbuilt M4 design; only section 1.1 describes the running ingest Job
+    # and stale sweep. Since prompt v14 DD3 has no fixed whole-document label: every
+    # heading carries the planned wording, so each real chunk is marked in the
+    # rendered prompt (including chunks that start at a ### heading) and 1.1 is not.
+    path = "docs/DESIGN-003-ingestion.md"
+    chunks = _real_chunks(path)
+    assert len(chunks) == 13
+    for text in chunks:
+        rendered = _rendered_source(path, text)
+        assert "PLANNED M4 DESIGN" not in rendered
         if text.startswith("## 1.1 What runs today"):
-            assert PLANNED_MARK not in _mark_planned(text)
+            assert PLANNED_MARK not in rendered
         else:
-            assert PLANNED_MARK in _mark_planned(text), text[:80]
+            assert PLANNED_MARK in rendered, text[:80]
 
 
 def test_real_deep_dive_marks_only_its_planned_section():
@@ -475,9 +503,9 @@ def test_real_deep_dive_marks_only_its_planned_section():
     ["Up-arrow", "Retry", "Landscape phone layout", "Pruning deleted files"],
 )
 def test_deep_dive_planned_section_lists_no_shipped_feature(shipped):
-    # Shipped on 2026-10-01: stop-and-send, Up-arrow and Retry (#93), landscape phones
-    # (#100) and the report-only stale sweep (#101). Listing them as planned made the
-    # bot deny live features.
+    # Settled on 2026-10-01: stop-and-send, Up-arrow and Retry (#93), landscape phones
+    # (#100, then superseded by portrait-only #119) and the report-only stale sweep
+    # (#101). Listing them as planned made the bot deny live features.
     (planned,) = (
         text
         for text in _real_chunks("docs/architecture/deep-dive.md")
@@ -586,21 +614,23 @@ def test_code_manifests_and_infra_are_never_marked(source_path):
     assert f"[1] {source_path}: {text}" in prompt
 
 
-def test_design_003_keeps_its_whole_document_label():
+def test_design_003_is_marked_unit_by_unit_without_a_document_label():
+    text = "## 5. Google Drive connector (planned)\nDrive sync runs every 15 minutes."
     prompt = _prompt(
         "Does Drive ingestion work now?",
         [
             WorkerChunk(
                 n=1,
                 chunk_id=1,
-                text="Drive sync runs every 15 minutes.",
+                text=text,
                 source_path="docs/DESIGN-003-ingestion.md",
                 title="Design",
                 score=0.8,
             )
         ],
     )
-    assert "[PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]" in prompt
+    assert "PLANNED M4 DESIGN" not in prompt
+    assert f"{PLANNED_MARK} Drive sync runs every 15 minutes." in prompt
     assert f"Text prefixed {PLANNED_MARK} describes work that does not exist today" in prompt
     assert "also appears in code, manifest, or infrastructure sources" in prompt
     assert 'reply with exactly "I don\'t know from what I have." and nothing else' in prompt

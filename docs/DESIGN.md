@@ -447,7 +447,7 @@ Each connection starts with a `retry:` hint, then a snapshot: one `pod` event (t
 |---|---|---|---|
 | `app` | `api` | Deployment (1 replica) | Startup/liveness probes on `/healthz`, readiness on `/readyz` (5s timeouts); `maxSurge: 0` rollout; waits for migrations |
 | `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) when KEDA is on; one replica while it is suspended | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
-| `app` | `ingest` | Job (per deploy). A nightly CronJob is not built yet | Idempotent; ends with the answer warm-up |
+| `app` | `ingest` | Job (per deploy). A nightly CronJob is not built yet. | Idempotent. It ends with the answer warm-up. |
 | `app` | `warm-answers` | CronJob (every 2h) | Warms the suggested questions' answer cache via the api (§7.3); ~21 MiB, 48Mi limit; Redis only for its daily cap counter |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
@@ -636,7 +636,7 @@ infra/
 - Traefik routes the site and `/api/*` to one Kubernetes `api` Service. The API image contains the built frontend, and FastAPI mounts its `frontend/dist` at `/` after the API and health routes. This gives the site and API one origin without a separate static-file server.
 - The EC2 security group allows port 80/443 **only** from Cloudflare's published IP ranges (https://www.cloudflare.com/ips/).
 - The `edge/` module also manages a Cloudflare Cache Rule bypassing caching for `/api/*` so the SSE stream is never buffered; static assets use the default cached behavior.
-- No CloudFront-style secret-header origin check by default; origin protection relies on the security group's IP allowlist. A Cloudflare Worker injecting a secret header is a documented stretch for defense-in-depth, not required for launch.
+- No CloudFront-style secret-header origin check by default; origin protection relies on the security group's IP allowlist. A Cloudflare Worker injecting a secret header (planned, not built yet) is a documented stretch for defense-in-depth, not required for launch.
 - Domain: `basel.engineering` (already owned, DNS already on Cloudflare).
 
 ### 10.4 Compute
@@ -660,7 +660,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 ### 10.6 Secrets
 
 - Terraform generates the MySQL root/app password (`random_password`) and stores it in SSM Parameter Store as a SecureString (standard tier is free) — same mechanism originally specified for RDS's master password, just naming a self-hosted database's credential instead.
-- A bootstrap step on the node reads SSM via the instance role and creates the Kubernetes Secret the MySQL `StatefulSet` and the API/worker/ingest pods consume. (Stretch: External Secrets Operator to sync automatically.)
+- A bootstrap step on the node reads SSM via the instance role and creates the Kubernetes Secret the MySQL `StatefulSet` and the API/worker/ingest pods consume. (External Secrets Operator to sync automatically: planned, not built yet.)
 - The Cloudflare API token is a separate secret, supplied as a Terraform variable (see §10.3) — not stored in SSM, since Terraform itself needs it before any AWS resources (including the secrets module) exist.
 - No secrets in the repo, in Terraform variables files, or in container images.
 
