@@ -466,11 +466,12 @@ cases:
     corpus: about_system
     category: planned
     holdout: true
+    notes: Since #101 the stale sweep exists but runs report-only in production; deletion stays off until the owner sets GLASSBOX_INGEST_SWEEP=apply, so the honest answer is still "no, they stay in the index".
     question: Are files deleted from the repository removed from the search index?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - Files deleted from the repository are not pruned from the index by this job.
-    must_include: ['prun|remov|delet|stale']
+      - 'it only logs: files deleted from the repository stay in the index'
+    must_include: ['prun|remov|delet|stale|stay in the index']
   - id: planned-eval-ci
     origin: new
     corpus: about_system
