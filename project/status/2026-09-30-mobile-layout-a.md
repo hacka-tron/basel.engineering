@@ -1,6 +1,6 @@
 # Mobile layout A: diagram in place, focus mode
 
-**Status:** In review, PR (see index) on branch `feature/mobile-layout-a`. Not merged. Frontend only.
+**Status:** In review, PR [#61](https://github.com/hacka-tron/basel.engineering/pull/61) on branch `feature/mobile-layout-a`. Not merged. Frontend only.
 
 ## TL;DR
 The owner picked option A (with focus mode) from the mobile layout prototypes. Below 768px the diagram now replaces the chat in place instead of opening a bottom sheet, the header and footer slide away while the ask box has focus, and New chat moves into the footer. At 375×667 the message area grows from 340px to 407px at rest and from 80px to 294px with the keyboard up. The diagram shows all 11 components without panning. Desktop (≥768px) is unchanged: screenshot diffs against `main` at 768/1024/1440 reach 0 changed pixels.
