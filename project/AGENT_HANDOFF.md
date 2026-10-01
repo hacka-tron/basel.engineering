@@ -1,5 +1,24 @@
 # Agent handoff
 
+## Session wrap-up: outage fixed, ops push-button, mobile pass — Claude, 2026-10-01
+
+**Active coordinator: Claude.** Codex is out of usage; Opus subagents review with the same primer brief (`project/orchestration/README.md`). Standing owner instructions (auto-merge after review and green CI, round cap, hard rules in infra dispatches, no hand-run AWS/Terraform, phone preview for mobile) are now in `project/CLAUDE.md` "Working style" and `project/orchestration/README.md`.
+
+**Shipped 2026-09-30 to 10-01 (all merged to `main`; Flux deploys merges hands-off):**
+- **Node and infra:** zram compressed swap under Terraform (#55; SSM association IAM fixes #64, #66: `CreateAssociation` is authorized against both the instance and the document, and `aws:RequestTag` isn't populated for the document, so tag conditions on it deny). Bootstrap state moved to S3 (#59; owner migration done). Push-button ops runbooks plus the bootstrap pipeline (#62), split into eight "Ops · …" wrappers over a reusable `ops.yml` (#68). Bootstrap pipeline's first live run applied #64/#66.
+- **Frontend:** mobile layout A, diagram in place of the chat plus focus mode (#61); UI tweaks: bare-ms latency with long-press tooltip, "+" New chat, diagram refit on resize (#65); "+" on the right (#69); "1 query served" (#71); stress tap always shows the diagram (#67, #70); header name shortening (#72); diagram view hides the topic nav (#73, superseded by #78); header padding (#74, #75); "Select a component" (#76, #79); phone preview `npm run phone` (#76); 13px chat text and 13px ask box with iOS-only `maximum-scale` (#77); mobile one-row header, topic chips in Chat view, envelope Contact (#78).
+- **Process:** reviewer primer (#63). This PR: docs wrap-up (deep dive, SNAPSHOT, BACKLOG, standing instructions, status index).
+
+**Incident (2026-09-30):** the 2 GiB node thrashed (memory plus swap I/O on the EBS disk shared with k3s's SQLite and MySQL); Traefik went not-ready and visitors got Cloudflare 521. Fixed by a reboot, zram (~920 MB, lzo-rle, priority 100), suspending KEDA (Flux Kustomizations and HelmRelease suspended, `keda` Deployments scaled to 0) and suspending the `warm-answers` CronJob.
+
+**Live state (2026-10-01):** zram on. KEDA suspended and scaled to 0; its HelmRelease is in a failed state from the outage's install timeout; the worker stays at one replica; the stress test simulates (free memory under the 512 MiB gate). `warm-answers` is running again: Flux re-applied it with `suspend: false`. After the fix: memory PSI about 3% (avg300), about 357 MiB available.
+
+**Not verified:** iOS focus zoom on a real iPhone (#77's iOS-only `maximum-scale=1`); the landscape phone layout (not built); the first change-type Ops runbook's `ops` approval prompt since the per-action split (#68).
+
+**Next action:** `project/BACKLOG.md` "> RESUME HERE": bring KEDA back via the runbooks once zram has had a day of normal traffic and Ops · Diagnose shows headroom (not before 2026-10-02); then the answer-thinness prompt fix (the stress-test answer dropped the 512 MiB rule and cooldown); then landscape. Owner decisions pending: warm-answers persistent suspend, the About This System fallback (not approved), chat bubble tightening (not approved), leftover branches.
+
+---
+
 ## Stress test ready for merge — Claude, 2026-09-30
 
 **Active coordinator: Claude.** `feature/stress-test-keda` (PR #40) finished Codex's paused work and passed the Codex review gate over five rounds: live-free-memory capacity gate (metrics-server) that fails closed, owner-approved RBAC (pods in `app`; `list` on nodes and `metrics.k8s.io` nodes), KEDA installed via ordered Flux Kustomizations (`keda` wait → `keda-scaling`), HPA scale-down back to 1 in about a minute, KEDA memory within the 150Mi budget, tiger/rabbit capacity icons with descriptive tooltips, simulated runs during any real burst's shared cooldown. 134 backend tests, lint/build, and `kubectl kustomize` renders pass; browser-checked locally at 1440px and 375px. **Merging installs KEDA on the live cluster** — needs the owner's go-ahead. Stacked on it: PR #41 (conversational chat) and `feature/typography-mobile` (in review).
