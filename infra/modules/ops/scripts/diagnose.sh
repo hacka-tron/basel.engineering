@@ -1,4 +1,5 @@
-# glassbox-ops-diagnose: read-only snapshot of the node, the cluster and Flux.
+# glassbox-ops-diagnose: read-only snapshot of the node, the cluster and Flux,
+# plus counts of the API's CSP Report-Only violation log lines.
 # Changes nothing. Every command is bounded and allowed to fail, so a sick
 # node still produces as much of the report as it can.
 #
@@ -169,6 +170,21 @@ SELECT CONCAT('  most repeated question #', ROW_NUMBER() OVER (ORDER BY COUNT(*)
 SQL
 }
 
+# CSP Report-Only lines, logged by /api/csp-report
+# (services/glassbox/api/csp_report.py) in a fixed, already-sanitized shape.
+# Only counts and the directive/blocked-origin pairs are printed. Covers the
+# running api pod only (its log resets on restart or deploy).
+csp_section() {
+  section "CSP Report-Only violations, api log last 24 hours (count, directive, blocked origin)"
+  local csp_log
+  csp_log=$(kc -n app logs deploy/api -c api --since=24h 2>/dev/null | grep -F 'csp-report-only violation' || true)
+  printf '%-34s %s\n' "violation lines" "$(grep -c 'violation directive=' <<<"$csp_log" || true)"
+  printf '%-34s %s\n' "oversize reports dropped" "$(grep -c 'violation oversize' <<<"$csp_log" || true)"
+  printf '%-34s %s\n' "log-cap summary lines" "$(grep -c 'violation log cap' <<<"$csp_log" || true)"
+  sed -nE 's/.*csp-report-only violation directive=([a-z-]+) blocked=([A-Za-z0-9:./-]+) path=.*/\1 \2/p' <<<"$csp_log" |
+    sort | uniq -c | sort -rn | head -15 | redact 160 || true
+}
+
 main() {
   exec </dev/null 2>&1
 
@@ -238,6 +254,8 @@ main() {
   kc get events -A --field-selector type=Warning --sort-by=.lastTimestamp \
     -o custom-columns='NS:.metadata.namespace,LAST:.lastTimestamp,COUNT:.count,REASON:.reason,KIND:.involvedObject.kind,NAME:.involvedObject.name' 2>/dev/null |
     tail -21 | redact || true
+
+  csp_section
 
   section "k3s log, last 30 minutes (counts per category; lines are not printed)"
   local k3s_log errors

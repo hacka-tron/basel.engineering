@@ -21,9 +21,14 @@ middleware, so the bare 500 page for an unhandled exception goes out without
 these headers. It is a plain-text body with no script, so nothing to frame or
 sniff.
 
-Deliberately not here: a script/style-restricting Content-Security-Policy.
-The CSP below only sets ``frame-ancestors``; restricting scripts and styles
-needs an audit of the Vite build first (see docs/DESIGN.md §11).
+Two CSP headers. The enforced ``Content-Security-Policy`` only sets
+``frame-ancestors`` (framing is the one thing it must block today). The
+script/style policy goes out as ``Content-Security-Policy-Report-Only``:
+browsers block nothing, they report what an enforced policy would block to
+``/api/csp-report`` (csp_report.py). It is enforced only after a week of clean
+reports (docs/DESIGN.md §11, project/BACKLOG.md). ``frame-ancestors`` is left
+out of the Report-Only policy, because browsers ignore it there and log a
+console warning.
 """
 
 from starlette.datastructures import MutableHeaders
@@ -61,6 +66,28 @@ PERMISSIONS_POLICY_VALUE = ", ".join(
     )
 )
 
+CSP_REPORT_PATH = "/api/csp-report"
+CSP_REPORT_GROUP = "csp"
+
+# Audited against the production build in headless Chrome (status report
+# project/status/2026-10-01-csp-report-only.md): with this policy the page,
+# the chat (SSE over fetch), the cluster stream (EventSource), React Flow and
+# the self-hosted fonts produce zero violations.
+CSP_REPORT_ONLY_DIRECTIVES: tuple[str, ...] = (
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self'",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    f"report-uri {CSP_REPORT_PATH}",
+    f"report-to {CSP_REPORT_GROUP}",
+)
+CSP_REPORT_ONLY_VALUE = "; ".join(CSP_REPORT_ONLY_DIRECTIVES)
+
 SECURITY_HEADERS: dict[str, str] = {
     "Strict-Transport-Security": HSTS_VALUE,
     "X-Content-Type-Options": "nosniff",
@@ -68,6 +95,10 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "Content-Security-Policy": "frame-ancestors 'none'",
     "Permissions-Policy": PERMISSIONS_POLICY_VALUE,
+    "Content-Security-Policy-Report-Only": CSP_REPORT_ONLY_VALUE,
+    # The Reporting API endpoint that report-to names (Chromium); others use
+    # report-uri. Same origin, so no CORS.
+    "Reporting-Endpoints": f'{CSP_REPORT_GROUP}="{CSP_REPORT_PATH}"',
 }
 
 
