@@ -5,6 +5,14 @@ from redis.exceptions import ResponseError
 from services.glassbox.cache.answer import _model_tag, chunk_content_sha
 
 INDEX_NAME = "idx:chunks"
+# Set a field on an existing hash only: EXISTS then HSET could recreate a key deleted
+# in between, holding nothing but the model field.
+_SET_FIELD_IF_EXISTS = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+end
+return -1
+"""
 
 
 async def ensure_index(client) -> bool:
@@ -53,9 +61,9 @@ async def ensure_index(client) -> bool:
 async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
     """Tag existing hashes from MySQL, without creating incomplete hashes for missing keys."""
     for chunk_id, model_id in rows:
-        key = f"chunk:{chunk_id}"
-        if await client.exists(key):
-            await client.hset(key, "model", _model_tag(model_id))
+        await client.eval(
+            _SET_FIELD_IF_EXISTS, 1, f"chunk:{chunk_id}", "model", _model_tag(model_id)
+        )
 
 
 def chunk_fields(
