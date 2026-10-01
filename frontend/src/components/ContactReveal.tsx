@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type Ref } from 'react'
 
 // Lives in the JS bundle only (never in the static HTML), so a naive scraper
 // of index.html doesn't see it.
@@ -36,7 +36,39 @@ function legacyCopy(text: string): boolean {
  * the execCommand fallback fail, the address is shown briefly instead so the
  * visitor can still read it.
  */
-function ContactReveal() {
+function EnvelopeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+    </svg>
+  )
+}
+
+const TEXT_CLASS = 'inline-flex min-h-11 items-center px-2 text-sm transition-colors hover:text-primary md:min-h-0 md:px-0'
+const ICON_CLASS = 'relative flex size-11 shrink-0 items-center justify-center transition-colors hover:text-primary'
+
+/** Width of the "Contact me" label, reserved for the longer "Email copied". */
+function TextLabel({ label }: { label: string }) {
+  return (
+    <span className="grid justify-items-end">
+      <span aria-hidden="true" className="invisible col-start-1 row-start-1">Email copied</span>
+      <span aria-live="polite" className="col-start-1 row-start-1">{label}</span>
+    </span>
+  )
+}
+
+/** Invisible, non-interactive copies of both forms, for the header's fit measurement. */
+export function ContactMeasure({ textRef, iconRef }: { textRef: Ref<HTMLSpanElement>; iconRef: Ref<HTMLSpanElement> }) {
+  return (
+    <span aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex">
+      <span ref={textRef} className={TEXT_CLASS}><TextLabel label="Contact me" /></span>
+      <span ref={iconRef} className={ICON_CLASS}><EnvelopeIcon /></span>
+    </span>
+  )
+}
+
+function ContactReveal({ variant = 'text' }: { variant?: 'text' | 'icon' }) {
   const [status, setStatus] = useState<Status>('idle')
   const timeoutRef = useRef<number | null>(null)
 
@@ -57,23 +89,31 @@ function ContactReveal() {
     timeoutRef.current = window.setTimeout(() => setStatus('idle'), ok ? 2000 : 5000)
   }
 
+  const label = status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : 'Contact me'
+  const colour = status === 'idle' ? 'text-muted' : 'text-primary'
+
+  if (variant === 'icon') {
+    // Same button, drawn as an envelope. The result shows as a small toast
+    // under it instead of inline text, so the header row never changes width.
+    return (
+      <button type="button" onClick={handleClick} aria-label="Copy email" className={`${ICON_CLASS} ${colour}`}>
+        <EnvelopeIcon />
+        <span
+          aria-live="polite"
+          className={`pointer-events-none absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded-[3px] border border-hairline bg-panel px-2 py-1 text-xs text-primary shadow-lg ${status === 'idle' ? 'sr-only' : ''}`}
+        >
+          {status === 'idle' ? '' : label}
+        </span>
+      </button>
+    )
+  }
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className={`inline-flex min-h-11 items-center px-2 text-sm transition-colors hover:text-primary md:min-h-0 md:px-0 ${
-        status === 'idle' ? 'text-muted' : 'text-primary'
-      }`}
-    >
+    <button type="button" onClick={handleClick} className={`${TEXT_CLASS} ${colour}`}>
       {/* "Email copied" sits in the width reserved for the longer of the two
           labels, right-aligned, so the header row never shifts (the GitHub
           icon stays put beside it). */}
-      <span className="grid justify-items-end">
-        <span aria-hidden="true" className="invisible col-start-1 row-start-1">Email copied</span>
-        <span aria-live="polite" className="col-start-1 row-start-1">
-          {status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : 'Contact me'}
-        </span>
-      </span>
+      <TextLabel label={label} />
     </button>
   )
 }

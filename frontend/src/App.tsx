@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import Collapsible from './components/Collapsible'
-import ContactReveal from './components/ContactReveal'
+import ContactReveal, { ContactMeasure } from './components/ContactReveal'
+import TopicMenu, { type TopicOption } from './components/TopicMenu'
 import PipelineStrip from './components/PipelineStrip'
 import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
-import { useFullNameFits } from './hooks/useFullNameFits'
+import { useFullNameFits, useHeaderFit } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
@@ -34,6 +35,11 @@ const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold trackin
 export type Corpus = 'basel' | 'system'
 
 const CORPORA: Corpus[] = ['basel', 'system']
+
+const TOPIC_OPTIONS: TopicOption<Corpus>[] = [
+  { value: 'basel', label: 'About Basel', short: 'About Basel' },
+  { value: 'system', label: 'About This System', short: 'This System' },
+]
 
 function apiCorpus(corpus: Corpus): ApiCorpus {
   return corpus === 'basel' ? 'about_me' : 'about_system'
@@ -571,12 +577,26 @@ function App() {
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
-  // The topic nav is inert while the diagram view hides it (below md), so
-  // focus that was on it moves to the Chat/Diagram toggle instead of being lost.
-  useLayoutEffect(() => {
-    if (showDiagramView && navRef.current?.contains(document.activeElement)) diagramButtonRef.current?.focus()
-  }, [showDiagramView])
-  const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
+  const shortMeasureRef = useRef<HTMLSpanElement>(null)
+  const contactTextMeasureRef = useRef<HTMLSpanElement>(null)
+  const contactIconMeasureRef = useRef<HTMLSpanElement>(null)
+  const topicMenuRef = useRef<HTMLDivElement>(null)
+  const githubRef = useRef<HTMLAnchorElement>(null)
+  const desktopFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
+  // Below md, one row: [name, topic menu ... Contact, GitHub]. Measured
+  // priority: full name, then the short name, then Contact as an icon.
+  const mobileFit = useHeaderFit(
+    headerRef,
+    { fullName: nameMeasureRef, shortName: shortMeasureRef, contactText: contactTextMeasureRef, contactIcon: contactIconMeasureRef },
+    [topicMenuRef, githubRef],
+    3,
+    !isDesktop,
+  )
+  const showFullName = isDesktop ? desktopFullName : mobileFit === 'full'
+  const selectTopic = (next: Corpus) => {
+    if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
+    else setCorpus('system')
+  }
 
   // Rendered before the Contact group at md+ and after it below md so DOM/tab
   // order matches the visual order at both layouts (visual order via `order-*`).
@@ -585,7 +605,7 @@ function App() {
         <button
           type="button"
           aria-pressed={corpus === 'basel'}
-          onClick={() => { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }}
+          onClick={() => selectTopic('basel')}
           className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
         >
           About Basel
@@ -594,7 +614,7 @@ function App() {
         <button
           type="button"
           aria-pressed={corpus === 'system'}
-          onClick={() => setCorpus('system')}
+          onClick={() => selectTopic('system')}
           className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
         >
           About This System
@@ -605,12 +625,11 @@ function App() {
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 pt-2 transition-[padding] duration-200 ease-out motion-reduce:transition-none ${showDiagramView ? 'pb-2' : 'pb-0'} md:flex-nowrap md:gap-0 md:px-8 md:py-0`}>
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
         {/*
-          Below md: row one is [h1 ... Contact me, GitHub], row two is the
-          topic nav. Contact me sits directly left of the GitHub icon as one
-          right-aligned pair, the same grouping as desktop. Visual order is set
-          with `order-*`; at md+ everything sits on one row as
+          Below md: one row, [h1, topic menu ... Contact, GitHub]. Contact
+          sits directly left of the GitHub icon as one right-aligned pair, the
+          same grouping as desktop. At md+ the row is
           [h1, nav ... Contact me, GitHub].
         */}
         <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
@@ -621,11 +640,18 @@ function App() {
           <span aria-hidden="true">{showFullName ? FULL_NAME : SHORT_NAME}</span>
         </h1>
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
-          {isDesktop && topicNav}
+        {!isDesktop && (
+          <>
+            <span ref={shortMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{SHORT_NAME}</span>
+            <ContactMeasure textRef={contactTextMeasureRef} iconRef={contactIconMeasureRef} />
+          </>
+        )}
+          {isDesktop ? topicNav : <div ref={topicMenuRef} className="order-2 shrink-0"><TopicMenu value={corpus} options={TOPIC_OPTIONS} onChange={selectTopic} /></div>}
 
         <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
-          <ContactReveal />
+          <ContactReveal variant={!isDesktop && mobileFit === 'icon' ? 'icon' : 'text'} />
           <a
+            ref={githubRef}
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
             rel="noopener noreferrer"
@@ -637,7 +663,6 @@ function App() {
             </svg>
           </a>
         </div>
-        {!isDesktop && <Collapsible open={!showDiagramView} className="order-3 w-full">{topicNav}</Collapsible>}
       </header>
       </Collapsible>
 
