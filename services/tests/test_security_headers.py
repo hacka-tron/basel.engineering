@@ -10,6 +10,7 @@ from starlette.staticfiles import StaticFiles
 from services.glassbox.api import ask, cluster
 from services.glassbox.api.main import app
 from services.glassbox.api.security_headers import (
+    CSP_REPORT_ONLY_VALUE,
     SECURITY_HEADERS,
     SecurityHeadersMiddleware,
 )
@@ -21,6 +22,8 @@ EXPECTED = {
     "referrer-policy": "strict-origin-when-cross-origin",
     "x-frame-options": "DENY",
     "content-security-policy": "frame-ancestors 'none'",
+    "content-security-policy-report-only": CSP_REPORT_ONLY_VALUE,
+    "reporting-endpoints": 'csp="/api/csp-report"',
 }
 
 
@@ -41,8 +44,56 @@ def test_values_are_the_documented_ones():
     hsts = SECURITY_HEADERS["Strict-Transport-Security"]
     # Moderate max-age, never preload or includeSubDomains (docs/DESIGN.md §11).
     assert "preload" not in hsts and "includesubdomains" not in hsts.lower()
-    # Only framing in the CSP: no script/style restrictions in this layer yet.
+    # The enforced CSP only blocks framing; scripts and styles are Report-Only.
     assert SECURITY_HEADERS["Content-Security-Policy"] == "frame-ancestors 'none'"
+
+
+def test_report_only_policy_is_strict_and_reports_to_the_endpoint():
+    directives = {
+        part.split(" ", 1)[0]: part.split(" ", 1)[1]
+        for part in SECURITY_HEADERS["Content-Security-Policy-Report-Only"].split("; ")
+    }
+    assert directives == {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self'",
+        "img-src": "'self'",
+        "font-src": "'self'",
+        "connect-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'",
+        "report-uri": "/api/csp-report",
+        "report-to": "csp",
+    }
+    # No escape hatches, and no frame-ancestors (ignored in Report-Only, with a
+    # console warning; the enforced header already carries it).
+    value = SECURITY_HEADERS["Content-Security-Policy-Report-Only"]
+    for loose in ("unsafe-inline", "unsafe-eval", "data:", "*", "http:", "https:"):
+        assert loose not in value
+    assert "frame-ancestors" not in value
+    assert SECURITY_HEADERS["Reporting-Endpoints"] == 'csp="/api/csp-report"'
+
+
+def test_index_html_has_no_inline_script():
+    """script-src 'self' only works if the page has no inline <script> body."""
+    import re
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[2] / "frontend" / "index.html").read_text()
+    scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, flags=re.S)
+    assert scripts, "expected the iOS zoom and app entry scripts"
+    for attrs, body in scripts:
+        assert "src=" in attrs and not body.strip(), attrs
+    assert '<script src="/ios-zoom.js"></script>' in html
+    # Classic and parser-blocking, so it still runs before first paint.
+    assert not re.search(r'<script[^>]*ios-zoom[^>]*\b(async|defer|type="module")', html)
+    assert "<style" not in html and " style=" not in html
+    # Same logic as the old inline script: iOS/iPadOS only, maximum-scale=1.
+    script = (Path(__file__).resolve().parents[2] / "frontend/public/ios-zoom.js").read_text()
+    assert "/iP(hone|od|ad)/.test(navigator.userAgent)" in script
+    assert "navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1" in script
+    assert "', maximum-scale=1'" in script
 
 
 @pytest.fixture
