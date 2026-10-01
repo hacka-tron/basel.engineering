@@ -54,12 +54,18 @@ class PaidRunRefused(SystemExit):
 
 
 def check_paid_allowed(paid: bool) -> None:
-    """Refuse any non-fake provider unless the caller passed --paid."""
+    """Refuse any non-fake provider unless --paid AND GLASSBOX_EVAL_ALLOW_PAID=1.
+
+    Two keys on purpose, matching run_eval.py's env-var guard: a stray flag or a
+    leftover environment variable alone cannot start a paid run.
+    """
     mode = os.getenv("GLASSBOX_PROVIDER", "fake").lower()
-    if mode != "fake" and not paid:
+    if mode == "fake":
+        return
+    if not paid or os.getenv("GLASSBOX_EVAL_ALLOW_PAID") != "1":
         raise PaidRunRefused(
-            f"GLASSBOX_PROVIDER={mode} makes paid model calls; "
-            "rerun with --paid once the owner has approved the spend"
+            f"GLASSBOX_PROVIDER={mode} makes paid model calls; once the owner has "
+            "approved the spend, rerun with --paid and GLASSBOX_EVAL_ALLOW_PAID=1"
         )
 
 
@@ -118,18 +124,24 @@ async def run_case(
         history = bounded_history([HistoryMessage(**item) for item in case.get("history", [])])
         rewrite = None
         retrieval_query = case["question"]
+        rewrite_error = None
         if history:
-            parts = [
-                part
-                async for part in llm.generate(
-                    _rewrite_prompt(case["question"], history),
-                    max_tokens=_REWRITE_MAX_TOKENS,
-                    system=_REWRITE_SYSTEM,
-                )
-            ]
-            rewrite = _clean_rewrite("".join(parts))
+            try:
+                parts = [
+                    part
+                    async for part in llm.generate(
+                        _rewrite_prompt(case["question"], history),
+                        max_tokens=_REWRITE_MAX_TOKENS,
+                        system=_REWRITE_SYSTEM,
+                    )
+                ]
+                rewrite = _clean_rewrite("".join(parts))
+            except Exception as exc:
+                # Like the API: a failed rewrite falls back to the original question.
+                rewrite_error = f"{type(exc).__name__}: {exc}"
             if rewrite:
                 retrieval_query = rewrite
+        row["rewrite_error"] = rewrite_error
         vector = (await embedder.embed([normalize_question(retrieval_query)]))[0]
         chunks = await retrieve(vector, case["corpus"], embedder.model_id)
         usage: dict = {}

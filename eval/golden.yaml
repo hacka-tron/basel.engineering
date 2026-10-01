@@ -321,6 +321,23 @@ cases:
       - multi-turn memory, follow-up question rewriting
     must_include: ['rewrit', 'history|memory|multi-turn|conversation']
 
+  - id: me-site-stack
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    notes: >-
+      corpus/about-me/skills.md says this site runs on "Terraform, EC2, RDS, and
+      Kubernetes (k3s)", but MySQL runs in the cluster, not on RDS. Expected to
+      fail until the owner approves the corpus fix (BACKLOG).
+    question: What does this site run on?
+    expected_sources: [corpus/about-me/skills.md, corpus/about-me/bio.md]
+    gold_snippets:
+      - this site (Glassbox) itself runs on AWS with Terraform, EC2
+      - hands-on depth with AWS, Kubernetes, Terraform, Redis, and applied RAG
+    must_include: ['AWS', 'Kubernetes|k3s']
+    must_not_include: ['\bRDS\b']
+
   # ---------------------------------------------------- suggested questions (chips)
   - id: sugg-me-distributed
     origin: suggested
@@ -452,6 +469,7 @@ cases:
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
       - Files deleted from the repository are not pruned from the index by this job.
+    must_include: ['prun|remov|delet|stale']
   - id: planned-eval-ci
     origin: new
     corpus: about_system
@@ -472,6 +490,7 @@ cases:
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
       - Sources show a title, path and score but do not link to the file and line range on GitHub
+    must_include: ['GitHub|link']
   - id: planned-live-facts
     origin: new
     corpus: about_system
@@ -481,6 +500,7 @@ cases:
     gold_snippets:
       - tool that answers "what version is deployed right now?" from the cluster
       - let the About This System assistant answer "what version is deployed right now?"
+    must_include: ['version|deploy']
 
   # ------------------------------------------------------------ live (built today)
   - id: live-flux

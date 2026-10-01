@@ -189,16 +189,64 @@ def test_case_filters():
         run_answers.select_cases(cases, categories=["nope"])
 
 
-def test_bedrock_is_refused_without_paid(monkeypatch):
+@pytest.mark.parametrize(
+    ("argv", "allow_env"),
+    [
+        (["--max-cases", "1"], None),
+        (["--max-cases", "1"], "1"),
+        (["--paid"], None),
+        (["--paid"], "yes"),
+    ],
+)
+def test_bedrock_needs_both_paid_flag_and_env(monkeypatch, argv, allow_env):
     monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrock")
+    if allow_env is None:
+        monkeypatch.delenv("GLASSBOX_EVAL_ALLOW_PAID", raising=False)
+    else:
+        monkeypatch.setenv("GLASSBOX_EVAL_ALLOW_PAID", allow_env)
     monkeypatch.setattr(
         run_answers, "_run_against_stack", lambda cases: pytest.fail("must not run")
     )
-    with pytest.raises(run_answers.PaidRunRefused, match="--paid"):
-        run_answers.main(["--max-cases", "1"])
+    with pytest.raises(run_answers.PaidRunRefused, match="GLASSBOX_EVAL_ALLOW_PAID=1"):
+        run_answers.main(argv)
+
+
+def test_paid_guard_allows_fake_and_fully_authorized_runs(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrock")
+    monkeypatch.setenv("GLASSBOX_EVAL_ALLOW_PAID", "1")
     run_answers.check_paid_allowed(paid=True)
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    monkeypatch.delenv("GLASSBOX_EVAL_ALLOW_PAID")
     run_answers.check_paid_allowed(paid=False)
+
+
+def test_rewrite_failure_falls_back_to_the_original_question():
+    class RewriteFails(FakeLLMProvider):
+        async def generate(self, prompt, *, max_tokens, system=None):
+            if system is not None and "rewrite" in system:
+                raise RuntimeError("throttled")
+            async for part in super().generate(prompt, max_tokens=max_tokens, system=system):
+                yield part
+
+    embedded: list[str] = []
+
+    class RecordingEmbedder(FakeEmbeddingProvider):
+        async def embed(self, texts):
+            embedded.extend(texts)
+            return await super().embed(texts)
+
+    case = next(case for case in load_golden() if case["id"] == "mt-stress-cooldown")
+    [row] = asyncio.run(
+        run_answers.run_cases(
+            [case], embedder=RecordingEmbedder(), llm=RewriteFails(), retrieve=_stub_retriever([])
+        )
+    )
+    assert row["error"] is None
+    assert row["rewrite"] is None
+    assert row["rewrite_error"] == "RuntimeError: throttled"
+    assert embedded == ["how long is the cooldown?"]
+    assert row["grades"]["rewrite_ok"] is False
+    assert row["answer"] == "This is a fake response for local development."
 
 
 def test_main_writes_jsonl_and_summary(monkeypatch, tmp_path):

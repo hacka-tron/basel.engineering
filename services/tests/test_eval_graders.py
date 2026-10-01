@@ -105,6 +105,64 @@ def test_planned_status_requires_a_no_in_the_first_sentence():
     assert status_ok("anything", "fact") is None
 
 
+@pytest.mark.parametrize(
+    ("case_id", "answer"),
+    [
+        (
+            "planned-asg",
+            "Yes, the node self-heals with an Auto Scaling Group, so no manual rebuild "
+            "is needed [1].",
+        ),
+        (
+            "planned-metrics",
+            "Yes, the API exposes a Prometheus /metrics endpoint, so you do not need "
+            "extra exporters.",
+        ),
+        ("planned-drive", "Yes, Glassbox ingests Google Drive documents without any extra setup."),
+        (
+            "planned-metrics",
+            "The API exposes a Prometheus /metrics endpoint, so you do not need one.",
+        ),
+        ("planned-asg", "Sure, the Auto Scaling Group replaces a failed node; no manual rebuild."),
+    ],
+)
+def test_planned_status_rejects_affirmative_answers(case_id, answer):
+    assert status_ok(answer, "planned") is False
+    assert "wrong_status" in grade_case(CASES[case_id], answer)["failures"]
+
+
+@pytest.mark.parametrize(
+    ("case_id", "answer"),
+    [
+        ("planned-prune", "No."),
+        ("planned-citation-links", "No, not today."),
+        ("planned-live-facts", "No, that is not built yet."),
+    ],
+)
+def test_planned_bare_no_fails_without_the_item(case_id, answer):
+    assert grade_case(CASES[case_id], answer)["failures"] == ["missing_facts"]
+
+
+@pytest.mark.parametrize(
+    ("case_id", "answer"),
+    [
+        ("planned-prune", "No, files deleted from the repo are not pruned from the index."),
+        ("planned-citation-links", "No, sources do not link to GitHub line ranges yet."),
+        ("planned-live-facts", "No, a tool that reports the deployed version is a stretch idea."),
+        ("planned-asg", "No. Today there is a single EC2 instance and a manual rebuild."),
+    ],
+)
+def test_planned_negative_answers_with_the_item_pass(case_id, answer):
+    assert grade_case(CASES[case_id], answer)["passed"]
+
+
+def test_site_stack_case_flags_the_rds_error_in_the_corpus():
+    case = CASES["me-site-stack"]
+    wrong = "It runs on AWS with Terraform, EC2, RDS and Kubernetes (k3s)."
+    assert grade_case(case, wrong)["failures"] == ["forbidden_content"]
+    assert grade_case(case, "It runs on AWS: one EC2 node with Kubernetes (k3s).")["passed"]
+
+
 def test_live_status_rejects_a_planned_claim():
     case = CASES["live-keda"]
     good = "Yes, KEDA is installed, but it is currently suspended and scaled to 0."

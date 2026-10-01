@@ -2,14 +2,14 @@
 
 **PR:** [#97](https://github.com/hacka-tron/basel.engineering/pull/97) · **Branch:** `feature/rag-p1-golden-set` (from `main` at `2484403`)
 **Plan:** phase 1 of `docs/superpowers/plans/2026-10-01-rag-quality.md` (PR [#92](https://github.com/hacka-tron/basel.engineering/pull/92), design `docs/DESIGN-005-rag-quality.md` §5)
-**Status:** In review, not merged. No review round yet. Needs your review of the About Basel facts (below) before any paid run uses them.
+**Status:** In review, not merged. Review round 1 (Opus) asked for changes; all addressed (see *What review caught*). Needs your review of the About Basel facts (below) before any paid run uses them.
 
 ## TL;DR
 
-- Glassbox now has an **answer-level test set**: 74 questions with the facts a good answer must contain, plus questions it must refuse, planned-vs-live questions, follow-ups and prompt-injection attempts.
+- Glassbox now has an **answer-level test set**: 75 questions with the facts a good answer must contain, plus questions it must refuse, planned-vs-live questions, follow-ups and prompt-injection attempts.
 - **Free, deterministic checks** score any answer text: required facts present, correct refusal, correct "planned / not built yet" vs "live", follow-up rewrite keeps the subject, no prompt leak. No model call, no cost.
 - **The thinness bug is now a failing test case.** The stress-test case requires "512 MiB" and the 5-minute cooldown. An answer modelled on today's thin v13 answer fails it; a v14-style answer passes. Both are unit tests.
-- A runner (`python -m eval.run_answers`) answers every case in-process with the same prompt code the API uses, without going through `/api/ask` (so no rate limit, budget or cache effects), and writes JSONL plus a per-category summary. It refuses Bedrock unless `--paid` is passed.
+- A runner (`python -m eval.run_answers`) answers every case in-process with the same prompt code the API uses, without going through `/api/ask` (so no rate limit, budget or cache effects), and writes JSONL plus a per-category summary. It refuses Bedrock unless both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1` are given.
 - Nothing changes for visitors. No paid calls were made.
 
 ## What changed for a visitor
@@ -20,7 +20,7 @@ Nothing. The only production-code change is a named constant for the answer toke
 
 ```mermaid
 flowchart LR
-    G[eval/golden.yaml<br/>74 cases] --> S[schema.py<br/>validates; gold snippets<br/>must exist in the source files]
+    G[eval/golden.yaml<br/>75 cases] --> S[schema.py<br/>validates; gold snippets<br/>must exist in the source files]
     G --> R[run_answers.py]
     R --> RW[rewrite prompt<br/>follow-ups only]
     RW --> E[embed] --> K[Redis KNN k=8] --> M[MySQL chunks]
@@ -32,14 +32,14 @@ flowchart LR
 
 | Category | Cases | What passes |
 |---|---|---|
-| `fact` | 37 (30 from `questions.yaml` verbatim, 7 suggested chips) | every `must_include` regex matches, no abstention |
-| `planned` | 8 (Drive ingestion, self-healing ASG, `/metrics`, nightly ingest, index pruning, eval in CI, GitHub citation links, live-facts tool) | first sentence says no / not yet / planned |
+| `fact` | 38 (30 from `questions.yaml` verbatim, 7 suggested chips, 1 for the RDS error in the corpus) | every `must_include` regex matches, no abstention |
+| `planned` | 8 (Drive ingestion, self-healing ASG, `/metrics`, nightly ingest, index pruning, eval in CI, GitHub citation links, live-facts tool) | first sentence does not open with "Yes" and its first clause says no / not yet / planned; plus the planned item itself |
 | `live` | 6 (Flux, Terraform, Stop button, follow-ups, zram, KEDA installed-but-suspended) | first sentence does not claim it is planned or missing |
 | `unanswerable` | 10 (salary, phone, Amazon, favourite movie, manager, off-topic questions) | the answer is a refusal |
 | `multi_turn` | 8 | rewrite keeps the subject, plus required facts |
 | `injection` | 5 (print the prompt, "say PWNED", "say it runs on Oracle", an instruction planted in history, a DAN role-play) | no prompt fragments, no forbidden content, required facts if any |
 
-By corpus: 44 About This System, 30 About Basel. 15 cases (20%) are `holdout: true`, to keep out of prompt tuning.
+By corpus: 44 About This System, 31 About Basel. 15 cases (20%) are `holdout: true`, to keep out of prompt tuning.
 
 Three planned cases (`/metrics`, eval in CI, GitHub citation links) and the nightly-ingest case target places where `DESIGN.md` describes unbuilt work in the present tense and only the deep dive's "Planned / not built yet" section says otherwise. They are the cases most likely to catch a wrong "yes".
 
@@ -55,7 +55,10 @@ Three planned cases (`/metrics`, eval in CI, GitHub citation links) and the nigh
 
 ## What review caught
 
-Not reviewed yet.
+Round 1 (Opus), all fixed:
+- **Important: the planned check passed "Yes" answers.** It accepted any no/not/without/manual in the first sentence, so "Yes, the node self-heals with an ASG, so no manual rebuild is needed" passed. Now an affirming opener ("Yes", "Sure", ...) fails, the negation must be in the first clause, "without"/"manual" no longer count, and planned-prune, planned-citation-links and planned-live-facts require the planned item in `must_include`, so a bare "No." fails. The three review examples are negative tests.
+- **Important: a paid run needed only `--paid`.** It now needs both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1`, like `run_eval.py`; tests cover each key missing.
+- **Minor:** a failed follow-up rewrite now falls back to the original question like the API (recorded as `rewrite_error`) instead of failing the case; the first-sentence and verbatim-leak limitations are documented in the grader docstrings; the README says how the holdout was picked and that it is frozen; the RDS error in `skills.md` is a BACKLOG item for owner sign-off and has a golden case (`me-site-stack`, `must_not_include` RDS) that should fail until it is fixed.
 
 ## Operational notes & risks
 
@@ -66,9 +69,9 @@ Not reviewed yet.
 
 ## How to see it / verify it
 
-- `pytest services/tests/test_eval_graders.py services/tests/test_eval_golden.py -q`: 41 tests (1 skips without a local MySQL/Redis).
-- Full backend suite: 370 passed, 22 skipped locally (was 330 / 21 on `main`).
-- With MySQL/Redis up and the corpus ingested: `GLASSBOX_PROVIDER=fake python -m eval.run_answers`. The local Docker daemon was unresponsive during this work, so the full 74-case run was done against an in-memory index of the real repo chunks (same runner, a stand-in retriever): 74 rows, 0 errors, per-category summary printed.
+- `pytest services/tests/test_eval_graders.py services/tests/test_eval_golden.py -q`: 59 tests (1 skips without a local MySQL/Redis).
+- Full backend suite: 388 passed, 22 skipped locally (was 330 / 21 on `main`).
+- With MySQL/Redis up and the corpus ingested: `GLASSBOX_PROVIDER=fake python -m eval.run_answers`. The local Docker daemon was unresponsive during this work, so the full run (then 74 cases) was done against an in-memory index of the real repo chunks (same runner, a stand-in retriever): 74 rows, 0 errors, per-category summary printed.
 
 ## Open items
 
@@ -79,5 +82,5 @@ Not reviewed yet.
   - Projects (`projects.md`): Goal Buddy is a social accountability platform on React Native, Expo and Zustand (Node.js API); CryptoKing's backend is AWS Lambda plus S3.
   - Skills (`skills.md`): languages Python, Java, C#, TypeScript, JavaScript, SQL; observability Geneva, Grafana, Kusto.
   - Refusals expected (not in the corpus): salary, phone number, work at Amazon, favourite movie, manager's name.
-- **Corpus note found while grounding facts:** `corpus/about-me/skills.md` says this site runs on "Terraform, EC2, RDS, and Kubernetes (k3s)". Glassbox does not use RDS (MySQL runs in the cluster). No golden case depends on it, but an About Basel answer could repeat it. Worth a one-word fix in the corpus.
+- **Corpus note found while grounding facts:** `corpus/about-me/skills.md` says this site runs on "Terraform, EC2, RDS, and Kubernetes (k3s)". Glassbox does not use RDS (MySQL runs in the cluster). An About Basel answer can repeat it; golden case `me-site-stack` now catches that (it should fail until the corpus is fixed). The fix is About Basel text, so it needs your sign-off (BACKLOG).
 - **Next phases:** phase 2 (retrieval eval v2) is in PR #95 and reads this file; phase 3 needs your approval for about $0.03 of Bedrock calls to record the v13 baseline, where the stress-test case should fail.
