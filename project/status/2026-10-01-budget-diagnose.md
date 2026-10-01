@@ -1,6 +1,6 @@
 # Answers stopped: budget audit and an LLM budget section in Ops · Diagnose
 
-**Status:** PR open. Needs the owner's Terraform apply after merge (it changes the `glassbox-ops-diagnose` SSM document).
+**Status:** PR [#116](https://github.com/hacka-tron/basel.engineering/pull/116) open. Needs the owner's Terraform apply after merge (it changes the `glassbox-ops-diagnose` SSM document).
 
 ## TL;DR
 
