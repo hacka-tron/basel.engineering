@@ -34,7 +34,7 @@ Recurring review findings (cross-cutting):
 Frontend (`frontend/`, rules in `project/MOBILE_DESIGN.md`):
 - Global CSS can silently override utilities (unlayered `font: inherit` beat every Tailwind size once). Check computed sizes, not class names.
 - React Flow needs fixed node size and explicit handles or nodes/arrows flicker out on each trace update. The 124x42 node size is deliberate.
-- Mobile: `h-dvh` not `100vh`; 16 px inputs (iOS zoom); >= 44 px tap targets; nothing under 11 px; short phones (375x667) can leave 48 px of message area; hit areas of neighbours can overlap by a few px.
+- Mobile: `h-dvh` not `100vh`; inputs match the 13 px message text, and iOS focus-zoom is prevented by an iOS-only `maximum-scale=1` in `index.html` (never add it for other platforms, since it blocks pinch-zoom there); >= 44 px tap targets; nothing under 11 px; short phones (375x667) can leave 48 px of message area; hit areas of neighbours can overlap by a few px.
 - Stream UX: idle watchdog, Stop keeps partial as `stopped`, errors are friendly replies saved as `error` and never sent as history, copy must never blame the visitor (shared IPs). Cooldowns must use elapsed time, not interval ticks.
 - Sheet/dialog focus: trap, Escape, restore on every exit path (including activating a different control).
 
