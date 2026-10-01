@@ -5,7 +5,7 @@
 ## TL;DR
 
 - **Answer thinness is caused by the prompt.** The answer prompt tells Nova Lite to "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list" (`services/glassbox/api/ask.py:275`, `:291`). The stress-test facts (512 MiB, 5-minute cooldown) sit in one retrieved chunk, and the model drops them as instructed.
-- **About This System retrieval is diluted by test code.** 307 of 755 About This System chunks are from `services/tests/`. In the Titan baseline, the rate-limit and budget questions retrieve only test files. Six historical plan files add stale statements. Deleted or renamed files are never removed from the index.
+- **About This System retrieval is diluted by test code.** 307 of 761 About This System chunks are from `services/tests/`. In the Titan baseline, the rate-limit and budget questions retrieve only test files. Six historical plan files add stale statements. Deleted or renamed files are never removed from the index.
 - **Nothing measures answers.** Today's eval is retrieval-only, document-level, at k=5 (production uses 8), manual, with a stale baseline.
 - **Plan:** build a cheap validation harness first (deterministic fact, abstention and planned/live checks, plus one calibrated LLM judge for faithfulness). Then, measured one at a time: prompt v14, corpus hygiene, section-sized chunks with heading breadcrumbs, and hybrid BM25 plus vector with RRF. Skip a paid reranker, LLM-written chunk context and a Redis upgrade for now.
 - **Cost:** a full paid eval run is about $0.03 (about $0.50 with an LLM judge). Re-embedding the whole cleaned corpus is under $0.01.
@@ -41,7 +41,11 @@ Retrieval target: two Redis queries (KNN 20 and BM25 20), fused by reciprocal ra
 
 ## What review caught
 
-Pending review.
+Round 1 (Opus reviewer), all fixed in the PR:
+- **Planned marker, both directions.** The current-state Prompt row quoted the literal marker text, so that live chunk would have been marked planned. Sections 3, 7, 8 and 9 described unbuilt work under headings without a signal word, so they would not have been marked. The row is reworded, the headings now say "not built yet", and `test_planned_labels.py` pins one marked and one unmarked DESIGN-005 case.
+- **Phase 5 would have broken every live answer.** `BedrockLLMProvider.generate` rejects `max_tokens` above 400, so raising it to 500 passes on the fake provider and fails live. The guard, its test and DESIGN.md §6.7 are now part of phase 5, and its acceptance checks them.
+- **Judge calibration was statistically weak.** Thirty natural labels give only a handful of failures, and reusing disagreements as few-shot examples on the same labels inflates agreement. The design now oversamples failures (at least 15 per class), splits dev and held-out test sets, and reports agreement on the held-out set only.
+- **Minor:** the chunk total (761), the paid-run cost (about $0.03), the phase 8 lexical query (OR-joined escaped terms, or BM25 matches nothing), approval flags (phase 7 migration, phase 6 paid eval and production deletions), `ensure_index` only checking `model`, and the about 22 chunks these docs add (761 to 783).
 
 ## Operational notes and risks
 
@@ -57,7 +61,7 @@ Read DESIGN-005 §2 (current-state map with file:line pointers) and §9 (decisio
 
 1. Approve paid eval runs (about $0.03 each, about $0.50 with a judge).
 2. Pick the judge model: Nova Pro, Claude Haiku (needs your first-time-use form), or offline-only.
-3. Label about 30 answers for judge calibration.
+3. Label about 50 answers per judge for calibration (about 1 to 1.5 hours; failures oversampled).
 4. Corpus scope: drop `services/tests/` and the plan files (recommended)? Add `frontend/src/`?
 5. Re-ingestion for phases 6 to 8.
 6. Log answer text in `queries` for online review.

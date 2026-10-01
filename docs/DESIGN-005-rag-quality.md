@@ -1,6 +1,6 @@
 # Glassbox Design Doc 005: RAG quality and validation
 
-**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today; everything after it is planned.
+**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned.
 **Plan:** `docs/superpowers/plans/2026-10-01-rag-quality.md`.
 **Replaces:** the BACKLOG "Answer thinness (prompt tuning)" item, which becomes phase 5 of the plan.
 
@@ -20,7 +20,7 @@ The planned work (not built yet) is to build a small validation harness first, t
 
 | Step | What it does today | Where |
 |---|---|---|
-| Sources | `about_me`: 5 Markdown files in `corpus/about-me/` (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` (**755 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested, although DESIGN.md §6.4 lists `frontend/src/architecture.ts`. | `ingest/scanner.py:11`, `:77-95` |
+| Sources | `about_me`: 5 Markdown files in `corpus/about-me/` (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` (**761 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested, although DESIGN.md §6.4 lists `frontend/src/architecture.ts`. | `ingest/scanner.py:11`, `:77-95` |
 | Secrets | Path denylist plus AWS-key, private-key and high-entropy heuristics; 10 files quarantined locally. | `ingest/scanner.py:34-63` |
 | Chunking | Markdown: split on headings, then **merge consecutive sections until about 300 to 500 words**, sliding 450-word windows with 50-word overlap for long sections. Code: one chunk per top-level def/class (median 48 words; the largest is 2,405 words). Terraform: per top-level block. YAML: per document. | `ingest/chunkers/markdown.py:48-75`, `chunkers/code.py`, `chunkers/terraform.py`, `chunkers/yaml_doc.py` |
 | Chunk text | Embedded **raw**: no file path, document title or heading breadcrumb. A split window of a long section loses its heading. | `ingest/run.py:134-135` |
@@ -29,7 +29,7 @@ The planned work (not built yet) is to build a small validation harness first, t
 | Stale files | Documents whose source file was deleted or renamed are **never removed** from MySQL or Redis; only a changed document's old chunks are replaced. | `ingest/run.py:160-188` |
 | Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 describes an "optional light rerank (score threshold, dedupe by document)" that was never built. | `retrieval/search.py:11-56`, `worker/main.py:240` |
 | Multi-turn | Follow-ups are rewritten into a standalone query by Nova Lite (60 tokens) and retrieval uses the rewrite; the answer prompt gets the original question plus up to 6 messages / 4,000 characters of history. | `api/ask.py:99-116`, `:480-507` |
-| Prompt | Numbered sources `[n] path: text`; planned-work units prefixed with `[PLANNED, not built yet]` by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 gets a hard-coded label. Instructions include **"Use two or three concise sentences"** (`:275`) and **"Do not list every detail unless the question asks for a list"** (`:291`). No bracketed citations in the answer (the UI lists sources). | `api/ask.py:65-74`, `:227-293`; system prompt `providers/base.py:17-29` |
+| Prompt | Numbered sources `[n] path: text`; headings, list items and sentences that name unshipped work get a status prefix (the `PLANNED_MARK` constant), chosen by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 gets a hard-coded label. Instructions include **"Use two or three concise sentences"** (`:275`) and **"Do not list every detail unless the question asks for a list"** (`:291`). No bracketed citations in the answer (the UI lists sources). | `api/ask.py:65-74`, `:227-293`; system prompt `providers/base.py:17-29` |
 | Generation | Nova Lite ConverseStream, `maxTokens` 400, temperature 0.2. | `api/ask.py:710`, `providers/bedrock.py:117` |
 | Abstention | Canonical sentence "I don't know from what I have."; exact and loose detectors; abstentions never cached; `done.abstained`. | `providers/base.py:14`, `:64-92` |
 | Answer cache | Semantic cache, cosine ≥ 0.95, 24h TTL, first questions only, keyed by corpus version, embedding model, LLM model and prompt version `v13`. Prompt-version bump invalidates everything; the `warm-answers` CronJob refills suggested questions (≤ 10 LLM calls/day). | `cache/answer.py:14-15`, `api/ask.py:59`, `:475` |
@@ -62,24 +62,39 @@ Document-level scoring is also lenient: `docs/DESIGN.md` counts as a hit whichev
 
 ## 3. Research findings, weighed against this project
 
+The findings below describe outside research. Each subsection's "*Here:*" verdict is a planned choice for Glassbox, not something it does today; the subsection headings say so.
+
 Scale: about 760 chunks (about 400 after hygiene), roughly 120k tokens of About This System text, one t4g.small node with about 350 MiB free, a daily cap of 100 Nova Lite answers, owner approval for every paid call.
 
-**Chunking.** Structure-aware chunking that follows the document's own sections is the standard advice; merging unrelated sections dilutes the embedding (DESIGN.md chunk 5 merges §4.5 Stress test, §4.6 Citations and §4.7 Degraded modes). Prefixing each chunk with its location ("contextual chunk headers": file path, document title, heading breadcrumb) is cheap and deterministic. Anthropic's Contextual Retrieval goes further and has an LLM write 50 to 100 tokens of context per chunk: in their benchmark, contextual embeddings cut top-20 retrieval failures by 35%, adding contextual BM25 by 49%, and adding a reranker by 67%. The same article says that a knowledge base under about 200k tokens can simply go into the prompt in full. ([Anthropic, Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval))
+### 3.1 Chunking (planned choice, not built yet)
+
+Structure-aware chunking that follows the document's own sections is the standard advice; merging unrelated sections dilutes the embedding (DESIGN.md chunk 5 merges §4.5 Stress test, §4.6 Citations and §4.7 Degraded modes). Prefixing each chunk with its location ("contextual chunk headers": file path, document title, heading breadcrumb) is cheap and deterministic. Anthropic's Contextual Retrieval goes further and has an LLM write 50 to 100 tokens of context per chunk: in their benchmark, contextual embeddings cut top-20 retrieval failures by 35%, adding contextual BM25 by 49%, and adding a reranker by 67%. The same article says that a knowledge base under about 200k tokens can simply go into the prompt in full. ([Anthropic, Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval))
 *Here:* About Basel already gets everything in the prompt. For About This System, deterministic breadcrumbs capture most of the benefit for docs whose headings are descriptive (ours are). LLM-written context would add an ingest-time LLM dependency to every deploy for a small gain. Whole-corpus prompting (about 120k tokens, or about 60k after hygiene) would cost about $0.004 to $0.007 per answer on Nova Lite and add seconds of time to first token on a 2 GiB node's request path. Retrieval stays.
 
-**Hybrid search.** BM25 plus vector, fused with reciprocal-rank fusion (RRF, k=60), helps most on exact identifiers. This corpus is full of them: `demo:load:lock`, `_PLANNED_SOURCE_SIGNAL`, `retrieval:jobs`, `512 MiB`, `t4g.small`. Redis 8.4 added `FT.HYBRID` with built-in RRF or linear fusion; Redis 7.2 (what runs here) has full-text `FT.SEARCH` with a BM25 scorer on TEXT fields, so the two legs can be fused in about 30 lines of Python. ([Redis search skill / FT.HYBRID notes](https://mcpservers.org/agent-skills/redis/redis-search))
+### 3.2 Hybrid search (planned choice, not built yet)
+
+BM25 plus vector, fused with reciprocal-rank fusion (RRF, k=60), helps most on exact identifiers. This corpus is full of them: `demo:load:lock`, `_PLANNED_SOURCE_SIGNAL`, `retrieval:jobs`, `512 MiB`, `t4g.small`. Redis 8.4 added `FT.HYBRID` with built-in RRF or linear fusion; Redis 7.2 (what runs here) has full-text `FT.SEARCH` with a BM25 scorer on TEXT fields, so the two legs can be fused in about 30 lines of Python. ([Redis search skill / FT.HYBRID notes](https://mcpservers.org/agent-skills/redis/redis-search))
 *Here:* worth it. It costs a TEXT field (about 1 to 2 MB of RAM) and one extra Redis query, and the lexical leg is deterministic and free, so it can run in CI without embeddings.
 
-**Reranking.** Cross-encoder rerankers give the biggest single gain in Anthropic's numbers. On Bedrock, Amazon Rerank 1.0 is **not available in us-east-1**; Cohere Rerank 3.5 is, at about **$2.00 per 1,000 queries**. ([Bedrock rerank regions](https://docs.aws.amazon.com/bedrock/latest/userguide/rerank-supported.html), [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/))
+### 3.3 Reranking (planned choice: skip)
+
+Cross-encoder rerankers give the biggest single gain in Anthropic's numbers. On Bedrock, Amazon Rerank 1.0 is **not available in us-east-1**; Cohere Rerank 3.5 is, at about **$2.00 per 1,000 queries**. ([Bedrock rerank regions](https://docs.aws.amazon.com/bedrock/latest/userguide/rerank-supported.html), [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/))
 *Here:* a Nova Lite answer costs about $0.0003 (about 3k input tokens at $0.06/M plus 300 output tokens at $0.24/M). A rerank call would cost about **7 times the answer** and add a network hop. Skip for now; revisit only if the eval shows correct chunks retrieved at ranks 9 to 20 after hybrid and hygiene.
 
-**Query rewriting.** Already built for follow-ups. The remaining gap is measurement: the rewrite should keep the entity the follow-up refers to. HyDE and multi-query expansion add an LLM call to every question; skip.
+### 3.4 Query rewriting
 
-**Metadata filtering.** Already filters by corpus and model. The useful addition is a source-type prior: down-rank or exclude tests and historical plans, plus a per-document cap (at most 2 or 3 chunks from one file) so one long file cannot fill the context.
+Already built for follow-ups. The remaining gap is measurement, which is planned work: the rewrite should keep the entity the follow-up refers to. HyDE and multi-query expansion add an LLM call to every question; skip.
 
-**Prompting for grounded, specific answers.** Ask explicitly for the concrete values that answer the question (numbers, thresholds, durations, names, limits). Allow the length to follow the question (a short paragraph or a short list) instead of capping it at a sentence count. Put the instructions before the sources and the question last. Keep the abstention rule. The thin answers here come from an explicit brevity instruction, so the fix is cheap and measurable.
+### 3.5 Metadata filtering
 
-**Evaluation.**
+Already filters by corpus and model. The planned addition (not built yet) is a source-type prior: down-rank or exclude tests and historical plans, plus a per-document cap (at most 2 or 3 chunks from one file) so one long file cannot fill the context.
+
+### 3.6 Prompting for grounded, specific answers (planned choice, not built yet)
+
+Ask explicitly for the concrete values that answer the question (numbers, thresholds, durations, names, limits). Allow the length to follow the question (a short paragraph or a short list) instead of capping it at a sentence count. Put the instructions before the sources and the question last. Keep the abstention rule. The thin answers here come from an explicit brevity instruction, so the fix is cheap and measurable.
+
+### 3.7 Evaluation (planned choice, not built yet)
+
 - Retrieval metrics: recall@k and MRR at the production k, scored at the chunk level (gold snippet), are the industry default and free to compute.
 - RAGAS-style answer metrics: *faithfulness* and *response relevancy* need only question, contexts and answer; *context recall* and *factual correctness* need a reference. ([Ragas metrics](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/))
 - Bedrock Evaluations offers managed LLM-as-judge RAG evaluation (correctness, completeness, faithfulness, citation precision and coverage, refusal) on your own responses ("bring your own inference"). ([AWS](https://aws.amazon.com/bedrock/evaluations/), [GA note](https://aws.amazon.com/about-aws/whats-new/2025/03/amazon-bedrock-rag-evaluation-generally-available/))
@@ -115,9 +130,11 @@ Changes against today:
 1. **Corpus hygiene.** Drop `services/tests/**` and `docs/superpowers/plans/**` from About This System. Add a `kind` tag (`doc`, `code`, `infra`, `manifest`). Sweep documents whose files no longer exist. Add the "clear chunks" command (`python -m services.glassbox.ingest.run --clear [--corpus X]`) that the backlog asks for.
 2. **Chunking.** Markdown: one chunk per section at the deepest heading level that keeps it between about 120 and 450 words. Merge only *sibling subsections* that are too small (no more merging across unrelated `###` sections). Split long sections into windows that repeat the breadcrumb. Code: merge tiny adjacent definitions up to about 250 words, split anything over about 600 words, and prefix the module path plus docstring line.
 3. **Contextual header** prepended to both the embedded text and the BM25 text, for example `docs/architecture/deep-dive.md > Glassbox architecture deep dive > Stress test and KEDA autoscaling of retrieval workers`. The prompt shows the same header as the source label.
-4. **Hybrid retrieval** in `retrieval/search.py`: two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters), RRF with k=60, a small multiplicative prior by kind (tuned by eval, may end at 1.0), a per-document cap of 3, top 8 out. The retrieval cache keys stay the same; the corpus version still invalidates.
+4. **Hybrid retrieval** in `retrieval/search.py`: two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters; the lexical query is the question's stopword-stripped, escaped terms joined with `|`, because `FT.SEARCH` ANDs terms by default and a whole question would match nothing), RRF with k=60, a small multiplicative prior by kind (tuned by eval, may end at 1.0), a per-document cap of 3, top 8 out. The retrieval cache keys stay the same; the corpus version still invalidates.
 5. **Prompt v14** (section 6).
 6. **Answer log**: store `answer` and `abstained` in `queries` (next Alembic revision) so live traffic can be sampled into the golden set and reviewed.
+
+New index fields (`kind`, `text`) need `ensure_index` restructured: today it only checks for the `model` attribute (`ingest/redis_index.py:15`) and returns early, so it would never add a second new field to an existing index. It should compare the full expected schema and `FT.ALTER` each missing field.
 
 Unchanged: Titan V2 at 512 dimensions, Nova Lite, the answer cache and its 0.95 threshold, the trace contract, the planned-work marker (until doc-level status metadata replaces it), Redis 7.2.
 
@@ -155,7 +172,7 @@ The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbe
 
 - **One binary question per judge** (faithful? relevant?), returning JSON `{"pass": bool, "critique": "..."}`. Sources and answer go in; the judge sees the same numbered chunks the generator saw.
 - **Judge model is different from the generator**, to avoid grading its own style. Candidates: Nova Pro on Bedrock (about $0.80/M input, so about $0.50 per 70-case run with both judges), or Claude Haiku once the owner has submitted Anthropic's first-time-use form. A third option costs no Bedrock money: an offline Claude Code session grades the run's JSONL with the same rubric. It is fine for one-off reviews but is not reproducible enough for a gate.
-- **Calibration.** The owner labels about 30 answers (pass/fail plus a one-line reason) in a small YAML file. The judge must reach ≥ 0.85 agreement on both the pass and the fail class before its numbers are used as a gate. Re-check whenever the judge prompt or model changes. Disagreements become few-shot examples.
+- **Calibration.** Natural answers are mostly passes, so 30 random labels would hold only 2 to 5 failures. Instead, the label set **oversamples known failures**: the thin v13 answers, answers to unanswerable questions with abstention disabled, and answers generated with deliberately perturbed sources (a number changed, a planned feature stated as live). The aim is about 50 labelled answers with at least 15 per class for each judge. They are split once, by a fixed seed, into a **dev set** (about 40%: few-shot examples and prompt iteration) and a **held-out test set** (about 60%, at least 10 per class), which is never shown to the judge-prompt author. Per-class agreement (true-positive and true-negative rate) is reported **on the held-out set only**, and must be ≥ 0.85 for both classes before the judge gates anything. Disagreements on the dev set may become few-shot examples; disagreements on the test set may not (fix the prompt and draw new test labels instead). Re-check whenever the judge prompt or model changes.
 - **Never** grade on a 1 to 5 scale, and never let the judge see the expected answer for faithfulness (it grades support by the sources only).
 
 ### 5.4 Where each check runs (planned)
@@ -175,11 +192,11 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 ## 6. How this fixes answer thinness (planned)
 
 1. **Measure first.** Phase 1 adds the `must_include` facts for the stress-test, caching and rate-limit questions. Phase 3 records the v13 baseline; the stress-test case should fail it.
-2. **Prompt v14.** Replace "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list" with: *"Answer directly in the first sentence, then give the specific details from the sources that answer the question: numbers, thresholds, limits, durations, names and conditions. Do not round or drop a number the sources give. Use a short paragraph, or a short list when there are several steps or items. Leave out details that don't bear on the question."* Raise `maxTokens` from 400 to 500 (a cost increase of about $0.00002 per answer). Bump `_PROMPT_VERSION`; the answer cache invalidates and `warm-answers` refills it within its cap.
+2. **Prompt v14.** Replace "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list" with: *"Answer directly in the first sentence, then give the specific details from the sources that answer the question: numbers, thresholds, limits, durations, names and conditions. Do not round or drop a number the sources give. Use a short paragraph, or a short list when there are several steps or items. Leave out details that don't bear on the question."* Raise `maxTokens` from 400 to 500 (a cost increase of about $0.00002 per answer). This also needs `BedrockLLMProvider.generate`'s guard changed: it rejects anything above 400 (`providers/bedrock.py:104-105`, pinned by `services/tests/test_bedrock_providers.py:101`). Otherwise the fake-provider run passes and every live answer fails. Bump `_PROMPT_VERSION`; the answer cache invalidates and `warm-answers` refills it within its cap.
 3. **Better context.** Breadcrumb headers and section-sized chunks mean the chunk that holds "512 MiB" is labelled "Stress test and KEDA autoscaling", which helps both retrieval and the model's reading. Excluding tests frees prompt space for the real sources.
 4. **Gate.** `fact_coverage` must rise and every other answer metric must hold.
 
-## 7. Alternatives considered
+## 7. Alternatives considered for the planned work (not built yet)
 
 | Option | Verdict | Why |
 |---|---|---|
@@ -195,7 +212,7 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 | RAGAS library or Bedrock Evaluations as the harness | **Borrow metric definitions, don't depend on them** | Both are fine but heavy (dependencies, S3 datasets, job setup) for 70 cases; a 300-line runner with deterministic graders plus one judge prompt is easier to own and to run in CI. Bedrock Evaluations BYOI stays a reasonable cross-check later. |
 | Graph RAG, agentic retrieval, fine-tuning | **Skip** | Enterprise-scale tools for problems this corpus doesn't have. |
 
-## 8. Risks
+## 8. Risks of the planned work (not built yet)
 
 - **Over-long answers.** v14 could swing to verbose. The gate also tracks answer length (median words) and relevance; the instruction says to leave out details that don't bear on the question.
 - **Prompt bump empties the answer cache.** It's a 24h cache, and the warm-up refills suggested questions within its 10-call cap. Expect a day of slightly higher latency and LLM use. Batch prompt changes rather than bumping often.
@@ -203,14 +220,14 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 - **Excluding tests hides real answers.** "How is the rate limiter tested?" would lose its sources. Keep a `tests` kind with a strong down-weight instead of full exclusion if the owner prefers (section 9).
 - **Judge drift.** A judge that is not calibrated is a random number generator with confidence. No judge gate until calibration passes.
 - **Golden-set overfitting.** Keep about 20% of cases as a held-out set that prompt tuning doesn't look at; add live questions over time.
-- **This document is ingested.** The bot reads DESIGN-005 (it stays in the corpus) and the plan (until phase 6 drops plans). Their target-state headings carry "planned" so `_PLANNED_SOURCE_SIGNAL` marks those sections; section 2 (current state) is deliberately unmarked. Check one live answer about hybrid search after merge.
+- **This document is ingested.** It adds about 22 chunks to About This System (761 to 783; 15 for this document, 7 for the plan), together with the plan file, which stays until phase 6 drops plans. Every section after section 2 has a "planned" or "not built yet" heading, so `_PLANNED_SOURCE_SIGNAL` marks it. Section 2 (current state) deliberately avoids the signal words and the literal marker text. `services/tests/test_planned_labels.py` pins one marked case (hybrid search in section 3) and one unmarked case (the KNN top 8 row in section 2). Check one live answer about hybrid search after merge.
 - **Planned-marker regex.** Still keyword-based (BACKLOG standing note). The planned/live category makes regressions visible; doc-level status metadata is the longer-term fix and is out of scope here.
 
-## 9. Open owner decisions
+## 9. Open owner decisions on the planned work (not built yet)
 
-1. **Paid eval runs:** approve about $0.05 per baseline run (no judge) for phases 3, 5, 7 and 8, run locally with your credentials or by an agent you authorize.
+1. **Paid eval runs:** approve about $0.03 per baseline run (no judge) for phases 3, 5, 7 and 8, run locally with your credentials or by an agent you authorize.
 2. **Judge model:** Nova Pro on Bedrock (about $0.50 per run with both judges), Claude Haiku (requires you to submit Anthropic's first-time-use form; agents won't), or offline Claude Code grading only (no Bedrock cost, not a gate).
-3. **Calibration labels:** about 30 minutes of your time to label 30 answers pass/fail.
+3. **Calibration labels:** about 1 to 1.5 hours of your time to label about 50 answers per judge pass/fail (failures are oversampled on purpose; section 5.3), possibly again if the held-out set has to be redrawn.
 4. **Corpus scope:** exclude `services/tests/` and `docs/superpowers/plans/` (recommended), or keep them down-weighted. Also: ingest `frontend/src/` (DESIGN.md §6.4 says `architecture.ts` is in scope; the scanner doesn't include it)?
 5. **Re-ingestion:** phases 6 to 8 each re-embed the corpus on the next deploy. Under $0.01 each, but they bump corpus versions and empty caches.
 6. **Answer logging:** store answer text in `queries` (phase 10). Visitor questions are already stored; answers add no new personal data, but it's your call.

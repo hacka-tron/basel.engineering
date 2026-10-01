@@ -304,6 +304,10 @@ LIVE_UNITS = [
     ("docs/DESIGN-004-action-plan.md", "## 6. Milestone 2: Live on AWS"),
     ("docs/DESIGN-004-action-plan.md", "| 5 | KEDA, synthetic load endpoint"),
     ("docs/DESIGN-004-action-plan.md", "| M2 |"),
+    # DESIGN-005: the current-state pipeline map must stay unmarked.
+    ("docs/DESIGN-005-rag-quality.md", "| Retrieval | KNN **top 8**"),
+    ("docs/DESIGN-005-rag-quality.md", "| Prompt | Numbered sources"),
+    ("docs/DESIGN-005-rag-quality.md", "Section 2 describes the system as it runs today."),
     ("docs/DESIGN-004-action-plan.md", "| M3 (shipped part) | DD2 | Conversational memory"),
     (
         "docs/DESIGN-004-action-plan.md",
@@ -325,6 +329,15 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "- **EKS for an afternoon:**"),
     ("docs/DESIGN.md", "- **Live facts tool:**"),
     ("docs/DESIGN.md", "- **Hybrid search:**"),
+    # DESIGN-005 and its plan describe unbuilt RAG work (hybrid retrieval, etc.).
+    ("docs/DESIGN-005-rag-quality.md", "### 3.2 Hybrid search (planned choice, not built yet)"),
+    ("docs/DESIGN-005-rag-quality.md", "4. **Hybrid retrieval** in `retrieval/search.py`"),
+    ("docs/DESIGN-005-rag-quality.md", "6. **Answer log**"),
+    ("docs/DESIGN-005-rag-quality.md", "6. **Answer logging:**"),
+    (
+        "docs/superpowers/plans/2026-10-01-rag-quality.md",
+        "**Files:** `ingest/redis_index.py` (`text` TEXT field",
+    ),
     # DD2's self-healing proposal, including a chunk that starts mid-feature.
     ("docs/DESIGN-002-followups.md", "### 3.3 Boot sequence (user data)"),
     ("docs/DESIGN-002-followups.md", "### 3.4 Health detection"),

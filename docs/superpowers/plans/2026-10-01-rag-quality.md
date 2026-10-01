@@ -11,10 +11,10 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 | 1 | Golden dataset v2 and deterministic answer graders | **yes** | none |
 | 2 | Retrieval eval v2 (k=8, chunk-level, noise@8) | **yes** | none |
 | 3 | Paid baseline run of the current system (v13) | no | paid, about $0.03 |
-| 4 | LLM judge plus owner calibration | partly (code yes, run no) | paid about $0.50 per run; owner labels |
+| 4 | LLM judge plus owner calibration | partly (code yes, run no) | paid about $0.50 per run; owner labels about 50 answers per judge |
 | 5 | Prompt v14: fix answer thinness | code yes, merge no | paid verification run; cache invalidation |
-| 6 | Corpus hygiene, stale sweep, `--clear` | code yes, merge no | re-ingest on deploy; corpus-scope decision |
-| 7 | Structure-aware chunks and breadcrumb headers | code yes, merge no | full re-embed (under $0.01) and paid eval |
+| 6 | Corpus hygiene, stale sweep, `--clear` | code yes, merge no | re-ingest on deploy; stale sweep deletes production rows/keys; corpus-scope decision; paid retrieval eval (about $0.0001) |
+| 7 | Structure-aware chunks and breadcrumb headers | code yes, merge no | Alembic migration (`chunks.header`); full re-embed (under $0.01); paid eval |
 | 8 | Hybrid BM25 plus vector with RRF | code yes, merge no | Redis schema change, re-ingest, paid eval |
 | 9 | CI gate (free checks) | **yes** | none |
 | 10 | Answer logging and online review | code yes, merge no | Alembic migration; logging decision |
@@ -66,41 +66,41 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 ## Phase 4 (planned): LLM judge and calibration
 
-**Autonomous:** the code is (it's tested with a fake judge); running it is not (paid about $0.50 per run; the owner chooses the model, DESIGN-005 §9 item 2). The owner also labels about 30 answers.
+**Autonomous:** the code is (it's tested with a fake judge); running it is not (paid about $0.50 per run; the owner chooses the model, DESIGN-005 §9 item 2). The owner also labels about 50 answers per judge, with failures oversampled (DESIGN-005 §5.3).
 
-**Files:** `eval/judge.py` (two binary judges, faithfulness and relevance; JSON output `{pass, critique}`; model id from `GLASSBOX_JUDGE_MODEL_ID`; the judge sees only the question, the numbered chunks and the answer), `eval/calibration.yaml` (owner labels: case id, answer hash, pass/fail, reason), `eval/calibrate.py` (agreement per class; prints disagreements for few-shot use), wiring in `run_answers.py --judge`.
+**Files:** `eval/judge.py` (two binary judges, faithfulness and relevance; JSON output `{pass, critique}`; model id from `GLASSBOX_JUDGE_MODEL_ID`; the judge sees only the question, the numbered chunks and the answer), `eval/calibration_candidates.py` (builds the label pool: v13 thin answers, abstention-disabled answers to unanswerable cases, and answers generated from perturbed sources, so each class has at least 15 cases), `eval/calibration.yaml` (owner labels: case id, answer hash, pass/fail, reason, `split: dev|test` assigned once by a fixed seed), `eval/calibrate.py` (per-class agreement on the **test split only**; prints dev-split disagreements for few-shot use and refuses to print test-split items' texts as few-shot material), wiring in `run_answers.py --judge`.
 
-**Tests:** parsing and malformed-JSON handling with a fake judge; agreement math.
+**Tests:** parsing and malformed-JSON handling with a fake judge; agreement math; the split is deterministic and dev/test never overlap; calibrate refuses to report when either class has fewer than 10 test cases.
 
-**Acceptance:** judge agreement ≥ 0.85 on both classes against the owner's labels before any gate uses it; otherwise iterate on the judge prompt with the disagreements as examples.
+**Acceptance:** true-positive and true-negative rates ≥ 0.85 on the held-out test split (at least 10 cases per class) before any gate uses the judge. Iterate on the prompt using dev-split disagreements only. If test-split agreement is used to choose between prompt versions more than once, draw fresh test labels.
 
 ## Phase 5 (planned): prompt v14, the answer-thinness fix
 
 **Autonomous:** writing the change, unit tests and a fake-provider run are. Merging is not: it needs a paid before/after run (about $0.03) and it invalidates the live answer cache.
 
-**Files:** `services/glassbox/api/ask.py` (`_prompt` wording per DESIGN-005 §6: remove "Use two or three concise sentences" and "Do not list every detail..."; add the keep-the-specifics instruction; `max_tokens` 400 to 500; `_PROMPT_VERSION = "v14"`), `providers/base.py` `GROUNDING_RULES` if wording overlaps, `docs/DESIGN.md` §6.7 (max output), the deep dive's prompt description (it's ingested, keep it accurate).
+**Files:** `services/glassbox/api/ask.py` (`_prompt` wording per DESIGN-005 §6: remove "Use two or three concise sentences" and "Do not list every detail..."; add the keep-the-specifics instruction; `max_tokens` 400 to 500; `_PROMPT_VERSION = "v14"`), `services/glassbox/providers/bedrock.py` (the `1 <= max_tokens <= 400` guard at `:104-105` becomes 500), `services/tests/test_bedrock_providers.py` (the `:101` test asserts the new 500 limit and that 500 is accepted), `providers/base.py` `GROUNDING_RULES` if wording overlaps, `docs/DESIGN.md` §6.7 ("Max output 400 tokens" at `:241`), the deep dive's prompt description (it's ingested, keep it accurate).
 
-**Tests:** prompt-contract unit test (the brevity phrases are gone, the specifics rule is present, the planned-marker text unchanged); existing `test_planned_labels.py` stays green.
+**Tests:** prompt-contract unit test (the brevity phrases are gone, the specifics rule is present, the planned-marker text unchanged); a test that the `max_tokens` value `_stream` passes to the LLM is accepted by `BedrockLLMProvider.generate` (stub client), so the API limit and the provider guard can't drift apart again; existing `test_planned_labels.py` stays green.
 
-**Acceptance (gate from DESIGN-005 §5.4):** `fact_coverage` rises (the stress-test case passes); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; median answer length reported and reasonable (the owner judges); faithfulness ≥ 0.95 if phase 4 is calibrated. After deploy: re-ask the stress-test question live (one paid answer) and close the BACKLOG item.
+**Acceptance (gate from DESIGN-005 §5.4):** the paid run goes through the real `BedrockLLMProvider` with `max_tokens=500` and no `ValueError`; `grep -rn 400` shows no leftover 400-token limit in `ask.py`, `bedrock.py` or DESIGN.md §6.7; `fact_coverage` rises (the stress-test case passes); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; median answer length reported and reasonable (the owner judges); faithfulness ≥ 0.95 if phase 4 is calibrated. After deploy: re-ask the stress-test question live (one paid answer) and close the BACKLOG item.
 
 ## Phase 6 (planned): corpus hygiene, stale sweep and `--clear`
 
-**Autonomous:** code yes; merge needs the owner's corpus-scope decision (DESIGN-005 §9 item 4). Merging triggers a re-ingest and corpus-version bump on the next deploy (no new embeddings needed for the deletions themselves).
+**Autonomous:** code yes; merge needs the owner's corpus-scope decision (DESIGN-005 §9 item 4) and a paid retrieval eval (about $0.0001). Merging triggers a re-ingest and corpus-version bump on the next deploy (no new embeddings needed for the deletions themselves). **On that deploy the stale sweep deletes production MySQL rows and Redis keys** for every document it no longer sees: list what it would delete in a dry-run log line first (`--dry-run-sweep` locally against a fake-ingested copy of the corpus) and include that list in the PR.
 
 **Files:** `ingest/scanner.py` (exclude `services/tests/**` and `docs/superpowers/plans/**`, or tag them; optionally add `frontend/src/architecture.ts`), `ingest/run.py` (after a successful run, delete documents and chunks, MySQL rows and Redis keys, whose `source_path` was not seen in this scan; `--clear [--corpus about_me|about_system]` wipes MySQL chunks/documents and Redis `chunk:*` for the scope and bumps the corpus version), `ingest/redis_index.py` (a `kind` TAG field: doc/code/infra/manifest/test), `services/glassbox/retrieval/search.py` (accepts an optional kind filter), DESIGN.md §6.4, the deep dive, BACKLOG ("Ability to clear chunks" closed).
 
-**Tests:** scanner exclusions; stale sweep removes a deleted file's rows and keys and leaves others; `--clear` per scope; `FT.ALTER` path for adding `kind` to an existing index (mirror the existing `model` backfill).
+**Tests:** scanner exclusions; stale sweep removes a deleted file's rows and keys and leaves others; `--clear` per scope; `FT.ALTER` path for adding `kind` to an existing index. `ensure_index` (`ingest/redis_index.py:10-50`) only checks for the `model` attribute today and returns early; restructure it to compare against the full expected field list and add each missing field, so phase 8's `text` field also gets added.
 
 **Acceptance:** fake-provider ingest has noise@8 = 0; a paid retrieval eval (about $0.0001) shows chunk-level recall@8 not lower than phase 3 and the rate-limit and budget cases now hitting `DESIGN.md`/`ask.py`.
 
 ## Phase 7 (planned): structure-aware chunks and breadcrumb headers
 
-**Autonomous:** code yes; merge needs owner approval (full re-embed on the next deploy, under $0.01; caches invalidated) and a paid eval run.
+**Autonomous:** code yes; merge needs owner approval (an Alembic migration adding `chunks.header`, applied by the `migrate` Job; a full re-embed on the next deploy, under $0.01; caches invalidated) and a paid eval run.
 
 **Files:** `ingest/chunkers/markdown.py` (one section per chunk at the deepest heading level that fits 120 to 450 words; merge only small sibling subsections; long sections split into windows that carry the breadcrumb; record the breadcrumb on `Chunk`), `chunkers/code.py` (merge tiny adjacent definitions to about 250 words; split over about 600; module-path prefix), `chunkers/base.py` (`Chunk.header`), `ingest/run.py` (embed `header + "\n\n" + text`; store the header in MySQL, the next Alembic revision adds `chunks.header`), `api/ask.py` `_prompt` (source label uses the header), `worker/main.py` `_load_chunks`.
 
-**Tests:** chunker unit tests for the DESIGN.md §4.5–4.7 case (three chunks, not one), breadcrumbs on split windows, code merge/split bounds; prompt shows headers; planned-marker heading logic still applies.
+**Tests:** migration up/down; chunker unit tests for the DESIGN.md §4.5–4.7 case (three chunks, not one), breadcrumbs on split windows, code merge/split bounds; prompt shows headers; planned-marker heading logic still applies.
 
 **Acceptance:** chunk-level recall@8 and MRR improve on phase 6; answer metrics hold; chunk count and size distribution reported.
 
@@ -108,9 +108,9 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 **Autonomous:** code yes; merge needs owner approval (Redis index schema gains a TEXT field; re-ingest to populate it) and a paid eval run.
 
-**Files:** `ingest/redis_index.py` (`text` TEXT field holding header plus chunk text, added via `FT.ALTER` with a backfill from MySQL like the `model` backfill), `retrieval/search.py` (`hybrid_search`: KNN 20 plus `FT.SEARCH` BM25 20 with the same corpus/model filters and escaped query terms, RRF k=60, optional kind prior, per-document cap 3, top 8), `worker/main.py` (passes the question text through; the retrieval cache key gains a `hybrid-v1` marker), `eval/run_eval.py` (reports the vector leg, the lexical leg and fused results separately), DESIGN.md §6.3, the deep dive. Check memory: Redis memory before and after on the local stack (expected +1 to 2 MB).
+**Files:** `ingest/redis_index.py` (`text` TEXT field holding header plus chunk text, added via `FT.ALTER` with a backfill from MySQL like the `model` backfill), `retrieval/search.py` (`hybrid_search`: KNN 20 plus `FT.SEARCH` BM25 20 with the same corpus/model filters. The lexical query is built from the question's terms: lowercase, drop English stopwords and one-character tokens, escape RediSearch punctuation (`:`, `-`, `@`, `.`, `{`, `}` and the rest) with backslashes, join with `|` (OR) inside `@text:(...)`. `FT.SEARCH` ANDs terms by default, so a whole question would match nothing and the phase would wrongly conclude that hybrid doesn't help. Use `SCORER BM25`; RRF k=60, optional kind prior, per-document cap 3, top 8), `worker/main.py` (passes the question text through; the retrieval cache key gains a `hybrid-v1` marker), `eval/run_eval.py` (reports the vector leg, the lexical leg and fused results separately), DESIGN.md §6.3, the deep dive. Check memory: Redis memory before and after on the local stack (expected +1 to 2 MB).
 
-**Tests:** RRF math; query escaping (punctuation, `:`, `@`, `-` in identifiers like `demo:load:lock`); per-document cap; empty lexical result; worker uses hybrid.
+**Tests:** RRF math; lexical query builder (stopwords removed, terms OR-joined, a full natural-language question returns non-empty results on a fixture index, identifiers like `demo:load:lock` and `_PLANNED_SOURCE_SIGNAL` escaped and still matched); `ensure_index` adds `text` to an index that already has `model` and `kind`; per-document cap; empty lexical result; worker uses hybrid.
 
 **Acceptance:** fused chunk-level recall@8 ≥ max(vector, lexical); identifier questions (add 3 to golden: `demo:load:lock`, `_PLANNED_SOURCE_SIGNAL`, `retrieval:jobs`) retrieved at rank ≤ 3; answer metrics hold. If fused results are not better than vector-only, don't merge; record the finding.
 
