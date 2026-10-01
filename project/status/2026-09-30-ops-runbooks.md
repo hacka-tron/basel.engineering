@@ -6,7 +6,7 @@
 ## TL;DR
 
 - Tonight's hand-typed operations are now buttons in GitHub Actions: EC2 reboot, `flux suspend`/`resume`, `kubectl scale`, the cronjob suspend patch, diagnostics, the zram script, and the bootstrap `terraform apply`.
-- **Ops runbooks** (`ops.yml`): pick an action from a fixed list. `diagnose` runs immediately and is read-only. Every other action waits for the owner's approval, then prints the node's state before and after.
+- **Ops runbooks**: eight "Ops · …" workflows in the Actions sidebar (one per action, each showing only its own inputs), all calling the shared core `ops.yml`. **Ops · Diagnose** runs immediately and is read-only. Every other action waits for the owner's approval, then prints the node's state before and after.
 - **Bootstrap** (`bootstrap.yml`): plans `infra/bootstrap` on PRs, and applies it from `main` after approval, only if the plan still matches the one you reviewed.
 - Nothing on the node can run unless it was reviewed in this repo. The workflow can only invoke Terraform-managed SSM documents with enum inputs, never `AWS-RunShellScript`.
 - **The owner applies bootstrap by hand one last time**, to create the four new roles, and creates four GitHub environments. That is one copy-paste block in `infra/CI.md`. After that, every operation is a button.
@@ -19,7 +19,7 @@ Nothing directly. Incidents should be shorter: fixing a 521 is now "run diagnose
 
 ```mermaid
 flowchart LR
-    O[Owner: Actions → Ops runbooks<br/>action = choice list] --> D[diagnose job<br/>env ops-read<br/>role glassbox-ops-read]
+    O[Owner: Actions → Ops · &lt;action&gt;<br/>wrapper workflow] --> D[diagnose job<br/>env ops-read<br/>role glassbox-ops-read]
     D -->|before snapshot| A{action ≠ diagnose?}
     A -->|owner approves env ops| J[act job<br/>role glassbox-ops]
     J -->|ssm:SendCommand<br/>glassbox-ops-* documents only| N[k3s node<br/>runs vetted script as root]
@@ -61,7 +61,11 @@ Not reviewed yet (Codex gate pending). Self-checks are listed under "How to see 
 
 - Locally: `terraform fmt -check -recursive infra`, and `init -backend=false` plus `validate` for both roots, all pass. `actionlint` is clean on all workflows. `shellcheck` is clean on every document (lib + action, as concatenated) and on the helper scripts. The rendered documents were run against a `kubectl` stub for every action, including rejecting an out-of-list value. A read-only, offline bootstrap plan shows **8 to add, 0 to change, 0 to destroy** on top of `main`. The plan fingerprint is stable across two plans.
 - IAM: 71 `simulate-custom-policy` cases across the four roles, 0 mismatches (tables are in the PR). Bucket-policy cases confirm the bootstrap roles can use `bootstrap/*`, the CI roles cannot, and nobody can delete the bucket.
-- Live, after setup: run **Ops runbooks → diagnose**, then **Bootstrap → Run workflow** (it should report "no changes").
+- Live, after setup: run **Ops · Diagnose**, then **Bootstrap → Run workflow** (it should report "no changes").
+
+## Follow-up: one workflow per runbook
+
+The single "Ops runbooks" form showed every input for every action. GitHub can't show inputs conditionally, so `ops.yml` is now a reusable workflow (`workflow_call`, same inputs and logic) and eight dispatch-only wrappers ("Ops · Diagnose", "Reboot node", "Restart deployment", "Flux suspend or resume", "Flux reconcile", "KEDA on or off", "Warm-up CronJob suspend or resume", "Apply zram") each show only their own inputs. Roles, environments and approval are unchanged; the OIDC `sub` of a called-workflow job is still the caller's environment subject. Refer to `ops.yml` above as the reusable core. See `infra/CI.md` "Runbooks". First live run should confirm the `ops` approval prompt still appears.
 
 ## Open items
 

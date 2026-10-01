@@ -1,0 +1,32 @@
+name: "Ops · KEDA on or off"
+
+# Scale the KEDA deployments to 0 or 1. Needs owner approval.
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keda:
+        description: KEDA state
+        type: choice
+        required: true
+        default: "off (0)"
+        options: ["off (0)", "on (1)"]
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: scale-keda
+      keda_replicas: ${{ inputs.keda == 'on (1)' && '1' || '0' }}
+      reason: ${{ inputs.reason }}
