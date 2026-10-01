@@ -6,6 +6,8 @@ import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
+import { useFullNameFits } from './hooks/useFullNameFits'
+import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
@@ -26,6 +28,8 @@ import {
   type ChatMessage,
   type MessageSource,
 } from './lib/conversation'
+
+const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight'
 
 export type Corpus = 'basel' | 'system'
 
@@ -563,10 +567,16 @@ function App() {
 
   const latestAnswer = messages.findLast((message) => message.role === 'assistant' && message.state !== 'pending')?.content || null
 
+  const headerRef = useRef<HTMLElement>(null)
+  const nameMeasureRef = useRef<HTMLSpanElement>(null)
+  const actionsRef = useRef<HTMLDivElement>(null)
+  const navRef = useRef<HTMLElement>(null)
+  const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
+
   // Rendered before the Contact group at md+ and after it below md so DOM/tab
   // order matches the visual order at both layouts (visual order via `order-*`).
   const topicNav = (
-      <nav aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
+      <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
         <button
           type="button"
           aria-pressed={corpus === 'basel'}
@@ -590,7 +600,7 @@ function App() {
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
+      <header ref={headerRef} className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
           Below md: row one is [h1 ... Contact me, GitHub], row two is the
           topic nav. Contact me sits directly left of the GitHub icon as one
@@ -598,10 +608,17 @@ function App() {
           with `order-*`; at md+ everything sits on one row as
           [h1, nav ... Contact me, GitHub].
         */}
-        <h1 className="order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight">Basel Abdel-Rahman</h1>
+        <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
+          {/* Screen readers always get the full name; the visible text swaps to
+              the short form only when the full one would push Contact/GitHub
+              off the first row (measured, see useFullNameFits). */}
+          <span className="sr-only">{FULL_NAME}</span>
+          <span aria-hidden="true">{showFullName ? FULL_NAME : SHORT_NAME}</span>
+        </h1>
+        <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
           {isDesktop && topicNav}
 
-        <div className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
+        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
