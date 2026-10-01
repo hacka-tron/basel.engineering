@@ -183,7 +183,16 @@ function App() {
     if (!clusterViewRef.current) startVisualStressTest()
   }, [startVisualStressTest])
 
-  const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
+  // An accepted stress-test tap (real or simulated, including cooldown clicks)
+  // shows the diagram on mobile at once, before the capacity/load request, so
+  // a later Chat tap while the request is pending wins. A long press only shows
+  // details and never triggers. Refs: the nav is created further down.
+  const isDesktopRef = useRef(false)
+  const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
+  const onStressBegin = useCallback(() => {
+    revealDiagramRef.current(isDesktopRef.current)
+  }, [])
+  const stressTest = useStressTest(startVisualStressTest, startRealStressTest, onStressBegin)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
     : Array.from({ length: simulatedPodCount }, (_, index) => ({ name: `demo-worker-${index}`, ready: true }))
@@ -384,7 +393,7 @@ function App() {
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
           // No token (sources only): keep firstTokenMs null so the footer
-          // labels the whole-request time as total, not as a first token.
+          // labels the whole-request time as total, not as a time to first token.
           setLastStats({
             firstTokenMs: firstTokenLatencyRef.current,
             totalMs: event.total_ms,
@@ -485,6 +494,8 @@ function App() {
     focusDiagramToggle: () => diagramButtonRef.current?.focus(),
   }))
   const showMobileView = diagramNav.showView
+  isDesktopRef.current = isDesktop
+  revealDiagramRef.current = diagramNav.revealDiagram
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
       diagramNav.handlePopState(event.state)

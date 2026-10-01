@@ -2,6 +2,7 @@ import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Nod
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
+import { boundsOf, createRefitter } from '../lib/diagramFit'
 import type { RetrievalChunk } from '../lib/sse'
 
 export type WorkerPod = { name: string; ready: boolean }
@@ -68,12 +69,9 @@ const handleStyle: CSSProperties = {
 const nodeWidth = 124
 const nodeHeight = 42
 const PORTRAIT_FIT_PADDING = 0.06
-const portraitBounds = {
-  x: 0,
-  y: 0,
-  width: Math.max(...portraitNodes.map((node) => node.position.x)) + nodeWidth,
-  height: Math.max(...portraitNodes.map((node) => node.position.y)) + nodeHeight,
-}
+const DESKTOP_FIT_PADDING = 0.12
+const portraitBounds = boundsOf(portraitNodes.map((node) => node.position), nodeWidth, nodeHeight)
+const desktopBounds = boundsOf(architectureNodes.map((node) => node.position), nodeWidth, nodeHeight)
 const nodeHandles: NodeHandle[] = [
   { id: 'left', type: 'target', position: Position.Left, x: 0, y: nodeHeight / 2 },
   { id: 'top', type: 'target', position: Position.Top, x: nodeWidth / 2, y: 0 },
@@ -178,28 +176,31 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   useEffect(() => {
     if (inspectorRef.current) inspectorRef.current.scrollTop = 0
   }, [inspectedNode])
-  // Portrait: refit whenever the details panel (or the keyboard/focus mode)
-  // changes the diagram's height, so all components stay in view.
+  // Refit whenever the container changes size: a window resize, the portrait
+  // <-> desktop switch, the details panel or keyboard/focus mode changing the
+  // diagram's height. fitView alone only runs once, so without this a zoom
+  // chosen while the window was narrow stuck after widening it again.
   const flowRef = useRef<ReactFlowInstance<LiveNode, ArchitectureEdge> | null>(null)
   const flowBoxRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const box = flowBoxRef.current
-    if (!portrait || !box) return
-    let frame = 0
-    const observer = new ResizeObserver(() => {
-      // Next frame, after React Flow has recorded the new size. Sets the
-      // viewport directly: fitView is deferred by React Flow while node data
-      // is changing (as it is when a tap starts a request), so it can miss.
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        if (!box.clientWidth || !box.clientHeight) return
-        void flowRef.current?.setViewport(getViewportForBounds(portraitBounds, box.clientWidth, box.clientHeight, fitMinZoom ?? 0.5, 1, PORTRAIT_FIT_PADDING))
-      })
-    })
+    if (!box) return
+    const bounds = portrait ? portraitBounds : desktopBounds
+    const padding = portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING
+    // Next frame, after React Flow has recorded the new size. Sets the
+    // viewport directly: fitView is deferred by React Flow while node data
+    // is changing (as it is when a tap starts a request), so it can miss.
+    // Trace updates do not resize the box, so they never trigger a refit.
+    const refitter = createRefitter(
+      () => ({ width: box.clientWidth, height: box.clientHeight }),
+      ({ width, height }) => { void flowRef.current?.setViewport(getViewportForBounds(bounds, width, height, fitMinZoom ?? 0.5, 1, padding)) },
+      { request: (callback) => requestAnimationFrame(callback), cancel: (handle) => cancelAnimationFrame(handle) },
+    )
+    const observer = new ResizeObserver(refitter.request)
     observer.observe(box)
     return () => {
       observer.disconnect()
-      cancelAnimationFrame(frame)
+      refitter.cancel()
     }
   }, [portrait, fitMinZoom])
   const nodes = useMemo<LiveNode[]>(() => (portrait ? portraitNodes : architectureNodes).map((node) => ({
@@ -303,7 +304,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           colorMode="dark"
           style={flowStyle}
           fitView
-          fitViewOptions={{ padding: portrait ? PORTRAIT_FIT_PADDING : 0.12, maxZoom: 1, ...(fitMinZoom ? { minZoom: fitMinZoom } : {}) }}
+          fitViewOptions={{ padding: portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING, maxZoom: 1, ...(fitMinZoom ? { minZoom: fitMinZoom } : {}) }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
