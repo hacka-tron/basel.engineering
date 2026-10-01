@@ -14,6 +14,11 @@ resource "aws_ssm_document" "zram_swap" {
   document_format = "JSON"
   target_type     = "/AWS::EC2::Instance"
 
+  # infra/bootstrap's CI IAM authorizes association changes only for
+  # resources tagged project=glassbox. default_tags sets the same tag; it's
+  # repeated here so the IAM scoping doesn't silently depend on it.
+  tags = { project = "glassbox" }
+
   content = jsonencode({
     schemaVersion = "2.2"
     description   = "Enable zram swap (priority 100) ahead of /swapfile on the Glassbox k3s node. Idempotent."
@@ -53,6 +58,9 @@ resource "aws_ssm_association" "zram_swap" {
   # association, and SSM re-runs it immediately on update.
   document_version    = aws_ssm_document.zram_swap.default_version
   schedule_expression = "cron(0 4 ? * SUN *)"
+
+  # Required by the CI role's tag-scoped association permissions.
+  tags = { project = "glassbox" }
 
   parameters = {
     mode = "apply"

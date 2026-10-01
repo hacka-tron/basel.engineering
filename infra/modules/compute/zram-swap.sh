@@ -18,9 +18,11 @@
 #      only overflows to the EBS-backed swap file when zram is full.
 #   3. Activates zram0 now if it is not already an active swap device.
 #   4. Only once /dev/zram0 is confirmed active: persists zram-oriented VM
-#      sysctls in /etc/sysctl.d/ and applies them. If activation fails it
-#      exits non-zero without applying them (and removes them if an earlier
-#      run left them), so the node never favors swapping with disk swap only.
+#      sysctls in /etc/sysctl.d/ and applies them. An EXIT trap covers every
+#      failure path: if zram0 is not active swap when the script exits, it
+#      fails the run and removes any sysctl file an earlier run left
+#      (restoring AL2023 defaults), so the node never favors swapping with
+#      disk swap only.
 #
 # Rollback (manual, as root on the node) - see docs/DESIGN.md section 9.7.
 set -euo pipefail
@@ -117,6 +119,30 @@ if [ "$(id -u)" != 0 ]; then
   exit 1
 fi
 
+# Safety net for EVERY exit path in apply mode, including `set -e` aborts
+# anywhere below: if /dev/zram0 is not an active swap device when the script
+# exits, the swap-happy sysctls must not stay in effect - with only the EBS
+# /swapfile they would push more pages to disk. So remove the sysctl file
+# (if an earlier successful run left it, e.g. zram broke after a reboot),
+# restore AL2023's defaults, and make sure the run reports failure.
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [ "$DRY_RUN" = 0 ] && ! zram_swap_active; then
+    echo "[zram] ERROR: $ZRAM_DEV is not an active swap device; zram sysctls NOT in effect" >&2
+    systemctl --no-pager status "$SETUP_UNIT" "$SWAP_UNIT" 2>&1 | tail -20 >&2 || true
+    if [ -f "$SYSCTL_CONF" ]; then
+      rm -f "$SYSCTL_CONF" || true
+      sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10 >&2 || true
+      echo "[zram] removed $SYSCTL_CONF from an earlier run and restored AL2023 default VM sysctls" >&2
+    fi
+    swapon --show >&2 || true
+    if [ "$rc" = 0 ]; then rc=1; fi
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
+
 log "mode=$MODE kernel=$(uname -r)"
 
 # 1. zram-generator ships with AL2023; install it if an image ever lacks it.
@@ -148,6 +174,7 @@ compression-algorithm = $ALG"
 fi
 
 ZRAM_CHANGED=0
+SWAPFILE_FAILED=0
 write_if_changed "$ZRAM_CONF" "$ZRAM_CONTENT" && ZRAM_CHANGED=1
 
 # 2. /swapfile stays as lower-priority overflow. Re-enable it if it is in
@@ -155,8 +182,10 @@ write_if_changed "$ZRAM_CONF" "$ZRAM_CONTENT" && ZRAM_CHANGED=1
 if [ -f /swapfile ] && grep -qE '^/swapfile[[:space:]]' /etc/fstab; then
   if swapon --show=NAME --noheadings | grep -qx /swapfile; then
     log "/swapfile active (overflow)"
-  else
-    run swapon /swapfile
+  elif ! run swapon /swapfile; then
+    # Not fatal for zram setup, but the run must report failure (see end).
+    echo "[zram] WARNING: could not re-enable /swapfile" >&2
+    SWAPFILE_FAILED=1
   fi
 fi
 
@@ -184,19 +213,15 @@ elif [ "$DRY_RUN" = 1 ]; then
   log "dry-run: would run: systemctl daemon-reload; systemctl restart $SETUP_UNIT; systemctl start $SWAP_UNIT"
   log "dry-run: sysctls below are applied only once $ZRAM_DEV is confirmed active"
 elif ! activate_zram; then
-  # The swap-happy sysctls below only make sense with RAM-backed swap; with
-  # only /swapfile they would push more pages to EBS. So on failure: never
-  # apply them, and if a previous successful run left them persisted (e.g.
-  # zram broke after a reboot), remove them and restore AL2023's defaults.
-  echo "[zram] ERROR: $ZRAM_DEV did not become an active swap device; zram sysctls NOT applied" >&2
-  systemctl --no-pager status "$SETUP_UNIT" "$SWAP_UNIT" 2>&1 | tail -20 >&2 || true
-  if [ -f "$SYSCTL_CONF" ]; then
-    rm -f "$SYSCTL_CONF"
-    sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10 >&2 || true
-    echo "[zram] removed $SYSCTL_CONF from an earlier run and restored AL2023 default VM sysctls" >&2
+  # systemctl can report an error even though the device came up; trust the
+  # actual swap state. If zram0 isn't active, exit and let on_exit roll the
+  # sysctls back.
+  if zram_swap_active; then
+    echo "[zram] WARNING: activation reported an error, but $ZRAM_DEV is active swap; continuing" >&2
+  else
+    echo "[zram] ERROR: $ZRAM_DEV did not become an active swap device" >&2
+    exit 1
   fi
-  swapon --show >&2 || true
-  exit 1
 fi
 
 # 4. Sysctls commonly recommended with zram swap - only reached once
@@ -226,6 +251,10 @@ zramctl 2>/dev/null || true
 sysctl vm.swappiness vm.page-cluster vm.watermark_boost_factor vm.watermark_scale_factor || true
 echo "memory PSI: $(head -2 /proc/pressure/memory | tr '\n' ' ')"
 echo "io PSI:     $(head -2 /proc/pressure/io | tr '\n' ' ')"
+if [ "$SWAPFILE_FAILED" = 1 ]; then
+  echo "[zram] finished with an error: /swapfile could not be re-enabled (zram is active)" >&2
+  exit 1
+fi
 log "done"
 }
 
