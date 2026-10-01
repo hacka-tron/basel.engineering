@@ -40,7 +40,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
       - id: tag
         # Also tags with a prefixed run number: short git SHAs have no
         # inherent ordering, but Flux's ImagePolicy needs to pick "the
@@ -53,7 +53,7 @@ jobs:
         run: |
           echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "build_number=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-      - uses: aws-actions/configure-aws-credentials@v6.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::404379474987:role/glassbox-ci-release
@@ -66,9 +66,9 @@ jobs:
       # runs). ECR sidesteps that whole class of problem rather than
       # working around it.
       - id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2 (v2.1.7)
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3 (v3.12.0)
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6 (v6.19.2)
         with:
           context: .
           file: ./Dockerfile

@@ -67,6 +67,7 @@ Workflows (`.github/workflows/`):
 - Manual `workflow_dispatch` on an old ref can mint a higher `build-N`; `sync-deploy-branch` and Flux both push `deploy` without retry (race).
 - Required checks cannot be path-filtered; the default `GITHUB_TOKEN` never triggers workflows on PRs it opens; environment gates (`terraform-prod`) are the apply control, so check plan jobs never get write credentials.
 - Run `actionlint`; read `permissions:`, `if:` fork guards, and which secrets each job can see.
+- Third-party actions are pinned by SHA with a version comment; Dependabot updates them.
 
 ## Per-area checklist (run it yourself and paste summary lines)
 
