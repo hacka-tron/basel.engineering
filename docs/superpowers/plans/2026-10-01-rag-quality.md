@@ -10,9 +10,9 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 |---|---|---|---|
 | 1 | Golden dataset v2 and deterministic answer graders | **yes** | none |
 | 2 | Retrieval eval v2 (k=8, chunk-level, noise@8) | **yes** | none |
-| 3 | Paid baseline run of the current system (v13) | no | paid, about $0.03 |
+| 3 | Paid baseline run of the current system (v14) | no | paid, about $0.03 |
 | 4 | LLM judge plus owner calibration | partly (code yes, run no) | paid about $0.50 per run; owner labels about 50 answers per judge |
-| 5 | Prompt v14: fix answer thinness | code yes, merge no | paid verification run; cache invalidation |
+| 5 | Prompt v15: fix answer thinness | code yes, merge no | paid verification run; cache invalidation |
 | 6 | Corpus hygiene, stale sweep, `--clear` | code yes, merge no | re-ingest on deploy; stale sweep deletes production rows/keys; corpus-scope decision; paid retrieval eval (about $0.0001) |
 | 7 | Structure-aware chunks and breadcrumb headers | code yes, merge no | Alembic migration (`chunks.header`); full re-embed (under $0.01); paid eval |
 | 8 | Hybrid BM25 plus vector with RRF | code yes, merge no | Redis schema change, re-ingest, paid eval |
@@ -36,7 +36,7 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 - Keep `eval/questions.yaml` and `run_eval.py` working until phase 2 replaces them.
 
 **Tests** (`services/tests/test_eval_graders.py`, `test_eval_golden.py`)
-- Each grader on fixture answers, including the real thin stress-test answer, which must fail `fact_coverage`, and a v14-style answer, which must pass.
+- Each grader on fixture answers, including the real thin stress-test answer, which must fail `fact_coverage`, and a v15-style answer, which must pass.
 - Schema validation runs on the committed `golden.yaml` (this is what makes it a CI check).
 - `run_answers` end to end with the fake provider against the CI MySQL/Redis services: produces one JSONL row per case and refuses Bedrock unless both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1` are set.
 
@@ -58,9 +58,9 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 **Autonomous: no. Owner approves about $0.03 of Bedrock calls** (Titan question embeddings plus about 70 Nova Lite answers and 8 rewrites), run against a local stack ingested with Titan (re-ingesting locally costs under $0.01; it does not touch production).
 
-**Goal:** the "before" numbers for v13: retrieval v2 and answer metrics.
+**Goal:** the "before" numbers for v14 (same answer wording as v13): retrieval v2 and answer metrics.
 
-**Files:** `eval/baselines/amazon.titan-embed-text-v2_0.json` (refresh, since the old fingerprint is stale), `eval/baselines/answers-nova-lite-v13.json` (new, summary plus per-case results), the status report.
+**Files:** `eval/baselines/amazon.titan-embed-text-v2_0.json` (refresh, since the old fingerprint is stale), `eval/baselines/answers-nova-lite-v14.json` (new, summary plus per-case results), the status report.
 
 **Acceptance:** the stress-test case fails `fact_coverage` (it reproduces the BACKLOG bug); the numbers are recorded in DESIGN-005 §2.2.
 
@@ -74,11 +74,11 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 **Acceptance:** true-positive and true-negative rates ≥ 0.85 on the held-out test split (at least 10 cases per class) before any gate uses the judge. Iterate on the prompt using dev-split disagreements only. If test-split agreement is used to choose between prompt versions more than once, draw fresh test labels.
 
-## Phase 5 (planned): prompt v14, the answer-thinness fix
+## Phase 5 (planned): prompt v15, the answer-thinness fix
 
 **Autonomous:** writing the change, unit tests and a fake-provider run are. Merging is not: it needs a paid before/after run (about $0.03) and it invalidates the live answer cache.
 
-**Files:** `services/glassbox/api/ask.py` (`_prompt` wording per DESIGN-005 §6: remove "Use two or three concise sentences" and "Do not list every detail..."; add the keep-the-specifics instruction; `max_tokens` 400 to 500; `_PROMPT_VERSION = "v14"`), `services/glassbox/providers/bedrock.py` (raise the output-token guard at `:104-105` to 500; DESIGN-005 §2.1 "Generation" row), `services/tests/test_bedrock_providers.py` (the `:101` test asserts the new 500 limit and that 500 is accepted), `providers/base.py` `GROUNDING_RULES` if wording overlaps, `docs/DESIGN.md` §6.7 ("Max output 400 tokens" at `:241`), the deep dive's prompt description (it's ingested, keep it accurate).
+**Files:** `services/glassbox/api/ask.py` (`_prompt` wording per DESIGN-005 §6: remove "Use two or three concise sentences" and "Do not list every detail..."; add the keep-the-specifics instruction; `max_tokens` 400 to 500; `_PROMPT_VERSION = "v15"`), `services/glassbox/providers/bedrock.py` (raise the output-token guard at `:104-105` to 500; DESIGN-005 §2.1 "Generation" row), `services/tests/test_bedrock_providers.py` (the `:101` test asserts the new 500 limit and that 500 is accepted), `providers/base.py` `GROUNDING_RULES` if wording overlaps, `docs/DESIGN.md` §6.7 ("Max output 400 tokens" at `:241`), the deep dive's prompt description (it's ingested, keep it accurate).
 
 **Tests:** prompt-contract unit test (the brevity phrases are gone, the specifics rule is present, the planned-marker text unchanged); a test that the `max_tokens` value `_stream` passes to the LLM is accepted by `BedrockLLMProvider.generate` (stub client), so the API limit and the provider guard can't drift apart again; existing `test_planned_labels.py` stays green.
 
