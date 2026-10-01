@@ -43,13 +43,13 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 
 ---
 
-## 3. Feature 1: Self-healing node recovery
+## 3. Feature 1: Self-healing node recovery (not built)
 
-### 3.1 Problem
+### 3.1 Problem (not built)
 
 DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. The design already keeps all durable state outside the node (RDS for data, Git for configuration), so the node itself is replaceable. Recovery just needs to be automatic.
 
-### 3.2 Design
+### 3.2 Design (not built)
 
 Replace the standalone `aws_instance` with:
 
@@ -58,7 +58,7 @@ Replace the standalone `aws_instance` with:
 
 The Elastic IP from DD1 is kept, because Cloudflare's DNS record points at it. A replacement instance gets a new address by default, so the boot script re-attaches the Elastic IP to itself (see 3.3).
 
-### 3.3 Boot sequence (user data)
+### 3.3 Boot sequence (user data) (not built)
 
 Every instance, first boot or replacement, runs the same script:
 
@@ -73,7 +73,7 @@ Every instance, first boot or replacement, runs the same script:
 
 Nothing in this script is specific to first boot, which is the whole point: a fresh machine and a replacement follow the identical path.
 
-### 3.4 Health detection
+### 3.4 Health detection (not built)
 
 EC2 status checks only catch hardware and OS failures. A machine can pass them while k3s is broken. Add an application-level check:
 
@@ -81,7 +81,7 @@ EC2 status checks only catch hardware and OS failures. A machine can pass them w
 - After 5 consecutive failures, it calls `aws autoscaling set-instance-health --health-status Unhealthy`, and the group replaces the instance.
 - Grace period of 600 seconds after launch so a booting node isn't killed before it's ready.
 
-### 3.5 IAM additions (instance role)
+### 3.5 IAM additions (instance role) (not built)
 
 | Action | Resource | Why |
 |---|---|---|
@@ -99,7 +99,7 @@ Recorded here as the production answer, with trade-offs:
 | k3s with an external datastore | k3s stores cluster state in MySQL; 2+ stateless servers behind a load balancer. Could use a separate database on the existing RDS instance | 2x node cost + load balancer |
 | EKS | AWS runs a multi-AZ control plane | Control plane fee + nodes |
 
-### 3.7 Verification ("game day")
+### 3.7 Verification ("game day") (not built)
 
 1. Note the current site state and a few test questions.
 2. Terminate the instance from the console.
@@ -107,7 +107,7 @@ Recorded here as the production answer, with trade-offs:
 4. Confirm answers match, query logs survived, and the vector index was rebuilt.
 5. Record the measured recovery time in the README.
 
-### 3.8 Cost
+### 3.8 Cost (not built)
 
 No change. Auto Scaling groups and launch templates are free; there is still one instance.
 
@@ -161,7 +161,7 @@ priority: normal      # normal | high (high gets a small ranking boost)
 
 Stored in a new `documents.metadata` JSON column and copied to the Redis chunk hashes as tag fields so vector search can filter on them.
 
-### 4.5 Ingest validation
+### 4.5 Ingest validation (not built)
 
 A `validate` step runs in CI on every pull request and at the start of every ingest Job. It never sends content anywhere; it only inspects files.
 

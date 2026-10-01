@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from redis.exceptions import ResponseError
 
+from services.glassbox.cache.cacheability import uncacheable_reason
+
 INDEX_NAME = "idx:answers"
 ANSWER_TTL_S = 86400
 MIN_SIMILARITY = 0.95
@@ -111,7 +113,13 @@ class RedisAnswerCache:
             payload = json.loads(raw)
         except (TypeError, ValueError):
             return None
-        return payload if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            return None
+        # Entries written before the cacheability gate may hold a refusal or an
+        # empty answer; treat them as a miss so the question is answered afresh.
+        if uncacheable_reason(payload.get("answer"), payload.get("chunks")):
+            return None
+        return payload
 
     async def put(
         self, corpus: str, version: int, model_id: str, vector: list[float], payload: dict
