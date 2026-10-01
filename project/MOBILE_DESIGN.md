@@ -55,11 +55,12 @@ Use this to look at the mobile layout yourself, without shrinking the browser wi
 1. `cd frontend && npm ci` (once), then `npm run phone`.
 2. Open http://localhost:5230/phone-preview.html.
 
-It shows the app in four phone frames side by side:
+It shows the app in five phone frames side by side:
 - iPhone 15 at 393×852
 - iPhone SE at 375×667
-- a narrow Android at 360×780 (its frame caption still says the name shortens below 367px; since the envelope Contact it only shortens below 292px)
+- a narrow Android at 360×780
 - the smallest phone at 320×568
+- a Galaxy Fold cover screen at 280×653, below the 292px point where the header name shortens to "Basel A-R"
 
 Each frame is a real phone-width page, so media queries and the measured layouts (name shortening, footer) behave as they do on a device.
 
