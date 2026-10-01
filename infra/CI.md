@@ -183,22 +183,28 @@ write access.
 
 ## Release role trust
 
+**Status: pending apply (PR #98).** The `ref` condition below is in the
+code but takes effect only once the owner applies it through the Bootstrap
+workflow (Actions → Bootstrap on `main`, then approval). Until then the live
+trust matches only the `environment:release` subject.
+
 `glassbox-ci-release` (`release_trust` in `infra/bootstrap/main.tf`) is
-assumed only by `release.yml`'s `build-and-push` job. Its trust requires
-both:
+assumed only by `release.yml`'s `build-and-push` job. Once applied, its trust
+requires both:
 
 - `sub` = `<immutable prefix>:environment:release`, and
 - `token.actions.githubusercontent.com:ref` = `refs/heads/main`.
 
-So a manual Release run on any other branch or tag can't get AWS
+A manual Release run on any other branch or tag then can't get AWS
 credentials, even if the `release` environment's branch policy is missing or
 loosened. STS has accepted GitHub claims (`ref`, `job_workflow_ref`,
 `environment`, `workflow`, `repository_id` and others) as trust-policy
 condition keys since January 2026 (AWS IAM User Guide, "IAM and AWS STS
 condition context keys", OIDC federation, GitHub tab). The immutable subject
 changes only `sub`; `ref` is the plain git ref. `job_workflow_ref` was not
-used: it carries the mutable owner/repo names, AWS documents it for reusable
-workflows only, and it would break releases if `release.yml` were renamed.
+used: it carries the mutable owner/repo names, and it would break releases
+if `release.yml` were renamed. (AWS documents it for reusable workflows, but
+GitHub emits it for every job; that doesn't change the choice.)
 This check does not catch a run on `main` whose commit is no longer the
 head; the in-workflow provenance check covers that. `sync-deploy-branch.yml`
 uses no AWS role.
