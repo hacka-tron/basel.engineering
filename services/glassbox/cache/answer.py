@@ -9,9 +9,11 @@ hash, which ingest writes. Ingest replaces all of a document's chunks whenever
 its content (or embedding model) changes, and the stale sweep deletes a removed
 document's chunks, so a missing key or a different hash means "a source changed
 or was deleted": the entry is deleted and read as a miss. Comparing content, not
-only key existence, also catches chunk ids reused after a MySQL wipe, TRUNCATE
-or restore while Redis kept its keys. Edits to other documents leave the answer
-cached until its 24h TTL (DESIGN.md §7.3).
+only key existence, covers ID REUSE: ids restart after a MySQL wipe, TRUNCATE or
+restore while Redis kept its keys, and a rewritten ``chunk:{id}`` holds new text.
+It does not cover orphans: keys above the post-wipe max id keep their old
+``content_sha``; the ingest reconcile (#122) deletes them on every run. Edits
+to other documents leave the answer cached until its 24h TTL (DESIGN.md §7.3).
 """
 
 import hashlib
