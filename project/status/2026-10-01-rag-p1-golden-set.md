@@ -1,6 +1,6 @@
 # RAG quality phase 1: golden answer set and free answer checks
 
-**PR:** PR_LINK · **Branch:** `feature/rag-p1-golden-set` (from `main` at `2484403`)
+**PR:** [#97](https://github.com/hacka-tron/basel.engineering/pull/97) · **Branch:** `feature/rag-p1-golden-set` (from `main` at `2484403`)
 **Plan:** phase 1 of `docs/superpowers/plans/2026-10-01-rag-quality.md` (PR [#92](https://github.com/hacka-tron/basel.engineering/pull/92), design `docs/DESIGN-005-rag-quality.md` §5)
 **Status:** In review, not merged. No review round yet. Needs your review of the About Basel facts (below) before any paid run uses them.
 
