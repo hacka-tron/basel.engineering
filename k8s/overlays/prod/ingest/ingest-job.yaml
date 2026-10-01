@@ -41,6 +41,13 @@ spec:
             - configMapRef:
                 name: glassbox-config
           env:
+            # Stale sweep: "report" logs every indexed document whose source file
+            # is gone ("would delete ...") and deletes nothing. Change to "apply"
+            # to delete them (MySQL rows and Redis keys) on each release; "off"
+            # skips the check. See docs/architecture/deep-dive.md, section
+            # "Stale documents: report-only sweep and the --clear command".
+            - name: GLASSBOX_INGEST_SWEEP
+              value: report
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
