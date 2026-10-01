@@ -604,6 +604,17 @@ resource "aws_iam_role_policy" "plan" {
 # Pushes the application image to ECR on every merge to main. Scoped to a
 # dedicated "release" GitHub environment (not the terraform-plan/prod ones -
 # this never touches infrastructure, only an already-tested image).
+#
+# The sub condition alone accepts any ref that can use the "release"
+# environment, so a manual Release run on an old branch or tag could push a
+# higher build-N that Flux deploys. The ref condition also requires the run's
+# git ref to be main, independently of the environment's branch policy.
+# STS evaluates GitHub claims as condition keys
+# (token.actions.githubusercontent.com:ref, IAM condition keys reference,
+# OIDC federation, GitHub tab). The immutable subject only changes sub; ref
+# is the plain "refs/heads/main". Not job_workflow_ref: it carries the
+# mutable owner/repo names and would tie this role to the workflow's file
+# name; see infra/CI.md "Release role trust".
 data "aws_iam_policy_document" "release_trust" {
   statement {
     effect  = "Allow"
@@ -624,6 +635,12 @@ data "aws_iam_policy_document" "release_trust" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["${local.github_oidc_subject_prefix}:environment:release"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/main"]
     }
   }
 }
