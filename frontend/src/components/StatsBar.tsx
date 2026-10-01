@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
+import { lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
-  lastStats?: { latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null
+  lastStats?: LastStats | null
   queriesServed?: number
   onStressTest?: () => void
   stressTestCooldownSeconds?: number | null
@@ -49,12 +50,16 @@ function StatsBar({
   const realCooldownMinutes = stressTestRealCooldownSeconds === null
     ? null
     : Math.max(1, Math.ceil(stressTestRealCooldownSeconds / 60))
-  const capacityLabel = stressTestCapacity.sufficient
-    ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 3 to drain them. Watch the pods and backlog on the Worker node. Tap to run.'
+  const capacityBase = stressTestCapacity.sufficient
+    ? 'Ready for a real stress test. Clicking queues 300 jobs on the live cluster, and KEDA scales the retrieval workers from 1 up to 3 to drain them. Watch the pods and backlog on the Worker node.'
     : stressTestCapacity.realCooldown
-      ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued. Tap to run.`
-      : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales. Tap to run."
+      ? `A real stress test just ran, so the cluster is cooling down. For the next ${realCooldownMinutes} min, clicking plays a simulated version; no new jobs are queued.`
+      : "There isn't enough cluster capacity for a real stress test right now, so clicking plays a simulated version instead. No jobs are queued and nothing scales."
+  // Narrow: the icon is the button. Wide: the labelled button runs it.
+  const capacityLabel = `${capacityBase} Tap to run.`
+  const wideCapacityLabel = `${capacityBase} Use the Stress test button to run it.`
   const disabled = !onStressTest || onCooldown || stressTestSubmitting
+  const latency = lastStatsParts(lastStats ?? null)
 
   const tooltipId = useId()
   const wideTooltipId = useId()
@@ -143,6 +148,32 @@ function StatsBar({
     }
   }, [tooltipOpen])
 
+  useEffect(() => {
+    if (!wideTooltipOpen) return
+    const hide = window.setTimeout(() => setWideTooltipOpen(false), TOOLTIP_AUTO_HIDE_MS)
+    function onDocPointerDown(e: PointerEvent) {
+      if (!(e.target as Element | null)?.closest?.('[data-stress-details]')) setWideTooltipOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointerDown)
+    return () => {
+      window.clearTimeout(hide)
+      document.removeEventListener('pointerdown', onDocPointerDown)
+    }
+  }, [wideTooltipOpen])
+
+  // Escape dismisses either tooltip; blurring also drops the CSS focus-visible one.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setTooltipOpen(false)
+      setWideTooltipOpen(false)
+      const active = document.activeElement as HTMLElement | null
+      if (active?.closest?.('[data-stress-details], [data-stress-button]')) active.blur()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   useEffect(() => clearPressTimer, [])
 
   return (
@@ -151,10 +182,14 @@ function StatsBar({
     // (overflow-x-auto would clip the absolutely-positioned capacity
     // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
-        <span>last {lastStats ? `${lastStats.latencyMs}ms` : '—ms'}</span>
-        <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">cache {lastStats?.cacheStatus ?? '—'}</span>
+        {/* Below sm, "· cached" drops to a second line so the row still fits at
+            360-375px with a four-digit time. */}
+        <span className="flex flex-col leading-tight sm:flex-row sm:leading-normal">
+          <span>{latency.timing}</span>
+          {latency.cached && <span className="sm:ml-1">· cached</span>}
+        </span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
@@ -185,6 +220,7 @@ function StatsBar({
           aria-label={`Cluster capacity: ${stressTestCapacity.sufficient ? 'real' : 'simulated'} stress test. Show details`}
           aria-describedby={wideTooltipId}
           aria-expanded={wideTooltipOpen}
+          data-stress-details
           onClick={() => setWideTooltipOpen((v) => !v)}
           onBlur={() => setWideTooltipOpen(false)}
           className="group relative hidden size-11 shrink-0 cursor-help select-none items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan sm:flex"
@@ -193,9 +229,9 @@ function StatsBar({
           <span
             id={wideTooltipId}
             role="tooltip"
-            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${wideTooltipOpen ? 'block' : 'hidden'}`}
+            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-72 rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg [@media(hover:hover)]:group-hover:block group-focus-visible:block ${wideTooltipOpen ? 'block' : 'hidden'}`}
           >
-            {capacityLabel}
+            {wideCapacityLabel}
           </span>
         </button>
         {/* < sm: the icon IS the button (tap runs, press-and-hold shows details). */}
@@ -213,7 +249,7 @@ function StatsBar({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
           onContextMenu={(e) => e.preventDefault()}
-          className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:mr-0 sm:hidden ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:hidden ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={disabled} />
           {onCooldown && (
