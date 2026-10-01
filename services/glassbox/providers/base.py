@@ -61,6 +61,15 @@ _CONTINUATION = re.compile(r"\b(?:but|however|although|though|except|while)\b|;"
 _MAX_REFUSAL_SENTENCES = 2
 
 
+def is_exact_abstention(answer: str) -> bool:
+    """True only when the whole answer is the canonical abstention sentence.
+
+    Stricter than is_abstention (which is deliberately loose for caching): an answer
+    that opens like a refusal but goes on to say something is a real answer.
+    """
+    return _normalized_words(answer) == _ABSTENTION_WORDS_CANONICAL
+
+
 def is_abstention(answer: str) -> bool:
     """True when the answer is a refusal rather than an answer.
 

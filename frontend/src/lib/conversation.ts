@@ -2,6 +2,8 @@
 // stateless: the browser keeps each corpus's conversation, persists it in
 // localStorage, and sends recent turns as `history` with each question.
 
+import { CANONICAL_IDK } from './idkReplies.ts'
+
 export type ApiCorpus = 'about_me' | 'about_system'
 
 export type MessageSource = { source_path: string; title: string; url?: string }
@@ -17,6 +19,9 @@ export type ChatMessage = {
   // saved so a reload shows the same chat, but never sent back as history.
   state?: 'pending' | 'error' | SettledState
   sources?: MessageSource[]
+  // The shown text is a playful stand-in for the server's abstention (lib/idkReplies.ts).
+  // History sends the canonical sentence instead. Optional, so older saves load unchanged.
+  idk?: boolean
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
   rewrittenQuery?: string
   createdAt: number
@@ -33,6 +38,7 @@ type StoredConversation = {
     content: string
     state?: StoredState
     sources?: MessageSource[]
+    idk?: boolean
     createdAt: number
   }[]
 }
@@ -97,12 +103,14 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
     if (message.role !== 'user' && message.role !== 'assistant') return null
     if (message.state !== undefined && (typeof message.state !== 'string' || !STORED_STATES.has(message.state))) return null
     if (message.sources !== undefined && (!Array.isArray(message.sources) || !message.sources.every(isSource))) return null
+    if (message.idk !== undefined && typeof message.idk !== 'boolean') return null
     messages.push({
       id: message.id,
       role: message.role,
       content: message.content,
       state: message.state as StoredState | undefined,
       sources: message.sources as MessageSource[] | undefined,
+      ...(message.idk === true ? { idk: true } : {}),
       createdAt: message.createdAt,
     })
   }
@@ -143,12 +151,13 @@ export function serializeConversation(messages: ChatMessage[], now = Date.now())
   const stored: StoredConversation = {
     version: 1,
     updatedAt: now,
-    messages: settled.map(({ id, role, content, state, sources, createdAt }) => ({
+    messages: settled.map(({ id, role, content, state, sources, idk, createdAt }) => ({
       id,
       role,
       content,
       ...(role === 'assistant' && state && STORED_STATES.has(state) ? { state: state as StoredState } : {}),
       ...(sources && sources.length > 0 ? { sources } : {}),
+      ...(role === 'assistant' && idk ? { idk: true } : {}),
       createdAt,
     })),
   }
@@ -167,7 +176,11 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
 /** The recent settled turns sent as `history` (the server re-applies its own limits). */
 export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
   const turns = messages.filter(isHistoryTurn).slice(-MAX_HISTORY_MESSAGES)
-    .map((message) => ({ role: message.role, content: message.content.slice(0, MAX_HISTORY_CHARS) }))
+    .map((message) => ({
+      role: message.role,
+      // A quirky stand-in goes back as the sentence the server actually said.
+      content: (message.idk ? CANONICAL_IDK : message.content).slice(0, MAX_HISTORY_CHARS),
+    }))
   // Mirror the server's total-character cap, dropping the oldest turns first.
   let total = 0
   let start = turns.length

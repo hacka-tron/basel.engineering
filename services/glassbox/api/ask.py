@@ -41,6 +41,7 @@ from services.glassbox.providers.base import (
     GROUNDING_RULES,
     REWRITE_FOLLOW_UP_PREFIX,
     REWRITE_PROMPT_SUFFIX,
+    is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
 from services.glassbox.trace import elapsed_ms, next_seq
@@ -562,6 +563,7 @@ async def _stream(
                     "total_ms": total_ms,
                     "mode": "full",
                     "answer_cache": "hit",
+                    "abstained": False,
                     "tokens_in": 0,
                     "tokens_out": 0,
                 },
@@ -655,6 +657,7 @@ async def _stream(
                     "total_ms": total_ms,
                     "mode": "full",
                     "answer_cache": "miss",
+                    "abstained": True,
                     "tokens_in": 0,
                     "tokens_out": 0,
                 },
@@ -670,6 +673,7 @@ async def _stream(
                     "total_ms": total_ms,
                     "mode": "retrieval_only",
                     "answer_cache": "miss",
+                    "abstained": False,
                     "tokens_in": 0,
                     "tokens_out": 0,
                 },
@@ -685,6 +689,7 @@ async def _stream(
                     "total_ms": total_ms,
                     "mode": "retrieval_only",
                     "answer_cache": "miss",
+                    "abstained": False,
                     "tokens_in": 0,
                     "tokens_out": 0,
                 },
@@ -744,6 +749,7 @@ async def _stream(
                 "total_ms": total_ms,
                 "mode": "full",
                 "answer_cache": "miss",
+                "abstained": is_exact_abstention("".join(response_parts)),
                 "tokens_in": tokens_in,
                 "tokens_out": tokens_out,
             },

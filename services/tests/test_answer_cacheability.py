@@ -186,6 +186,25 @@ def test_refusals_and_empty_answers_are_never_cached(monkeypatch, reply):
         assert row["timings"].get("abstained") == (1 if reply.strip() else None)
 
 
+@pytest.mark.parametrize(
+    ("reply", "flag"),
+    [
+        (ABSTENTION_ANSWER, True),
+        ("i dont know from what i have", True),
+        ("I do not know from what I have.", True),
+        # Loose abstentions (kept out of the cache) that still say something: not flagged.
+        ("I don't know from what I have, but he did build a RAG system on k3s.", False),
+        ("It is unclear whether he used Kafka. He used Redis streams for the queue.", False),
+        ("The sources don't say. Basel built it on k3s.", False),
+        ("A real answer about the queue.", False),
+    ],
+)
+def test_done_flags_only_the_exact_abstention_sentence(monkeypatch, reply, flag):
+    llm = ScriptedLLM(reply)
+    _, _, _, dones = _ask_twice(monkeypatch, llm)
+    assert [done["abstained"] for done in dones] == [flag, flag]
+
+
 def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypatch):
     llm = ScriptedLLM()
     cache, saved, streams, dones = _ask_twice(
@@ -196,6 +215,7 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
     assert cache.puts == []
     assert [done["answer_cache"] for done in dones] == ["miss", "miss"]
     assert all(row["timings"]["abstained"] == 1 for row in saved)
+    assert [done["abstained"] for done in dones] == [True, True]
 
 
 def test_normal_answer_is_cached_under_the_v13_prompt_version(monkeypatch):
@@ -211,6 +231,7 @@ def test_normal_answer_is_cached_under_the_v13_prompt_version(monkeypatch):
     assert all(model_id.endswith("|v13") for model_id in cache.model_ids)
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
+    assert [done["abstained"] for done in dones] == [False, False]
 
 
 def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
@@ -254,3 +275,4 @@ def test_no_sources_refusal_is_flagged_in_the_query_log(monkeypatch):
     assert "".join(d["text"] for n, d in stream if n == "token") == ABSTENTION_ANSWER
     assert saved[0]["timings"]["abstained"] == 1
     assert saved[0]["timings"]["answer_cache_skipped"] == 1
+    assert next(d for n, d in stream if n == "done")["abstained"] is True
