@@ -117,7 +117,9 @@ function StatsBar({
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
         {/* Always one line: the stats are never wrapped or squeezed. The
             timing is a focusable control so hover, focus, and a long press
-            (touch) explain what the number is; a tap does nothing. */}
+            (touch) explain what the number is; a tap does nothing. Like the
+            capacity icon it brightens from muted on hover, keyboard focus,
+            and press. */}
         <button
           type="button"
           ref={latencyPressRef}
@@ -129,7 +131,7 @@ function StatsBar({
           onPointerUp={latencyPressHandlers.onPointerUp}
           onPointerCancel={latencyPressHandlers.onPointerCancel}
           onContextMenu={latencyPressHandlers.onContextMenu}
-          className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
+          className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
         >
           <span>{latency.timing}</span>
           {latency.cached && <span className="ml-1">· cached</span>}

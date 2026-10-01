@@ -576,60 +576,33 @@ function App() {
   const headerRef = useRef<HTMLElement>(null)
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
-  const navRef = useRef<HTMLElement>(null)
-  // One handler for the desktop nav and the mobile topic chips.
+  // One handler for the topic chips and the diagram's node clicks (which
+  // switch to About This System through handleInspectComponent).
   const selectTopic = (next: Corpus) => {
     if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
     else setCorpus('system')
   }
-  const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
-
-  // md+ only; below md the topic is chosen with the chips above the ask box
-  // (Chat view only; Diagram view keeps the topic, it just hides the chips).
-  const topicNav = (
-      <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
-        <button
-          type="button"
-          aria-pressed={corpus === 'basel'}
-          onClick={() => selectTopic('basel')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About Basel
-        </button>
-        <span aria-hidden="true" className="text-hairline">|</span>
-        <button
-          type="button"
-          aria-pressed={corpus === 'system'}
-          onClick={() => selectTopic('system')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About This System
-        </button>
-      </nav>
-  )
+  const showFullName = useFullNameFits(headerRef, nameMeasureRef, actionsRef)
 
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
+      <header ref={headerRef} className="relative flex shrink-0 flex-nowrap items-center gap-x-4 border-b border-hairline px-4 py-2 md:min-h-[72px] md:px-8 md:py-0">
         {/*
-          Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
-          chips sit above the ask box in Chat view). The envelope sits directly
-          left of the GitHub icon as one right-aligned pair at every width. At
-          md+ the row is [h1, nav ... envelope, GitHub] (visual order via
-          `order-*`).
+          One row at every width: [h1 ... envelope (Copy email), GitHub]. The
+          topic chips sit above the ask box (desktop always; below md in Chat
+          view only), so the header holds no topic control.
         */}
-        <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
+        <h1 className={`flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
           {/* Screen readers always get the full name; the visible text swaps to
-              the short form only when the full one would push Contact/GitHub
-              off the first row (measured, see useFullNameFits). */}
+              the short form only when the full one would squeeze Contact/GitHub
+              (measured, see useFullNameFits). */}
           <span className="sr-only">{FULL_NAME}</span>
           <span aria-hidden="true">{showFullName ? FULL_NAME : SHORT_NAME}</span>
         </h1>
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
-          {isDesktop && topicNav}
 
-        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
+        <div ref={actionsRef} data-auto-margin className="ml-auto flex items-center max-md:shrink-0 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
@@ -673,7 +646,10 @@ function App() {
               />
             </div>
           ) : undefined}
-          inputTopic={isDesktop || showDiagramView ? undefined : (
+          // Always shown at md+ (the diagram sits beside the chat); below md in
+          // Chat view only. One element at one tree position, so the same
+          // TopicChips instance (and a chip's focus) survives a resize across md.
+          inputTopic={showDiagramView ? undefined : (
             <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={() => diagramButtonRef.current?.focus()} />
           )}
           inputAccessory={

@@ -11,10 +11,12 @@ type TopicChipsProps<T extends string> = {
 }
 
 /**
- * Below md, the question topic as a radio group directly above the ask box:
- * "Asking about (● Basel) (○ System)". One 44px row, Chat view only (the
- * Diagram view unmounts it and gives the diagram that height; the topic is
- * unchanged, so a question typed there still uses it). Roving
+ * The question topic as a radio group directly above the ask box, the only
+ * topic control at every width: "Asking about (● Basel) (○ System)". Below md
+ * it is one 44px row in Chat view only (the Diagram view unmounts it and gives
+ * the diagram that height; the topic is unchanged, so a question typed there
+ * still uses it). At md+ it is always shown, a compact row with 12px pills
+ * like the rest of the desktop's secondary UI. Roving
  * tabindex: Tab reaches the checked chip; arrows (and Home/End) move and
  * select, as in a native radio group. Accessible names are the full topic
  * names; the visible short labels are contained in them.
@@ -51,7 +53,7 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
   }
 
   return (
-    <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:hidden">
+    <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:mb-3 md:min-h-0">
       {/* Below 320px (e.g. a 280px Fold cover screen) the label would push the System chip off screen, so it becomes screen-reader-only there; the radiogroup keeps its name. */}
       <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted max-[319px]:sr-only">Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
@@ -67,10 +69,10 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
               aria-label={option.label}
               tabIndex={checked ? 0 : -1}
               onClick={() => { if (!checked) onChange(option.value) }}
-              className="group flex min-h-11 items-center px-1 outline-none"
+              className="group flex min-h-11 items-center px-1 outline-none md:min-h-0 md:py-0.5"
             >
               <span
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm leading-tight transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cyan ${
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm leading-tight transition-colors md:text-xs group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cyan ${
                   checked ? 'border-cyan text-cyan' : 'border-hairline text-muted group-hover:text-primary'
                 }`}
               >
