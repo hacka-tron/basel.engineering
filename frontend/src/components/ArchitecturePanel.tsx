@@ -1,7 +1,7 @@
 import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Node, type NodeHandle, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
-import { architectureEdges, architectureNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
+import { architectureEdges, architectureNodes, landscapeEdges, landscapeNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
 import { boundsOf, createRefitter } from '../lib/diagramFit'
 import type { RetrievalChunk } from '../lib/sse'
 
@@ -37,6 +37,11 @@ type ArchitecturePanelProps = {
    * capped in height and can be collapsed so the diagram keeps the room.
    */
   portrait?: boolean
+  /**
+   * With `portrait`, a phone held sideways: the three-row landscape graph.
+   * The open details panel sits beside the diagram (CSS, `phone-landscape:`).
+   */
+  landscape?: boolean
   /** Shown in the portrait details panel when no component is selected. */
   latestAnswer?: string | null
   /** Portrait: leave the diagram for the conversation. */
@@ -71,6 +76,7 @@ const nodeHeight = 42
 const PORTRAIT_FIT_PADDING = 0.06
 const DESKTOP_FIT_PADDING = 0.12
 const portraitBounds = boundsOf(portraitNodes.map((node) => node.position), nodeWidth, nodeHeight)
+const landscapeBounds = boundsOf(landscapeNodes.map((node) => node.position), nodeWidth, nodeHeight)
 const desktopBounds = boundsOf(architectureNodes.map((node) => node.position), nodeWidth, nodeHeight)
 const nodeHandles: NodeHandle[] = [
   { id: 'left', type: 'target', position: Position.Left, x: 0, y: nodeHeight / 2 },
@@ -131,7 +137,7 @@ const defaultEdgeOptions = {
 // for, which made the Vector Search -> MySQL arrow loop back on itself.
 const portraitEdgeOptions = { ...defaultEdgeOptions, pathOptions: { offset: 8 } }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom, portrait = false, latestAnswer, onContinueInChat }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom, portrait = false, landscape = false, latestAnswer, onContinueInChat }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   // Portrait only: the details panel starts collapsed (unless a component is
   // already selected) so the diagram gets the room.
@@ -185,7 +191,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   useEffect(() => {
     const box = flowBoxRef.current
     if (!box) return
-    const bounds = portrait ? portraitBounds : desktopBounds
+    const bounds = portrait ? (landscape ? landscapeBounds : portraitBounds) : desktopBounds
     const padding = portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING
     // Next frame, after React Flow has recorded the new size. Sets the
     // viewport directly: fitView is deferred by React Flow while node data
@@ -202,8 +208,8 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       observer.disconnect()
       refitter.cancel()
     }
-  }, [portrait, fitMinZoom])
-  const nodes = useMemo<LiveNode[]>(() => (portrait ? portraitNodes : architectureNodes).map((node) => ({
+  }, [portrait, landscape, fitMinZoom])
+  const nodes = useMemo<LiveNode[]>(() => (portrait ? (landscape ? landscapeNodes : portraitNodes) : architectureNodes).map((node) => ({
     ...node,
     // Known dimensions and handle positions keep nodes and arrows visible during updates.
     width: nodeWidth,
@@ -221,7 +227,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       onLeave: leaveNode,
       onInspect: inspectNode,
     },
-  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog, portrait])
+  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog, portrait, landscape])
 
   // The same details render in the desktop inspector and the portrait panel.
   const details = (
@@ -292,13 +298,13 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   )
 
   return (
-    <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel">
+    <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel phone-landscape:grid phone-landscape:grid-cols-[minmax(0,1fr)_auto] phone-landscape:grid-rows-[minmax(0,1fr)_auto]">
       <div ref={flowBoxRef} className="min-h-0 flex-1">
         <ReactFlow
           onInit={(instance) => { flowRef.current = instance }}
           aria-label="System architecture diagram"
           nodes={nodes}
-          edges={portrait ? portraitEdges : architectureEdges}
+          edges={portrait ? (landscape ? landscapeEdges : portraitEdges) : architectureEdges}
           defaultEdgeOptions={portrait ? portraitEdgeOptions : defaultEdgeOptions}
           nodeTypes={nodeTypes}
           colorMode="dark"
@@ -321,8 +327,10 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         </div>
       ) : detailsOpen ? (
         // Capped so the diagram keeps its room; the collapse button stays
-        // pinned while the details scroll, and text keeps clear of it.
-        <div id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline" style={portraitPanelStyle}>
+        // pinned while the details scroll, and text keeps clear of it. A
+        // phone held sideways has no height to spare, so there it opens
+        // beside the diagram instead, at full height.
+        <div id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline phone-landscape:max-h-none! phone-landscape:w-[40vw] phone-landscape:border-t-0 phone-landscape:border-l" style={portraitPanelStyle}>
           <div ref={inspectorRef} className="min-h-0 flex-1 overflow-y-auto py-4 pl-4 pr-14">
             {details}
           </div>
@@ -345,7 +353,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           aria-expanded="false"
           aria-controls={detailsId}
           onClick={() => toggleDetails(true)}
-          className="flex min-h-11 w-full shrink-0 items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted transition-colors hover:text-primary"
+          className="flex min-h-11 w-full shrink-0 items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted transition-colors hover:text-primary phone-landscape:col-span-2"
         >
           <span className="min-w-0 truncate">{selectedComponent ? `${selectedComponent.data.label} details` : 'Details'}</span>
           <span className="flex shrink-0 items-center gap-2 tabular-nums">

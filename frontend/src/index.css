@@ -30,6 +30,31 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+/*
+ * Layout breakpoints (project/MOBILE_DESIGN.md "Landscape phones"). A phone
+ * held sideways is wider than 768px but at most 500px tall; it keeps the
+ * phone layout instead of the two-pane desktop one, so `md` also requires
+ * more than 500px of height below 1024px of width. `max-md` is its exact
+ * opposite. The same queries are in src/lib/layout.ts for useMediaQuery; a
+ * unit test keeps the two copies identical.
+ */
+@custom-variant md {
+  @media (width >= 768px) and (height > 500px), (width >= 1024px) {
+    @slot;
+  }
+}
+@custom-variant max-md {
+  @media (width < 768px), (height <= 500px) and (width < 1024px) {
+    @slot;
+  }
+}
+/* A phone in landscape: everything below md that is wider than tall. */
+@custom-variant phone-landscape {
+  @media (orientation: landscape) and (height <= 500px) and (width < 1024px) {
+    @slot;
+  }
+}
+
 :root {
   font-family: 'JetBrains Mono', monospace;
   color: var(--color-primary);

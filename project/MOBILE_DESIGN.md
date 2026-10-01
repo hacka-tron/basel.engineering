@@ -9,7 +9,7 @@ Rules for any frontend change in `frontend/`. The desktop layout has been decent
 
 ## Layout
 
-- **Mobile-first.** Write the base classes for a 375px phone, then add larger overrides. `md:` (768px) is the main layout breakpoint and must stay in sync with `useMediaQuery('(min-width: 768px)')` in `App.tsx`; `sm:` (640px) is fine for small refinements (e.g. `StatsBar`).
+- **Mobile-first.** Write the base classes for a 375px phone, then add larger overrides. `md:` is the main layout breakpoint: 768px wide and more than 500px tall, or 1024px wide (redefined in `index.css` so a phone held sideways keeps the phone layout, see "Landscape phones"). It must stay in sync with `DESKTOP_QUERY` in `lib/layout.ts`, which `App.tsx` passes to `useMediaQuery` (`lib/layout.test.ts` checks the two are identical); `sm:` (640px) is fine for small refinements (e.g. `StatsBar`).
 - **Viewport height: `h-dvh`, never `h-screen`/`100vh`,** on anything full-height. `body` has `overflow: hidden`, so on iOS Safari a `100vh` shell pushes the bottom (StatsBar, chat input) behind the browser toolbar with no way to scroll to it.
 - **No fixed pixel heights/widths for boxes that hold flowing text** (headers, bars, chat bubbles, inputs). Use `min-h-*`, padding, and `rem`. Fixed px is fine for icons, hairlines, and **React Flow diagram nodes** — the 124×42 node size in `ArchitecturePanel.tsx` is deliberate (`docs/DESIGN.md`: React Flow needs fixed node dimensions and handle positions or nodes/arrows vanish during updates); size labels to fit the node instead.
 - **Flex/grid children that hold text get `min-w-0`,** otherwise long words or code refuse to shrink and cause horizontal scroll.
@@ -21,6 +21,17 @@ Rules for any frontend change in `frontend/`. The desktop layout has been decent
 - Chrome that hides (focus mode: header and footer slide away while the ask box has focus) animates grid rows, not height, respects `prefers-reduced-motion`, keeps the message list pinned to the bottom, and never moves a control while it is being tapped.
 - Below md, New chat lives in the footer as an icon-only 44px "+" on the right of the footer, immediately left of the bunny/tiger capacity icon (stats stay on the left; DOM order is stats, "+", capacity icon; its tooltip is right-anchored so it never clips) (same look and long-press/tooltip behaviour as the capacity icon, via `hooks/useLongPressTooltip.ts`); there is no label-vs-icon width switching. The latency stat is a focusable control with the same tooltip. The stats stay on one line.
 - Diagram: React Flow only fits once on init, so `ArchitecturePanel` refits through a `ResizeObserver` (`lib/diagramFit.ts`) on any container resize or layout switch, never on trace updates.
+
+## Landscape phones (proposed, pending the owner's review)
+
+A phone held sideways is 320 to 430px tall. The portrait-tuned layout left 55 to 110px for the messages there, showed 4 of the 11 diagram nodes (none at 568x320), and an iPhone 11/XR sideways (896x414) got the two-pane desktop layout with a 108px diagram. Rules (PR "landscape phone layout", compare page in `project/status/2026-10-01-landscape-phone.md`):
+
+- **What counts as a landscape phone:** `phone-landscape:` = `(orientation: landscape) and (height <= 500px) and (width < 1024px)` (`index.css` custom variant, `PHONE_LANDSCAPE_QUERY` in `lib/layout.ts`). Every phone sideways matches; tablets (at least 600px tall) and desktops do not. Portrait phones, tablets and desktop are unchanged.
+- **Phone layout, never two panes:** `md` additionally needs more than 500px of height below 1024px of width, so 768 to 1023px wide landscape phones keep the phone layout. Side effect: a desktop browser window between 768 and 1023px wide and at most 500px tall also gets the phone layout, which suits that height better.
+- **Chat view:** the header loses its vertical padding (one 44px row, 45px with the border); the topic chips sit to the left of the ask box in one row instead of a row above it; the footer is 44px instead of 58px and uses the phone footer at every landscape width (stats, "+", capacity icon as the button; the labelled "Stress test" button and its separate details icon, normally shown from 640px, are hidden). Message area: 568x320 55 → 120px, 667x375 110 → 175px, 740x360 95 → 160px, 896x414 → 214px. All tap targets stay 44px.
+- **Diagram view:** the header slides away (same Collapsible as focus mode; the footer stays, so the capacity icon and its cooldown remain visible after a stress-test tap, and the tapped Diagram toggle does not move). The graph switches to a three-row landscape arrangement (`landscapeNodes`/`landscapeEdges` in `architecture.ts`, same node size, handles and pitch as the portrait graph): Edge → API → Answer Cache → Queue / Rewrite, Worker, LLM / Embed Cache → Embed → Vector Search → MySQL. Its zoom floor is 0.65 (the desktop floor) instead of 0.75; all 11 nodes are visible at every landscape size with the details collapsed.
+- **Details panel:** opens beside the diagram at full height (40vw, border on the left) instead of below it; collapsed it is still the 44px bar under the diagram. At 568x320 the graph then pans slightly (the selected component stays in the middle); from 667px wide it fits.
+- **Focus mode** is unchanged and also applies in landscape (header and footer slide away while typing). Not verified: the real on-screen keyboard in landscape, which leaves very little height; if that is too tight on a phone, also hiding the pipeline strip while typing is the next step (BACKLOG).
 
 ## Typography
 
@@ -55,12 +66,13 @@ Use this to look at the mobile layout yourself, without shrinking the browser wi
 1. `cd frontend && npm ci` (once), then `npm run phone`.
 2. Open http://localhost:5230/phone-preview.html.
 
-It shows the app in five phone frames side by side:
+It shows the app in nine phone frames, five portrait and four landscape:
 - iPhone 15 at 393×852
 - iPhone SE at 375×667
 - a narrow Android at 360×780
 - the smallest phone at 320×568
 - a Galaxy Fold cover screen at 280×653, below the 292px point where the header name shortens to "Basel A-R"
+- landscape: iPhone SE sideways at 667×375, an Android at 740×360, iPhone 11/XR at 896×414 and the smallest at 568×320
 
 Each frame is a real phone-width page, so media queries and the measured layouts (name shortening, footer) behave as they do on a device.
 
@@ -81,4 +93,5 @@ One line per standing mobile/UI decision, so a session can check them at a glanc
 - **Error replies never blame the visitor:** failures read as the backend's fault ("something's wrong with the backend", "my thoughts got tangled"), never "your question" or "you" (`lib/errorReplies.ts`).
 - **"I don't know" swaps are exact-match only:** the playful replies replace the answer only when it is exactly the canonical abstention ("I don't know from what I have.", flagged `done.abstained`); a partial answer that merely contains the phrase is shown as written. History always keeps the canonical sentence (`lib/idkReplies.ts`).
 - **Desktop topic control stays in the header (2026-10-01):** "About Basel | About This System" tabs in the desktop header. Pills above the desktop ask box were tried (#82) and reverted the same day at the owner's request; pills are for phones only (Chat view, #78).
+- **Landscape phones (proposed 2026-10-01, pending the owner's review):** phones held sideways (at most 500px tall, under 1024px wide) keep the phone layout, 896x414 included; compact header and footer, topic chips beside the ask box, header hidden in Diagram view, a three-row landscape graph, details beside the diagram. Detail in "Landscape phones" above.
 - **Footer latency lights up (2026-10-01):** the latency readout brightens from muted on hover, keyboard focus and press, like the capacity icon (from #82, kept after the revert).

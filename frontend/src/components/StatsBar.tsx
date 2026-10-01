@@ -113,7 +113,7 @@ function StatsBar({
     // (overflow-x-auto would clip the absolutely-positioned tooltips, which
     // open upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8 phone-landscape:min-h-11">
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
         {/* Always one line: the stats are never wrapped or squeezed. The
             timing is a focusable control so hover, focus, and a long press
@@ -196,7 +196,7 @@ function StatsBar({
             ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining`
             : `Run stress test (${stressTestCapacity.sufficient ? 'real' : 'simulated'})`}
           onClick={() => { onStressTap?.(); if (!disabled) onStressTest?.() }}
-          className={`hidden min-h-11 shrink-0 touch-manipulation rounded-[3px] border px-4 py-2 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-cyan sm:inline-block md:min-h-0 ${
+          className={`hidden min-h-11 shrink-0 touch-manipulation rounded-[3px] border px-4 py-2 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-cyan sm:inline-block md:min-h-0 phone-landscape:hidden ${
             disabled
               ? 'cursor-not-allowed border-hairline text-muted'
               : 'cursor-pointer border-hairline text-primary hover:border-cyan hover:text-cyan'
@@ -212,7 +212,7 @@ function StatsBar({
           data-stress-details
           onClick={() => setWideTooltipOpen((v) => !v)}
           onBlur={() => setWideTooltipOpen(false)}
-          className="group relative hidden size-11 shrink-0 cursor-help select-none items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan sm:flex"
+          className="group relative hidden size-11 shrink-0 cursor-help select-none items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-cyan sm:flex phone-landscape:hidden"
         >
           <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={false} />
           <span
@@ -223,7 +223,7 @@ function StatsBar({
             {wideCapacityLabel}
           </span>
         </button>
-        {/* < sm: the icon IS the button (tap runs, press-and-hold shows details). */}
+        {/* < sm, and on a phone held sideways: the icon IS the button (tap runs, press-and-hold shows details). */}
         <button
           type="button"
           aria-disabled={disabled}
@@ -238,7 +238,7 @@ function StatsBar({
           onPointerUp={stressPressHandlers.onPointerUp}
           onPointerCancel={stressPressHandlers.onPointerCancel}
           onContextMenu={stressPressHandlers.onContextMenu}
-          className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:hidden ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:hidden phone-landscape:flex ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={disabled} />
           {onCooldown && (
