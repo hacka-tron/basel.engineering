@@ -29,6 +29,16 @@ def _model_tag(model_id: str) -> str:
     return hashlib.sha256(model_id.encode()).hexdigest()
 
 
+def chunk_content_sha(text: str) -> str:
+    """The ``content_sha`` field of a ``chunk:{id}`` hash: SHA-256 hex of the chunk text.
+
+    The text is exactly as stored in MySQL ``chunks.text``; ingest writes the
+    field (ingest/redis_index.py) and the answer cache compares it with the text
+    an answer was built from.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 class RedisAnswerCache:
     def __init__(self, client):
         self.client = client

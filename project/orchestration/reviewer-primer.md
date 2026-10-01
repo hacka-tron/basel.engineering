@@ -41,6 +41,7 @@ Frontend (`frontend/`, rules in `project/MOBILE_DESIGN.md`):
 Backend / RAG (`services/glassbox/`):
 - **Grounding is keyword-based, not tense-aware.** The planned-design marker mislabels live infra (KEDA, k3s, Terraform, Flux) or leaves unbuilt detail unmarked; check marks at sentence/row granularity, not whole chunks.
 - **Never cache refusals.** Abstentions in many wordings ("I have no information...", "sources don't say...") must stay out of the answer cache; a cached refusal replays forever.
+- Redis `chunk:{id}` keys are derived from MySQL: every ingest run ends with a reconcile (`ingest/reconcile.py`) that repairs, rewrites (by `content_sha`) and removes keys. Anything that writes a chunk key must go through `chunk_fields()` in `redis_index.py`, and an unchanged-files run must still repair a flushed Redis.
 - Embedding-model isolation: chunks are tagged with a hashed model id and search filters on it; a partial re-ingest must not mix vectors. Cache keys must include model + prompt version.
 - Budgets: refund to the reserving UTC day; never refund an uncertain call (a timeout after the POST was sent); count every generation attempt; the warmer shares a daily cap and must stop on limit errors. Mixed old/new pod versions must not double-spend (counters carried across deploys).
 - Disconnect handling: poll fallback must run during continuous output, not only on quiet; cancel must close the Bedrock stream even before headers arrive.

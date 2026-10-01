@@ -170,7 +170,7 @@ KEDA is installed but suspended since the 2026-09-30 memory incident (its Flux K
 | Technology | Job in this system | Honest note |
 |---|---|---|
 | RAG (Bedrock embeddings + LLM) | Grounded, cited answers over two curated corpora | Core feature |
-| MySQL (in-cluster) | Source of truth for documents, chunks, embeddings, ingestion runs, query logs | Redis is rebuilt from MySQL on restart, so MySQL owns durability. Not RDS — see §10.5 for why |
+| MySQL (in-cluster) | Source of truth for documents, chunks, embeddings, ingestion runs, query logs | MySQL keeps every chunk's text and embedding, so MySQL owns durability: every ingest run ends with a reconcile that rewrites missing or stale Redis chunk keys from MySQL (no re-embedding), and `--reindex` rewrites all of them. Not RDS — see §10.5 for why |
 | Redis | Vector index, three cache layers, job queue (Streams), trace fan-out (pub/sub), rate limits, counters | Doing many jobs on purpose: one small in-memory store instead of five services |
 | Kubernetes (k3s) | Runs API, workers, Redis, ingestion; queue-driven autoscaling via KEDA (installed, suspended for now); RBAC-scoped cluster view | Single node for cost. Manifests are cluster-agnostic and would run on EKS unchanged |
 | KEDA | Scales workers on Redis Stream backlog | The standard way to scale on queue depth rather than CPU. Installed, but suspended and scaled to 0 since the 2026-09-30 memory incident (§9.3) |
@@ -239,8 +239,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 
 - Redis 8 (includes the query engine with vector search) or `redis-stack-server`, as a StatefulSet with a small PVC (k3s `local-path`).
 - AOF persistence off or `everysec`; nothing in Redis is precious because MySQL can rebuild it.
-- There is no separate `reindex` Job: each release's ingest Job creates or migrates the index (`ensure_index`) and writes every changed document's vectors. After a Redis data loss, `--clear` plus a fresh ingest rebuilds it (§6.4).
-- Not built yet: rebuilding the vector index from the embeddings stored in MySQL without re-embedding.
+- There is no separate `reindex` Job. The `ingest` Job (after every rollout) ends with a **reconcile** (`services/glassbox/ingest/reconcile.py`): for the configured embedding model it writes a `chunk:{id}` key for every MySQL chunk that lacks one, rewrites keys whose corpus, model, document, path or `content_sha` (SHA-256 of the chunk text) disagree with their row, and deletes keys with no MySQL row, all from the stored vectors (no embedding call). It runs even when no file changed, which is the case after Redis loses its data: unchanged files are skipped by the incremental scan. It bumps `corpus:ver:{corpus}` only when it changed something, and never deletes keys for a corpus that has zero MySQL chunks, or more than 30% (and more than 2) of a corpus's keys unless run as `--reindex` (logged as `REFUSED`; repairs still happen). Rewrites go in 50-key MULTI transactions; an ingest or reindex holds the Redis lock `ingest:lock` (30-minute TTL) and a second one exits 0 without doing anything. `python -m services.glassbox.ingest.run --reindex` rewrites every key from MySQL without scanning files (after a MySQL restore). Redis data loss is therefore repaired at the next ingest run; until then answers abstain. Added 2026-10-01 after the gap was found: before that nothing rebuilt lost keys.
 
 ### 6.6 MySQL (in-cluster)
 
