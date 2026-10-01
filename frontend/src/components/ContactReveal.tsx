@@ -32,7 +32,7 @@ function legacyCopy(text: string): boolean {
 
 /**
  * "Contact me" is a single button: click/tap copies the email address and
- * flashes "Copied!" (announced via aria-live). If both the Clipboard API and
+ * flashes "Email copied" (announced via aria-live). If both the Clipboard API and
  * the execCommand fallback fail, the address is shown briefly instead so the
  * visitor can still read it.
  */
@@ -65,12 +65,13 @@ function ContactReveal() {
         status === 'idle' ? 'text-muted' : 'text-primary'
       }`}
     >
-      {/* "Copied!" sits in the width "Contact me" reserves, right-aligned, so
-          the header row never shifts (the GitHub icon stays put beside it). */}
+      {/* "Email copied" sits in the width reserved for the longer of the two
+          labels, right-aligned, so the header row never shifts (the GitHub
+          icon stays put beside it). */}
       <span className="grid justify-items-end">
-        <span aria-hidden="true" className="invisible col-start-1 row-start-1">Contact me</span>
+        <span aria-hidden="true" className="invisible col-start-1 row-start-1">Email copied</span>
         <span aria-live="polite" className="col-start-1 row-start-1">
-          {status === 'copied' ? 'Copied!' : status === 'shown' ? EMAIL : 'Contact me'}
+          {status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : 'Contact me'}
         </span>
       </span>
     </button>
