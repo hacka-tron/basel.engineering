@@ -17,6 +17,11 @@ data:
   # Answer-cache warm-up: LLM calls per UTC day across all warm-up runs
   # (CronJob + post-deploy), out of the 100 above (services/glassbox/warm.py).
   GLASSBOX_WARM_DAILY_LLM_CAP: "10"
+  # Client IP for rate limiting (services/glassbox/limits.py client_address):
+  # forwarding headers are believed only from peers in the pod network
+  # (Traefik). Cloudflare overwrites CF-Connecting-IP with the visitor's
+  # address, and the security group admits only Cloudflare, so it is the
+  # unspoofable source; X-Forwarded-For (right to left) is the fallback.
   GLASSBOX_TRUSTED_PROXY_CIDRS: "10.42.0.0/16"
   # /api/cluster/stream limits, per api process (services/glassbox/api/cluster.py,
   # DESIGN.md §9.5 "Bounded cost"). The values here equal the code defaults;
@@ -26,3 +31,7 @@ data:
   GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S: "600"
   GLASSBOX_CLUSTER_STREAM_HEARTBEAT_S: "15"
   GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S: "30"
+  GLASSBOX_CLIENT_IP_HEADER: cf-connecting-ip
+  # The api refuses to start without a stable >= 32-character salt
+  # (glassbox-app secret, from SSM /glassbox/ip_hash_salt).
+  GLASSBOX_REQUIRE_IP_HASH_SALT: "true"

@@ -16,6 +16,11 @@ from services.glassbox.db.models import Chunk, Document, Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.worker.main import STREAM_NAME
 
+LEAKY_WORKER_MESSAGE = (
+    "(pymysql.err.OperationalError) (2003, \"Can't connect to MySQL server on "
+    "'mysql.data.svc.cluster.local'\") [SQL: SELECT chunks.text FROM chunks]"
+)
+
 # Integration tests default to the shared local MySQL; point them at a private,
 # fully migrated instance with GLASSBOX_TEST_MYSQL_PORT.
 TEST_MYSQL_PORT = os.environ.get("GLASSBOX_TEST_MYSQL_PORT", "3306")
@@ -156,7 +161,8 @@ class MemoryRedis:
         }
         await self.expire(f"seq:{request_id}", 300)
         if kind == "error":
-            payload.update(code="internal", message="worker failed")
+            # What an older worker published: raw exception text (SQL, hosts).
+            payload.update(code="internal", message=LEAKY_WORKER_MESSAGE)
         elif self.outcome == "empty":
             payload["chunks"] = []
         else:
@@ -483,7 +489,12 @@ def test_worker_error_ends_stream_before_llm(monkeypatch):
     stream = events(
         TestClient(app).post("/api/ask", json={"question": "Who is Basel?", "corpus": "about_me"})
     )
-    assert stream[-1] == ("error", {"code": "internal", "message": "worker failed"})
+    # The worker's exception text never reaches the visitor.
+    assert stream[-1] == (
+        "error",
+        {"code": "internal", "message": "The request could not be completed"},
+    )
+    assert "mysql" not in json.dumps(stream).lower()
     assert all(name not in {"token", "done"} for name, _ in stream)
 
 
