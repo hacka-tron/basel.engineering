@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
+import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
-import PipelineStrip from './components/PipelineStrip'
+import PipelineStrip, { type MobileView } from './components/PipelineStrip'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
@@ -46,7 +47,13 @@ function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
 
 function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
-  const [architectureOpen, setArchitectureOpen] = useState(false)
+  // Below md the diagram replaces the conversation in place (no overlay).
+  // A reload while in the diagram keeps it (its history entry survives).
+  const [mobileView, setMobileView] = useState<MobileView>(() =>
+    (window.history.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram' ? 'diagram' : 'chat')
+  // Focus mode: below md, the header and footer slide away while the ask box
+  // has focus, so the conversation keeps its room with the keyboard up.
+  const [askFocused, setAskFocused] = useState(false)
   const [activeNode, setActiveNode] = useState<NodeId | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
@@ -455,7 +462,6 @@ function App() {
   function handleInspectComponent(id: NodeId) {
     setSelectedNode(id)
     setCorpus('system')
-    if (isDesktop) setArchitectureOpen(false)
     if (requestInFlightRef.current) {
       pendingComponentRef.current = id
     } else {
@@ -466,12 +472,90 @@ function App() {
   // React Flow instance is mounted so only one ever exists at a time — see
   // the comment above the desktop panel render below.
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  // Derived rather than synced via an effect: even if `architectureOpen`
-  // stays true while the viewport crosses into desktop width (e.g. rotating
-  // a tablet), the sheet — and its ArchitecturePanel/React Flow instance —
-  // simply never renders at md+, so it can never coexist with the desktop
-  // panel below.
-  const showArchitectureSheet = architectureOpen && !isDesktop
+  const showDiagramView = !isDesktop && mobileView === 'diagram'
+  const focusMode = !isDesktop && askFocused
+
+  // The diagram view is a history entry, so the browser's Back button (and
+  // Escape, "Chat", or "Continue in chat") returns to the conversation.
+  const diagramButtonRef = useRef<HTMLButtonElement | null>(null)
+  const diagramRegionRef = useRef<HTMLDivElement>(null)
+  const restoreFocusAfterDiagram = useCallback(() => {
+    // Focus inside the diagram is about to unmount; hand it to the toggle.
+    const active = document.activeElement
+    if (!active || active === document.body || diagramRegionRef.current?.contains(active)) {
+      requestAnimationFrame(() => diagramButtonRef.current?.focus())
+    }
+  }, [])
+  useEffect(() => {
+    function handlePopState(event: PopStateEvent) {
+      const view = (event.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram' ? 'diagram' : 'chat'
+      if (view === 'chat') restoreFocusAfterDiagram()
+      setMobileView(view)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [restoreFocusAfterDiagram])
+  const showMobileView = useCallback((view: MobileView) => {
+    if (view === 'diagram') {
+      if ((window.history.state as { glassboxView?: MobileView } | null)?.glassboxView !== 'diagram') {
+        window.history.pushState({ glassboxView: 'diagram' }, '')
+      }
+      setMobileView('diagram')
+      return
+    }
+    restoreFocusAfterDiagram()
+    if ((window.history.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram') {
+      window.history.back()
+    } else {
+      setMobileView('chat')
+    }
+  }, [restoreFocusAfterDiagram])
+  useEffect(() => {
+    if (!showDiagramView) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !event.defaultPrevented) showMobileView('chat')
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showDiagramView, showMobileView])
+
+  // Leaving the ask box restores the header and footer. If a tap caused the
+  // blur, wait until it is released: restoring mid-tap would slide the button
+  // being tapped out from under the finger and the tap would miss it.
+  const pointerDownRef = useRef(false)
+  const restorePendingRef = useRef(false)
+  useEffect(() => {
+    function handlePointerDown() {
+      pointerDownRef.current = true
+    }
+    function handlePointerUp() {
+      pointerDownRef.current = false
+      if (!restorePendingRef.current) return
+      // After this gesture's click has been dispatched.
+      window.setTimeout(() => {
+        if (!restorePendingRef.current) return
+        restorePendingRef.current = false
+        setAskFocused(false)
+      }, 0)
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    document.addEventListener('pointerup', handlePointerUp, true)
+    document.addEventListener('pointercancel', handlePointerUp, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('pointerup', handlePointerUp, true)
+      document.removeEventListener('pointercancel', handlePointerUp, true)
+    }
+  }, [])
+  const handleAskFocusChange = useCallback((focused: boolean) => {
+    restorePendingRef.current = false
+    if (focused || !pointerDownRef.current) {
+      setAskFocused(focused)
+    } else {
+      restorePendingRef.current = true
+    }
+  }, [])
+
   const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
   // Component questions always go to About This System's conversation.
   const systemMessages = conversations.system
@@ -486,34 +570,7 @@ function App() {
   const selectedAnswer = selectedReply ? selectedReply.content
     : selectedNode ? 'Waiting for the current answer…' : null
 
-  // Focus management for the mobile bottom sheet: it declares
-  // `aria-modal="true"`, which is a promise to assistive tech that focus is
-  // contained. A full Tab-cycling focus trap is out of scope for this
-  // skeleton, but Escape-to-close, initial focus into the dialog, and focus
-  // restoration on close are the minimum needed to honor that promise.
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const triggerButtonRef = useRef<HTMLButtonElement | null>(null)
-
-  const closeArchitectureSheet = () => {
-    setArchitectureOpen(false)
-    triggerButtonRef.current?.focus()
-  }
-
-  useEffect(() => {
-    if (!showArchitectureSheet) return
-
-    closeButtonRef.current?.focus()
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setArchitectureOpen(false)
-        triggerButtonRef.current?.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [showArchitectureSheet])
+  const latestAnswer = messages.findLast((message) => message.role === 'assistant' && message.state !== 'pending')?.content || null
 
   // Rendered before the Contact group at md+ and after it below md so DOM/tab
   // order matches the visual order at both layouts (visual order via `order-*`).
@@ -541,24 +598,26 @@ function App() {
 
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
+      <Collapsible open={!focusMode}>
       <header className="relative flex min-h-[72px] shrink-0 flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-0 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
         {/*
-          Below md: row one is [h1 ... Contact + GitHub], row two is the topic
-          nav (flex-wrap; the revealed email wraps onto its own row). Visual
-          order is set with `order-*`; at md+ everything sits on one row as
-          [h1, nav ... Contact + GitHub].
+          Below md: row one is [h1 ... Contact me, GitHub], row two is the
+          topic nav. Contact me sits directly left of the GitHub icon as one
+          right-aligned pair, the same grouping as desktop. Visual order is set
+          with `order-*`; at md+ everything sits on one row as
+          [h1, nav ... Contact me, GitHub].
         */}
         <h1 className="order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight">Basel Abdel-Rahman</h1>
           {isDesktop && topicNav}
 
-        <div className="order-2 flex flex-wrap items-center gap-x-4 gap-y-0 md:order-3 md:ml-auto md:gap-3 md:flex-nowrap">
+        <div className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="View source on GitHub"
-            className="absolute right-0.5 top-0 flex size-11 items-center justify-center text-muted transition-colors hover:text-primary md:static md:size-auto"
+            className="-mr-2.5 flex size-11 items-center justify-center text-muted transition-colors hover:text-primary md:mr-0 md:size-auto"
           >
             <svg viewBox="0 0 16 16" className="size-6 sm:size-7" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
@@ -567,6 +626,7 @@ function App() {
         </div>
         {!isDesktop && topicNav}
       </header>
+      </Collapsible>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[40%_60%]">
         <Chat
@@ -576,25 +636,45 @@ function App() {
           onAsk={(question) => { setSelectedNode(null); handleAsk(question) }}
           onStop={handleStop}
           onNewChat={handleNewChat}
+          onInputFocusChange={handleAskFocusChange}
+          replacement={showDiagramView ? (
+            <div ref={diagramRegionRef} className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
+              <ArchitecturePanel
+                portrait
+                fitMinZoom={0.75}
+                activeNode={activeNode}
+                nodeCacheStatus={nodeCacheStatus}
+                retrievedChunks={retrievedChunks}
+                selectedNode={selectedNode}
+                answerText={selectedAnswer}
+                latestAnswer={latestAnswer}
+                onContinueInChat={() => showMobileView('chat')}
+                onInspect={handleInspectComponent}
+                workerPods={shownWorkerPods}
+                backlog={shownBacklog}
+              />
+            </div>
+          ) : undefined}
           inputAccessory={
             <PipelineStrip
+              view={showDiagramView ? 'diagram' : 'chat'}
+              onViewChange={showMobileView}
               activeNode={activeNode}
-              triggerRef={triggerButtonRef}
-              onViewArchitecture={() => setArchitectureOpen(true)}
+              diagramButtonRef={diagramButtonRef}
             />
           }
         />
         {/*
-          Mounted only at md+ instead of CSS-hidden below it: React Flow sets
-          up a ResizeObserver, zoom/pan handlers, and internal store on mount,
-          so leaving it always-mounted-but-hidden on mobile wastes work and
-          risks a second instance rendering into a zero-size container
-          whenever the sheet below is also open. Only one ArchitecturePanel
-          is ever mounted at a time (this one, or the sheet's).
+          Each React Flow instance is mounted only where it is shown instead
+          of CSS-hidden: it sets up a ResizeObserver, zoom/pan handlers, and an
+          internal store on mount. Desktop mounts this one; below md the
+          portrait diagram above mounts only in the diagram view. Only one
+          ArchitecturePanel ever exists at a time.
         */}
         {isDesktop && <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
       </main>
 
+      <Collapsible open={!focusMode}>
       <StatsBar
         lastStats={lastStats}
         queriesServed={queriesServed}
@@ -603,35 +683,13 @@ function App() {
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
         stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
+        {...(isDesktop ? {} : {
+          onNewChat: handleNewChat,
+          newChatDisabled: isStreaming || messages.length === 0,
+          topicLabel: corpus === 'basel' ? 'About Basel' : 'About This System',
+        })}
       />
-
-      {showArchitectureSheet && (
-        <div role="dialog" aria-modal="true" aria-label="Architecture" className="fixed inset-0 z-50 md:hidden">
-          <button
-            type="button"
-            aria-label="Close architecture panel"
-            onClick={closeArchitectureSheet}
-            className="absolute inset-0 bg-black/70"
-          />
-          <div className="absolute inset-x-0 bottom-0 flex h-[80dvh] flex-col border-t border-hairline bg-panel pb-[env(safe-area-inset-bottom)]">
-            <div className="flex h-12 shrink-0 items-center justify-between border-b border-hairline px-4">
-              <h2 className="text-sm text-primary">Architecture</h2>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                aria-label="Close architecture panel"
-                onClick={closeArchitectureSheet}
-                className="min-h-11 min-w-11 text-xl text-muted hover:text-primary"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
-              <ArchitecturePanel fitMinZoom={0.75} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} answerText={selectedAnswer} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />
-            </div>
-          </div>
-        </div>
-      )}
+      </Collapsible>
     </div>
   )
 }

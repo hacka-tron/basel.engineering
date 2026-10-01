@@ -65,8 +65,13 @@ function ContactReveal() {
         status === 'idle' ? 'text-muted' : 'text-primary'
       }`}
     >
-      <span aria-live="polite">
-        {status === 'copied' ? 'Copied!' : status === 'shown' ? EMAIL : 'Contact me'}
+      {/* "Copied!" sits in the width "Contact me" reserves, right-aligned, so
+          the header row never shifts (the GitHub icon stays put beside it). */}
+      <span className="grid justify-items-end">
+        <span aria-hidden="true" className="invisible col-start-1 row-start-1">Contact me</span>
+        <span aria-live="polite" className="col-start-1 row-start-1">
+          {status === 'copied' ? 'Copied!' : status === 'shown' ? EMAIL : 'Contact me'}
+        </span>
       </span>
     </button>
   )
