@@ -94,11 +94,11 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs
 
-- **Mobile Diagram view: the "Details / N chunks" toggle shows the latest chat answer when no component is selected (owner, 2026-10-01).** Opening the details panel under the portrait diagram before tapping any component shows the most recent chat answer and its chunks, which reads as unrelated. Owner's suggestion: disable the toggle (or keep it closed and non-interactive) until a component is selected, and show a short "Select a component" hint instead. Look at `frontend/src/components/ArchitecturePanel.tsx` (portrait readout/collapse state) and how `retrievedChunks` and the selected node feed it. Keep 44px targets and an accessible disabled state (`aria-disabled`, focusable or not, decided consistently). Not implemented yet; pick up when the owner asks.
-
 ## Feature work (priority)
 
 Owner wants this worked first, ahead of the security/infra/data-pipeline groups below. Done and removed on 2026-10-01: conversational memory and per-topic chats (#41), Stop/auto-scroll/persistence (#48), suggested-question chips hidden once a conversation starts, hover-to-reveal node technology on the diagram (#33).
+
+- **Diagram view: cue when a typed answer is ready (from the #90 review).** Since #90, an answer to a question typed in mobile Diagram view appears only in Chat, so a sighted visitor watches the nodes light up and then sees nothing. Idea: a small "Answer ready · View in chat" link near the Chat|Diagram switch once the answer completes. Owner decision before building.
 
 - **Answer thinness (prompt tuning).** See RESUME HERE item 2: answers drop specifics (numbers, thresholds, cooldowns) that the retrieved chunks contain. Tune the prompt toward including the concrete facts, bump the prompt version, re-ask live.
 - **Phone rotated to landscape: adjust the mobile layout.** Header name shortening (Basel A-R), footer (stats / + / capacity icon), the Chat|Diagram view and the diagram's portrait graph were all tuned for portrait; check 667x375, 740x360 and 896x414 landscape and fix what looks off (e.g. short height squeezing the message area, the diagram choosing the portrait layout in landscape). Use the phone preview (`npm run phone`; add landscape frames) rather than a shrunk window. Owner request 2026-09-30. **Built, PR open (2026-10-01), pending owner review:** see `project/status/2026-10-01-landscape-phone.md`. Follow-ups: (a) check the real on-screen keyboard in landscape on a phone; if the message area is too short while typing, also slide the pipeline strip away in focus mode. (b) At 568x320 with the details open the graph pans slightly; centring the refit on the selected component would avoid that if the owner minds.
