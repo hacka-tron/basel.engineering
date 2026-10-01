@@ -45,3 +45,43 @@ export const architectureEdges: ArchitectureEdge[] = [
   { id: 'vector_search-mysql', source: 'vector_search', target: 'mysql', sourceHandle: 'right', targetHandle: 'left' },
   { id: 'vector_search-llm', source: 'vector_search', target: 'llm', sourceHandle: 'bottom', targetHandle: 'top' },
 ]
+
+// Phone layout (below md): the same graph in two portrait columns so all 11
+// components fit a phone's width without panning. Node size and handles are
+// unchanged (fixed 124x42, DESIGN.md §4.4); only positions and which handles
+// each edge uses differ. Every edge still leaves a right/bottom handle and
+// enters a left/top one: an arrow either moves right along a row or goes
+// down to a later row.
+export const PORTRAIT_COLUMN_PITCH = 164
+export const PORTRAIT_ROW_PITCH = 66
+const portraitGrid: Record<NodeId, [column: number, row: number]> = {
+  edge: [0, 0],
+  api: [0, 1], answer_cache: [1, 1],
+  rewrite: [0, 2], queue: [1, 2],
+  embed_cache: [0, 3], worker: [1, 3],
+  embed: [0, 4], vector_search: [1, 4],
+  mysql: [0, 5], llm: [1, 5],
+}
+const portraitHandles: Record<string, [source: 'right' | 'bottom', target: 'left' | 'top']> = {
+  'edge-api': ['bottom', 'top'],
+  'api-answer_cache': ['right', 'left'],
+  'api-rewrite': ['bottom', 'top'],
+  'rewrite-embed_cache': ['bottom', 'top'],
+  'answer_cache-queue': ['bottom', 'top'],
+  'queue-worker': ['bottom', 'top'],
+  'worker-vector_search': ['bottom', 'top'],
+  'embed_cache-embed': ['bottom', 'top'],
+  'embed-vector_search': ['right', 'left'],
+  'vector_search-mysql': ['bottom', 'top'],
+  'vector_search-llm': ['bottom', 'top'],
+}
+
+export const portraitNodes: ArchitectureNode[] = architectureNodes.map((node) => {
+  const [column, row] = portraitGrid[node.id]
+  return { ...node, position: { x: column * PORTRAIT_COLUMN_PITCH, y: row * PORTRAIT_ROW_PITCH } }
+})
+
+export const portraitEdges: ArchitectureEdge[] = architectureEdges.map((edge) => {
+  const [sourceHandle, targetHandle] = portraitHandles[edge.id]
+  return { ...edge, sourceHandle, targetHandle }
+})

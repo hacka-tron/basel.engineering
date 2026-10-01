@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
 import suggestedQuestions from '../suggested-questions.json'
@@ -18,6 +18,12 @@ type ChatProps = {
   onStop: () => void
   onNewChat: () => void
   inputAccessory?: ReactNode
+  /**
+   * Shown in place of the messages (mobile diagram view). The messages stay
+   * mounted underneath, so their scroll position survives the switch.
+   */
+  replacement?: ReactNode
+  onInputFocusChange?: (focused: boolean) => void
 }
 
 // Within this distance of the bottom counts as "at the bottom" (DESIGN-002 §6.3).
@@ -26,7 +32,7 @@ const FOLLOW_THRESHOLD_PX = 80
 // answer it just asked for.
 const STOP_GUARD_MS = 400
 
-function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory }: ChatProps) {
+function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory, replacement, onInputFocusChange }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
   const askedAtRef = useRef(0)
@@ -44,6 +50,23 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
     const container = messagesRef.current
     if (container && following) container.scrollTop = container.scrollHeight
   }, [messages, following])
+
+  // The list also changes height without new messages: focus mode sliding the
+  // header and footer away, the keyboard, rotating, or coming back from the
+  // diagram view. Stay pinned to the latest message through all of them.
+  const followingRef = useRef(following)
+  useEffect(() => {
+    followingRef.current = following
+  }, [following])
+  useEffect(() => {
+    const container = messagesRef.current
+    if (!container) return
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current) container.scrollTop = container.scrollHeight
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
   function handleScroll() {
     const container = messagesRef.current
@@ -65,6 +88,15 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
   const lastMessage = messages[messages.length - 1]
   const announcement = !isStreaming && lastMessage?.role === 'assistant' ? lastMessage.content : ''
 
+  // A suggested question is asked straight away, the same way as Send.
+  function handleSuggestionClick(event: MouseEvent<HTMLButtonElement>) {
+    const suggestion = event.currentTarget.value
+    if (isStreaming || !suggestion) return
+    askedAtRef.current = performance.now()
+    setFollowing(true)
+    onAsk(suggestion)
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmedQuestion = question.trim()
@@ -78,7 +110,8 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
   return (
     <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col bg-panel md:border-r md:border-hairline">
       <div aria-live="polite" className="sr-only">{announcement}</div>
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      {replacement}
+      <div className={`relative min-h-0 flex-1 flex-col ${replacement ? 'hidden' : 'flex'}`}>
         <div ref={messagesRef} onScroll={handleScroll} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-7 md:py-6">
           <div className="flex shrink-0 flex-col gap-4">
             {messages.map((message) => {
@@ -128,13 +161,18 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
                 <button
                   key={suggestion}
                   type="button"
-                  onClick={() => setQuestion(suggestion)}
-                  className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-sm leading-relaxed text-muted transition-colors hover:text-primary md:min-h-0"
+                  value={suggestion}
+                  onClick={handleSuggestionClick}
+                  disabled={isStreaming}
+                  className="min-h-11 max-w-full whitespace-normal rounded-[3px] border border-hairline px-3 py-2 text-left text-sm leading-relaxed text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-muted md:min-h-0"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
+            {/* Below md the New chat control is in the footer; this keeps the
+                privacy note discoverable without a row under the ask box. */}
+            <p className="mt-3 text-[11px] leading-relaxed text-muted md:hidden">Chats are saved in this browser. New chat, at the bottom, clears this topic.</p>
           </div>}
         </div>
 
@@ -151,9 +189,11 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
 
       {inputAccessory}
 
-      <div className="shrink-0 px-4 pb-3 md:px-7 md:pb-7">
+      <div className="shrink-0 px-4 py-2 md:px-7 md:pb-7 md:pt-0">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
+            onFocus={() => onInputFocusChange?.(true)}
+            onBlur={() => onInputFocusChange?.(false)}
             aria-label="Ask anything"
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
@@ -181,7 +221,8 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
             </button>
           )}
         </form>
-        <p className="mt-2 flex flex-wrap items-center gap-x-1 text-[11px] text-muted md:mt-2">
+        {/* Desktop only; below md New chat sits in the footer after the stats. */}
+        <p className="mt-2 hidden flex-wrap items-center gap-x-1 text-[11px] text-muted md:mt-2 md:flex">
           Chats are saved in this browser.{' '}
           <button
             type="button"

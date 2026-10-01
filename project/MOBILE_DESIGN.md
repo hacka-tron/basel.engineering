@@ -14,7 +14,9 @@ Rules for any frontend change in `frontend/`. The desktop layout has been decent
 - **No fixed pixel heights/widths for boxes that hold flowing text** (headers, bars, chat bubbles, inputs). Use `min-h-*`, padding, and `rem`. Fixed px is fine for icons, hairlines, and **React Flow diagram nodes** — the 124×42 node size in `ArchitecturePanel.tsx` is deliberate (`docs/DESIGN.md`: React Flow needs fixed node dimensions and handle positions or nodes/arrows vanish during updates); size labels to fit the node instead.
 - **Flex/grid children that hold text get `min-w-0`,** otherwise long words or code refuse to shrink and cause horizontal scroll.
 - **Layout switches via CSS breakpoints.** JS (`useMediaQuery`) only to avoid *mounting* something heavy (the React Flow diagram) — not for styling.
-- Mobile-only overlays (the architecture sheet) use `dvh`, respect `env(safe-area-inset-bottom)`, trap Escape, and restore focus on close.
+- Mobile views that replace content in place (the diagram view) are a history entry: browser Back and Escape return, and focus moves back to the control that opened them. Any future mobile overlay uses `dvh`, respects `env(safe-area-inset-bottom)`, traps Escape, and restores focus on close.
+- Chrome that hides (focus mode: header and footer slide away while the ask box has focus) animates grid rows, not height, respects `prefers-reduced-motion`, keeps the message list pinned to the bottom, and never moves a control while it is being tapped.
+- Below md, New chat lives in the footer and switches between the label and "+" by **measured** free width (`lib/footerFit.ts`), never by truncation. The stats stay on one line.
 
 ## Typography
 
@@ -37,7 +39,7 @@ JetBrains Mono is wide (~0.6em per character), so everything wraps sooner than a
 
 1. Run the app (`frontend`: `npm run dev`; API per `README.md`).
 2. Screenshot with the `claude-in-chrome` tools at **375, 414, 768, 1024, 1440px** widths.
-3. Check at each width: no horizontal scroll, no text clipped or overflowing, nothing overlapping, bottom bar and chat input visible, tap targets usable, architecture sheet opens/closes (mobile) and diagram nodes + arrows visible (desktop).
+3. Check at each width: no horizontal scroll, no text clipped or overflowing, nothing overlapping, bottom bar and chat input visible, tap targets usable, diagram view (mobile: all 11 nodes visible, details panel collapses/reopens, Back returns to chat) and diagram nodes + arrows visible (desktop).
 4. Fix everything found in **one batch**, re-check once, stop. Don't polish in an open-ended loop.
 5. `npm run lint && npm run build` pass.
 6. The Codex review gate (`project/orchestration/codex-reviewer.md`) for a UI change should include the same width checklist.
