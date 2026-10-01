@@ -5,14 +5,14 @@
 
 ## TL;DR
 
-- A **Stress test** button in the footer puts 300 synthetic, no-LLM jobs on the retrieval queue. KEDA then scales the `retrieval-worker` Deployment from 1 to 5 pods, and visitors watch it live as pod dots and a backlog counter on the diagram's Worker node.
+- The footer tiger/rabbit icon (tap to run) puts 300 synthetic, no-LLM jobs on the retrieval queue. KEDA then scales the `retrieval-worker` Deployment from 1 to 5 pods, and visitors watch it live as pod dots and a backlog counter on the diagram's Worker node.
 - The node is a 2 GiB machine, so a real burst is **allowed only if the node has enough live free memory**. Otherwise the click plays a convincing simulation with nothing queued.
 - This is the demo that justifies the queue + KEDA architecture (DESIGN §5.3: "the thing that makes the stress test real").
 - Blocking: your approval to install KEDA live. Live scaling is unverified until then, because development has no cluster access.
 
 ## What changed for a visitor
 
-- A footer **Stress test** button with a small muted animal icon next to it:
+- The footer's small muted animal icon is the stress-test button (tap/click runs it; press-and-hold on touch, hover or keyboard focus shows the tooltip):
   - **Tiger**: a real burst is available. The tooltip says a click queues 300 jobs and KEDA scales workers 1→5.
   - **Rabbit**: not enough capacity, or a real burst ran recently. The click plays the same animation with nothing queued, and the tooltip explains why and how many minutes of cooldown remain.
 - On click: a brief screen-shake, then pod dots appear on the Worker node (cyan = ready) with a live backlog count. When the queue drains, the dots shrink back to one pod about a minute later.
