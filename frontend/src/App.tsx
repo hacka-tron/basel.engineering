@@ -15,6 +15,7 @@ import { useStressTest } from './hooks/useStressTest'
 import { architectureNodes, questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
+import { pickBudgetReply } from './lib/budgetReplies'
 import { errorReplyFor } from './lib/errorReplies'
 import { holdSaveDuringRetry, planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
@@ -90,6 +91,7 @@ function App() {
   // The last friendly failure reply shown, so the next one is never the same.
   const lastErrorReplyRef = useRef<string | null>(null)
   const lastIdkReplyRef = useRef<string | null>(null)
+  const lastBudgetReplyRef = useRef<string | null>(null)
   // Which conversation and assistant message the in-flight request writes to;
   // it stays fixed even if the visitor switches tabs mid-answer.
   const streamTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
@@ -293,6 +295,16 @@ function App() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
+  // A random budget reply (lib/budgetReplies.ts), never the last one shown in
+  // this session nor the latest one saved in this conversation.
+  function nextBudgetReply(targetCorpus: Corpus): string {
+    const saved = conversationsRef.current[targetCorpus]
+      .findLast((message) => message.role === 'assistant' && message.budget)?.content
+    const reply = pickBudgetReply([lastBudgetReplyRef.current, saved])
+    lastBudgetReplyRef.current = reply
+    return reply
+  }
+
   function updateStreamingMessage(update: (message: ChatMessage) => ChatMessage | null) {
     const target = streamTargetRef.current
     if (!target) return
@@ -436,15 +448,16 @@ function App() {
             idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, targetCorpus)
             lastIdkReplyRef.current = idkReply
           }
+          // Budget reached or LLM switched off: the sources still came back, and
+          // a playful budget reply goes above them (picked once, then stored).
+          // Picked only when it will be shown: no answer token ever arrived.
+          const noText = firstTokenLatencyRef.current === null
+          const budgetReply = event.mode === 'retrieval_only' && noText ? nextBudgetReply(targetCorpus) : null
           updateStreamingMessage((message) => ({
             ...message,
-            // Budget reached or LLM switched off: the sources still came back.
             // Only the bare canonical sentence is swapped (never a real answer).
-            ...(idkReply && isCanonicalIdk(message.content) ? { content: idkReply, idk: true } : {
-              content: event.mode === 'retrieval_only' && !message.content
-                ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
-                : message.content,
-            }),
+            ...(idkReply && isCanonicalIdk(message.content) ? { content: idkReply, idk: true } : {}),
+            ...(budgetReply && !message.content ? { content: budgetReply, budget: true } : {}),
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
           // No token (sources only): keep firstTokenMs null so the footer
@@ -468,8 +481,11 @@ function App() {
           // in this tab (it may be right above after a reload).
           const savedReply = conversationsRef.current[targetCorpus]
             .findLast((message) => message.role === 'assistant' && message.state === 'error')?.content
-          const reply = errorReplyFor(event, [lastErrorReplyRef.current, savedReply])
-          lastErrorReplyRef.current = reply
+          // The daily-budget failure gets a playful budget reply, marked `budget`
+          // so Retry leaves it alone (retrying fails the same way until later).
+          const budget = event.code === 'budget_exhausted'
+          const reply = budget ? nextBudgetReply(targetCorpus) : errorReplyFor(event, [lastErrorReplyRef.current, savedReply])
+          if (!budget) lastErrorReplyRef.current = reply
           // The failure becomes an assistant message marked `error`: saved with
           // the conversation, but never sent as history or counted as an answer.
           // Partial text stays visible and is marked `error` too.
@@ -480,6 +496,7 @@ function App() {
               role: 'assistant',
               content: reply,
               state: 'error',
+              ...(budget ? { budget: true } : {}),
               // Retry waits out the rate limit instead of hitting it again.
               ...(event.code === 'rate_limited' && event.retry_after_s && event.retry_after_s > 0
                 ? { retryAt: Date.now() + event.retry_after_s * 1000 }
@@ -490,7 +507,9 @@ function App() {
               ...current,
               [target.corpus]: current[target.corpus].flatMap((message) => {
                 if (message.id !== target.messageId) return [message]
-                return message.content ? [{ ...message, state: 'error' as const }, errorReply] : [errorReply]
+                // A budget reply keeps the sources already found, which it points to.
+                const reply = budget && !message.content && message.sources?.length ? { ...errorReply, sources: message.sources } : errorReply
+                return message.content ? [{ ...message, state: 'error' as const }, reply] : [reply]
               }).slice(-MAX_DISPLAY_MESSAGES),
             }))
           }
