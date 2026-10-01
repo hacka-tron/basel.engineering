@@ -63,6 +63,10 @@ Not reviewed yet (Codex gate pending). Self-checks are listed under "How to see 
 - IAM: 71 `simulate-custom-policy` cases across the four roles, 0 mismatches (tables are in the PR). Bucket-policy cases confirm the bootstrap roles can use `bootstrap/*`, the CI roles cannot, and nobody can delete the bucket.
 - Live, after setup: run **Ops runbooks → diagnose**, then **Bootstrap → Run workflow** (it should report "no changes").
 
+## Follow-up: one workflow per runbook
+
+The single "Ops runbooks" form showed every input for every action. GitHub can't show inputs conditionally, so `ops.yml` is now a reusable workflow (`workflow_call`, same inputs and logic) and eight dispatch-only wrappers ("Ops · Diagnose", "Reboot node", "Restart deployment", "Flux suspend or resume", "Flux reconcile", "KEDA on or off", "Warm-up CronJob suspend or resume", "Apply zram") each show only their own inputs. Roles, environments and approval are unchanged; the OIDC `sub` of a called-workflow job is still the caller's environment subject. Refer to `ops.yml` above as the reusable core. See `infra/CI.md` "Runbooks". First live run should confirm the `ops` approval prompt still appears.
+
 ## Open items
 
 - Codex review.

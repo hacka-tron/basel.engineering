@@ -1,61 +1,55 @@
-name: Ops runbooks
+name: Ops · reusable core (not run directly)
 
-# Push-button production operations: Actions -> "Ops runbooks" -> Run
-# workflow. Pick an action from the list; the other inputs only matter for
-# the action named in their description. There is no free-form command input
-# on purpose: every action runs a Terraform-managed SSM document
-# (infra/modules/ops) or one fixed EC2 call. What each action does and when
-# to use it: infra/CI.md "Runbooks".
+# Reusable core of the push-button production operations. Nobody runs this
+# file: each runbook has a thin wrapper that shows only that runbook's inputs
+# and calls this workflow with a fixed action (Actions sidebar, all named
+# "Ops · ..."):
+#   ops-diagnose.yml, ops-reboot-node.yml, ops-restart-deployment.yml,
+#   ops-flux-suspend-resume.yml, ops-flux-reconcile.yml, ops-keda.yml,
+#   ops-cronjob-suspend-resume.yml, ops-apply-zram.yml
+# (GitHub can't show inputs conditionally, hence one wrapper per runbook.)
+# There is no free-form command input on purpose: every action runs a
+# Terraform-managed SSM document (infra/modules/ops) or one fixed EC2 call.
+# What each action does and when to use it: infra/CI.md "Runbooks".
 #
 #   diagnose        read-only; runs straight away (ops-read environment,
 #                   glassbox-ops-read role, no approval)
 #   everything else first runs diagnose (the "before"), then waits for owner
 #                   approval in the ops environment, acts with the
 #                   glassbox-ops role, and runs diagnose again (the "after")
+#
+# The OIDC sub claim of a job in a called workflow is the caller's
+# (environment:<name>), so the role trust policies are unchanged. The caller
+# must grant id-token: write and contents: read.
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       action:
         description: Runbook action
-        type: choice
+        type: string
         required: true
-        default: diagnose
-        options:
-          - diagnose
-          - reboot-node
-          - restart-deployment
-          - flux-suspend
-          - flux-resume
-          - flux-reconcile
-          - scale-keda
-          - cronjob-suspend
-          - cronjob-resume
-          - apply-zram
       deployment:
         description: restart-deployment only
-        type: choice
+        type: string
         default: api
-        options: [api, retrieval-worker, traefik]
       flux_target:
-        description: flux-suspend / flux-resume only (helmrelease-keda = the keda HelmRelease)
-        type: choice
+        description: flux-suspend / flux-resume only
+        type: string
         default: keda
-        options: [keda, keda-scaling, ingest, app-ready, flux-system, helmrelease-keda]
       keda_replicas:
-        description: scale-keda only
-        type: choice
+        description: scale-keda only (0 or 1)
+        type: string
         default: "0"
-        options: ["0", "1"]
       cronjob:
         description: cronjob-suspend / cronjob-resume only
-        type: choice
+        type: string
         default: warm-answers
-        options: [warm-answers]
       reason:
-        description: Why (optional; shown in the run summary)
+        description: Why (optional; shown in the public run summary)
         type: string
         required: false
+        default: ""
 
 permissions:
   contents: read

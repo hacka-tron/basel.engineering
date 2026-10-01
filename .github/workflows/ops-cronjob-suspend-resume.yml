@@ -1,0 +1,30 @@
+name: "Ops · Warm-up CronJob suspend or resume"
+
+# Suspend or resume the warm-answers CronJob (fixed). Needs owner approval.
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: What to do
+        type: choice
+        required: true
+        options: [suspend, resume]
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: cronjob-${{ inputs.operation }}
+      reason: ${{ inputs.reason }}

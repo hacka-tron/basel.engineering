@@ -49,10 +49,30 @@ alone does not apply infrastructure.
 
 ## Runbooks (push-button operations)
 
-`.github/workflows/ops.yml` turns every routine production operation into a
-button: **Actions → Ops runbooks → Run workflow** (branch `main`), pick an
-`action`, set the one input that action uses, optionally write a `reason`,
-and run. There is no free-form command input. Each action runs one
+Every routine production operation is a button: **Actions → "Ops · ..."**
+→ Run workflow (branch `main`), set the one or two inputs that runbook has,
+optionally write a `reason` (shown in the public run summary), and run.
+GitHub can't show inputs conditionally, so each runbook is a thin
+dispatch-only wrapper that calls the reusable core `.github/workflows/ops.yml`
+with a fixed action:
+
+| Workflow | Inputs | Action |
+|---|---|---|
+| Ops · Diagnose | reason | `diagnose` |
+| Ops · Reboot node | reason | `reboot-node` |
+| Ops · Restart deployment | deployment (api, retrieval-worker, traefik), reason | `restart-deployment` |
+| Ops · Flux suspend or resume | operation, target, reason | `flux-suspend` / `flux-resume` |
+| Ops · Flux reconcile | reason | `flux-reconcile` |
+| Ops · KEDA on or off | state ("off (0)" / "on (1)"), reason | `scale-keda` (0/1) |
+| Ops · Warm-up CronJob suspend or resume | operation, reason (`warm-answers` is fixed) | `cronjob-suspend` / `cronjob-resume` |
+| Ops · Apply zram | reason | `apply-zram` |
+
+The wrappers grant `contents: read` and `id-token: write`; the core keeps the
+diagnose-before job (`ops-read`), the approval-gated act job (`ops`) and the
+diagnose-after step. The OIDC `sub` of a job in a called workflow is the
+caller's environment/ref subject, so the role trust policies don't change
+(they don't condition on `job_workflow_ref`). The action names below are the
+core's `action` values. There is no free-form command input. Each action runs one
 Terraform-managed SSM Command document (`infra/modules/ops`, named
 `glassbox-ops-<action>`) or one fixed EC2 call. The roles can't send any
 other document, so nothing runs on the node unless it was reviewed here and
@@ -208,10 +228,10 @@ cd ../..
 Then approve the pending **Terraform** run on `main` (`terraform-prod`). It
 creates the `glassbox-ops-*` documents, and the zram document and
 association if not already done. If that run already failed with
-AccessDenied before step 2, re-run it. Confirm by running **Ops runbooks →
+AccessDenied before step 2, re-run it. Confirm by running **Ops · Diagnose →
 diagnose**.
 
-**From then on, every operation is a button in Actions.** Use Ops runbooks
+**From then on, every operation is a button in Actions.** Use the Ops · workflows
 for the node, Terraform for production infrastructure, and Bootstrap for the
 CI roles themselves. Move the local `terraform.tfstate*` files out of the
 repo as `infra/bootstrap/README.md` describes.
