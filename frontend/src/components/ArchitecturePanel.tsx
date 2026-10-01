@@ -1,9 +1,9 @@
 import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Node, type NodeHandle, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
-import { architectureEdges, architectureNodes, landscapeEdges, landscapeNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
+import { architectureEdges, architectureNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
 import { deselectsOnKey, PORTRAIT_DETAILS_HINT } from '../lib/detailsPanel'
-import { boundsOf, createRefitter, squeezedMinZoom } from '../lib/diagramFit'
+import { boundsOf, createRefitter } from '../lib/diagramFit'
 import type { RetrievalChunk } from '../lib/sse'
 
 export type WorkerPod = { name: string; ready: boolean }
@@ -44,11 +44,6 @@ type ArchitecturePanelProps = {
    * capped in height and open only while a component is selected.
    */
   portrait?: boolean
-  /**
-   * With `portrait`, a phone held sideways: the three-row landscape graph.
-   * The open details panel sits beside the diagram (CSS, `phone-landscape:`).
-   */
-  landscape?: boolean
   /** Portrait: leave the diagram for the conversation. */
   onContinueInChat?: () => void
 }
@@ -79,14 +74,8 @@ const handleStyle: CSSProperties = {
 const nodeWidth = 124
 const nodeHeight = 42
 const PORTRAIT_FIT_PADDING = 0.06
-// Landscape with the details open beside the diagram: the graph is shown
-// whole, so the zoom floor gives way down to this (568x320 needs about 0.54),
-// keeping a 4px margin around the graph.
-const LANDSCAPE_DETAILS_MIN_ZOOM = 0.5
-const LANDSCAPE_DETAILS_MARGIN_PX = 4
 const DESKTOP_FIT_PADDING = 0.12
 const portraitBounds = boundsOf(portraitNodes.map((node) => node.position), nodeWidth, nodeHeight)
-const landscapeBounds = boundsOf(landscapeNodes.map((node) => node.position), nodeWidth, nodeHeight)
 const desktopBounds = boundsOf(architectureNodes.map((node) => node.position), nodeWidth, nodeHeight)
 const nodeHandles: NodeHandle[] = [
   { id: 'left', type: 'target', position: Position.Left, x: 0, y: nodeHeight / 2 },
@@ -147,7 +136,7 @@ const defaultEdgeOptions = {
 // for, which made the Vector Search -> MySQL arrow loop back on itself.
 const portraitEdgeOptions = { ...defaultEdgeOptions, pathOptions: { offset: 8 } }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, onDeselect, workerPods, backlog, fitMinZoom, portrait = false, landscape = false, onContinueInChat }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, onDeselect, workerPods, backlog, fitMinZoom, portrait = false, onContinueInChat }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
   // Portrait: the details panel is open exactly while a component is
   // selected; otherwise the bar under the diagram is locked (lib/detailsPanel.ts).
@@ -207,15 +196,10 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   // chosen while the window was narrow stuck after widening it again.
   const flowRef = useRef<ReactFlowInstance<LiveNode, ArchitectureEdge> | null>(null)
   const flowBoxRef = useRef<HTMLDivElement>(null)
-  // A phone held sideways with the details open beside the diagram: lower the
-  // zoom floor just enough that the whole graph fits instead of clipping its
-  // outer columns (the smallest landscape phone, 568x320). Wider phones
-  // already fit at the normal floor, so nothing changes for them.
-  const squeezeToFit = portrait && landscape && detailsOpen
   useEffect(() => {
     const box = flowBoxRef.current
     if (!box) return
-    const bounds = portrait ? (landscape ? landscapeBounds : portraitBounds) : desktopBounds
+    const bounds = portrait ? portraitBounds : desktopBounds
     const padding = portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING
     const floor = fitMinZoom ?? 0.5
     // Next frame, after React Flow has recorded the new size. Sets the
@@ -225,8 +209,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
     const refitter = createRefitter(
       () => ({ width: box.clientWidth, height: box.clientHeight }),
       ({ width, height }) => {
-        const minZoom = squeezeToFit ? squeezedMinZoom(bounds, { width, height }, floor, LANDSCAPE_DETAILS_MIN_ZOOM, LANDSCAPE_DETAILS_MARGIN_PX) : floor
-        void flowRef.current?.setViewport(getViewportForBounds(bounds, width, height, minZoom, 1, padding))
+        void flowRef.current?.setViewport(getViewportForBounds(bounds, width, height, floor, 1, padding))
       },
       { request: (callback) => requestAnimationFrame(callback), cancel: (handle) => cancelAnimationFrame(handle) },
     )
@@ -236,8 +219,8 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       observer.disconnect()
       refitter.cancel()
     }
-  }, [portrait, landscape, fitMinZoom, squeezeToFit])
-  const nodes = useMemo<LiveNode[]>(() => (portrait ? (landscape ? landscapeNodes : portraitNodes) : architectureNodes).map((node) => ({
+  }, [portrait, fitMinZoom])
+  const nodes = useMemo<LiveNode[]>(() => (portrait ? portraitNodes : architectureNodes).map((node) => ({
     ...node,
     // Known dimensions and handle positions keep nodes and arrows visible during updates.
     width: nodeWidth,
@@ -255,7 +238,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       onLeave: leaveNode,
       onInspect: inspectNode,
     },
-  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog, portrait, landscape])
+  })), [activeNode, inspectNode, leaveNode, nodeCacheStatus, previewNode, selectedNode, workerPods, backlog, portrait])
 
   // The same details render in the desktop inspector and the portrait panel.
   const details = (
@@ -317,13 +300,13 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   )
 
   return (
-    <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel phone-landscape:grid phone-landscape:grid-cols-[minmax(0,1fr)_auto] phone-landscape:grid-rows-[minmax(0,1fr)_auto]">
+    <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel">
       <div ref={flowBoxRef} className="min-h-0 flex-1">
         <ReactFlow
           onInit={(instance) => { flowRef.current = instance }}
           aria-label="System architecture diagram"
           nodes={nodes}
-          edges={portrait ? (landscape ? landscapeEdges : portraitEdges) : architectureEdges}
+          edges={portrait ? portraitEdges : architectureEdges}
           defaultEdgeOptions={portrait ? portraitEdgeOptions : defaultEdgeOptions}
           nodeTypes={nodeTypes}
           colorMode="dark"
@@ -349,10 +332,8 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         </div>
       ) : detailsOpen ? (
         // Capped so the diagram keeps its room; the close button stays
-        // pinned while the details scroll, and text keeps clear of it. A
-        // phone held sideways has no height to spare, so there it opens
-        // beside the diagram instead, at full height.
-        <div ref={detailsRef} id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline phone-landscape:max-h-none! phone-landscape:w-[40vw] phone-landscape:border-t-0 phone-landscape:border-l" style={portraitPanelStyle}>
+        // pinned while the details scroll, and text keeps clear of it.
+        <div ref={detailsRef} id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline" style={portraitPanelStyle}>
           <div ref={inspectorRef} className="min-h-0 flex-1 overflow-y-auto py-4 pl-4 pr-14">
             {details}
           </div>
@@ -377,7 +358,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           ref={lockedBarRef}
           type="button"
           aria-disabled="true"
-          className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted phone-landscape:col-span-2"
+          className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted"
         >
           <span className="min-w-0 truncate">{PORTRAIT_DETAILS_HINT}</span>
           <span className="flex shrink-0 items-center opacity-40">

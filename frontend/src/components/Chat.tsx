@@ -266,10 +266,9 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
 
       {inputAccessory}
 
-      {/* A phone held sideways puts the topic chips beside the ask box: one row instead of two. */}
-      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 phone-landscape:flex phone-landscape:items-center phone-landscape:gap-2 ${inputTopic ? 'pb-2 phone-landscape:pt-2' : 'py-2'}`}>
+      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 ${inputTopic ? 'pb-2' : 'py-2'}`}>
         {inputTopic}
-        <form onSubmit={handleSubmit} className="flex gap-2 phone-landscape:min-w-0 phone-landscape:flex-1">
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             ref={inputRef}
             onKeyDown={handleKeyDown}
