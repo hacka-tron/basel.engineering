@@ -1,6 +1,6 @@
 # Answer cache survives unrelated re-ingests
 
-**Status:** PR open (`fix/answer-cache-source-validation`), awaiting review. Not merged, not deployed.
+**Status:** PR [#117](https://github.com/hacka-tron/basel.engineering/pull/117) open, awaiting review. Not merged, not deployed.
 
 ## TL;DR
 
