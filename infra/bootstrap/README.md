@@ -4,7 +4,8 @@ Creates the S3 Terraform state bucket, the GitHub Actions OIDC provider, and
 three roles: `glassbox-ci` (production apply, trusts the protected
 `terraform-prod` environment), `glassbox-ci-plan` (read-only Terraform plan,
 trusts the protected `terraform-plan` environment), and `glassbox-ci-release`
-(pushes the application image to ECR, trusts the `release` environment).
+(pushes the application image to ECR, trusts the `release` environment on
+`refs/heads/main` only).
 **Already applied to the real AWS account** (`404379474987`) — this is not a
 placeholder module.
 

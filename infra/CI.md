@@ -14,6 +14,10 @@ The owner subsequently chose automatic previews: `terraform-plan` has no
 required reviewer, while `terraform-prod` still requires owner approval and
 accepts only `main`.
 
+
+**Action pinning:** Third-party actions are pinned by full 40-char SHA with a plain `# vX.Y.Z` comment (not `# vX (vX.Y.Z)`; Dependabot keeps only the plain form current). Never use a bare tag or branch in `uses:`. Dependabot (`.github/dependabot.yml`) opens one grouped `ci:` PR per month for all github-actions updates.
+
+**Runner pin:** Workflows run on `ubuntu-24.04` (and `ubuntu-24.04-arm` for the release build), not `ubuntu-latest`, so the 2026-10-19 move of `ubuntu-latest` to Ubuntu 26 cannot silently change our runners (Python 3.12 and Node 22 toolcache availability on 26.04 is unproven). BACKLOG: revisit the `ubuntu-24.04` runner pin after Ubuntu 26 images are proven.
 ## Environment setup and recovery
 
 1. In GitHub repository Settings → Environments, create `terraform-plan` and
@@ -46,6 +50,109 @@ comment reports only whether there are changes and links to the workflow run.
 The apply job computes a fresh plan after approval, so review any drift visible
 in its log. GitHub environment approval is the production change gate; a merge
 alone does not apply infrastructure.
+
+## Concurrency: PR plans never cancel a main apply
+
+Until 2026-10-01 every Terraform run (PR plans, Dependabot included, and the
+main plan and apply) shared one group, `terraform-prod-state`. GitHub's rule
+for a concurrency group is: at most one run in progress, and with the default
+queue (`single`) at most one pending; a newly queued run **replaces** the
+pending one. `cancel-in-progress: false` doesn't change that, it only spares
+the running one. So each merge cancelled the previous main run, and a
+Dependabot PR's plan replaced main's queued apply before it ever reached the
+`terraform-prod` approval.
+
+Now the groups are split by event (workflow-level `concurrency`):
+
+| Run | Group | Cancel in progress | Locking |
+|---|---|---|---|
+| Terraform, PR | `terraform-pr-<number>` | yes (a new push supersedes the old plan) | `plan -lock=false` |
+| Terraform, push to `main` | `terraform-prod-main` | no | `plan`/`apply -lock-timeout=10m` |
+| Bootstrap, PR | `bootstrap-pr-<number>` | yes | `plan -lock=false` (always was) |
+| Bootstrap, Run workflow | `terraform-bootstrap-state` | no | plan `-lock=false`, apply re-plan locks |
+
+- PR plans can't touch a main run's queue, and since they don't lock, they
+  can't make an apply fail with "Error acquiring the state lock" either. A
+  PR plan that overlaps an apply reads the state before or after the write
+  (S3 writes are atomic); it's a preview, and the main run re-plans anyway.
+- Main runs are one at a time end to end: a run waiting for approval holds
+  the group. Merges that land meanwhile queue behind it, and only the newest
+  stays pending (older pending ones show as cancelled). That is intended:
+  the newest run plans and applies `main`'s head, so it covers every merge
+  before it, and the owner approves once instead of once per merge. Reject a
+  waiting run you don't want, and the pending one starts.
+- `-lock-timeout=10m` on the main plan and apply covers a lock still held by
+  something else (for example a PR run started from an older copy of this
+  workflow, which still locked).
+- **Switch-over:** runs already queued under the old `terraform-prod-state`
+  group (started before this change merged) aren't serialized with the new
+  `terraform-prod-main` group. Until they have all finished, approve only the
+  newest main run and reject older waiting ones.
+- GitHub also offers `queue: max` (up to 100 pending, FIFO). Not used: it
+  would make the owner approve every superseded main run in turn.
+
+## Release and the deploy branch
+
+`release.yml` builds the image on every push to `main` that touches an image
+input and pushes it to ECR as `<short-sha>`, `build-N` and `latest`, where N
+is `github.run_number`. Flux's `ImagePolicy` deploys the highest `build-N`.
+Two safeguards keep that honest:
+
+- **Manual runs build only `main`'s current head.** Actions → Release → Run
+  workflow is for rebuilding after a failed or flaky run. Because N grows with
+  every new run whatever commit it builds, a manual run on another branch or
+  tag, or on a `main` commit that is no longer the head (for example a run
+  that queued behind another release while a merge landed), would get the
+  highest number and Flux would roll production back to it. Three layers stop
+  that:
+  - **The gate: the release role's trust requires `refs/heads/main`** (see
+    "Release role trust" below; applied 2026-10-01). A manual run executes
+    the `release.yml` of the ref it was started on, so a branch or tag cut
+    before the in-workflow check existed has no check at all, but its token
+    carries that branch's or tag's ref, so AWS refuses the role and nothing
+    is built or pushed.
+  - **The `release` environment's deployment-branch policy (owner setting):**
+    GitHub → Settings → Environments → `release` → Deployment branches and
+    tags → Selected branches and tags → `main` only. A second layer: GitHub
+    then never issues the environment's token to another ref.
+  - **The in-workflow check, for refs that contain it.** The first step
+    (`.github/scripts/release-provenance.sh`) refuses a manual run before
+    AWS credentials are requested unless `github.ref` is `refs/heads/main`
+    and `github.sha` equals `git ls-remote origin refs/heads/main`.
+    Equality, not "is an ancestor of main": every old release is an
+    ancestor. With the branch policy in place, this is what still catches
+    a run on `main` whose commit is no longer the head. If it refuses,
+    start a new run on `main`.
+
+  Push runs skip the check: they only fire on `main`, and the `release-main`
+  concurrency group runs them in order, so a newer commit always gets a
+  higher number. A **re-run** of any earlier run keeps its `run_number`
+  (only `run_attempt` changes), so it re-pushes its own `build-N`, which
+  can't outrank newer builds; a re-run of an old manual run is refused
+  anyway, because its commit is no longer `main`'s head. One side effect
+  remains: a re-run of an old push run also moves `:latest` (and its SHA
+  tag) to that old commit, because ECR tags are mutable
+  (`infra/modules/registry`). Production is unaffected, since Flux selects
+  only by the numeric `build-N` policy, but don't treat `:latest` as "what
+  is deployed".
+- **The deploy-branch sync retries instead of losing a race.**
+  `sync-deploy-branch.yml` merges `main` into `deploy` on every push to
+  `main`; Flux's `ImageUpdateAutomation` commits tag bumps to the same
+  branch. When Flux pushes between the sync's fetch and push, the sync's push
+  is rejected as non-fast-forward. `.github/scripts/sync-deploy-branch.sh`
+  then re-fetches both branches, rebuilds the merge on the new `deploy` tip
+  and pushes again, up to 5 attempts with 5, 10, 15 and 20 s waits. It never
+  force-pushes, so Flux's commits are never dropped. A merge conflict is not
+  retried (exit 2), and running out of attempts fails the job (exit 1); in
+  both cases `deploy` is left as it was, and the fix is to resolve the
+  conflict or re-run the job. The workflow is one-at-a-time
+  (`sync-deploy-branch` concurrency group, not cancelled midway). Flux's own
+  rejected push is retried at its next 1-minute reconcile from the new tip.
+
+Both scripts have offline tests against local bare repositories, run by the
+Terraform workflow's validate job (`.github/scripts/tests/`). The sync test
+uses a `git` shim that pushes a competing "Flux" commit just before the
+script's push, so the retry path sees a real non-fast-forward rejection.
 
 ## Runbooks (push-button operations)
 
@@ -91,8 +198,13 @@ connection errors, TLS, image pull, memory, disk, probes; kine's "Slow SQL"
 lines contain SQL arguments). The few remaining free-text columns (Flux
 status, kernel OOM lines) pass through a redaction filter (`redact` in
 `infra/modules/ops/scripts/lib.sh`): URL userinfo and query strings removed,
-values after password/token/secret/key/authorization masked, JWT-like and 20+
-character base64/hex strings masked, lines cut to 160-220 characters. That
+values after password/token/secret/key/authorization masked (also when the
+value is on the following lines: YAML blocks, pretty-printed JSON, the
+values of `data:`/`stringData:` maps, PEM blocks), JWT-like and 20+
+character base64/hex strings masked, lines cut to 160-220 characters. If the
+filter itself fails, the rest of the output is withheld, not printed raw.
+Ops scripts must never read Secrets (`get secret`, jsonpath into `.data`):
+a bare value with no key around it can't be recognised. That
 filter is a safety net, not a guarantee; it has an offline test
 (`infra/modules/ops/tests/redact-test.sh`, run in CI). `ops-run.sh` runs the
 same `redact` over everything SSM returns (stdout, stderr) and over the
@@ -175,11 +287,54 @@ PR #59 denies `bootstrap/*` to `glassbox-ci`, `glassbox-ci-plan` and
 they can read and write the bootstrap state. The ops roles have no S3 grants
 at all. Bucket deletion stays denied to everyone.
 
+**Bucket policy in the plan.** The state bucket policy names the CI roles
+it denies `bootstrap/*` to. It used to take their ARNs from
+`aws_iam_role.*.arn`, so whenever one of those roles had a pending change
+(PR #98's release-role trust edit), Terraform deferred reading the policy
+document to apply time and the plan also listed
+`aws_s3_bucket_policy.state` as "updated in-place ... (known after apply)".
+Apply then found the JSON identical and changed nothing ("2 to change", 1
+changed). The ARNs are now built from the account ID and role names (same
+strings), with `depends_on` on the roles, so a role change plans as just
+that role. It was never a perpetual diff: plans with no role change were
+already clean.
+
 `glassbox-bootstrap-plan` trusts only `bootstrap-plan` (no reviewer, any
 branch, like `terraform-plan`). It has IAM `Get*`/`List*`, bucket-level
 `s3:Get*`/`s3:List*` on the state bucket, and `s3:GetObject` on
 `bootstrap/terraform.tfstate`. It plans with `-lock=false`, so it has no
 write access.
+
+## Release role trust
+
+Applied through the Bootstrap workflow on 2026-10-01 (PR #98).
+
+`glassbox-ci-release` (`release_trust` in `infra/bootstrap/main.tf`) is
+assumed only by `release.yml`'s `build-and-push` job. Its trust requires
+both:
+
+- `sub` = `<immutable prefix>:environment:release`, and
+- `token.actions.githubusercontent.com:ref` = `refs/heads/main`.
+
+A manual Release run on any other branch or tag then can't get AWS
+credentials, even if the `release` environment's branch policy is missing or
+loosened. STS has accepted GitHub claims (`ref`, `job_workflow_ref`,
+`environment`, `workflow`, `repository_id` and others) as trust-policy
+condition keys since January 2026 (AWS IAM User Guide, "IAM and AWS STS
+condition context keys", OIDC federation, GitHub tab). The immutable subject
+changes only `sub`; `ref` is the plain git ref. `job_workflow_ref` was not
+used: it carries the mutable owner/repo names, and it would break releases
+if `release.yml` were renamed. (AWS documents it for reusable workflows, but
+GitHub emits it for every job; that doesn't change the choice.)
+This check does not catch a run on `main` whose commit is no longer the
+head; the in-workflow provenance check covers that. `sync-deploy-branch.yml`
+uses no AWS role.
+
+The other roles still trust only their environment `sub` (or `main` for
+`glassbox-ops-read`). `terraform-prod`, `ops` and `bootstrap` are `main`-only
+environments, so a `ref` condition there would be defence in depth only. The
+plan roles must keep working on PR refs (`refs/pull/N/merge`), so they can't
+be pinned to `main`.
 
 ## One-time owner setup (the last manual step)
 
