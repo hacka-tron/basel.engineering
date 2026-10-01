@@ -44,6 +44,7 @@ Backend / RAG (`services/glassbox/`):
 - Embedding-model isolation: chunks are tagged with a hashed model id and search filters on it; a partial re-ingest must not mix vectors. Cache keys must include model + prompt version.
 - Budgets: refund to the reserving UTC day; never refund an uncertain call (a timeout after the POST was sent); count every generation attempt; the warmer shares a daily cap and must stop on limit errors. Mixed old/new pod versions must not double-spend (counters carried across deploys).
 - Disconnect handling: poll fallback must run during continuous output, not only on quiet; cancel must close the Bedrock stream even before headers arrive.
+- Middleware must stay pure ASGI (edit `http.response.start`, pass body chunks through), like `security_headers.py`: `BaseHTTPMiddleware` or GZip would buffer or compress the SSE streams. Security headers are set in the app, not Cloudflare.
 - Alembic: new columns need migrate-before-api ordering (init gate `wait_for_migrations`, bounded per attempt). DB-backed tests skip without MySQL, so run them or say they skipped.
 
 k8s / Flux (`k8s/`):

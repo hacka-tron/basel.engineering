@@ -238,8 +238,13 @@ midway).
 Both roles are defined in `infra/bootstrap/runbooks.tf`. They reuse
 `local.github_oidc_subject_prefix`, the immutable OIDC subject.
 
-- `glassbox-ops-read` trusts the `ops-read` environment, plus `main` for
-  jobs that have no environment. It can call `ssm:SendCommand` only with
+- `glassbox-ops-read` trusts only the `ops-read` environment (no reviewer,
+  `main`-only branch policy). It used to trust plain `main` jobs with no
+  environment as well; that subject was removed because nothing used it
+  (`ops.yml`'s diagnose job is the only caller and always runs in
+  `ops-read`), and it let any `main` job with `id-token: write` run
+  diagnose. A new workflow that needs diagnose must use the `ops-read`
+  environment. It can call `ssm:SendCommand` only with
   `glassbox-ops-diagnose`, and only on an instance tagged
   `Name=glassbox,project=glassbox`. It can also read command results and
   instance state (`ssm:GetCommandInvocation`,
@@ -330,8 +335,7 @@ This check does not catch a run on `main` whose commit is no longer the
 head; the in-workflow provenance check covers that. `sync-deploy-branch.yml`
 uses no AWS role.
 
-The other roles still trust only their environment `sub` (or `main` for
-`glassbox-ops-read`). `terraform-prod`, `ops` and `bootstrap` are `main`-only
+The other roles still trust only their environment `sub`. `terraform-prod`, `ops` and `bootstrap` are `main`-only
 environments, so a `ref` condition there would be defence in depth only. The
 plan roles must keep working on PR refs (`refs/pull/N/merge`), so they can't
 be pinned to `main`.
