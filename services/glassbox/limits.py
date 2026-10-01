@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import ipaddress
+import logging
 import os
 import time
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ from typing import Protocol
 
 from fastapi import Request
 
+LOGGER = logging.getLogger(__name__)
 RATE_WINDOW_MS = 10 * 60 * 1000
 RATE_CAPACITY = 10
 _LOCAL_SALT = os.urandom(32)
@@ -120,21 +122,117 @@ def get_daily_budget(client) -> DailyBudget:
     return RedisDailyBudget(client, cap=int(os.getenv("GLASSBOX_DAILY_LLM_CAP", "100")))
 
 
-def client_ip_hash(request: Request) -> str:
-    peer = request.client.host if request.client else "unknown"
+# Real ip_hash_salt values are 64 characters (infra/modules/secrets); anything
+# much shorter is a misconfiguration, not a key.
+MIN_IP_HASH_SALT_LENGTH = 32
+
+
+def validate_ip_hash_salt() -> None:
+    """Fail closed at API startup when production requires a stable salt.
+
+    Without GLASSBOX_IP_HASH_SALT the hash falls back to a random per-process
+    salt: still private, but every restart or extra replica gets its own rate
+    limit buckets, and query-log hashes stop being comparable. Production sets
+    GLASSBOX_REQUIRE_IP_HASH_SALT=true (k8s/base/configmap-app.yaml), so a
+    missing or empty secret stops the pod instead of degrading silently.
+    """
+    if os.getenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "").strip().lower() not in {"1", "true", "yes"}:
+        return
+    if len(os.getenv("GLASSBOX_IP_HASH_SALT", "").strip()) < MIN_IP_HASH_SALT_LENGTH:
+        raise ValueError(
+            "GLASSBOX_IP_HASH_SALT must be set (at least "
+            f"{MIN_IP_HASH_SALT_LENGTH} characters) when GLASSBOX_REQUIRE_IP_HASH_SALT is true"
+        )
+
+
+def _parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     try:
-        peer_address = ipaddress.ip_address(peer)
+        return ipaddress.ip_address(value.strip())
     except ValueError:
-        peer_address = None
+        return None
+
+
+def _is_trusted(address, networks) -> bool:
+    return address is not None and any(address in network for network in networks)
+
+
+# At most one "trusted proxy fallback" warning per interval per process.
+_FALLBACK_WARNING_INTERVAL_S = 60.0
+_last_fallback_warning = float("-inf")
+
+
+def _warn_trusted_proxy_fallback() -> None:
+    """Make a missing client IP header visible without flooding the log.
+
+    If Cloudflare stops sending CF-Connecting-IP (for example its "Remove
+    visitor IP headers" managed transform is switched on), every visitor would
+    silently share the proxy's single rate-limit bucket. No addresses logged.
+    """
+    global _last_fallback_warning
+    now = time.monotonic()
+    if now - _last_fallback_warning < _FALLBACK_WARNING_INTERVAL_S:
+        return
+    _last_fallback_warning = now
+    LOGGER.warning(
+        "Client IP header missing or invalid on a proxied request; rate limit is "
+        "keyed on the trusted proxy fallback (one shared bucket)"
+    )
+
+
+def client_address(request: Request) -> str:
+    """The visitor's IP, believing forwarding headers only from trusted proxies.
+
+    Forwarding headers are read only when the TCP peer is inside
+    GLASSBOX_TRUSTED_PROXY_CIDRS (in production: the pod network, i.e. Traefik).
+    Then, in order:
+      1. GLASSBOX_CLIENT_IP_HEADER, if configured (production: CF-Connecting-IP,
+         which Cloudflare always overwrites with the address it saw, and the
+         node's security group only admits Cloudflare);
+      2. X-Forwarded-For, walked from the right, skipping trusted proxies: the
+         first untrusted hop is the closest address a trusted proxy vouched
+         for. The leftmost entry is whatever the client chose to send, so it
+         is never used on its own.
+    Anything unparsable falls back to the next option, and finally to the peer.
+    """
+    peer = request.client.host if request.client else "unknown"
     trusted = os.getenv("GLASSBOX_TRUSTED_PROXY_CIDRS", "")
     networks = [
         ipaddress.ip_network(value.strip()) for value in trusted.split(",") if value.strip()
     ]
-    if peer_address is not None and any(peer_address in network for network in networks):
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        try:
-            peer = str(ipaddress.ip_address(forwarded))
-        except ValueError:
-            pass
+    if not _is_trusted(_parse_ip(peer), networks):
+        return peer
+    header = os.getenv("GLASSBOX_CLIENT_IP_HEADER", "").strip().lower()
+    if header:
+        address = _parse_ip(request.headers.get(header, ""))
+        if address is not None:
+            return str(address)
+    hops = [hop for hop in request.headers.get("x-forwarded-for", "").split(",") if hop.strip()]
+    for hop in reversed(hops):
+        address = _parse_ip(hop)
+        if address is None:
+            break
+        if not _is_trusted(address, networks):
+            return str(address)
+    # Only proxied requests carry X-Forwarded-For (Traefik always sets it); the
+    # in-cluster answer warmer calls the api directly without it.
+    if header and hops:
+        _warn_trusted_proxy_fallback()
+    return peer
+
+
+def _rate_limit_identity(address: str) -> str:
+    # One IPv6 subscriber usually holds a whole /64, so key on the /64;
+    # otherwise rotating addresses inside it would give a fresh bucket each time.
+    # An IPv4-mapped address (::ffff:1.2.3.4) is the same visitor as 1.2.3.4.
+    parsed = _parse_ip(address)
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.ipv4_mapped is not None:
+            return str(parsed.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{parsed}/64", strict=False))
+    return address
+
+
+def client_ip_hash(request: Request) -> str:
     salt = os.getenv("GLASSBOX_IP_HASH_SALT", "").encode() or _LOCAL_SALT
-    return hmac.new(salt, peer.encode(), hashlib.sha256).hexdigest()
+    identity = _rate_limit_identity(client_address(request))
+    return hmac.new(salt, identity.encode(), hashlib.sha256).hexdigest()

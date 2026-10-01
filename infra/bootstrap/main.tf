@@ -54,6 +54,36 @@ resource "aws_s3_bucket_public_access_block" "state" {
 #     delete this root's own state (bootstrap/*). That state defines the CI
 #     roles' permissions, so CI must not be able to tamper with it. The roles'
 #     IAM policies don't grant it either; this explicit deny is a second layer.
+#
+# The denied role ARNs are built from the account ID and the role names, not
+# read from aws_iam_role.*.arn. A reference to a role makes Terraform defer
+# reading this document to apply time whenever that role has any pending
+# change (a trust-policy edit, say), so the plan then also shows the bucket
+# policy as "updated in-place ... (known after apply)" even though the JSON
+# comes out identical and apply changes nothing. The resulting ARNs are the
+# same strings (the roles have no path); depends_on on the bucket policy below
+# keeps the roles created before the policy names them. The names live in one
+# local, used by the aws_iam_role resources too, so they can't drift apart.
+#
+# Caveat: AWS stores a role principal in a resource policy as the role's
+# unique ID. If one of these roles is ever replaced (destroyed and created
+# again), the stored deny keeps pointing at the old ID, so it no longer
+# covers the new role, until the next bootstrap apply rewrites this policy
+# (AWS then shows the dead principal as a bare unique ID, which the plan
+# reports as a diff). Run that apply right after replacing a CI role.
+locals {
+  ci_role_names = {
+    ci      = "glassbox-ci"
+    plan    = "glassbox-ci-plan"
+    release = "glassbox-ci-release"
+  }
+
+  bootstrap_state_denied_role_arns = [
+    for role in ["ci", "plan", "release"] :
+    "arn:aws:iam::${var.aws_account_id}:role/${local.ci_role_names[role]}"
+  ]
+}
+
 data "aws_iam_policy_document" "state_bucket" {
   statement {
     sid       = "DenyInsecureTransport"
@@ -92,12 +122,8 @@ data "aws_iam_policy_document" "state_bucket" {
     resources = ["${aws_s3_bucket.state.arn}/bootstrap/*"]
 
     principals {
-      type = "AWS"
-      identifiers = [
-        aws_iam_role.ci.arn,
-        aws_iam_role.plan.arn,
-        aws_iam_role.release.arn,
-      ]
+      type        = "AWS"
+      identifiers = local.bootstrap_state_denied_role_arns
     }
   }
 }
@@ -106,8 +132,14 @@ resource "aws_s3_bucket_policy" "state" {
   bucket = aws_s3_bucket.state.id
   policy = data.aws_iam_policy_document.state_bucket.json
 
-  # Public access block settings must be in place before a policy is attached.
-  depends_on = [aws_s3_bucket_public_access_block.state]
+  # Public access block settings must be in place before a policy is attached,
+  # and S3 rejects a policy naming a role that doesn't exist yet.
+  depends_on = [
+    aws_s3_bucket_public_access_block.state,
+    aws_iam_role.ci,
+    aws_iam_role.plan,
+    aws_iam_role.release,
+  ]
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -165,7 +197,7 @@ data "aws_iam_policy_document" "ci_trust" {
 }
 
 resource "aws_iam_role" "ci" {
-  name               = "glassbox-ci"
+  name               = local.ci_role_names.ci
   assume_role_policy = data.aws_iam_policy_document.ci_trust.json
 }
 
@@ -435,7 +467,7 @@ data "aws_iam_policy_document" "plan_trust" {
 }
 
 resource "aws_iam_role" "plan" {
-  name               = "glassbox-ci-plan"
+  name               = local.ci_role_names.plan
   assume_role_policy = data.aws_iam_policy_document.plan_trust.json
 }
 
@@ -604,6 +636,17 @@ resource "aws_iam_role_policy" "plan" {
 # Pushes the application image to ECR on every merge to main. Scoped to a
 # dedicated "release" GitHub environment (not the terraform-plan/prod ones -
 # this never touches infrastructure, only an already-tested image).
+#
+# The sub condition alone accepts any ref that can use the "release"
+# environment, so a manual Release run on an old branch or tag could push a
+# higher build-N that Flux deploys. The ref condition also requires the run's
+# git ref to be main, independently of the environment's branch policy.
+# STS evaluates GitHub claims as condition keys
+# (token.actions.githubusercontent.com:ref, IAM condition keys reference,
+# OIDC federation, GitHub tab). The immutable subject only changes sub; ref
+# is the plain "refs/heads/main". Not job_workflow_ref: it carries the
+# mutable owner/repo names and would tie this role to the workflow's file
+# name; see infra/CI.md "Release role trust".
 data "aws_iam_policy_document" "release_trust" {
   statement {
     effect  = "Allow"
@@ -625,11 +668,17 @@ data "aws_iam_policy_document" "release_trust" {
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["${local.github_oidc_subject_prefix}:environment:release"]
     }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/main"]
+    }
   }
 }
 
 resource "aws_iam_role" "release" {
-  name               = "glassbox-ci-release"
+  name               = local.ci_role_names.release
   assume_role_policy = data.aws_iam_policy_document.release_trust.json
 }
 
