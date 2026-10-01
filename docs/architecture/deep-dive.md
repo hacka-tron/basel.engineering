@@ -359,7 +359,7 @@ All Glassbox cloud resources are defined in Terraform under `infra/` and live in
 
 **Terraform layout.**
 
-- `infra/bootstrap`: the root that creates the S3 state bucket (versioned, encrypted, public access blocked, TLS-only, protected from deletion by a bucket policy and `prevent_destroy`), the GitHub OIDC identity provider, and the IAM roles CI uses: the Terraform apply role, a read-only plan role, the image release role, two operations-runbook roles and two bootstrap-pipeline roles. Each role trusts only a specific GitHub environment of this repository.
+- `infra/bootstrap`: the root that creates the S3 state bucket (versioned, encrypted, public access blocked, TLS-only, protected from deletion by a bucket policy and `prevent_destroy`), the GitHub OIDC identity provider, and the IAM roles CI uses: the Terraform apply role, a read-only plan role, the image release role, two operations-runbook roles and two bootstrap-pipeline roles. Each role trusts only a specific GitHub environment of this repository; the image release role also requires the run to be on `main`.
 - `infra/envs/prod`: the production root. It uses an S3 backend with Terraform's native lockfile (no DynamoDB table) and wires six modules together.
 - `modules/network`: one VPC, one public subnet in one availability zone, an internet gateway and a route table. There is no NAT gateway, which would cost more than everything else combined.
 - `modules/compute`: the EC2 instance, security group, IAM instance role and profile, an Elastic IP, and the compressed-swap setup (`zram.tf`).

@@ -181,6 +181,34 @@ branch, like `terraform-plan`). It has IAM `Get*`/`List*`, bucket-level
 `bootstrap/terraform.tfstate`. It plans with `-lock=false`, so it has no
 write access.
 
+## Release role trust
+
+`glassbox-ci-release` (`release_trust` in `infra/bootstrap/main.tf`) is
+assumed only by `release.yml`'s `build-and-push` job. Its trust requires
+both:
+
+- `sub` = `<immutable prefix>:environment:release`, and
+- `token.actions.githubusercontent.com:ref` = `refs/heads/main`.
+
+So a manual Release run on any other branch or tag can't get AWS
+credentials, even if the `release` environment's branch policy is missing or
+loosened. STS has accepted GitHub claims (`ref`, `job_workflow_ref`,
+`environment`, `workflow`, `repository_id` and others) as trust-policy
+condition keys since January 2026 (AWS IAM User Guide, "IAM and AWS STS
+condition context keys", OIDC federation, GitHub tab). The immutable subject
+changes only `sub`; `ref` is the plain git ref. `job_workflow_ref` was not
+used: it carries the mutable owner/repo names, AWS documents it for reusable
+workflows only, and it would break releases if `release.yml` were renamed.
+This check does not catch a run on `main` whose commit is no longer the
+head; the in-workflow provenance check covers that. `sync-deploy-branch.yml`
+uses no AWS role.
+
+The other roles still trust only their environment `sub` (or `main` for
+`glassbox-ops-read`). `terraform-prod`, `ops` and `bootstrap` are `main`-only
+environments, so a `ref` condition there would be defence in depth only. The
+plan roles must keep working on PR refs (`refs/pull/N/merge`), so they can't
+be pinned to `main`.
+
 ## One-time owner setup (the last manual step)
 
 The new roles live in `infra/bootstrap`, so they can't create themselves.
