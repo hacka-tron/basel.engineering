@@ -231,9 +231,10 @@ data "aws_iam_policy_document" "ci" {
   # aws:ResourceTag on Describe/Update/DeleteAssociation): only associations
   # tagged project=glassbox can be created, read, changed or deleted.
   #
-  # Residual risk: IAM never checks an association's Targets (InstanceIds or
-  # target tags) against any resource, so this role could still run a
-  # glassbox-* document it wrote on another instance in this region. And the
+  # Residual risk: IAM checks InstanceIds targets against the instance
+  # (tag-scoped below), but tag-based targets are not checked against any
+  # resource, so this role could still target a glassbox-* document by tag at
+  # another instance in this region. And the
   # pre-existing RegionalParameterStore statement grants
   # ssm:AddTagsToResource region-wide, so the role could tag a foreign
   # association project=glassbox to bring it into scope. Accepted: the
@@ -267,6 +268,22 @@ data "aws_iam_policy_document" "ci" {
     condition {
       test     = "StringEquals"
       variable = "aws:RequestTag/project"
+      values   = ["glassbox"]
+    }
+  }
+
+  # Create/UpdateAssociation are also authorized against each target
+  # instance (the first live apply failed with AccessDenied on
+  # instance/i-...), so allow them only on instances tagged project=glassbox.
+  statement {
+    sid       = "AssociateTaggedProjectInstances"
+    effect    = "Allow"
+    actions   = ["ssm:CreateAssociation", "ssm:UpdateAssociation"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:resourceTag/project"
       values   = ["glassbox"]
     }
   }
