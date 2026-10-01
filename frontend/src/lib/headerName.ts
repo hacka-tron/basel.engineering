@@ -1,7 +1,7 @@
 /**
  * Full name vs short name in the header.
  *
- * The header row is [name, (desktop: topic nav), Contact envelope + GitHub]. The
+ * The header row is [name ... Contact envelope + GitHub] at every width. The
  * full name is shown whenever its natural width fits in what the other items
  * leave; otherwise the short form keeps Contact and GitHub on the first line.
  * Decided by measurement (font loading changes widths),
@@ -12,9 +12,9 @@ export const FULL_NAME = 'Basel Abdel-Rahman'
 export const SHORT_NAME = 'Basel A-R'
 
 /**
- * Minimum breathing room between the end of the name and whatever follows it
- * (the Contact envelope, or the topic nav at md+). Below md the row's own gap is
- * already 16px, so only the shortfall against this value is reserved.
+ * Minimum breathing room between the end of the name and the Contact envelope.
+ * The row's own gap is already 16px, so only the shortfall against this value
+ * is reserved.
  */
 export const MIN_GAP_PX = 16
 
