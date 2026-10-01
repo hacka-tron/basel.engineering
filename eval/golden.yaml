@@ -476,11 +476,11 @@ cases:
     origin: new
     corpus: about_system
     category: planned
-    notes: DESIGN.md §15 says the eval runs in CI; the deep dive says it is manual.
+    notes: The deep dive and DESIGN.md §15 both say it runs manually (DESIGN.md said CI until the 2026-10-01 drift pass).
     question: Does the retrieval evaluation run in CI on every pull request?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - The recall@5 and MRR harness runs manually and does not gate pull requests.
+      - the answer eval run manually and do not gate pull requests
     must_include: ['manual']
   - id: planned-citation-links
     origin: new
@@ -531,7 +531,7 @@ cases:
     question: Can I stop an answer while it is still streaming?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - the Stop button and the idle watchdog are already live
+      - While an answer streams, the send button becomes **Stop**
     must_include: ['\bstop']
   - id: live-follow-ups
     origin: new

@@ -10,7 +10,9 @@ import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
-import { DESKTOP_QUERY, PHONE_LANDSCAPE_QUERY } from './lib/layout'
+import { DESKTOP_QUERY } from './lib/layout'
+import { useRotateScreen } from './hooks/useRotateScreen'
+import RotateScreen from './components/RotateScreen'
 import { useStressTest } from './hooks/useStressTest'
 import { architectureNodes, questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
@@ -603,16 +605,16 @@ function App() {
     // again, as before (Retry also exists).
   }
   // Matches Tailwind's `md` breakpoint (redefined in index.css so a phone held
-  // sideways keeps the phone layout). Drives which ArchitecturePanel / React
+  // sideways keeps the phone layout under the rotate screen). Drives which ArchitecturePanel / React
   // Flow instance is mounted so only one ever exists at a time — see the
   // comment above the desktop panel render below.
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
-  const isPhoneLandscape = useMediaQuery(PHONE_LANDSCAPE_QUERY)
+  // A phone held sideways shows "turn your phone upright" instead of the app.
+  // The app stays mounted underneath (hidden and inert, not unmounted), so a
+  // streaming answer, the conversation and the selection survive the turn.
+  const showRotateScreen = useRotateScreen()
   const showDiagramView = !isDesktop && mobileView === 'diagram'
   const focusMode = !isDesktop && askFocused
-  // A phone held sideways is too short for the header and the diagram, so
-  // the header slides away in Diagram view (the footer stays: stress test).
-  const headerOpen = !focusMode && !(isPhoneLandscape && showDiagramView)
 
   // The diagram view is a history entry, so the browser's Back button (and
   // Escape, "Chat", or "Continue in chat") returns to the conversation.
@@ -737,9 +739,14 @@ function App() {
   )
 
   return (
-    <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
-      <Collapsible open={headerOpen}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0 phone-landscape:py-0`}>
+    <>
+    <div
+      inert={showRotateScreen}
+      aria-hidden={showRotateScreen || undefined}
+      className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
+    >
+      <Collapsible open={!focusMode}>
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
         {/*
           Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
           chips sit above the ask box in Chat view). The envelope sits directly
@@ -788,8 +795,7 @@ function App() {
             <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
               <ArchitecturePanel
                 portrait
-                landscape={isPhoneLandscape}
-                fitMinZoom={isPhoneLandscape ? 0.65 : 0.75}
+                fitMinZoom={0.75}
                 activeNode={activeNode}
                 nodeCacheStatus={nodeCacheStatus}
                 retrievedChunks={retrievedChunks}
@@ -843,6 +849,8 @@ function App() {
       />
       </Collapsible>
     </div>
+    {showRotateScreen && <RotateScreen />}
+    </>
   )
 }
 
