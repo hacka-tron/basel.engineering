@@ -4,9 +4,8 @@ const TRANSITION_MS = 200
 
 /**
  * Below md, slides its child closed to zero height. Used by focus mode (hides
- * the header and footer while the ask box has focus) and by the Diagram view
- * (hides the topic nav). Animates grid rows rather
- * than height, so the content keeps its natural size and nothing reflows
+ * the header and footer while the ask box has focus). Animates grid rows
+ * rather than height, so the content keeps its natural size and nothing reflows
  * inside it. Content is clipped only while closed or moving, so tooltips that
  * open out of the footer are not cut off once it is fully open. At md+ both
  * wrappers are `display: contents`, so the desktop layout is untouched.

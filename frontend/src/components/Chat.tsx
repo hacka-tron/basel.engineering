@@ -18,6 +18,8 @@ type ChatProps = {
   onStop: () => void
   onNewChat: () => void
   inputAccessory?: ReactNode
+  /** Below md, the topic chips; rendered directly above the ask box. */
+  inputTopic?: ReactNode
   /**
    * Shown in place of the messages (mobile diagram view). The messages stay
    * mounted underneath, so their scroll position survives the switch.
@@ -32,7 +34,7 @@ const FOLLOW_THRESHOLD_PX = 80
 // answer it just asked for.
 const STOP_GUARD_MS = 400
 
-function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory, replacement, onInputFocusChange }: ChatProps) {
+function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory, inputTopic, replacement, onInputFocusChange }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
   const askedAtRef = useRef(0)
@@ -189,7 +191,8 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
 
       {inputAccessory}
 
-      <div className="shrink-0 px-4 py-2 md:px-7 md:pb-7 md:pt-0">
+      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 ${inputTopic ? 'pb-2' : 'py-2'}`}>
+        {inputTopic}
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             onFocus={() => onInputFocusChange?.(true)}

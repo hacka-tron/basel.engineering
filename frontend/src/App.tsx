@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import Collapsible from './components/Collapsible'
-import ContactReveal, { ContactMeasure } from './components/ContactReveal'
-import TopicMenu, { type TopicOption } from './components/TopicMenu'
+import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
+import TopicChips, { type TopicChip } from './components/TopicChips'
 import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
-import { useFullNameFits, useHeaderFit } from './hooks/useFullNameFits'
+import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
@@ -36,9 +36,9 @@ export type Corpus = 'basel' | 'system'
 
 const CORPORA: Corpus[] = ['basel', 'system']
 
-const TOPIC_OPTIONS: TopicOption<Corpus>[] = [
-  { value: 'basel', label: 'About Basel', short: 'About Basel' },
-  { value: 'system', label: 'About This System', short: 'This System' },
+const TOPIC_CHIPS: TopicChip<Corpus>[] = [
+  { value: 'basel', label: 'About Basel', short: 'Basel' },
+  { value: 'system', label: 'About This System', short: 'System' },
 ]
 
 function apiCorpus(corpus: Corpus): ApiCorpus {
@@ -577,29 +577,14 @@ function App() {
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
-  const shortMeasureRef = useRef<HTMLSpanElement>(null)
-  const contactTextMeasureRef = useRef<HTMLSpanElement>(null)
-  const contactIconMeasureRef = useRef<HTMLSpanElement>(null)
-  const topicMenuRef = useRef<HTMLDivElement>(null)
-  const githubRef = useRef<HTMLAnchorElement>(null)
-  const desktopFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
-  // Below md, one row: [name, topic menu ... Contact, GitHub]. Measured
-  // priority: full name, then the short name, then Contact as an icon.
-  const mobileFit = useHeaderFit(
-    headerRef,
-    { fullName: nameMeasureRef, shortName: shortMeasureRef, contactText: contactTextMeasureRef, contactIcon: contactIconMeasureRef },
-    [topicMenuRef, githubRef],
-    3,
-    !isDesktop,
-  )
-  const showFullName = isDesktop ? desktopFullName : mobileFit === 'full'
+  // One handler for the desktop nav and the mobile topic chips.
   const selectTopic = (next: Corpus) => {
     if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
     else setCorpus('system')
   }
+  const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
-  // Rendered before the Contact group at md+ and after it below md so DOM/tab
-  // order matches the visual order at both layouts (visual order via `order-*`).
+  // md+ only; below md the topic is chosen with the chips above the ask box.
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
         <button
@@ -627,10 +612,10 @@ function App() {
       <Collapsible open={!focusMode}>
       <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
         {/*
-          Below md: one row, [h1, topic menu ... Contact, GitHub]. Contact
-          sits directly left of the GitHub icon as one right-aligned pair, the
-          same grouping as desktop. At md+ the row is
-          [h1, nav ... Contact me, GitHub].
+          Below md: one row, [h1 ... Contact me, GitHub] (the topic chips sit
+          above the ask box). Contact me sits directly left of the GitHub icon
+          as one right-aligned pair, the same grouping as desktop. At md+ the
+          row is [h1, nav ... Contact me, GitHub] (visual order via `order-*`).
         */}
         <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
           {/* Screen readers always get the full name; the visible text swaps to
@@ -640,18 +625,11 @@ function App() {
           <span aria-hidden="true">{showFullName ? FULL_NAME : SHORT_NAME}</span>
         </h1>
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
-        {!isDesktop && (
-          <>
-            <span ref={shortMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{SHORT_NAME}</span>
-            <ContactMeasure textRef={contactTextMeasureRef} iconRef={contactIconMeasureRef} />
-          </>
-        )}
-          {isDesktop ? topicNav : <div ref={topicMenuRef} className="order-2 shrink-0"><TopicMenu value={corpus} options={TOPIC_OPTIONS} onChange={selectTopic} /></div>}
+          {isDesktop && topicNav}
 
-        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
-          <ContactReveal variant={!isDesktop && mobileFit === 'icon' ? 'icon' : 'text'} />
+        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
+          <ContactReveal />
           <a
-            ref={githubRef}
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
             rel="noopener noreferrer"
@@ -693,6 +671,7 @@ function App() {
               />
             </div>
           ) : undefined}
+          inputTopic={isDesktop ? undefined : <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} />}
           inputAccessory={
             <PipelineStrip
               view={showDiagramView ? 'diagram' : 'chat'}
