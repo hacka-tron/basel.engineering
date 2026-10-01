@@ -18,17 +18,12 @@ export type LastStats = {
   cacheStatus: 'hit' | 'miss'
 }
 
-/** The readout split for layout: the timing, and whether it was a cache hit. */
-export function lastStatsParts(stats: LastStats | null): { timing: string; cached: boolean; description: string } {
+/** The visible timing and the description used for the tooltip and screen readers. Cache hits are not marked here; only the tooltip mentions them. */
+export function lastStatsParts(stats: LastStats | null): { timing: string; description: string } {
   const firstToken = 'Time to first token'
-  if (!stats) return { timing: '—', cached: false, description: firstToken }
-  if (stats.firstTokenMs === null) return { timing: `total ${stats.totalMs}ms`, cached: false, description: 'Total request time (no answer text was generated)' }
-  return { timing: `${stats.firstTokenMs}ms`, cached: stats.cacheStatus === 'hit', description: firstToken }
-}
-
-export function lastStatsLabel(stats: LastStats | null): string {
-  const { timing, cached } = lastStatsParts(stats)
-  return cached ? `${timing} · cached` : timing
+  if (!stats) return { timing: '—', description: firstToken }
+  if (stats.firstTokenMs === null) return { timing: `total ${stats.totalMs}ms`, description: 'Total request time (no answer text was generated)' }
+  return { timing: `${stats.firstTokenMs}ms`, description: firstToken }
 }
 
 /** Short tooltip text (two or three lines) explaining the readout. */
