@@ -10,6 +10,9 @@ source "$here/../scripts/lib.sh"
 [ -z "${REDACT_TEST_PATH:-}" ] || PATH=$REDACT_TEST_PATH:$PATH
 
 fail=0
+# A failing helper call (e.g. a typo'd expect_* name) must fail the suite,
+# not just print "command not found" and drop that check.
+trap 'echo "FAIL line $LINENO: command failed"; fail=1' ERR
 # expect_absent <label> <secret> <input>: the secret must not survive.
 expect_absent() {
   local out

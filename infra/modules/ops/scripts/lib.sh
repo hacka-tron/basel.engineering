@@ -46,7 +46,11 @@ section() { printf '\n===== %s =====\n' "$*"; }
 #    Indent is measured in columns (tabs to multiples of 8). Known limits:
 #    after a bare `Password:`, only the first flush-left line is masked;
 #    keyword matching is by substring, so `monkey:` or `secretKeyRef:` are
-#    over-masked (acceptable, it fails closed).
+#    over-masked (acceptable, it fails closed); a continuation is caught only
+#    when it is MORE indented than its key, so free text with a quoted value
+#    and a raw newline continuing flush-left (or at a "- " item's own column)
+#    still prints; a table row ending in a keyword opener ("...token:") masks
+#    the next row.
 # 2. The per-line pass (sed), unchanged in spirit:
 #    - drops URL userinfo (user:pass@) and query strings,
 #    - masks the value after password/passwd/token/secret/key/authorization/
