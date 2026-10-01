@@ -123,7 +123,7 @@ function StatsBar({
         <button
           type="button"
           ref={latencyPressRef}
-          aria-label={`${latency.description}: ${latency.timing}`}
+          aria-label={`${latency.description}: ${latency.timing}${latency.cached ? ', cached' : ''}`}
           aria-describedby={latencyTooltipId}
           onClick={latencyPressHandlers.onClick}
           onPointerDown={latencyPressHandlers.onPointerDown}
@@ -134,6 +134,7 @@ function StatsBar({
           className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
         >
           <span>{latency.timing}</span>
+          {latency.cached && <span className="ml-1">· cached</span>}
           <span
             id={latencyTooltipId}
             role="tooltip"
