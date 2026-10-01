@@ -92,6 +92,10 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 - **`agy` reviews on larger/more file-heavy diffs can take longer than the default assumption** — a review covering 4 files (chunkers) or an integration-heavy task (ingestion script) sometimes needs 5-8 minutes, not the ~2-3 minutes smaller Phase 0 reviews took. Give `agy` calls a generous timeout (300-480s) rather than the tool default, especially for anything reviewing more than 1-2 files.
 - **Real end-to-end verification keeps earning its keep.** Running the actual ingestion job against real corpus content (not just tests) surfaced a genuinely interesting correctness signal for free: the secret scanner correctly quarantined the ingestion pipeline's own test file, because that file legitimately contains a fake-AWS-key string as its own test fixture. Nothing broke — but this is exactly the kind of thing that only shows up by running the real thing against real data, not by reading code or running synthetic-fixture tests.
 
+## Bugs
+
+- **Footer latency says "· cached" after every suggested question (owner, 2026-10-01).** Suggested questions are pre-warmed by the `warm-answers` CronJob, so they always hit the answer cache, and the footer appends `· cached` (`frontend/src/components/StatsBar.tsx`, `lib/lastStats.ts`). The owner doesn't want that shown. Planned fix: drop the visible `· cached` and keep the cache hit in the hover/long-press tooltip only. It was implemented as #85 and reverted at the owner's request ("for now dont implement this, put it in the bug backlog"), so pick it up only when the owner asks. Docs to update with it: DESIGN.md "Footer latency" (ingested), SNAPSHOT and the MOBILE_DESIGN.md owner decisions.
+
 ## Feature work (priority)
 
 Owner wants this worked first, ahead of the security/infra/data-pipeline groups below. Done and removed on 2026-10-01: conversational memory and per-topic chats (#41), Stop/auto-scroll/persistence (#48), suggested-question chips hidden once a conversation starts, hover-to-reveal node technology on the diagram (#33).
