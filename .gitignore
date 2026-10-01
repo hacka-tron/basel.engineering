@@ -36,3 +36,6 @@ dist/
 **/*.tfvars
 **/*.tfvars.json
 !**/*.tfvars.example
+
+# Answer eval runs (eval/run_answers.py); committed baselines live in eval/baselines/
+eval/runs/
