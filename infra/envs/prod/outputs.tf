@@ -13,3 +13,7 @@ output "mysql_password_parameter_name" {
 output "ecr_repository_url" {
   value = module.registry.repository_url
 }
+
+output "ops_document_names" {
+  value = module.ops.document_names
+}

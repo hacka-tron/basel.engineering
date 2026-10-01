@@ -1,0 +1,159 @@
+name: Bootstrap
+
+# Plans infra/bootstrap (the CI roles, OIDC provider and state bucket) on
+# every same-repository PR that touches it, and applies it from main after
+# owner approval: Actions -> "Bootstrap" -> Run workflow (main).
+#
+#   plan   bootstrap-plan environment, glassbox-bootstrap-plan role
+#          (read-only; plans with -lock=false). No approval.
+#   apply  workflow_dispatch on main only, and only when the plan has
+#          changes. Waits for the owner in the bootstrap environment, then
+#          re-plans with the glassbox-bootstrap role and applies that plan
+#          only if it changes exactly what the reviewed plan showed (same
+#          fingerprint); otherwise it stops without applying.
+#
+# Requires the bootstrap state to be in S3 (backend "s3" in
+# infra/bootstrap/versions.tf, state migrated with
+# `terraform init -migrate-state`). Fails fast otherwise. Setup and the
+# roles' scope: infra/CI.md "Bootstrap via pipeline".
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - infra/bootstrap/**
+      - .github/workflows/bootstrap.yml
+      - .github/scripts/plan-fingerprint.sh
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-bootstrap-state
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ROOT: infra/bootstrap
+
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: bootstrap-plan
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+      fingerprint: ${{ steps.plan.outputs.fingerprint }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the S3 backend
+        run: |
+          if ! grep -Eqs 'backend[[:space:]]+"s3"' "$ROOT"/*.tf; then
+            echo "::error::infra/bootstrap still uses local state. Merge the S3 backend change (PR #59) and run 'terraform init -migrate-state' once (infra/bootstrap/README.md) before this workflow can plan or apply bootstrap."
+            exit 1
+          fi
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Assume read-only bootstrap plan role
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::404379474987:role/glassbox-bootstrap-plan
+          role-session-name: bootstrap-plan-${{ github.run_id }}
+      - name: Initialize bootstrap state
+        run: terraform -chdir="$ROOT" init -lockfile=readonly
+      - name: Require migrated state
+        run: |
+          if [ -z "$(terraform -chdir="$ROOT" state list)" ]; then
+            echo "::error::The S3 bootstrap state is empty: the local state was never migrated. Run 'terraform init -migrate-state' in infra/bootstrap (infra/bootstrap/README.md). Refusing to plan, since an empty state would try to recreate every CI role and the state bucket."
+            exit 1
+          fi
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform -chdir="$ROOT" plan -lock=false -detailed-exitcode -no-color -out=bootstrap.tfplan
+          result=$?
+          set -e
+          case "$result" in
+            0) changes=false ;;
+            2) changes=true ;;
+            *) exit "$result" ;;
+          esac
+          echo "Changes:"
+          fingerprint=$(.github/scripts/plan-fingerprint.sh "$ROOT" bootstrap.tfplan)
+          {
+            echo "changes=$changes"
+            echo "fingerprint=$fingerprint"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Bootstrap plan"
+            echo
+            echo "- Changes: **$changes**"
+            echo "- Plan fingerprint: \`$fingerprint\`"
+            echo
+            echo "The full plan is in this job's log. Approving the bootstrap environment applies exactly this change set or nothing."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment on pull request
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANGES: ${{ steps.plan.outputs.changes }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "$CHANGES" in
+            true) result="changes proposed" ;;
+            false) result="no changes" ;;
+            *) result="failed before plan" ;;
+          esac
+          gh pr comment "$PR_NUMBER" --body "Bootstrap plan: **${result}**. [View workflow run](${RUN_URL}). After merge, apply it from Actions -> Bootstrap -> Run workflow (main), which needs the owner's approval."
+
+  apply:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    environment: bootstrap
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the S3 backend
+        run: grep -Eqs 'backend[[:space:]]+"s3"' "$ROOT"/*.tf
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Assume bootstrap role
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::404379474987:role/glassbox-bootstrap
+          role-session-name: bootstrap-apply-${{ github.run_id }}
+      - name: Initialize bootstrap state
+        run: terraform -chdir="$ROOT" init -lockfile=readonly
+      - name: Re-plan and match the reviewed plan
+        env:
+          REVIEWED: ${{ needs.plan.outputs.fingerprint }}
+        run: |
+          terraform -chdir="$ROOT" plan -no-color -out=bootstrap.tfplan
+          echo "Changes:"
+          fingerprint=$(.github/scripts/plan-fingerprint.sh "$ROOT" bootstrap.tfplan)
+          if [ -z "$REVIEWED" ] || [ "$fingerprint" != "$REVIEWED" ]; then
+            echo "::error::The plan changed since it was reviewed (reviewed $REVIEWED, now $fingerprint). Nothing was applied. Run the workflow again and review the new plan."
+            exit 1
+          fi
+          echo "Plan matches the reviewed fingerprint $fingerprint."
+      - name: Apply
+        run: terraform -chdir="$ROOT" apply -no-color -input=false bootstrap.tfplan
