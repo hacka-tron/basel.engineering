@@ -1,6 +1,6 @@
 # Push-button ops runbooks and bootstrap pipeline
 
-**PR:** to be linked when opened · **Branch:** `feature/ops-runbooks` · **Docs:** `infra/CI.md` ("Runbooks", "Bootstrap via pipeline", "One-time owner setup"), `k8s/README.md` ("Incidents")
+**PR:** [#62](https://github.com/hacka-tron/basel.engineering/pull/62) · **Branch:** `feature/ops-runbooks` · **Docs:** `infra/CI.md` ("Runbooks", "Bootstrap via pipeline", "One-time owner setup"), `k8s/README.md` ("Incidents")
 **Status:** In review. Nothing applied. It depends on PR #55 (zram, plus the CI role's SSM document permissions) and PR #59 (bootstrap state in S3). Merge those first.
 
 ## TL;DR
