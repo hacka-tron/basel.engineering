@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
+import { newChatFit, type NewChatFit } from '../lib/footerFit'
 import { lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
@@ -11,9 +12,16 @@ type StatsBarProps = {
   stressTestSubmitting?: boolean
   stressTestCapacity?: DemoCapacity
   stressTestRealCooldownSeconds?: number | null
+  /** Below md the New chat control lives here, right after the stats. */
+  onNewChat?: () => void
+  newChatDisabled?: boolean
+  /** Topic whose conversation New chat clears, e.g. "About Basel". */
+  topicLabel?: string
 }
 
 const LONG_PRESS_MS = 500
+// The square "+" New chat button (w-8).
+const COMPACT_NEW_CHAT_PX = 32
 const LONG_PRESS_SLOP_PX = 10
 const TOOLTIP_AUTO_HIDE_MS = 4000
 
@@ -43,6 +51,9 @@ function StatsBar({
   stressTestSubmitting = false,
   stressTestCapacity = { sufficient: false, reason: 'Checking cluster capacity…' },
   stressTestRealCooldownSeconds = null,
+  onNewChat,
+  newChatDisabled = false,
+  topicLabel = 'this',
 }: StatsBarProps) {
   const onCooldown = stressTestCooldownSeconds !== null
   // The API's `reason` (memory estimate vs. node allocatable) is for
@@ -176,25 +187,109 @@ function StatsBar({
 
   useEffect(() => clearPressTimer, [])
 
+  // Labelled "New chat" when the measured free width allows it, otherwise a
+  // compact "+" with the same action and tooltip (lib/footerFit.ts). The stats
+  // never wrap or shrink to make room.
+  const newChatTooltipId = useId()
+  const footerRef = useRef<HTMLElement>(null)
+  const statsRef = useRef<HTMLDivElement>(null)
+  const stressRef = useRef<HTMLDivElement>(null)
+  const newChatLabelRef = useRef<HTMLSpanElement>(null)
+  const prefixMeasureRef = useRef<HTMLSpanElement>(null)
+  const [fit, setFit] = useState<NewChatFit>('label')
+  const fitRef = useRef(fit)
+  const newChatCompact = fit !== 'label'
+  const timingPrefix = latency.timing.startsWith('first token ') ? 'first token ' : ''
+  const hasTimingPrefix = timingPrefix !== ''
+  const hasNewChat = onNewChat !== undefined
+  useLayoutEffect(() => {
+    const footer = footerRef.current
+    const stats = statsRef.current
+    if (!hasNewChat || !footer || !stats) return
+    function measure() {
+      if (!footer || !stats || !stressRef.current || !newChatLabelRef.current || !prefixMeasureRef.current) return
+      const style = getComputedStyle(footer)
+      const prefix = hasTimingPrefix ? prefixMeasureRef.current.getBoundingClientRect().width : 0
+      // While tight the prefix is not drawn; add it back so the choice is
+      // always made against the full-length stats.
+      const shownStats = stats.getBoundingClientRect().width
+      const next = newChatFit({
+        available: footer.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        stats: fitRef.current === 'tight' ? shownStats + prefix : shownStats,
+        prefix,
+        stressControl: stressRef.current.getBoundingClientRect().width,
+        label: newChatLabelRef.current.getBoundingClientRect().width,
+        compact: COMPACT_NEW_CHAT_PX,
+      })
+      fitRef.current = next
+      setFit(next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(footer)
+    observer.observe(stats)
+    if (stressRef.current) observer.observe(stressRef.current)
+    return () => observer.disconnect()
+  }, [hasNewChat, hasTimingPrefix])
+
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
     // desktop md: values) so this row fits at ~375px. It must not scroll
     // (overflow-x-auto would clip the absolutely-positioned capacity
     // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3 md:gap-5">
-        {/* Below sm, "· cached" drops to a second line so the row still fits at
-            360-375px with a four-digit time. */}
-        <span className="flex flex-col leading-tight sm:flex-row sm:leading-normal">
-          <span>{latency.timing}</span>
-          {latency.cached && <span className="sm:ml-1">· cached</span>}
+    <footer ref={footerRef} className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+      {/* Below md: stats then New chat, as one group. At md+ the wrapper
+          dissolves (display: contents) and New chat lives under the ask box. */}
+      <div className="flex min-w-0 items-center gap-3 md:contents">
+      <div ref={statsRef} className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
+        {/* Always one line: the stats are never wrapped or squeezed. */}
+        <span className="flex leading-normal" title={fit === 'tight' ? latency.timing : undefined}>
+          {hasNewChat && timingPrefix ? (
+            <span>
+              <span className={fit === 'tight' ? 'sr-only' : undefined}>{timingPrefix}</span>
+              {latency.timing.slice(timingPrefix.length)}
+            </span>
+          ) : (
+            <span>{latency.timing}</span>
+          )}
+          {latency.cached && <span className="ml-1">· cached</span>}
         </span>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center sm:gap-2">
+      {onNewChat && (
+        <button
+          type="button"
+          onClick={onNewChat}
+          disabled={newChatDisabled}
+          aria-label={newChatCompact ? 'New chat' : undefined}
+          aria-describedby={newChatTooltipId}
+          className={`group relative inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-[3px] border border-hairline text-xs text-primary outline-none transition-colors after:absolute after:-inset-y-1.5 after:content-[''] hover:border-cyan hover:text-cyan focus-visible:ring-1 focus-visible:ring-cyan disabled:cursor-not-allowed disabled:text-muted disabled:hover:border-hairline md:hidden ${newChatCompact ? 'w-8 after:-inset-x-1.5' : 'px-2.5 after:-inset-x-1'}`}
+        >
+          {newChatCompact ? (
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
+          ) : 'New chat'}
+          <span
+            id={newChatTooltipId}
+            role="tooltip"
+            className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-56 max-w-[calc(100vw-2rem)] whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg [@media(hover:hover)]:group-hover:block group-focus-visible:block"
+          >
+            New chat: clears the {topicLabel} conversation only. Chats are saved in this browser.
+          </span>
+        </button>
+      )}
+      {onNewChat && (
+        // Measures the labelled button so the choice above never depends on
+        // what is currently rendered.
+        <>
+          <span ref={newChatLabelRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 inline-flex h-8 items-center whitespace-nowrap border px-2.5 text-xs md:hidden">New chat</span>
+          <span ref={prefixMeasureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre md:hidden">first token </span>
+        </>
+      )}
+      </div>
+      <div ref={stressRef} className="flex shrink-0 items-center sm:gap-2">
         {/* >= sm: a labelled button runs the test; the icon beside it is
             details-only (hover/focus shows the tooltip, click/tap toggles it),
             so there is exactly one control per action. Both are display:none
