@@ -187,6 +187,16 @@ function App() {
     if (!clusterViewRef.current) startVisualStressTest()
   }, [startVisualStressTest])
 
+  // Every stress-test tap shows the diagram on mobile at once: one that starts
+  // a run, and one ignored while a run is in flight or counting down (the
+  // animation is still playing there). It runs before any request, so a
+  // later Chat tap while the request is pending wins. A long press only shows
+  // details and never taps. Refs: the nav is created further down.
+  const isDesktopRef = useRef(false)
+  const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
+  const onStressTap = useCallback(() => {
+    revealDiagramRef.current(isDesktopRef.current)
+  }, [])
   const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
@@ -489,6 +499,8 @@ function App() {
     focusDiagramToggle: () => diagramButtonRef.current?.focus(),
   }))
   const showMobileView = diagramNav.showView
+  isDesktopRef.current = isDesktop
+  revealDiagramRef.current = diagramNav.revealDiagram
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
       diagramNav.handlePopState(event.state)
@@ -675,6 +687,7 @@ function App() {
         lastStats={lastStats}
         queriesServed={queriesServed}
         onStressTest={handleStressTestClick}
+        onStressTap={onStressTap}
         stressTestCooldownSeconds={stressTest.cooldownSeconds}
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}

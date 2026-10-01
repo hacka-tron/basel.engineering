@@ -84,20 +84,20 @@ Deployments are set up so that is safe on a 2 GiB node:
 
 ## Incidents: push-button runbooks
 
-Use **Actions → Ops runbooks** (`.github/workflows/ops.yml`) instead of SSM
+Use the **Actions → "Ops · ..."** workflows (one per runbook, wrappers around `.github/workflows/ops.yml`) instead of SSM
 sessions and hand-typed `kubectl`/`flux`. Every action is described in
 `infra/CI.md` under "Runbooks". `diagnose` needs no approval. Everything
 else waits for the owner's approval and prints a diagnose before and after.
 
-| Symptom | Run |
+| Symptom | Run (workflow, then inputs) |
 |---|---|
-| Anything looks wrong | `diagnose` first. Read the memory PSI, swap in/out (`si`/`so`), node conditions, unready pods, warning events, and the k3s error and Slow SQL counts. |
-| Site returns 521/522 or times out, and `diagnose` fails, times out or shows the apiserver not answering | `reboot-node`. If the after-diagnose shows no `/dev/zram0`, run `apply-zram`. |
-| Node responsive but thrashing (memory PSI `full` stays high, heavy `si`/`so`, many Slow SQL lines), or KEDA's Helm release keeps retrying | `flux-suspend` `helmrelease-keda`, then `flux-suspend` `keda`, then `scale-keda` `0`. Optionally `cronjob-suspend` `warm-answers`. |
-| …incident over | In reverse: `scale-keda` `1`, `flux-resume` `helmrelease-keda`, `flux-resume` `keda`, `cronjob-resume` `warm-answers`. |
-| `api` Running but not serving (stuck streams, readiness flapping) | `restart-deployment` `api`. This causes a few seconds of downtime. |
-| A merged fix should deploy now, or a release is stuck behind Flux's interval | `flux-reconcile`. |
-| Need to stop all deploys while investigating | `flux-suspend` `flux-system`, and later `flux-resume` `flux-system`. |
+| Anything looks wrong | **Ops · Diagnose** first. Read the memory PSI, swap in/out (`si`/`so`), node conditions, unready pods, warning events, and the k3s error and Slow SQL counts. |
+| Site returns 521/522 or times out, and `diagnose` fails, times out or shows the apiserver not answering | **Ops · Reboot node**. If the after-diagnose shows no `/dev/zram0`, run **Ops · Apply zram**. |
+| Node responsive but thrashing (memory PSI `full` stays high, heavy `si`/`so`, many Slow SQL lines), or KEDA's Helm release keeps retrying | **Ops · Flux suspend or resume** (suspend) `helmrelease-keda`, then `keda`, then **Ops · KEDA on or off** `off (0)`. Optionally **Ops · Warm-up CronJob suspend or resume** (suspend). |
+| …incident over | In reverse: **KEDA on or off** `on (1)`, **Flux suspend or resume** (resume) `helmrelease-keda` then `keda`, **Warm-up CronJob** (resume). |
+| `api` Running but not serving (stuck streams, readiness flapping) | **Ops · Restart deployment** `api`. This causes a few seconds of downtime. |
+| A merged fix should deploy now, or a release is stuck behind Flux's interval | **Ops · Flux reconcile**. |
+| Need to stop all deploys while investigating | **Ops · Flux suspend or resume** `flux-system` (suspend), and later resume. |
 
 Anything not on this list still needs an SSM session (see below). If it
 keeps coming up, add it as a new `glassbox-ops-*` document in

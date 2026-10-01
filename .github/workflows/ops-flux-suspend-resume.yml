@@ -1,0 +1,37 @@
+name: "Ops · Flux suspend or resume"
+
+# Suspend or resume a Flux Kustomization/HelmRelease. Needs owner approval.
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: What to do
+        type: choice
+        required: true
+        options: [suspend, resume]
+      flux_target:
+        description: Target (helmrelease-keda = the keda HelmRelease; flux-system freezes all deploys)
+        type: choice
+        required: true
+        default: keda
+        options: [keda, keda-scaling, ingest, app-ready, flux-system, helmrelease-keda]
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: flux-${{ inputs.operation }}
+      flux_target: ${{ inputs.flux_target }}
+      reason: ${{ inputs.reason }}
