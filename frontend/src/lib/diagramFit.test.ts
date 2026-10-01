@@ -52,8 +52,13 @@ test('squeezedMinZoom lowers the floor only as far as an edge-to-edge fit needs'
   const bounds = { x: 0, y: 0, width: 616, height: 174 }
   // 568x320: about 341px left for the graph, so 0.65 would clip it.
   assert.equal(squeezedMinZoom(bounds, { width: 341, height: 167 }, 0.65, 0.5), 341 / 616)
-  // 667x375: the graph already fits at the normal floor.
+  // Without a margin, a box the graph already fills at the normal floor keeps it.
   assert.equal(squeezedMinZoom(bounds, { width: 401, height: 222 }, 0.65, 0.5), 0.65)
+  // 667x375 (about 401px beside the panel) with the real 4px margin: just under
+  // the floor, about 0.638.
+  assert.equal(squeezedMinZoom(bounds, { width: 401, height: 222 }, 0.65, 0.5, 4), 393 / 616)
+  // 740x360 (444px): fits above the floor, so the floor stays.
+  assert.equal(squeezedMinZoom(bounds, { width: 444, height: 205 }, 0.65, 0.5, 4), 0.65)
   // Never below the lowest floor.
   assert.equal(squeezedMinZoom(bounds, { width: 200, height: 167 }, 0.65, 0.5), 0.5)
   // A margin keeps the outer nodes off the box's edges.

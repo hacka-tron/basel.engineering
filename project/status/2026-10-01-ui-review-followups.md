@@ -28,7 +28,7 @@ flowchart LR
 
 - **Reload mid-retry.** The save effect in `App.tsx` skips writing a conversation while the reply to an in-flight retry is still pending (`holdSaveDuringRetry` in `lib/chatRetry.ts`). The stored copy keeps the failure reply until the retried answer settles (done, stopped, or failed again), then the normal save runs.
 - **Announcements.** `Chat.tsx` derives its live-region text from `chatAnnouncement()`: empty while streaming, the settled reply otherwise, "Answer stopped." for a stopped reply, nothing for the reply a stop-and-send interrupted (Chat remembers its id when you send), and "Retry is available now." once the Retry countdown calls back.
-- **Focus.** User messages carry `data-message-id` and `tabIndex=-1`; after Retry on a phone, Chat focuses the retried question with `preventScroll`.
+- **Focus.** User messages carry `data-message-id`, `tabIndex=-1`, `role="group"` and an accessible name ("Your question: …", cut at 80 characters). After Retry on a phone, Chat focuses the retried question with `preventScroll`. Keyboard users get a 1px cyan focus ring (`outline-hidden` plus `focus-visible:outline-solid`); a tap shows none.
 - **Landscape fit.** While the details are open beside the landscape diagram, the refit uses `squeezedMinZoom` (`lib/diagramFit.ts`): the 0.65 floor gives way only as far as needed for the graph to fit with a 4px margin, never below 0.5.
 
 ## Key design decisions
@@ -44,7 +44,11 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet.
+Opus review, round 1: CHANGES NEEDED. The persistence hold, the announcements, the segment tap area and the landscape zoom all checked out. Fixed:
+- **Important:** the retried question's focus ring never showed. In Tailwind v4, `outline-none` sets `outline-style: none`, and `focus-visible:outline-1` only sets the width, so the style stayed `none` (WCAG 2.4.7). It now uses `outline-hidden` plus `focus-visible:outline-solid`. Checked in headless Chrome: after Enter on Retry, `:focus-visible` matches and the computed outline is solid 1px cyan; after a tap, `:focus-visible` does not match and no ring shows.
+- **Important:** the branch conflicted with `main` (docs only), so CI had not run. Merged `main`, keeping both sides.
+- **Minor:** the focus target got `role="group"` and a "Your question: …" name. A `diagramFit` test comment now matches the real 4px margin, and the report is renamed to 2026-10-01.
+- **Kept in the backlog:** App-wiring tests for the save hold.
 
 ## Operational notes and risks
 
@@ -56,7 +60,7 @@ Frontend only; no API or infra change. Low risk. Edge: if the browser is closed 
 - Phone preview (`npx vite --config vite.phone.config.ts --port 5240`) driven by headless Chrome over CDP, with `/api/ask` faked in the page (0 live questions):
   - Reload mid-retry at 393x852, 320x568, 667x375, 568x320 and 1280x800: storage kept the failure reply while the retry streamed; after the reload the failure reply and an enabled Retry were back; retrying again saved the answer and sent the same history as the first attempt. A normal mid-answer reload still shows the question without a reply.
   - Live region: Stop gave `"Answer stopped."`; stop-and-send never contained the interrupted text; a 3s rate limit gave the failure reply, then `"Retry is available now."`, and the Retry label changed to "Retry question".
-  - Focus after Retry: the retried question on every phone size, the ask box on desktop.
+  - Focus after Retry: the retried question on every phone size, the ask box on desktop. The focus ring shows after keyboard activation (computed outline `solid 1px`) and not after a tap.
   - Segments: 49px tall tap area in portrait and landscape; visible 40px; strip height unchanged (47px).
   - 568x320 details open: 0 of 11 nodes clipped (was 6), zoom 0.54; 667x375, 740x360, 896x414 also 0 clipped.
   - Against `main` (separate worktree, same fixture): desktop 1280x800 Chat and Diagram screenshots byte-identical, and all portrait screenshots byte-identical; element rectangles identical at every size except the worker's live pod dots.
@@ -66,4 +70,5 @@ Frontend only; no API or infra change. Low risk. Edge: if the browser is closed 
 
 - Stop-and-send looks the same as Send to sighted users (owner design call).
 - An "answer ready" cue in Diagram view (owner design call).
+- **Owner sign-off:** at 568x320 with details open, the diagram labels draw at about 6.5px. This is a documented exception to the 11px label rule in `MOBILE_DESIGN.md`; the diagram can be pinched.
 - Component questions are still recognised by wording (`COMPONENT_QUESTIONS`), and the App wiring (queued ask, `isCurrent` guard, retry wiring, the save hold) has no tests; it needs a component-test setup.

@@ -192,9 +192,11 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
                 <div
                   key={message.id}
                   data-message-id={message.id}
-                  // Questions take focus after Retry on a phone (handleRetry).
-                  tabIndex={message.role === 'user' ? -1 : undefined}
-                  className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end rounded-[3px] outline-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-cyan' : 'self-start'}`}
+                  // Questions take focus after Retry on a phone (handleRetry), so
+                  // they get a role and name for predictable screen-reader output
+                  // and a focus ring for keyboard users (focus-visible only).
+                  {...(message.role === 'user' ? { tabIndex: -1, role: 'group', 'aria-label': questionLabel(message.content) } : {})}
+                  className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end rounded-[3px] outline-hidden focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-cyan' : 'self-start'}`}
                 >
                   {(message.content || pending) && <div
                     // Failure replies and text cut off by a failure get a dashed border.
@@ -315,6 +317,15 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
       </div>
     </section>
   )
+}
+
+// Accessible name of a question in the message list ("Your question: ..."),
+// shortened so a long question is not read twice in full.
+const QUESTION_LABEL_MAX_CHARS = 80
+function questionLabel(content: string): string {
+  const text = content.replace(/\s+/g, ' ').trim()
+  const short = text.length > QUESTION_LABEL_MAX_CHARS ? `${text.slice(0, QUESTION_LABEL_MAX_CHARS - 1).trimEnd()}…` : text
+  return `Your question: ${short}`
 }
 
 /**
