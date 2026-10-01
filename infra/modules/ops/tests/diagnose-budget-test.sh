@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Offline test for the "LLM budget" section of ../scripts/diagnose.sh, with a
-# stubbed kubectl. Checks the numbers it prints, that Redis is only asked
+# Offline test for the "LLM budget" and "CSP Report-Only" sections of
+# ../scripts/diagnose.sh, with a stubbed kubectl. Checks the numbers it prints, that Redis is only asked
 # read-only commands, that no Secret is read, and that MySQL output passes
 # through redact(). Needs no cluster or AWS.
 #   bash infra/modules/ops/tests/diagnose-budget-test.sh
@@ -46,6 +46,8 @@ kc() {
       echo "rl:$(printf 'a%.0s' {1..64})"
       echo "rl:$(printf 'b%.0s' {1..64})"
       echo "rl:not-a-hash"
+      # /api/csp-report's own buckets are not question buckets.
+      echo "rl:csp:$(printf 'c%.0s' {1..64})"
       ;;
     *redis-cli*)
       local line
@@ -68,6 +70,17 @@ kc() {
           *) echo "UNEXPECTED $line" ;;
         esac
       done <<<"$input"
+      ;;
+    *"logs deploy/api"*)
+      printf '%s\n' \
+        "INFO: 10.42.0.8:1234 - \"POST /api/csp-report HTTP/1.1\" 204" \
+        "csp-report-only violation directive=style-src-attr blocked=inline path=/" \
+        "csp-report-only violation directive=style-src-attr blocked=inline path=/" \
+        "csp-report-only violation directive=connect-src blocked=https://cdn.example.com path=/" \
+        "csp-report-only violation directive=img-src blocked=chrome-extension: path=/" \
+        "csp-report-only violation oversize: body over 8192 bytes, dropped" \
+        "csp-report-only violation log cap: 7 more reports not logged in the last minute" \
+        "csp-report-only violation directive=script-src blocked=https://x.example/?token=ABCDEFGHIJKLMNOPQRSTUVWXYZ path=/"
       ;;
     *mysql*)
       printf '%s\n' "  by mode/cache: full miss = 31" "  asks: 40, follow-ups (turn > 0): 6, generated answers (full, miss): 31"
@@ -97,7 +110,9 @@ check "warm-up counters" $?
 grep -qF 'about_me 3, about_system 41' <<<"$out"
 check "corpus versions" $?
 grep -qF 'rate-limit buckets active in the last 10 min: 2' <<<"$out"
-check "bucket count ignores malformed names" $?
+check "bucket count ignores malformed names and rl:csp: buckets" $?
+! grep -qF 'cccccccc' <<<"$out"
+check "rl:csp: bucket never listed as a client" $?
 first=$(grep -m1 '  client ' <<<"$out")
 grep -qxF '  client aaaaaaaa...: 2.5 of 10 asks left' <<<"$first"
 check "busiest bucket first, hash cut to 8 characters" $?
@@ -150,6 +165,24 @@ out=$(budget_section 2>&1)
 grep -qF 'rate-limit buckets active in the last 10 min: 200+ (200 shown)' <<<"$out"
 check "bucket scan cap is reported" $?
 BUCKETS=
+
+# CSP Report-Only section: counts and directive/origin pairs only.
+out=$(csp_section 2>&1)
+printf '%s\n' "$out" | sed 's/^/     | /'
+grep -qE '^violation lines +5$' <<<"$out"
+check "csp: violation lines counted" $?
+grep -qE '^oversize reports dropped +1$' <<<"$out"
+check "csp: oversize lines counted" $?
+grep -qE '^log-cap summary lines +1$' <<<"$out"
+check "csp: log-cap lines counted" $?
+grep -qE '^ +2 style-src-attr inline$' <<<"$out"
+check "csp: pairs counted, most frequent first" $?
+grep -qE '^ +1 connect-src https://cdn.example.com$' <<<"$out" && grep -qE '^ +1 img-src chrome-extension:$' <<<"$out"
+check "csp: origins and schemes kept" $?
+! grep -qE 'token|ABCDEFGH|POST|10\.42' <<<"$out"
+check "csp: off-shape lines and access log never printed" $?
+grep -qF 'logs deploy/api -c api --since=24h' "$calls"
+check "csp: reads only the api container's last 24h" $?
 
 # redis_read refuses anything that could write.
 kc() { echo "SENT"; }

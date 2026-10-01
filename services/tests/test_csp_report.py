@@ -11,6 +11,7 @@ from services.glassbox.api.main import app
 from services.glassbox.limits import RedisRateLimiter
 
 LOGGER_NAME = "services.glassbox.api.csp_report"
+OVERSIZE_LINE = "csp-report-only violation oversize: body over 8192 bytes, dropped"
 
 REPORT_URI_BODY = {
     "csp-report": {
@@ -198,7 +199,7 @@ def test_oversize_body_is_rejected_by_declared_length(redis, caplog):
     big = {"csp-report": {**REPORT_URI_BODY["csp-report"], "script-sample": "x" * 9000}}
     response = post(TestClient(app), big)
     assert response.status_code == 413
-    assert csp_lines(caplog) == []
+    assert csp_lines(caplog) == [OVERSIZE_LINE]
     # Rejected before it costs the visitor a rate-limit token.
     assert redis.keys == []
 
@@ -217,7 +218,58 @@ def test_oversize_streamed_body_is_cut_off_while_reading(redis, caplog):
         "/api/csp-report", content=chunks(), headers={"content-type": "application/csp-report"}
     )
     assert response.status_code == 413
+    assert csp_lines(caplog) == [OVERSIZE_LINE]
+
+
+def test_client_disconnect_mid_body_is_dropped_quietly(redis, caplog):
+    """A sender that closes after part of the body: no traceback, no log line."""
+    import asyncio
+
+    caplog.set_level(logging.DEBUG)
+    messages = [
+        {"type": "http.request", "body": b'{"csp-report": ', "more_body": True},
+        {"type": "http.disconnect"},
+    ]
+    sent: list[dict] = []
+
+    async def receive():
+        return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/csp-report",
+        "raw_path": b"/api/csp-report",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"content-type", b"application/csp-report"),
+            (b"content-length", b"4000"),
+        ],
+        "client": ("127.0.0.1", 5000),
+        "server": ("testserver", 80),
+    }
+    asyncio.run(app(scope, receive, send))
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 400
+    assert not [r for r in caplog.records if r.exc_info or r.levelno >= logging.ERROR]
     assert csp_lines(caplog) == []
+
+
+def test_oversize_lines_share_the_log_cap(redis, caplog, monkeypatch):
+    caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
+    monkeypatch.setattr(csp_report, "LOG_BUDGET", csp_report._LogBudget(per_window=2))
+    client = TestClient(app)
+    big = b"x" * (csp_report.MAX_BODY_BYTES + 1)
+    codes = [post(client, big).status_code for _ in range(5)]
+    assert codes == [413] * 5
+    assert csp_lines(caplog) == [OVERSIZE_LINE] * 2
 
 
 @pytest.mark.parametrize(

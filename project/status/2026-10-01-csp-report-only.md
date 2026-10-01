@@ -1,7 +1,7 @@
 # Content-Security-Policy, Report-Only, with a report endpoint
 
 **PR:** [#121](https://github.com/hacka-tron/basel.engineering/pull/121) · **Branch:** `security/csp-report-only` · **Docs:** `docs/DESIGN.md` §11, `docs/architecture/deep-dive.md` (one sentence), `infra/CI.md` (diagnose row), `project/MOBILE_DESIGN.md` (where the iOS zoom fix lives)
-**Status:** PR open, not reviewed yet. No production access was used (no AWS, kubectl, Terraform plan or apply, or workflow runs). No live `/api/ask` calls; the audit faked `/api/ask` on a local server.
+**Status:** PR open; review round 1 fixes pushed. No production access was used (no AWS, kubectl, Terraform plan or apply, or workflow runs). No live `/api/ask` calls; the audit faked `/api/ask` on a local server.
 
 ## TL;DR
 
@@ -41,7 +41,7 @@ Reporting-Endpoints: csp="/api/csp-report"
 - `services/glassbox/api/security_headers.py` adds both headers to every response (page, assets, API JSON, SSE, 404s), next to the existing enforced `Content-Security-Policy: frame-ancestors 'none'`.
 - `services/glassbox/api/csp_report.py` is the endpoint. Order of checks: content type (415), declared length (413), per-visitor rate limit (429), body read with a running 8 KiB cap (413), JSON shape (400), then log and answer 204.
 - `services/glassbox/limits.py`: `RedisRateLimiter` takes a `key_prefix`. `/api/ask` keeps `rl:<hash>`, so live buckets survive the deploy. Reports use `rl:csp:<hash>` and never spend a visitor's question budget.
-- `infra/modules/ops/scripts/diagnose.sh` greps the api pod's last 24 hours of log for the fixed `csp-report-only violation` prefix. It prints the line count, the log-cap summary count, and the top 15 `directive blocked-origin` pairs, through `redact`.
+- `infra/modules/ops/scripts/diagnose.sh` greps the api pod's last 24 hours of log for the fixed `csp-report-only violation` prefix. It prints the violation line count, the oversize-drop count, the log-cap summary count, and the top 15 `directive blocked-origin` pairs, through `redact`.
 
 ## The audit: violations found and fixed
 
@@ -83,13 +83,21 @@ iOS behaviour: under the iPhone emulation the viewport became `width=device-widt
 
 ## Tests
 
-- `services/tests/test_csp_report.py` (50 cases): both report formats are accepted and logged sanitized; a sensitive-content sweep (query strings, fragments, samples, user agent, referrer, XFF IP, IP hash, original policy); sanitizer edge cases (userinfo, IPv4/IPv6 literals, extensions, newline injection, odd paths); oversize by declared length and by a chunked body; invalid JSON/shapes (400); wrong content type (415); the per-visitor limit and its own `rl:csp` key; the per-process log cap and its summary line; the per-request report cap; Redis down; no DB access; the default `rl:` prefix unchanged.
+- `services/tests/test_csp_report.py` (52 cases, including a mid-body disconnect and oversize lines sharing the log cap): both report formats are accepted and logged sanitized; a sensitive-content sweep (query strings, fragments, samples, user agent, referrer, XFF IP, IP hash, original policy); sanitizer edge cases (userinfo, IPv4/IPv6 literals, extensions, newline injection, odd paths); oversize by declared length and by a chunked body; invalid JSON/shapes (400); wrong content type (415); the per-visitor limit and its own `rl:csp` key; the per-process log cap and its summary line; the per-request report cap; Redis down; no DB access; the default `rl:` prefix unchanged.
 - `services/tests/test_security_headers.py`: the Report-Only header and `Reporting-Endpoints` are on HTML, assets, API JSON, 404/422, `/api/ask` SSE and `/api/cluster/stream` SSE. The exact directive set is pinned, with no `unsafe-*`, `data:` or wildcards. `index.html` has no inline script or style, and `ios-zoom.js` has the same logic.
-- Full suite (after rebasing on main): 652 passed, 22 skipped (Redis/MySQL-backed skips). `ruff check` and `ruff format --check` are clean. Frontend `npm ci`, `npm test` (118 passed), `npm run lint` and `npm run build` pass. `bash -n` on `diagnose.sh`, the ops `redact-test.sh` and `ops-run-test.sh` pass, and `terraform fmt -check` passes for the ops module.
+- Full suite (after rebasing on main and the round 1 fixes): 654 passed, 22 skipped (Redis/MySQL-backed skips). `ruff check` and `ruff format --check` are clean. Frontend `npm ci`, `npm test` (118 passed), `npm run lint` and `npm run build` pass. `bash -n` on `diagnose.sh`, the ops `redact-test.sh` and `ops-run-test.sh` pass, and `terraform fmt -check` passes for the ops module.
 
 ## What review caught
 
-_Pending._
+Round 1 (Opus reviewer): CHANGES NEEDED, one Important item, fixed in the round 1 commit.
+
+- **Important:** a client that disconnected mid-body raised an unhandled `ClientDisconnect`. That logged a roughly 60-line traceback outside the log cap, so anyone could flood the log with half-sent POSTs. Fixed: the read catches it and drops the request silently. A raw-ASGI test sends 14 of 4000 declared bytes and then disconnects, and asserts no traceback and no log line. The test fails without the fix.
+- Minor, all fixed:
+  - An oversized body (for example a Chromium batch of 10+ violations) was dropped without a trace. It now gets one budgeted `csp-report-only violation oversize: …` line, which Diagnose counts. I chose this over raising the cap, because a clean site shouldn't produce such batches.
+  - The docstring and DESIGN §11 now say there is no app-level body read timeout (Traefik/Cloudflare timeouts and the pre-read rate limit bound it), and that the log-cap summary line is written on the next report, not on a timer.
+  - `diagnose-budget-test.sh` gained an `rl:csp:<hash>` fixture, which proves CSP buckets aren't counted as question buckets. It also gained 7 checks for the new `csp_section`: counts, pairs, and that off-shape lines and access-log lines are never printed.
+  - DESIGN §11's audit wording now separates what was verified (`report-uri`) from what wasn't (`report-to` delivery to plain-HTTP localhost).
+- Confirmed by review: the policy is safe to enforce later, the iOS zoom behaviour is unchanged, sanitization holds, and Diagnose's `rl:` filter excludes `rl:csp`.
 
 ## Operational notes & risks
 

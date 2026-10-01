@@ -30,6 +30,18 @@ It always answers 204 to a well-formed report (also when a log line is
 suppressed), 429 when the visitor is over the rate limit, 413/400/415 for
 oversized, malformed or wrongly typed bodies. Browsers ignore the status;
 these are for tests and for anyone probing the endpoint.
+
+An oversized body is dropped whole, with one budgeted ``oversize`` line that
+Ops · Diagnose counts. Chromium batches Reporting API reports, so a page with
+many violations at once could produce a batch over 8 KiB; on a clean site
+that doesn't happen, and the line makes it visible if it ever does. A client
+that disconnects mid-body is dropped silently.
+
+Known limits: there is no app-level timeout on reading the body; a slow
+sender is bounded by Traefik's and Cloudflare's timeouts, and by the rate
+limit checked before reading. The log-cap summary line for a minute is
+written when the next report arrives after that minute, not on a timer, so
+a flood that ends abruptly may never get its summary line.
 """
 
 import ipaddress
@@ -42,6 +54,7 @@ from urllib.parse import urlsplit
 
 import redis.asyncio as redis
 from fastapi import APIRouter, Request, Response
+from starlette.requests import ClientDisconnect
 
 from services.glassbox.limits import RedisRateLimiter, client_ip_hash
 
@@ -202,14 +215,28 @@ def _violations(payload: object) -> list[tuple[str, str, str]] | None:
     return None
 
 
-async def _read_capped(request: Request) -> bytes | None:
-    """The body, or None as soon as it grows past MAX_BODY_BYTES."""
+_OVERSIZE = object()
+_DISCONNECTED = object()
+
+
+async def _read_capped(request: Request) -> bytes | object:
+    """The body, _OVERSIZE as soon as it grows past MAX_BODY_BYTES, or
+    _DISCONNECTED if the client goes away before sending all of it."""
     body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > MAX_BODY_BYTES:
-            return None
+    try:
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_BODY_BYTES:
+                return _OVERSIZE
+    except ClientDisconnect:
+        return _DISCONNECTED
     return bytes(body)
+
+
+def _oversize() -> Response:
+    if LOG_BUDGET.take():
+        LOGGER.warning("%s oversize: body over %d bytes, dropped", LOG_MARKER, MAX_BODY_BYTES)
+    return Response(status_code=413)
 
 
 async def _allowed(request: Request) -> bool:
@@ -228,7 +255,7 @@ async def csp_report(request: Request) -> Response:
         return Response(status_code=415)
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
-        return Response(status_code=413)
+        return _oversize()
     try:
         allowed = await _allowed(request)
     except Exception:
@@ -240,8 +267,12 @@ async def csp_report(request: Request) -> Response:
     if not allowed:
         return Response(status_code=429)
     raw = await _read_capped(request)
-    if raw is None:
-        return Response(status_code=413)
+    if raw is _OVERSIZE:
+        return _oversize()
+    if raw is _DISCONNECTED:
+        # Nobody is left to answer; nothing worth logging.
+        return Response(status_code=400)
+    assert isinstance(raw, bytes)
     try:
         payload = json.loads(raw)
     except (UnicodeDecodeError, ValueError):
