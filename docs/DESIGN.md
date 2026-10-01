@@ -69,7 +69,7 @@ Recruiters get a polished, memorable demo. Engineers get a working, inspectable 
 |   A: ...streamed answer...    |                   [LLM]                    |
 |      [1] [2] [3] citations    |                                            |
 |                               |   Retrieved chunks: file, score (0.87)     |
-|   Asking: (Basel) (System)    |                                            |
+| Asking about (Basel) (System) |                                            |
 |   [ ask anything...     ] ->  |                                            |
 +-------------------------------+--------------------------------------------+
 | p50 312ms | cache hit 64% today | 1,204 queries served | [ Stress test ]   |
