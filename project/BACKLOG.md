@@ -26,7 +26,6 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 **Roadmap after that** (owner's earlier list; details in the sections below):
 
 - Release pipeline hardening (manual-dispatch build-number trust, `sync-deploy-branch` push race).
-- Chat UX leftovers: Retry on error replies, typing while an answer streams, Up-arrow recall.
 - Security pass: IP-hash salt and trusted proxy CIDRs verified in production, Terraform preview credential audit.
 - Self-healing node (ASG + EIP reassociation, M3).
 - Google Drive content pipeline (M4).
@@ -102,7 +101,7 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 
 - **Answer thinness (prompt tuning).** See RESUME HERE item 2: answers drop specifics (numbers, thresholds, cooldowns) that the retrieved chunks contain. Tune the prompt toward including the concrete facts, bump the prompt version, re-ask live.
 - **Phone rotated to landscape: adjust the mobile layout.** Header name shortening (Basel A-R), footer (stats / + / capacity icon), the Chat|Diagram view and the diagram's portrait graph were all tuned for portrait; check 667x375, 740x360 and 896x414 landscape and fix what looks off (e.g. short height squeezing the message area, the diagram choosing the portrait layout in landscape). Use the phone preview (`npm run phone`; add landscape frames) rather than a shrunk window. Owner request 2026-09-30. **Built, PR open (2026-10-01), pending owner review:** see `project/status/2026-10-01-landscape-phone.md`. Follow-ups: (a) check the real on-screen keyboard in landscape on a phone; if the message area is too short while typing, also slide the pipeline strip away in focus mode. (b) At 568x320 with the details open the graph pans slightly; centring the refit on the selected component would avoid that if the owner minds.
-- **Live chat UX leftovers (M3, DD2 §6.4):** input enabled while an answer streams (sending stops the current answer), Up-arrow recall of the last question, and a Retry control on error replies.
+- **Chat UX follow-ups (from the #93 review):** (1) a reload during a retry loses the failure reply and the Retry button, because the conversation is saved before the new answer settles; (2) screen-reader announcements: during stop-and-send the live region holds the stopped partial for one render, there is no "answer stopped" announcement, and nothing announces that Retry became available after a rate-limit countdown; (3) on phones focus falls to `<body>` after Retry (deliberate, so the keyboard doesn't pop up; revisit); (4) stop-and-send looks the same as Send to sighted users, only the accessible name changes (owner design call); (5) component questions are recognised by wording only (`COMPONENT_QUESTIONS` in `frontend/src/App.tsx`); (6) no tests for the App wiring (queued-ask effect, `isCurrent` guard, retry wiring): consider extracting a hook or adding a component-test setup.
 
 ## Security
 

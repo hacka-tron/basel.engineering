@@ -24,6 +24,9 @@ export type ChatMessage = {
   idk?: boolean
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
   rewrittenQuery?: string
+  // Live-only, on a rate-limited failure reply: when Retry may be pressed again
+  // (epoch ms, from the server's retry-after). Not persisted.
+  retryAt?: number
   createdAt: number
 }
 
@@ -75,10 +78,16 @@ function isStorable(message: ChatMessage): boolean {
   return message.role === 'user' || (message.state !== undefined && STORED_STATES.has(message.state))
 }
 
-/** A turn the server may see as history: never an error reply or empty text. */
-function isHistoryTurn(message: ChatMessage): boolean {
+/**
+ * A turn the server may see as history: never an error reply or empty text,
+ * and a question only if its reply settled (done, stopped or retrieval_only).
+ * A question that failed, or has no reply yet, is left out, so re-sending it
+ * (Retry, or Up-arrow and Enter) never puts the same question in twice.
+ */
+function isHistoryTurn(message: ChatMessage, next: ChatMessage | undefined): boolean {
   if (!message.content) return false
-  return message.role === 'user' || (message.state !== undefined && SETTLED_STATES.has(message.state))
+  if (message.role === 'user') return next?.role === 'assistant' && next.state !== undefined && SETTLED_STATES.has(next.state)
+  return message.state !== undefined && SETTLED_STATES.has(message.state)
 }
 
 function isSource(value: unknown): value is MessageSource {
@@ -175,7 +184,7 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
 
 /** The recent settled turns sent as `history` (the server re-applies its own limits). */
 export function historyForRequest(messages: ChatMessage[]): HistoryTurn[] {
-  const turns = messages.filter(isHistoryTurn).slice(-MAX_HISTORY_MESSAGES)
+  const turns = messages.filter((message, index) => isHistoryTurn(message, messages[index + 1])).slice(-MAX_HISTORY_MESSAGES)
     .map((message) => ({
       role: message.role,
       // A quirky stand-in goes back as the sentence the server actually said.
