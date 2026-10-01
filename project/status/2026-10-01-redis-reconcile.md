@@ -39,6 +39,15 @@ All writers of a chunk key now go through one helper, `chunk_fields()` in `redis
 - **Scoped to the current embedding model.** Keys tagged with another model are left alone, as the sweep and `--clear` do.
 - **One ingest at a time is assumed** (the Job). Ingest writes a document's Redis keys just before its MySQL commit, so a concurrent reconcile could briefly see those as orphans.
 
+## What review caught (round 1: approved, with safety additions)
+
+- **Fraction guard:** orphan deletion for a corpus is refused when more than 30% of its keys (and more than 2) would go, same banner as the zero-row guard; repairs and rewrites still run. `--reindex` lifts it (the zero-row guard stays).
+- **Smaller transactions:** rewrites go in MULTIs of 50 keys instead of 500, so HNSW deletes and inserts never stall Redis for long on the small node.
+- **One run at a time:** ingest and `--reindex` take a Redis lock, `ingest:lock` (`SET NX`, 30-minute TTL, released only by the holder's token via Lua). A second run logs a loud banner and exits 0 without doing anything, so the Job doesn't fail.
+- **Version bump on partial failure:** if a later batch fails, corpora already changed still get their `corpus:ver` bump.
+- Keys with this model's tag but no corpus field are reported as `unknown` and removed (no MySQL row) without a refusal banner. The vector size comes from `retrieval/search.py`.
+- Logged in BACKLOG: there is no production path to run `--reindex` without kubectl (an "Ops · Reindex" runbook would fix that).
+
 ## Interaction with PR #117
 
 #117 makes the answer cache check a cached answer's source chunks in Redis instead of keying entries by the corpus version. The coordinator agreed the field name and definition (`content_sha` = SHA-256 hex of `chunks.text`). This PR writes it on every key it touches and treats a missing field as "rewrite". Whichever PR merges second resolves a small overlap in `redis_index.py` (both write `content_sha`; keep `chunk_fields()` as the single writer).

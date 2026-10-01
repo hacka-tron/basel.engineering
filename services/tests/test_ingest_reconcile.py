@@ -132,6 +132,7 @@ class _Redis:
     def __init__(self):
         self.store: dict[str, dict] = {}
         self.strings: dict[str, int] = {}
+        self.multis = 0
 
     def hset(self, key, mapping):
         encoded = {
@@ -146,6 +147,7 @@ class _Redis:
                 yield key.encode()
 
     def pipeline(self, transaction=True):
+        self.multis += bool(transaction)
         return _Pipeline(self)
 
     async def delete(self, *keys):
@@ -265,6 +267,161 @@ async def test_invalid_stored_vector_is_skipped_not_indexed(mysql):
     reports = {r.corpus: r for r in await rec.reconcile(None, redis, MODEL)}
     assert reports["about_me"].repaired == [1] and reports["about_me"].skipped == [2]
     assert "chunk:2" not in redis.store
+
+
+def test_fraction_guard_refuses_a_large_orphan_purge_unless_forced():
+    rows = [_row(chunk_id) for chunk_id in range(1, 7)]
+    keys = {row.chunk_id: _stored(row) for row in rows}
+    orphan = ("about_me", TAG, "9", "corpus/about-me/gone.md", "x")
+    keys.update({chunk_id: orphan for chunk_id in range(100, 104)})  # 4 of 10 keys
+    reports = plan_reconcile(MODEL, rows, keys)
+    assert reports["about_me"].removed == [] and "30%" in reports["about_me"].refused
+    forced = plan_reconcile(MODEL, rows, keys, force=True)
+    assert forced["about_me"].removed == [100, 101, 102, 103]
+    assert forced["about_me"].refused is None
+    # Repairs and rewrites still happen when deletion is refused.
+    del keys[1]
+    assert plan_reconcile(MODEL, rows, keys)["about_me"].repaired == [1]
+
+
+@pytest.mark.parametrize(("orphans", "kept"), [(3, 7), (2, 1)])
+def test_fraction_guard_allows_up_to_30_percent_or_two_keys(orphans, kept):
+    rows = [_row(chunk_id) for chunk_id in range(1, kept + 1)]
+    keys = {row.chunk_id: _stored(row) for row in rows}
+    keys.update({100 + n: ("about_me", TAG, "9", "x.md", "x") for n in range(orphans)})
+    reports = plan_reconcile(MODEL, rows, keys)
+    assert len(reports["about_me"].removed) == orphans and reports["about_me"].refused is None
+
+
+def test_key_without_a_corpus_is_removed_as_unknown_without_a_refusal():
+    rows = [_row(1)]
+    keys = {
+        1: _stored(rows[0]),
+        **{chunk_id: (None, TAG, None, None, None) for chunk_id in range(50, 60)},
+        70: (None, _model_tag("other"), None, None, None),  # another model: left alone
+    }
+    reports = plan_reconcile(MODEL, rows, keys)
+    assert reports["unknown"].removed == list(range(50, 60))
+    assert reports["unknown"].refused is None
+    assert all(report.refused is None for report in reports.values())
+
+
+@pytest.mark.asyncio
+async def test_unknown_report_is_returned_only_when_it_had_keys(mysql, capsys):
+    redis = _Redis()
+    for row in mysql.values():
+        _write(redis, row)
+    assert [r.corpus for r in await rec.reconcile(None, redis, MODEL)] == [
+        "about_me",
+        "about_system",
+    ]
+    redis.hset("chunk:50", {"model": TAG, "vector": VECTOR})
+    reports = {r.corpus: r for r in await rec.reconcile(None, redis, MODEL)}
+    assert reports["unknown"].removed == [50] and "chunk:50" not in redis.store
+    ingest_run._print_reconcile(list(reports.values()))
+    assert "REFUSED" not in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_rewrites_go_in_small_transactions(monkeypatch):
+    rows = {
+        cid: (cid, "about_me", VECTOR, "corpus/about-me/a.md", 1, f"t{cid}")
+        for cid in range(1, 121)
+    }
+    monkeypatch.setattr(
+        rec,
+        "load_scope_rows",
+        lambda engine, model_id: [
+            ScopeRow(cid, "about_me", 1, row[3], chunk_content_sha(row[5]))
+            for cid, row in rows.items()
+        ],
+    )
+    monkeypatch.setattr(
+        rec, "load_write_rows", lambda engine, model_id, ids: [rows[cid] for cid in ids]
+    )
+    redis = _Redis()
+    await rec.reconcile(None, redis, MODEL)
+    assert redis.multis == 3  # 120 keys in MULTIs of 50
+    assert len(redis.store) == 120
+
+
+@pytest.mark.asyncio
+async def test_version_is_bumped_when_a_later_batch_fails(mysql, monkeypatch):
+    redis = _Redis()
+    redis.hset("chunk:9", {"corpus": "about_system", "model": TAG, "vector": VECTOR})
+    calls = []
+
+    async def failing_write(client, model_id, rows):
+        calls.append(rows)
+        raise ConnectionError("redis went away")
+
+    monkeypatch.setattr(rec, "_write_keys", failing_write)
+    with pytest.raises(ConnectionError):
+        await rec.reconcile(None, redis, MODEL)
+    # The orphan delete for about_system was applied before the write failed.
+    assert "chunk:9" not in redis.store
+    assert redis.strings == {"corpus:ver:about_system": 1}
+
+
+# --- Ingest lock --------------------------------------------------------------
+
+
+class _LockRedis:
+    def __init__(self, holder=None):
+        self.value = holder
+        self.calls = []
+
+    async def set(self, key, value, nx, px):
+        self.calls.append(("set", key, px))
+        if self.value is not None:
+            return None
+        self.value = value
+        return True
+
+    async def eval(self, script, numkeys, key, token):
+        self.calls.append(("eval", key))
+        if self.value == token:
+            self.value = None
+            return 1
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_and_reindex_do_nothing_while_another_run_holds_the_lock(capsys):
+    held = _LockRedis(holder="other-run")
+    # engine=object(): touching MySQL would raise, so this proves nothing ran.
+    result = await ingest_run.ingest(engine=object(), redis_client=held, sweep="off")
+    assert result.locked_out and result.docs_changed == 0
+    assert await ingest_run.reindex(engine=object(), redis_client=held) is None
+    assert held.value == "other-run"  # never released someone else's lock
+    assert "ANOTHER INGEST OR REINDEX HOLDS ingest:lock" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_lock_is_taken_with_a_ttl_and_released_by_token():
+    redis = _LockRedis()
+    async with ingest_run.ingest_lock(redis) as acquired:
+        assert acquired and redis.value is not None
+    assert redis.value is None
+    assert redis.calls[0] == ("set", "ingest:lock", ingest_run.INGEST_LOCK_TTL_MS)
+
+    # Lock expired mid-run and another run took it: the release must not delete it.
+    async with ingest_run.ingest_lock(redis):
+        redis.value = "someone-else"
+    assert redis.value == "someone-else"
+
+
+def test_cli_exits_zero_when_locked_out(monkeypatch):
+    async def fake_ingest(**kwargs):
+        return ingest_run.RunResult(locked_out=True)
+
+    async def fake_reindex(**kwargs):
+        return None
+
+    monkeypatch.setattr(ingest_run, "ingest", fake_ingest)
+    monkeypatch.setattr(ingest_run, "reindex", fake_reindex)
+    assert ingest_run.main([]) == 0
+    assert ingest_run.main(["--reindex"]) == 0
 
 
 # --- CLI ----------------------------------------------------------------------

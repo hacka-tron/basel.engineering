@@ -23,18 +23,27 @@ So a ``chunk:{id}`` key exists only when MySQL row ``{id}`` exists, and its
 ``content_sha`` names that row's current text: the invariant the answer cache's
 source check relies on. Keys tagged with another embedding model are out of scope.
 
-Guard: when MySQL has zero chunks for a corpus (in this model) but Redis has keys
-for it, nothing is deleted and the refusal is logged loudly (an empty or wrongly
-restored database must not wipe the index); like the stale sweep's zero-file
-guard, ``force`` does not lift it.
+Guards on orphan deletion (repairs and rewrites still proceed; a refusal is
+logged at ERROR and printed as a banner):
+
+* zero rows: MySQL has zero chunks for a corpus (in this model) but Redis has keys
+  for it. An empty or wrongly restored database must not wipe the index; like the
+  stale sweep's zero-file guard, ``force`` does not lift it.
+* fraction: more than 30% of a corpus's keys (and more than 2) would go. Only
+  ``force`` (``--reindex``) lifts it.
+
+Keys tagged with this model but no corpus field are counted under ``unknown`` and
+removed when they have no MySQL row; no guard applies to them.
 
 When anything was written or removed for a corpus, ``corpus:ver:{corpus}`` is
-bumped so retrieval-cache entries computed against the old index are not reused.
+bumped so retrieval-cache entries computed against the old index are not reused;
+the bump also happens when a later batch fails after earlier ones were applied.
+Rewrites go in MULTI transactions of 50 keys to keep Redis stalls short.
 ``force`` (``--reindex``) rewrites every key in scope from MySQL; it is idempotent.
 
-Assumes one ingest at a time (the ingest Job): ingest writes a document's Redis
-keys just before its MySQL transaction commits, so a reconcile running alongside
-another ingest could see those keys as orphans for a moment.
+One ingest or reindex runs at a time: both hold the Redis lock ``ingest:lock``
+(``run.py``). Ingest writes a document's Redis keys just before its MySQL commit,
+so a reconcile alongside another ingest could see those keys as orphans.
 """
 
 import logging
@@ -50,11 +59,22 @@ from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
 from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields
 from services.glassbox.ingest.sweep import CORPORA
+from services.glassbox.retrieval.search import VECTOR_DIMENSIONS
 
 LOGGER = logging.getLogger(__name__)
 
+# Keys read (HMGET) or deleted per round trip, and MySQL rows loaded per query.
 BATCH = 500
-VECTOR_BYTES = 512 * 4
+# Keys rewritten per MULTI. Atomicity is only needed per key (DEL + HSET); small
+# transactions keep each Redis main-thread stall (HNSW deletes and inserts) short.
+WRITE_BATCH = 50
+VECTOR_BYTES = VECTOR_DIMENSIONS * 4
+# Orphan deletions allowed per corpus without --reindex: at most this share of the
+# corpus's Redis keys (for this model), and always at least ALWAYS_ALLOWED_ORPHANS.
+MAX_ORPHAN_FRACTION = 0.30
+ALWAYS_ALLOWED_ORPHANS = 2
+# Keys tagged with this model but no corpus field are reported under this name.
+UNKNOWN_CORPUS = "unknown"
 # The fields compared against MySQL, in HMGET order.
 _COMPARED = ("corpus", "model", "document_id", "source_path", "content_sha")
 
@@ -129,17 +149,31 @@ def plan_reconcile(
         corpus, model = stored[0], stored[1]
         if model != tag:
             continue  # another model's key, or an id rewritten above
-        current = report(corpus or "unknown")
+        current = report(corpus or UNKNOWN_CORPUS)
         current.redis_keys += 1
         if chunk_id not in by_id:
             current.removed.append(chunk_id)
     for current in reports.values():
-        if current.removed and current.mysql_chunks == 0:
+        if not current.removed or current.corpus not in CORPORA:
+            # Keys with no (or an unknown) corpus are malformed: with this model's
+            # tag and no MySQL row they are always removed, never refused.
+            continue
+        if current.mysql_chunks == 0:
             current.refused = (
                 f"MySQL has zero {model_id} chunks for {current.corpus} but Redis has "
                 f"{current.redis_keys} keys for it; refusing to delete them (is the database "
                 "empty or restored from the wrong dump?)"
             )
+        elif not force and len(current.removed) > max(
+            ALWAYS_ALLOWED_ORPHANS, MAX_ORPHAN_FRACTION * current.redis_keys
+        ):
+            current.refused = (
+                f"{len(current.removed)} of {current.redis_keys} Redis keys for "
+                f"{current.corpus} have no MySQL row, above the {MAX_ORPHAN_FRACTION:.0%} "
+                "limit; refusing to delete them (MySQL restored from an old dump? run "
+                "--reindex to remove them deliberately)"
+            )
+        if current.refused:
             current.removed = []
     return reports
 
@@ -211,37 +245,43 @@ async def load_redis_chunks(client) -> dict[int, tuple[str | None, ...]]:
 async def apply_reconcile(
     engine: Engine, client, model_id: str, reports: dict[str, ReconcileReport]
 ) -> None:
-    removed = [chunk_id for report in reports.values() for chunk_id in report.removed]
-    for start in range(0, len(removed), BATCH):
-        batch = removed[start : start + BATCH]
-        await client.delete(
-            *(f"chunk:{chunk_id}" for chunk_id in batch),
-            *(f"chunktxt:{chunk_id}" for chunk_id in batch),
-        )
-    to_write = sorted(
-        chunk_id
+    corpus_of = {
+        chunk_id: report.corpus
         for report in reports.values()
-        for chunk_id in (*report.repaired, *report.rewritten)
-    )
+        for chunk_id in (*report.removed, *report.repaired, *report.rewritten)
+    }
+    # Corpora with at least one applied change: their version is bumped even if a
+    # later batch fails, so no retrieval-cache entry outlives a change it missed.
+    touched: set[str] = set()
     written: set[int] = set()
-    for start in range(0, len(to_write), BATCH):
-        batch = to_write[start : start + BATCH]
-        rows = load_write_rows(engine, model_id, batch)
-        # One MULTI per batch: a rewritten key is replaced atomically (DEL then
-        # HSET drops any stray field), so readers never see it missing.
-        async with client.pipeline(transaction=True) as pipeline:
-            for chunk_id, corpus, vector, source_path, document_id, text in rows:
-                if vector is None or len(vector) != VECTOR_BYTES:
-                    LOGGER.error("chunk %s has an invalid stored vector; not indexed", chunk_id)
-                    continue
-                key = f"chunk:{chunk_id}"
-                pipeline.delete(key, f"chunktxt:{chunk_id}")
-                pipeline.hset(
-                    key,
-                    mapping=chunk_fields(corpus, model_id, vector, source_path, document_id, text),
-                )
-                written.add(chunk_id)
-            await pipeline.execute()
+    try:
+        removed = [chunk_id for report in reports.values() for chunk_id in report.removed]
+        for start in range(0, len(removed), BATCH):
+            batch = removed[start : start + BATCH]
+            await client.delete(
+                *(f"chunk:{chunk_id}" for chunk_id in batch),
+                *(f"chunktxt:{chunk_id}" for chunk_id in batch),
+            )
+            touched.update(corpus_of[chunk_id] for chunk_id in batch)
+        to_write = sorted(
+            chunk_id
+            for report in reports.values()
+            for chunk_id in (*report.repaired, *report.rewritten)
+        )
+        for start in range(0, len(to_write), BATCH):
+            rows = [
+                row
+                for row in load_write_rows(engine, model_id, to_write[start : start + BATCH])
+                if _valid_vector(row)
+            ]
+            for offset in range(0, len(rows), WRITE_BATCH):
+                await _write_keys(client, model_id, rows[offset : offset + WRITE_BATCH])
+                for row in rows[offset : offset + WRITE_BATCH]:
+                    written.add(row[0])
+                    touched.add(corpus_of.get(row[0], row[1]))
+    finally:
+        for corpus in sorted(touched):
+            await client.incr(f"corpus:ver:{corpus}")
     for report in reports.values():
         report.skipped = [
             chunk_id
@@ -250,8 +290,28 @@ async def apply_reconcile(
         ]
         report.repaired = [chunk_id for chunk_id in report.repaired if chunk_id in written]
         report.rewritten = [chunk_id for chunk_id in report.rewritten if chunk_id in written]
-        if report.changed:
-            await client.incr(f"corpus:ver:{report.corpus}")
+
+
+def _valid_vector(row) -> bool:
+    chunk_id, vector = row[0], row[2]
+    if vector is None or len(vector) != VECTOR_BYTES:
+        LOGGER.error("chunk %s has an invalid stored vector; not indexed", chunk_id)
+        return False
+    return True
+
+
+async def _write_keys(client, model_id: str, rows) -> None:
+    # One small MULTI: each rewritten key is replaced atomically (DEL then HSET
+    # drops any stray field), so readers never see it missing.
+    async with client.pipeline(transaction=True) as pipeline:
+        for chunk_id, corpus, vector, source_path, document_id, text in rows:
+            key = f"chunk:{chunk_id}"
+            pipeline.delete(key, f"chunktxt:{chunk_id}")
+            pipeline.hset(
+                key,
+                mapping=chunk_fields(corpus, model_id, vector, source_path, document_id, text),
+            )
+        await pipeline.execute()
 
 
 def log_report(report: ReconcileReport) -> None:
@@ -282,6 +342,8 @@ async def reconcile(
     keys = await load_redis_chunks(client)
     reports = plan_reconcile(model_id, rows, keys, force=force)
     await apply_reconcile(engine, client, model_id, reports)
-    for report in reports.values():
+    # Always report the real corpora; "unknown" only when it had malformed keys.
+    shown = [report for report in reports.values() if report.corpus in CORPORA or report.redis_keys]
+    for report in shown:
         log_report(report)
-    return list(reports.values())
+    return shown

@@ -7,6 +7,8 @@ import os
 import re
 import struct
 import sys
+import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,6 +60,39 @@ _CHUNKERS = {
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 
 
+INGEST_LOCK_KEY = "ingest:lock"
+# Longer than any ingest run so far; if a run outlives it, the lock just expires.
+INGEST_LOCK_TTL_MS = 30 * 60 * 1000
+_RELEASE_LOCK = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+
+@asynccontextmanager
+async def ingest_lock(redis_client):
+    """Hold ``ingest:lock`` for one ingest or reindex; yields False if another holds it."""
+    token = uuid.uuid4().hex
+    acquired = await redis_client.set(INGEST_LOCK_KEY, token, nx=True, px=INGEST_LOCK_TTL_MS)
+    if not acquired:
+        message = (
+            f"!!! ANOTHER INGEST OR REINDEX HOLDS {INGEST_LOCK_KEY}; this run did nothing "
+            "(it exits 0 so the Job doesn't fail; the next run catches up) !!!"
+        )
+        LOGGER.error(message)
+        print(message)
+        print(message, file=sys.stderr)
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        # Token-checked: never delete a lock that expired and was taken by another run.
+        await redis_client.eval(_RELEASE_LOCK, 1, INGEST_LOCK_KEY, token)
+
+
 @dataclass
 class RunResult:
     docs_changed: int = 0
@@ -65,6 +100,7 @@ class RunResult:
     errors: dict[str, str] = field(default_factory=dict)
     sweep: list[SweepPlan] = field(default_factory=list)
     reconcile: list[ReconcileReport] = field(default_factory=list)
+    locked_out: bool = False
 
 
 def chunker_for_path(path: Path):
@@ -132,6 +168,26 @@ async def ingest(
         engine = create_db_engine()
     if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
+    try:
+        async with ingest_lock(redis_client) as acquired:
+            if not acquired:
+                return RunResult(locked_out=True)
+            return await _ingest(root, engine, redis_client, sweep, sweep_max_fraction, force_sweep)
+    finally:
+        if own_redis:
+            await redis_client.aclose()
+        if own_engine:
+            engine.dispose()
+
+
+async def _ingest(
+    root: Path,
+    engine: Engine,
+    redis_client,
+    sweep: str,
+    sweep_max_fraction: float,
+    force_sweep: bool,
+) -> RunResult:
     sessions = sessionmaker(bind=engine)
     result = RunResult()
     run_id = None
@@ -273,19 +329,17 @@ async def ingest(
                 run.docs_changed = result.docs_changed
                 run.chunks_written = result.chunks_written
         raise
-    finally:
-        if own_redis:
-            await redis_client.aclose()
-        if own_engine:
-            engine.dispose()
 
 
-async def reindex(*, engine: Engine | None = None, redis_client=None) -> list[ReconcileReport]:
+async def reindex(
+    *, engine: Engine | None = None, redis_client=None
+) -> list[ReconcileReport] | None:
     """Rewrite every Redis chunk key of the configured model from MySQL (``--reindex``).
 
     For after a MySQL restore or a suspect index. Scans no files and calls no
     embedding API (the vectors come from MySQL); idempotent. Orphan keys are
-    removed under the same zero-row guard as the reconcile in every ingest run.
+    removed under the zero-row guard (the fraction guard is lifted). Returns None,
+    doing nothing, when another ingest or reindex holds ``ingest:lock``.
     """
     model_id = get_embedding_provider().model_id
     own_engine = engine is None
@@ -294,8 +348,11 @@ async def reindex(*, engine: Engine | None = None, redis_client=None) -> list[Re
     if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
     try:
-        await prepare_index(sessionmaker(bind=engine), redis_client)
-        return await reconcile(engine, redis_client, model_id, force=True)
+        async with ingest_lock(redis_client) as acquired:
+            if not acquired:
+                return None
+            await prepare_index(sessionmaker(bind=engine), redis_client)
+            return await reconcile(engine, redis_client, model_id, force=True)
     finally:
         if own_redis:
             await redis_client.aclose()
@@ -520,7 +577,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             LOGGER.exception("Reindex failed")
             return 1
-        _print_reconcile(reports)
+        if reports is not None:
+            _print_reconcile(reports)
         return 0
     if args.dry_run:
         try:
@@ -542,6 +600,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         LOGGER.exception("Ingestion run failed")
         return 1
+    if result.locked_out:
+        return 0
     print(
         f"docs_changed={result.docs_changed} chunks_written={result.chunks_written} "
         f"documents_skipped={len(result.errors)}"
