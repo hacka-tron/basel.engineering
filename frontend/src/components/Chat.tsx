@@ -18,7 +18,7 @@ type ChatProps = {
   onStop: () => void
   onNewChat: () => void
   inputAccessory?: ReactNode
-  /** Below md, the topic chips; rendered directly above the ask box. */
+  /** Below md in Chat view, the topic chips; rendered directly above the ask box. */
   inputTopic?: ReactNode
   /**
    * Shown in place of the messages (mobile diagram view). The messages stay

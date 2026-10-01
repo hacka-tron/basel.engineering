@@ -584,7 +584,8 @@ function App() {
   }
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
-  // md+ only; below md the topic is chosen with the chips above the ask box.
+  // md+ only; below md the topic is chosen with the chips above the ask box
+  // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
         <button
@@ -612,10 +613,11 @@ function App() {
       <Collapsible open={!focusMode}>
       <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
         {/*
-          Below md: one row, [h1 ... Contact me, GitHub] (the topic chips sit
-          above the ask box). Contact me sits directly left of the GitHub icon
-          as one right-aligned pair, the same grouping as desktop. At md+ the
-          row is [h1, nav ... Contact me, GitHub] (visual order via `order-*`).
+          Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
+          chips sit above the ask box). Contact sits directly left of the
+          GitHub icon as one right-aligned pair, the same grouping as desktop.
+          At md+ the row is [h1, nav ... Contact me, GitHub] (visual order via
+          `order-*`).
         */}
         <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
           {/* Screen readers always get the full name; the visible text swaps to
@@ -628,7 +630,7 @@ function App() {
           {isDesktop && topicNav}
 
         <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
-          <ContactReveal />
+          <ContactReveal variant={isDesktop ? 'text' : 'icon'} />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
             target="_blank"
@@ -671,7 +673,9 @@ function App() {
               />
             </div>
           ) : undefined}
-          inputTopic={isDesktop ? undefined : <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} />}
+          inputTopic={isDesktop || showDiagramView ? undefined : (
+            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={() => diagramButtonRef.current?.focus()} />
+          )}
           inputAccessory={
             <PipelineStrip
               view={showDiagramView ? 'diagram' : 'chat'}

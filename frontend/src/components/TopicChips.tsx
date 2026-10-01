@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from 'react'
+import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
 
 export type TopicChip<T extends string> = { value: T; label: string; short: string }
 
@@ -6,18 +6,35 @@ type TopicChipsProps<T extends string> = {
   value: T
   options: TopicChip<T>[]
   onChange: (value: T) => void
+  /** Called if a chip still has focus when the chips unmount (e.g. on a switch to Diagram view). */
+  onUnmountWithFocus?: () => void
 }
 
 /**
  * Below md, the question topic as a radio group directly above the ask box:
- * "Asking about (● Basel) (○ System)". One 44px row in both Chat and Diagram
- * views, so the topic is always next to where the question is typed. Roving
+ * "Asking about (● Basel) (○ System)". One 44px row, Chat view only (the
+ * Diagram view unmounts it and gives the diagram that height; the topic is
+ * unchanged, so a question typed there still uses it). Roving
  * tabindex: Tab reaches the checked chip; arrows (and Home/End) move and
  * select, as in a native radio group. Accessible names are the full topic
  * names; the visible short labels are contained in them.
  */
-function TopicChips<T extends string>({ value, options, onChange }: TopicChipsProps<T>) {
+function TopicChips<T extends string>({ value, options, onChange, onUnmountWithFocus }: TopicChipsProps<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([])
+  const rootRef = useRef<HTMLDivElement>(null)
+  const onUnmountRef = useRef(onUnmountWithFocus)
+  useLayoutEffect(() => { onUnmountRef.current = onUnmountWithFocus })
+  // Layout-effect cleanup runs before React removes the DOM, so the focused
+  // chip can still be detected; the callback moves focus once it is gone.
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    return () => {
+      if (root?.contains(document.activeElement)) {
+        const rescue = onUnmountRef.current
+        if (rescue) queueMicrotask(rescue)
+      }
+    }
+  }, [])
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const index = options.findIndex((option) => option.value === value)
@@ -34,7 +51,7 @@ function TopicChips<T extends string>({ value, options, onChange }: TopicChipsPr
   }
 
   return (
-    <div className="flex min-h-11 items-center gap-1 md:hidden">
+    <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:hidden">
       <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted">Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
         {options.map((option, index) => {
