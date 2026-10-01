@@ -281,7 +281,29 @@ data "aws_iam_policy_document" "ci" {
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.state.arn]
+
+    # List only what the envs/prod backend needs: its own prefix, the exact
+    # state key (the backend lists with prefix = key), and the default
+    # workspace-enumeration prefix env:/ (empty, workspaces are not used).
+    # Never bootstrap/.
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values = [
+        "envs/prod",
+        "envs/prod/*",
+        "env:/",
+        "env:/*",
+      ]
+    }
+  }
+
+  statement {
+    sid       = "StateBucketLocation"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
     resources = [aws_s3_bucket.state.arn]
   }
 
@@ -410,7 +432,29 @@ data "aws_iam_policy_document" "plan" {
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.state.arn]
+
+    # List only what the envs/prod backend needs: its own prefix, the exact
+    # state key (the backend lists with prefix = key), and the default
+    # workspace-enumeration prefix env:/ (empty, workspaces are not used).
+    # Never bootstrap/.
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values = [
+        "envs/prod",
+        "envs/prod/*",
+        "env:/",
+        "env:/*",
+      ]
+    }
+  }
+
+  statement {
+    sid       = "StateBucketLocation"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
     resources = [aws_s3_bucket.state.arn]
   }
 

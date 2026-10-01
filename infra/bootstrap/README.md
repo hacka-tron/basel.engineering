@@ -64,29 +64,37 @@ and `use_lockfile = true` as `infra/envs/prod/backend.tf`, key
 `bootstrap/terraform.tfstate`). Bootstrap stays human-applied: CI cannot read
 or write this key. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
 
-Prerequisite: PR #55 (zram) also changes bootstrap IAM. It can be applied
-before or after this move, but apply #55's change first, with the local state,
-then migrate.
+Prerequisite: PR #55 (branch `fix/zram-swap`) adds bootstrap SSM permissions
+and must be **merged to `main` first**. Do not apply #55 from its branch and
+then migrate from a `main` that lacks it: the next plan would remove those
+permissions. Run everything below from an up-to-date `main` checkout that
+contains both #55 and this PR.
 
-1. `cd infra/bootstrap && git pull` (on `main`, after this PR is merged).
-2. `terraform init -migrate-state`. Terraform sees the new backend and the
+1. `git checkout main && git pull`, then `cd infra/bootstrap`.
+2. Check before migrating: `terraform plan` (still on local state, before
+   init changes anything) must show **no changes**. Any diff means the local
+   state and `main` disagree (for example #55 was applied from a branch or
+   not yet applied). Resolve that first; do not migrate.
+3. Back up the local state privately, before touching the backend:
+   `cp terraform.tfstate ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate && chmod 600 ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate`
+4. `terraform init -migrate-state`. Terraform sees the new backend and the
    existing local `terraform.tfstate` and asks whether to copy it to S3.
    Answer `yes`. It uploads the state to `bootstrap/terraform.tfstate`; it does
    not change any AWS resource.
-3. `terraform plan`. It must show only the expected changes:
+5. `terraform plan`. It must show only the expected changes:
    - `aws_s3_bucket_policy.state` will be created (TLS-only, DenyDeleteBucket,
      CI roles denied on `bootstrap/*`);
-   - `aws_iam_role_policy.ci` will be updated in place (state S3 access
-     narrowed from the whole bucket to `envs/prod/*`; plus #55's statements if
-     not yet applied).
+   - `aws_iam_role_policy.ci` and `aws_iam_role_policy.plan` will be updated
+     in place (state S3 access narrowed from the whole bucket to `envs/prod/*`,
+     `s3:ListBucket` restricted by prefix).
    Anything else, especially a destroy or replace, means stop and investigate.
    `prevent_destroy` on the bucket and `random_id` adds no plan diff.
-4. `terraform apply`.
-5. Verify: `aws s3 ls s3://glassbox-tfstate-404379474987-ab88985b66efc96f/bootstrap/`
+6. `terraform apply`.
+7. Verify: `aws s3 ls s3://glassbox-tfstate-404379474987-ab88985b66efc96f/bootstrap/`
    should list `terraform.tfstate`. Run `terraform plan` once more: no changes.
-6. Move the local `terraform.tfstate` and `terraform.tfstate.backup` to a
-   private backup location outside the repo (keep until you are comfortable),
-   then delete them. Never commit them.
+8. Delete the local `terraform.tfstate` and `terraform.tfstate.backup` from the
+   repo directory (the private backup from step 3 is your copy; keep it until
+   you are comfortable). Never commit them.
 
 If the state or bucket is ever lost, recreate the bucket's contents from
 versions (the bucket is versioned) first. If the bucket itself is gone, recreate
