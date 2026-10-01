@@ -1,6 +1,6 @@
 # Bootstrap state moves to S3
 
-**PR:** PRNUM · **Branch:** `infra/bootstrap-remote-state` · **Spec:** `infra/bootstrap/README.md`
+**PR:** [#59](https://github.com/hacka-tron/basel.engineering/pull/59) · **Branch:** `infra/bootstrap-remote-state` · **Spec:** `infra/bootstrap/README.md`
 **Status:** In review. Nothing is migrated or applied yet; both steps are owner-run.
 
 ## TL;DR
