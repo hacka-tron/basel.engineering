@@ -26,6 +26,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 - **Answer warm-up** (`warm.py`): asks the suggested questions through the API so their answers stay cached; shared daily cap `GLASSBOX_WARM_DAILY_LLM_CAP=10`.
 - **Providers:** `GLASSBOX_PROVIDER=fake|bedrock`; fake is the local/CI default and makes no network calls. Production: Titan Text Embeddings V2 + Nova Lite (Claude Haiku streaming is blocked by the account's first-time-use form; do not submit it for the owner).
 - **Eval:** `eval/run_eval.py` (retrieval eval v2, RAG quality plan phase 2): k=8 like the worker, file-level recall@5/MRR (continuity) plus recall@8, chunk-level recall@8/MRR (gold snippets) and noise@8 (tests/plans share), per corpus and category. 30 questions until `eval/golden.yaml` lands. Stored Titan baseline (v1 format, stale fingerprint) recall@5 0.8667, MRR 0.6917. Manual, not in CI; metric unit tests and a fake-provider end-to-end test run in CI.
+- **Answer eval (RAG quality plan phase 1, #97):** `eval/golden.yaml` (75 cases: fact, planned, live, unanswerable, multi-turn, injection), free deterministic graders in `eval/graders.py`, and `eval/run_answers.py` (in-process answers, JSONL to `eval/runs/`). Dataset validation and grader tests run in CI; no paid run yet.
 
 ### Frontend (`frontend/`, Vite + React 19 + TypeScript + Tailwind v4 + React Flow)
 
