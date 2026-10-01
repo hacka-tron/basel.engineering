@@ -9,6 +9,8 @@
 #   Usage: zram-swap.sh [apply|dry-run]     (default: apply)
 #
 # What it does:
+#   0. Holds an exclusive flock on /run/lock/glassbox-zram-swap.lock for the
+#      whole run, so overlapping runs cannot undo each other.
 #   1. Writes /etc/systemd/zram-generator.conf, overriding AL2023's packaged
 #      default (/usr/lib/systemd/zram-generator.conf sets
 #      host-memory-limit=800, which disables zram on this 1.84 GiB node).
@@ -17,8 +19,6 @@
 #   2. Leaves /swapfile alone (priority -2): the kernel fills zram first and
 #      only overflows to the EBS-backed swap file when zram is full.
 #   3. Activates zram0 now if it is not already an active swap device.
-#   0. Holds an exclusive flock on /run/lock/glassbox-zram-swap.lock for the
-#      whole run, so overlapping runs cannot undo each other.
 #   4. Only once /dev/zram0 is confirmed active: persists zram-oriented VM
 #      sysctls in /etc/sysctl.d/ and applies them. An EXIT trap covers every
 #      failure path: if zram0 is not active swap when the script exits, it
