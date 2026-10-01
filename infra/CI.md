@@ -3,7 +3,7 @@
 `.github/workflows/terraform.yml` validates both Terraform roots on PRs and
 pushes to `main`. It plans `infra/envs/prod` on same-repository PRs and pushes,
 then applies `infra/envs/prod` after a merge to `main`. `infra/bootstrap` remains
-a manually applied local-state root. Fork PRs receive formatting and
+a manually applied root (state in S3, unreachable by CI). Fork PRs receive formatting and
 validation checks, but do not receive production state or Cloudflare access.
 
 As of 2026-09-30, both environments, their Cloudflare secrets and zone ID
@@ -30,8 +30,8 @@ accepts only `main`.
    zone with Zone Read, DNS Edit, and Cache Rules Edit. In **each** environment, add
    variable `CLOUDFLARE_ZONE_ID` for `basel.engineering`. Do not use repository
    secrets for these values, because the environment gates their release.
-3. From `infra/bootstrap`, using the owner's AWS credentials and the retained
-   local `terraform.tfstate`, run `terraform init` and `terraform plan`. Review
+3. From `infra/bootstrap`, using the owner's AWS credentials (state is in S3 at
+   `bootstrap/terraform.tfstate`, see `infra/bootstrap/README.md`), run `terraform init` and `terraform plan`. Review
    that the plan adds only `glassbox-ci-plan` and its policy, updates the
    `glassbox-ci` trust policy, and exposes the new output. Then run
    `terraform apply`. The workflow cannot update its own bootstrap roles.
