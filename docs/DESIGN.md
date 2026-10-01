@@ -224,6 +224,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - Python/TypeScript: one chunk per top-level function or class.
   - Every chunk keeps `source_path`, `start_line`, `end_line`.
 - **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates caches, see 7.3).
+- **Stale documents:** after a complete scan, documents whose files are gone (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
 
 ### 6.5 Redis
 
