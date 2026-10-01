@@ -15,6 +15,7 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 
+- **About Basel corpus error: RDS (owner sign-off).** `corpus/about-me/skills.md` line 15 says this site runs on "Terraform, EC2, RDS, and Kubernetes (k3s)". Glassbox has no RDS; MySQL runs in the cluster (`docs/DESIGN.md` §10.5). Suggested fix: drop "RDS" (or say "in-cluster MySQL"). It is About Basel text, so it needs the owner's OK. Golden case `me-site-stack` (`must_not_include` RDS) fails until it is fixed.
 - **Decide: warm-answers persistently suspended?** Owner decision. Currently running and cheap (at most 10 LLM answers/day). A manual suspend does not stick, because Flux re-applied the CronJob with `suspend: false` after the incident; a lasting suspend means `spec.suspend: true` in `k8s/base/warm-cronjob.yaml` via a PR.
 - **"About Basel can't answer" → fall back to About This System:** proposed, **NOT approved** by the owner. Don't build it until the owner says so.
 - **Optional chat bubble tightening** (less padding, more Claude-like): offered, **not approved**.
