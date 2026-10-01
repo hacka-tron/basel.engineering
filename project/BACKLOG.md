@@ -95,8 +95,6 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 
 ## Bugs
 
-- **Footer latency says "· cached" after every suggested question (owner, 2026-10-01).** Suggested questions are pre-warmed by the `warm-answers` CronJob, so they always hit the answer cache, and the footer appends `· cached` (`frontend/src/components/StatsBar.tsx`, `lib/lastStats.ts`). The owner doesn't want that shown. Planned fix: drop the visible `· cached` and keep the cache hit in the hover/long-press tooltip only. It was implemented as #85 and reverted at the owner's request ("for now dont implement this, put it in the bug backlog"), so pick it up only when the owner asks. Docs to update with it: DESIGN.md "Footer latency" (ingested), SNAPSHOT and the MOBILE_DESIGN.md owner decisions.
-
 - **Mobile Diagram view: the "Details / N chunks" toggle shows the latest chat answer when no component is selected (owner, 2026-10-01).** Opening the details panel under the portrait diagram before tapping any component shows the most recent chat answer and its chunks, which reads as unrelated. Owner's suggestion: disable the toggle (or keep it closed and non-interactive) until a component is selected, and show a short "Select a component" hint instead. Look at `frontend/src/components/ArchitecturePanel.tsx` (portrait readout/collapse state) and how `retrievedChunks` and the selected node feed it. Keep 44px targets and an accessible disabled state (`aria-disabled`, focusable or not, decided consistently). Not implemented yet; pick up when the owner asks.
 
 ## Feature work (priority)
