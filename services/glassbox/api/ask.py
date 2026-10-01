@@ -56,7 +56,9 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Part of the answer-cache identity: bumping it makes every older entry unreachable
 # (they expire via the 24h TTL). v13: abstentions stop being cached, and the
 # planned-source signal and grounding rules no longer treat live infra as planned.
-_PROMPT_VERSION = "v13"
+# v14: DESIGN-003 lost its fixed whole-document label; its headings carry the planned
+# wording instead, so its "what runs today" section reaches the model unmarked.
+_PROMPT_VERSION = "v14"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -264,9 +266,6 @@ def _prompt(
     question: str, chunks: list[WorkerChunk], history: list[HistoryMessage] | None = None
 ) -> str:
     def source_line(chunk: WorkerChunk) -> str:
-        if chunk.source_path == "docs/DESIGN-003-ingestion.md":
-            status = " [PLANNED M4 DESIGN; Google Drive and Git connectors are not implemented yet]"
-            return f"[{chunk.n}] {chunk.source_path}{status}: {chunk.text}"
         if chunk.source_path.startswith(_CODE_SOURCE_PREFIXES):
             return f"[{chunk.n}] {chunk.source_path}: {chunk.text}"
         return f"[{chunk.n}] {chunk.source_path}: {_mark_planned(chunk.text)}"
