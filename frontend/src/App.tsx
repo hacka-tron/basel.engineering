@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
+import TopicChips, { type TopicChip } from './components/TopicChips'
 import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
@@ -34,6 +35,11 @@ const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold trackin
 export type Corpus = 'basel' | 'system'
 
 const CORPORA: Corpus[] = ['basel', 'system']
+
+const TOPIC_CHIPS: TopicChip<Corpus>[] = [
+  { value: 'basel', label: 'About Basel', short: 'Basel' },
+  { value: 'system', label: 'About This System', short: 'System' },
+]
 
 function apiCorpus(corpus: Corpus): ApiCorpus {
   return corpus === 'basel' ? 'about_me' : 'about_system'
@@ -571,21 +577,21 @@ function App() {
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
-  // The topic nav is inert while the diagram view hides it (below md), so
-  // focus that was on it moves to the Chat/Diagram toggle instead of being lost.
-  useLayoutEffect(() => {
-    if (showDiagramView && navRef.current?.contains(document.activeElement)) diagramButtonRef.current?.focus()
-  }, [showDiagramView])
+  // One handler for the desktop nav and the mobile topic chips.
+  const selectTopic = (next: Corpus) => {
+    if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
+    else setCorpus('system')
+  }
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
-  // Rendered before the Contact group at md+ and after it below md so DOM/tab
-  // order matches the visual order at both layouts (visual order via `order-*`).
+  // md+ only; below md the topic is chosen with the chips above the ask box
+  // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
         <button
           type="button"
           aria-pressed={corpus === 'basel'}
-          onClick={() => { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }}
+          onClick={() => selectTopic('basel')}
           className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
         >
           About Basel
@@ -594,7 +600,7 @@ function App() {
         <button
           type="button"
           aria-pressed={corpus === 'system'}
-          onClick={() => setCorpus('system')}
+          onClick={() => selectTopic('system')}
           className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
         >
           About This System
@@ -605,13 +611,13 @@ function App() {
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 pt-2 transition-[padding] duration-200 ease-out motion-reduce:transition-none ${showDiagramView ? 'pb-2' : 'pb-0'} md:flex-nowrap md:gap-0 md:px-8 md:py-0`}>
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
         {/*
-          Below md: row one is [h1 ... Contact me, GitHub], row two is the
-          topic nav. Contact me sits directly left of the GitHub icon as one
-          right-aligned pair, the same grouping as desktop. Visual order is set
-          with `order-*`; at md+ everything sits on one row as
-          [h1, nav ... Contact me, GitHub].
+          Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
+          chips sit above the ask box in Chat view). The envelope sits directly
+          left of the GitHub icon as one right-aligned pair at every width. At
+          md+ the row is [h1, nav ... envelope, GitHub] (visual order via
+          `order-*`).
         */}
         <h1 className={`order-1 flex min-h-11 shrink-0 items-center whitespace-nowrap md:min-h-0 ${NAME_TEXT}`}>
           {/* Screen readers always get the full name; the visible text swaps to
@@ -623,7 +629,7 @@ function App() {
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
           {isDesktop && topicNav}
 
-        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center md:order-3 md:gap-3">
+        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
@@ -637,7 +643,6 @@ function App() {
             </svg>
           </a>
         </div>
-        {!isDesktop && <Collapsible open={!showDiagramView} className="order-3 w-full">{topicNav}</Collapsible>}
       </header>
       </Collapsible>
 
@@ -668,6 +673,9 @@ function App() {
               />
             </div>
           ) : undefined}
+          inputTopic={isDesktop || showDiagramView ? undefined : (
+            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={() => diagramButtonRef.current?.focus()} />
+          )}
           inputAccessory={
             <PipelineStrip
               view={showDiagramView ? 'diagram' : 'chat'}

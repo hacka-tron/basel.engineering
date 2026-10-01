@@ -4,12 +4,14 @@ const TRANSITION_MS = 200
 
 /**
  * Below md, slides its child closed to zero height. Used by focus mode (hides
- * the header and footer while the ask box has focus) and by the Diagram view
- * (hides the topic nav). Animates grid rows rather
- * than height, so the content keeps its natural size and nothing reflows
+ * the header and footer while the ask box has focus). Animates grid rows
+ * rather than height, so the content keeps its natural size and nothing reflows
  * inside it. Content is clipped only while closed or moving, so tooltips that
  * open out of the footer are not cut off once it is fully open. At md+ both
- * wrappers are `display: contents`, so the desktop layout is untouched.
+ * wrappers are `display: contents`, so the desktop layout is untouched. The
+ * inner wrapper is `min-w-0` so a grid item never grows to its content's
+ * min-content width: the header must stay as wide as the screen for the
+ * name to switch to its short form on very narrow screens.
  */
 function Collapsible({ open, className = '', children }: { open: boolean; className?: string; children: ReactNode }) {
   const [settledOpen, setSettledOpen] = useState(open)
@@ -24,7 +26,7 @@ function Collapsible({ open, className = '', children }: { open: boolean; classN
       inert={!open}
       className={`grid shrink-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none md:contents ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${className}`}
     >
-      <div className={`min-h-0 md:contents ${clipped ? 'overflow-hidden' : ''}`}>{children}</div>
+      <div className={`min-h-0 min-w-0 md:contents ${clipped ? 'overflow-hidden' : ''}`}>{children}</div>
     </div>
   )
 }
