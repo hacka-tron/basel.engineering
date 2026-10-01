@@ -379,8 +379,8 @@ cases:
     expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN.md]
     gold_snippets:
       - it counts as a hit only at cosine similarity 0.95 or higher
-      - every cache key embeds the version, so old entries simply stop being read
-    must_include: ['semantic|answer cache', '0\.95', '24[- ]?(h\b|hours?)', 'version']
+      - the retrieval key embeds the version, so old entries stop being read
+    must_include: ['semantic|answer cache', '0\.95', '24[- ]?(h\b|hours?)', 'version|sources?|chang']
   - id: sugg-system-k3s
     origin: suggested
     corpus: about_system

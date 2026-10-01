@@ -24,6 +24,8 @@ from services.glassbox.ingest.chunkers.markdown import chunk_markdown
 from services.glassbox.ingest.chunkers.terraform import chunk_terraform
 from services.glassbox.ingest.chunkers.yaml_doc import chunk_yaml
 from services.glassbox.ingest.redis_index import (
+    CONTENT_SHA_READY_KEY,
+    backfill_content_shas,
     backfill_model_tags,
     ensure_index,
     replace_document_vectors,
@@ -134,6 +136,13 @@ async def ingest(
             for corpus in ("about_me", "about_system"):
                 await redis_client.incr(f"corpus:ver:{corpus}")
             await redis_client.set("idx:chunks:model-tags-ready", "1")
+        # One-time: chunk hashes from before `content_sha` existed get it from
+        # MySQL, so answers built from unchanged documents can be validated.
+        if not await redis_client.get(CONTENT_SHA_READY_KEY):
+            with sessions() as session:
+                rows = session.execute(select(DbChunk.id, DbChunk.text)).all()
+            await backfill_content_shas(redis_client, rows)
+            await redis_client.set(CONTENT_SHA_READY_KEY, "1")
         provider = get_embedding_provider()
         seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
         for source in scan_sources(root):
@@ -224,7 +233,14 @@ async def ingest(
                     session.add(row)
                     session.flush()
                     new_vectors.append(
-                        (row.id, source.corpus, packed, source.source_path, document.id)
+                        (
+                            row.id,
+                            source.corpus,
+                            packed,
+                            source.source_path,
+                            document.id,
+                            chunk.text,
+                        )
                     )
                 await replace_document_vectors(
                     redis_client, old_ids, new_vectors, provider.model_id

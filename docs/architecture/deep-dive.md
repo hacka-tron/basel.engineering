@@ -106,18 +106,18 @@ On phones (below the 768 px breakpoint, and on any phone held sideways: landscap
 
 ## Caching layers: embedding, retrieval, chunk and semantic answer caches
 
-Glassbox has four Redis caches. Every cache entry is tied to whatever could make it stale: the model identity for vectors and answers, the corpus version for retrieval results, and, for answers, the source chunks they were built from.
+Glassbox has four Redis caches, each tied to whatever could make it stale: the model identity for vectors and answers, the corpus version for retrieval results, and the source chunks for answers.
 
-1. **Embedding cache** (`emb:{sha256}`): an exact-match cache of question vectors. The key hashes the embedding model ID together with the normalized question (whitespace collapsed, case-folded). Values are 512 packed float32 values with a 7-day TTL. A hit skips the Titan embedding call on Bedrock. For follow-ups, the key uses the rewritten standalone query.
-2. **Semantic answer cache** (`idx:answers:v2` over `ans2:{corpus}:{id}` hashes): a RediSearch HNSW vector index of previous question vectors, each stored with its answer and cited chunks for 24 hours. A lookup is a KNN search (nearest 3) filtered by corpus and a hashed model tag, and it counts as a hit only at cosine similarity 0.95 or higher and only if every cited chunk's `chunk:{id}` key still exists; an entry whose source changed is deleted on sight and the next-nearest is tried. The model tag hashes `embedding model | LLM model | prompt version`, so changing either model or the prompt wording (the prompt version) makes old answers unreachable. A hit skips the queue, the worker and the LLM entirely and uses no daily budget.
-3. **Retrieval cache** (`ret:{corpus}:v{version}:{sha256}`): the ranked chunk IDs and scores for a given query vector, keyed by a hash of the embedding model ID and the packed vector, with a 1-hour TTL. The worker checks it before running KNN search.
-4. **Chunk cache** (`chunktxt:{chunk_id}`): JSON with each chunk's text, source path, title and line range, with a 1-day TTL. The worker uses it only when every matched chunk is cached; otherwise it reads all of them from MySQL.
+1. **Embedding cache** (`emb:{sha256}`): exact match on the embedding model ID plus the normalized question (whitespace collapsed, case-folded); 512 packed float32 values, 7-day TTL. A hit skips the Titan call. Follow-ups use the rewritten query.
+2. **Semantic answer cache** (`idx:answers:v2` over `ans2:{corpus}:{id}`): an HNSW index of previous question vectors, each stored with its answer and cited chunks for 24 hours, plus each chunk's `content_sha` (SHA-256 of its text). A lookup is a KNN search (nearest 3) filtered by corpus and a hashed `embedding model | LLM model | prompt version` tag, and it counts as a hit only at cosine similarity 0.95 or higher and only if every cited `chunk:{id}` hash still holds the same `content_sha`; a stale entry is deleted and the next-nearest is tried. A hit skips the queue, the worker and the LLM and uses no daily budget.
+3. **Retrieval cache** (`ret:{corpus}:v{version}:{sha256}`): ranked chunk IDs and scores for a query vector and embedding model, 1-hour TTL, checked by the worker before KNN.
+4. **Chunk cache** (`chunktxt:{chunk_id}`): each chunk's text, source path, title and line range, 1-day TTL; used only when every matched chunk is cached.
 
-The order on a first question is: embedding cache, then (on a miss) Bedrock embedding, then the semantic answer cache, then the queue and worker with the retrieval and chunk caches. The embedding comes first because the semantic answer cache needs the question vector to search.
+On a first question the order is: embedding cache, Bedrock embedding on a miss, semantic answer cache, then the queue and worker with the retrieval and chunk caches.
 
-Invalidation avoids scan-and-delete. The integer `corpus:ver:{corpus}` is part of every retrieval-cache key; the ingest Job increments it after it commits a changed document (and the stale sweep after a deletion), so older retrieval results stop being read and simply expire. The answer cache does not use it: a changed document gets new chunk ids, so only answers built from that document fail their source check. An edit elsewhere leaves answers cached until their 24h TTL, which means a new document that would improve an existing answer is picked up only after that answer expires.
+Invalidation avoids scan-and-delete. `corpus:ver:{corpus}` is part of every retrieval-cache key; ingest increments it after committing a changed document (the stale sweep after a deletion), so old retrieval results stop being read and expire. The answer cache does not use it: a changed document's chunks are replaced, so only answers built from that document fail their check. Checking content, not just key existence, also covers chunk ids reused after a MySQL wipe, `TRUNCATE` or restore while Redis kept its data. The trade-off: a new document that would improve an existing answer is picked up only when that answer's 24h TTL ends.
 
-Follow-up questions skip the semantic answer cache in both directions: no read, no lock and no write. A follow-up's answer depends on the conversation, not just the words, so a cached first-question answer is never replayed for a follow-up, and a follow-up answer never enters the cache. Follow-ups still use the embedding, retrieval and chunk caches, keyed on the rewritten query.
+Follow-up questions skip the semantic answer cache both ways (no read, lock or write), because their answer depends on the conversation. They still use the other caches, keyed on the rewritten query.
 
 ## Answer warm-up: keeping suggested answers cached
 
@@ -190,7 +190,7 @@ Redis in Glassbox is `redis/redis-stack-server` 7.2, which includes RediSearch v
 
 Redis structures and keys:
 
-- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path` and `document_id`. Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
+- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id` and `content_sha` (SHA-256 hex of the chunk text, checked by the answer cache). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
 - **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes the source chunk ids. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read.)
 - **`emb:{sha256}`**: the embedding cache. 7-day TTL.
 - **`ret:{corpus}:v{version}:{sha256}`**: the retrieval cache. 1-hour TTL.
@@ -205,6 +205,7 @@ Redis structures and keys:
 - **`glassbox:kill:disable_llm`**: the LLM kill switch.
 - **`demo:load:lock`**: the global stress-test cooldown lock. 5-minute TTL.
 - **`idx:chunks:model-tags-ready`**: a marker recording that existing chunk hashes carry model tags.
+- **`idx:chunks:content-sha-ready`**: a marker recording that existing chunk hashes carry `content_sha`.
 
 Most of Redis can be recreated: chunk vectors come from MySQL and ingestion, caches refill on demand, and locks are short-lived. The exception is the day's rate-limit and budget counters, which live only in Redis, so losing Redis resets the spent daily budget to zero.
 
@@ -219,7 +220,7 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 - **`about_me`**: every Markdown file under `corpus/about-me/`. Any leading `---` front matter is stripped before chunking.
 - **`about_system`**: files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`. Frontend code and GitHub workflow files are outside these directories and are not part of the corpus.
 
-**Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval-cache entries for that corpus stop being read; cached answers built from the old chunks fail their source check. A typical release therefore embeds only the documents that changed.
+**Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval-cache entries for that corpus stop being read; cached answers built from the old chunks fail their source check. A one-time backfill adds `content_sha` from MySQL to hashes written before that field existed. A typical release therefore embeds only the documents that changed.
 
 **Run bookkeeping.** Each run writes an `ingestion_runs` row with its status and counts, and prints `docs_changed`, `chunks_written` and every skipped file with its reason. A file that fails chunking or embedding is skipped and reported, and the run continues.
 

@@ -2,13 +2,16 @@
 
 An entry is keyed by corpus + model id (embedding model, LLM model and prompt
 version) + question vector, not by the corpus-wide version that every ingest
-bumps. Instead, each read checks that every chunk the answer was built from is
-still indexed (``chunk:{id}`` exists). Ingest replaces all of a document's
-chunks with fresh ids whenever its content (or embedding model) changes, and the
-stale sweep deletes the chunks of removed documents, so a missing chunk key
-means "a source document changed or was deleted": the entry is deleted and
-treated as a miss. Edits to other documents leave the answer cached until its
-24h TTL (DESIGN.md §7.3).
+bumps. Instead, the entry stores ``sources``: ``{chunk id: content_sha}`` for
+every chunk the answer was built from (SHA-256 of the chunk text it saw), and
+each read checks those against the ``content_sha`` field of each ``chunk:{id}``
+hash, which ingest writes. Ingest replaces all of a document's chunks whenever
+its content (or embedding model) changes, and the stale sweep deletes a removed
+document's chunks, so a missing key or a different hash means "a source changed
+or was deleted": the entry is deleted and read as a miss. Comparing content, not
+only key existence, also catches chunk ids reused after a MySQL wipe, TRUNCATE
+or restore while Redis kept its keys. Edits to other documents leave the answer
+cached until its 24h TTL (DESIGN.md §7.3).
 """
 
 import hashlib
@@ -46,18 +49,33 @@ def _model_tag(model_id: str) -> str:
     return hashlib.sha256(model_id.encode()).hexdigest()
 
 
-def source_chunk_ids(payload: dict) -> set[int] | None:
-    """The chunk ids an answer was built from, or None when the payload names none."""
-    chunks = payload.get("chunks")
+def chunk_content_sha(text: str) -> str:
+    """The ``content_sha`` field of a ``chunk:{id}`` hash: SHA-256 hex of the chunk text.
+
+    The text is exactly as stored in MySQL ``chunks.text``; ingest writes the
+    field (ingest/redis_index.py) and the answer cache compares it with the text
+    an answer was built from.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def source_hashes(chunks: object) -> dict[str, str] | None:
+    """``{chunk id: content_sha}`` of the chunk texts an answer was built from.
+
+    None when any chunk lacks an integer id or its text, so nothing unverifiable
+    is cached.
+    """
     if not isinstance(chunks, list) or not chunks:
         return None
-    ids = set()
+    sources = {}
     for chunk in chunks:
-        chunk_id = chunk.get("chunk_id") if isinstance(chunk, dict) else None
-        if not isinstance(chunk_id, int) or isinstance(chunk_id, bool):
+        if not isinstance(chunk, dict):
             return None
-        ids.add(chunk_id)
-    return ids
+        chunk_id, text = chunk.get("chunk_id"), chunk.get("text")
+        if not isinstance(chunk_id, int) or isinstance(chunk_id, bool) or not isinstance(text, str):
+            return None
+        sources[str(chunk_id)] = chunk_content_sha(text)
+    return sources
 
 
 class RedisAnswerCache:
@@ -100,13 +118,25 @@ class RedisAnswerCache:
             if "index already exists" not in str(exc).lower():
                 raise
 
-    async def sources_current(self, payload: dict) -> bool:
-        """True when every source chunk of the answer is still in the chunk index."""
-        ids = source_chunk_ids(payload)
-        if not ids:
+    async def sources_current(self, sources: object) -> bool:
+        """True when every source chunk still holds the text the answer was built from.
+
+        A missing key or a missing ``content_sha`` field (a hash written before the
+        field existed) counts as changed.
+        """
+        if not isinstance(sources, dict) or not sources:
             return False
-        present = await self.client.exists(*(f"chunk:{chunk_id}" for chunk_id in sorted(ids)))
-        return present == len(ids)
+        ids = sorted(sources)
+        async with self.client.pipeline(transaction=False) as pipe:
+            for chunk_id in ids:
+                pipe.hget(f"chunk:{chunk_id}", "content_sha")
+            current = await pipe.execute()
+        for chunk_id, value in zip(ids, current, strict=True):
+            if isinstance(value, bytes):
+                value = value.decode()
+            if value is None or value != sources[chunk_id]:
+                return False
+        return True
 
     async def get(self, corpus: str, model_id: str, vector: list[float]) -> dict | None:
         await self._ensure_index()
@@ -145,7 +175,7 @@ class RedisAnswerCache:
             payload = await self._load(key)
             if payload is None:
                 continue
-            if not await self.sources_current(payload):
+            if not await self.sources_current(payload.get("sources")):
                 # A source document changed or was deleted since this answer was
                 # written. Drop it so the next read doesn't re-check it.
                 await self.client.delete(key)
@@ -170,11 +200,13 @@ class RedisAnswerCache:
 
     async def put(self, corpus: str, model_id: str, vector: list[float], payload: dict) -> None:
         await self._ensure_index()
+        sources = source_hashes(payload.get("chunks"))
         # A source re-ingested while the answer was generating would make the entry
         # stale on arrival; skip it (reads re-check anyway, so this only saves space).
-        if not await self.sources_current(payload):
-            LOGGER.info("Answer cache write skipped: a source chunk is no longer indexed")
+        if sources is None or not await self.sources_current(sources):
+            LOGGER.info("Answer cache write skipped: a source chunk changed or is unverifiable")
             return
+        payload = {**payload, "sources": sources}
         key = f"{KEY_PREFIX}{corpus}:{uuid4().hex}"
         packed = struct.pack(f"<{len(vector)}f", *vector)
         async with self.client.pipeline(transaction=True) as pipe:

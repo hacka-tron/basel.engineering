@@ -15,7 +15,13 @@ from sqlalchemy import delete
 from services.glassbox.api import ask as ask_module
 from services.glassbox.api.main import app
 from services.glassbox.cache import answer as answer_module
-from services.glassbox.cache.answer import INDEX_NAME, KEY_PREFIX, RedisAnswerCache, _model_tag
+from services.glassbox.cache.answer import (
+    INDEX_NAME,
+    KEY_PREFIX,
+    RedisAnswerCache,
+    _model_tag,
+    chunk_content_sha,
+)
 from services.glassbox.cache.embedding import embedding_cache_key
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
@@ -43,8 +49,7 @@ class _Pipeline:
         return lambda *args, **kwargs: self.ops.append((name, args, kwargs))
 
     async def execute(self):
-        for name, args, kwargs in self.ops:
-            await getattr(self.store, name)(*args, **kwargs)
+        return [await getattr(self.store, name)(*args, **kwargs) for name, args, kwargs in self.ops]
 
 
 class SearchRedis:
@@ -126,23 +131,51 @@ class SearchRedis:
         return self.strings.get(key)
 
 
+def _text(chunk_id, revision=0):
+    return f"Chunk {chunk_id} text, revision {revision}."
+
+
 def _payload(*chunk_ids, answer="Basel builds software."):
     return {
         "answer": answer,
         "chunks": [
-            {"n": n, "chunk_id": chunk_id, "source_path": f"docs/doc{chunk_id}.md"}
+            {
+                "n": n,
+                "chunk_id": chunk_id,
+                "text": _text(chunk_id),
+                "source_path": f"docs/doc{chunk_id}.md",
+            }
             for n, chunk_id in enumerate(chunk_ids, start=1)
         ],
     }
 
 
-async def _ingest_document(client, old_ids, new_ids, source_path, document_id):
+def _stored(payload):
+    """What the cache stores and replays: the payload plus its source hashes."""
+    return {
+        **payload,
+        "sources": {
+            str(chunk["chunk_id"]): chunk_content_sha(chunk["text"]) for chunk in payload["chunks"]
+        },
+    }
+
+
+async def _ingest_document(
+    client, old_ids, new_ids, source_path, document_id, revision=0, text=None
+):
     """What ingest does to Redis for a new or changed document (plus the version bump)."""
     await replace_document_vectors(
         client,
         old_ids,
         [
-            (chunk_id, "about_system", struct.pack("512f", *V2), source_path, document_id)
+            (
+                chunk_id,
+                "about_system",
+                struct.pack("512f", *V2),
+                source_path,
+                document_id,
+                text if text is not None else _text(chunk_id, revision),
+            )
             for chunk_id in new_ids
         ],
         "fake-v1",
@@ -160,7 +193,7 @@ async def test_hit_survives_a_reingest_that_changed_an_unrelated_document():
     await cache.put("about_system", MODEL, V1, payload)
     # Another document changes: new chunk ids for it, and the corpus version moves.
     await _ingest_document(client, [3], [4], "docs/other.md", 11)
-    assert await cache.get("about_system", MODEL, V1) == payload
+    assert await cache.get("about_system", MODEL, V1) == _stored(payload)
 
 
 @pytest.mark.asyncio
@@ -190,6 +223,42 @@ async def test_miss_after_a_source_document_is_deleted():
 
 
 @pytest.mark.asyncio
+async def test_miss_when_a_reused_chunk_id_now_holds_different_text():
+    """A MySQL wipe/TRUNCATE/restore restarts AUTO_INCREMENT while Redis keeps its keys."""
+    client = SearchRedis()
+    cache = RedisAnswerCache(client)
+    await _ingest_document(client, [], [5], "docs/source.md", 10)
+    await cache.put("about_system", MODEL, V1, _payload(5))
+    # A fresh ingest after the wipe writes chunk:5 again, for different text.
+    await _ingest_document(client, [], [5], "docs/unrelated.md", 1, revision=1)
+    assert await client.exists("chunk:5") == 1
+    assert await cache.get("about_system", MODEL, V1) is None
+
+
+@pytest.mark.asyncio
+async def test_miss_when_a_chunk_hash_predates_content_sha():
+    client = SearchRedis()
+    cache = RedisAnswerCache(client)
+    await _ingest_document(client, [], [1], "docs/source.md", 10)
+    await cache.put("about_system", MODEL, V1, _payload(1))
+    del client.hashes["chunk:1"]["content_sha"]
+    assert await cache.get("about_system", MODEL, V1) is None
+
+
+@pytest.mark.asyncio
+async def test_unverifiable_answers_are_not_written():
+    client = SearchRedis()
+    cache = RedisAnswerCache(client)
+    await _ingest_document(client, [], [1], "docs/source.md", 10)
+    no_text = {"answer": "An answer.", "chunks": [{"n": 1, "chunk_id": 1}]}
+    await cache.put("about_system", MODEL, V1, no_text)
+    edited = _payload(1)
+    edited["chunks"][0]["text"] = "Text the index no longer holds."
+    await cache.put("about_system", MODEL, V1, edited)
+    assert not [key for key in client.hashes if key.startswith(KEY_PREFIX)]
+
+
+@pytest.mark.asyncio
 async def test_a_stale_nearest_entry_does_not_hide_a_valid_one():
     client = SearchRedis()
     cache = RedisAnswerCache(client)
@@ -198,7 +267,7 @@ async def test_a_stale_nearest_entry_does_not_hide_a_valid_one():
     await _ingest_document(client, [1], [2], "docs/source.md", 10)
     fresh = _payload(2, answer="New answer.")
     await cache.put("about_system", MODEL, V1, fresh)
-    assert await cache.get("about_system", MODEL, V1) == fresh
+    assert await cache.get("about_system", MODEL, V1) == _stored(fresh)
 
 
 @pytest.mark.asyncio
@@ -221,7 +290,7 @@ async def test_entry_is_scoped_by_corpus_model_and_similarity_but_not_corpus_ver
     assert set(stored) == {"corpus", "model", "vector", "payload"}
     for _ in range(5):
         await client.incr("corpus:ver:about_system")
-    assert await cache.get("about_system", MODEL, V1) == payload
+    assert await cache.get("about_system", MODEL, V1) == _stored(payload)
     assert await cache.get("about_me", MODEL, V1) is None
     assert await cache.get("about_system", "fake-v1|fake-llm|v14", V1) is None
     assert await cache.get("about_system", MODEL, V2) is None
@@ -239,7 +308,7 @@ async def test_legacy_entries_are_never_read():
         "version": "7",
         "model": _model_tag(MODEL),
         "vector": struct.pack("<512f", *V1),
-        "payload": json.dumps(_payload(1)),
+        "payload": json.dumps(_stored(_payload(1))),
     }
     assert await cache.get("about_system", MODEL, V1) is None
     assert INDEX_NAME != "idx:answers" and not KEY_PREFIX.startswith("ans:")
@@ -248,7 +317,7 @@ async def test_legacy_entries_are_never_read():
         "corpus": "about_system",
         "model": _model_tag(MODEL),
         "vector": struct.pack("<512f", *V1),
-        "payload": json.dumps({"answer": "An answer.", "chunks": [{"n": 1}]}),
+        "payload": json.dumps(_payload(1)),  # valid chunks, but no "sources" map
     }
     assert await cache.get("about_system", MODEL, V1) is None
 
@@ -283,7 +352,9 @@ def test_warm_up_still_hits_after_an_unrelated_reingest(monkeypatch):
 
     search = SearchRedis()
     # MemoryRedis's simulated worker always retrieves chunk 42.
-    asyncio.run(_ingest_document(search, [], [42], "about/basel.md", 1))
+    asyncio.run(
+        _ingest_document(search, [], [42], "about/basel.md", 1, text="Basel builds software.")
+    )
     monkeypatch.setenv("REDIS_URL", "redis://unused")
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
     monkeypatch.setattr(ask_module.redis, "from_url", lambda url: MemoryRedis())
@@ -335,17 +406,25 @@ async def test_semantic_answer_cache_against_redis_stack():
     chunk_id = 10**15 + uuid4().int % 10**9
     chunk_key = f"chunk:{chunk_id}"
     legacy_key = f"ans:about_me:v1:{uuid4().hex}"
-    payload = {"answer": "A grounded answer.", "chunks": [{"chunk_id": chunk_id}]}
+    payload = {"answer": "A grounded answer.", "chunks": [{"chunk_id": chunk_id, "text": "T."}]}
+    stored = {**payload, "sources": {str(chunk_id): chunk_content_sha("T.")}}
+    chunk_fields = {"corpus": "answer_cache_test", "content_sha": chunk_content_sha("T.")}
     try:
-        await client.hset(chunk_key, mapping={"corpus": "answer_cache_test"})
+        await client.hset(chunk_key, mapping=chunk_fields)
         assert await cache.get("about_me", model_id, V1) is None
         await cache.put("about_me", model_id, V1, payload)
-        assert await cache.get("about_me", model_id, V1) == payload
+        assert await cache.get("about_me", model_id, V1) == stored
         await client.incr("corpus:ver:answer_cache_test")
-        assert await cache.get("about_me", model_id, V1) == payload
+        assert await cache.get("about_me", model_id, V1) == stored
         assert await cache.get("about_system", model_id, V1) is None
         assert await cache.get("about_me", "different-model", V1) is None
         assert await cache.get("about_me", model_id, V2) is None
+        # Same id, different text (a reused id after a MySQL wipe): a miss.
+        await client.hset(chunk_key, "content_sha", chunk_content_sha("Other text."))
+        assert await cache.get("about_me", model_id, V1) is None
+        await client.hset(chunk_key, mapping=chunk_fields)
+        await cache.put("about_me", model_id, V1, payload)
+        assert await cache.get("about_me", model_id, V1) == stored
         await client.delete(chunk_key)
         assert await cache.get("about_me", model_id, V1) is None
         assert not [
@@ -354,7 +433,7 @@ async def test_semantic_answer_cache_against_redis_stack():
             if await client.hget(key, "model") == _model_tag(model_id).encode()
         ]
         # A legacy-format entry is invisible to the new index.
-        await client.hset(chunk_key, mapping={"corpus": "answer_cache_test"})
+        await client.hset(chunk_key, mapping=chunk_fields)
         await client.hset(
             legacy_key,
             mapping={
@@ -362,7 +441,7 @@ async def test_semantic_answer_cache_against_redis_stack():
                 "version": "1",
                 "model": _model_tag(model_id),
                 "vector": struct.pack("<512f", *V1),
-                "payload": json.dumps(payload),
+                "payload": json.dumps(stored),
             },
         )
         assert await cache.get("about_me", model_id, V1) is None
@@ -456,7 +535,13 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     async def index_source_chunk():
         client = redis.from_url("redis://127.0.0.1:6379/0")
         try:
-            await client.hset(f"chunk:{chunk_id}", mapping={"corpus": "answer_cache_test"})
+            await client.hset(
+                f"chunk:{chunk_id}",
+                mapping={
+                    "corpus": "answer_cache_test",
+                    "content_sha": chunk_content_sha("Basel builds software."),
+                },
+            )
         finally:
             await client.aclose()
 

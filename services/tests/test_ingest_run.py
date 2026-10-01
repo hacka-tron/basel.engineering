@@ -537,7 +537,12 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
     """A cached answer outlives other documents' re-ingests, not its own sources'."""
     from uuid import uuid4
 
-    from services.glassbox.cache.answer import KEY_PREFIX, RedisAnswerCache, _model_tag
+    from services.glassbox.cache.answer import (
+        KEY_PREFIX,
+        RedisAnswerCache,
+        _model_tag,
+        chunk_content_sha,
+    )
 
     engine, client = integration_stack
     try:
@@ -560,30 +565,35 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
 
-    def chunk_ids(path):
-        with Session(engine) as session:
-            return list(
-                session.scalars(
-                    select(DbChunk.id)
-                    .join(Document, DbChunk.document_id == Document.id)
-                    .where(Document.source_path == path)
-                )
-            )
-
     cache = RedisAnswerCache(client)
     model_id = f"test-{uuid4().hex}"
     v_source = [1.0] + [0.0] * 511
     v_deleted = [0.0, 1.0] + [0.0] * 510
 
     def payload(path):
+        with Session(engine) as session:
+            rows = session.execute(
+                select(DbChunk.id, DbChunk.text)
+                .join(Document, DbChunk.document_id == Document.id)
+                .where(Document.source_path == path)
+            ).all()
         return {
             "answer": f"An answer from {path}.",
-            "chunks": [{"chunk_id": chunk_id, "source_path": path} for chunk_id in chunk_ids(path)],
+            "chunks": [
+                {"chunk_id": chunk_id, "text": text, "source_path": path} for chunk_id, text in rows
+            ],
         }
+
+    def served(entry):
+        return entry and {key: value for key, value in entry.items() if key != "sources"}
 
     try:
         await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         from_source, from_deleted = payload(paths["source"]), payload(paths["deleted"])
+        for chunk in from_source["chunks"]:
+            assert await client.hget(f"chunk:{chunk['chunk_id']}", "content_sha") == (
+                chunk_content_sha(chunk["text"]).encode()
+            )
         await cache.put("about_me", model_id, v_source, from_source)
         await cache.put("about_me", model_id, v_deleted, from_deleted)
 
@@ -592,13 +602,13 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
         changed = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         assert changed.docs_changed == 1
         assert int(await client.get("corpus:ver:about_me")) == version + 1
-        assert await cache.get("about_me", model_id, v_source) == from_source
-        assert await cache.get("about_me", model_id, v_deleted) == from_deleted
+        assert served(await cache.get("about_me", model_id, v_source)) == from_source
+        assert served(await cache.get("about_me", model_id, v_deleted)) == from_deleted
 
         (tmp_path / paths["source"]).write_text(f"# source {name}\n\nEdited.\n")
         await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         assert await cache.get("about_me", model_id, v_source) is None
-        assert await cache.get("about_me", model_id, v_deleted) == from_deleted
+        assert served(await cache.get("about_me", model_id, v_deleted)) == from_deleted
 
         (tmp_path / paths["deleted"]).unlink()
         swept = await ingest(tmp_path, engine=engine, redis_client=client, sweep="apply")
@@ -620,4 +630,33 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
         async for key in client.scan_iter(f"{KEY_PREFIX}about_me:*"):
             if await client.hget(key, "model") == _model_tag(model_id).encode():
                 await client.delete(key)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_backfills_set_fields_only_on_existing_chunk_hashes():
+    """Model-tag and content_sha backfills never recreate a key deleted meanwhile."""
+    from uuid import uuid4
+
+    from services.glassbox.cache.answer import _model_tag, chunk_content_sha
+    from services.glassbox.ingest.redis_index import backfill_content_shas, backfill_model_tags
+
+    client = redis.from_url("redis://127.0.0.1:6379/0")
+    try:
+        await client.ping()
+    except Exception as exc:
+        await client.aclose()
+        pytest.skip(f"local Redis Stack unavailable: {exc}")
+    present, gone = (10**15 + uuid4().int % 10**9 + offset for offset in (0, 1))
+    try:
+        await client.hset(f"chunk:{present}", mapping={"corpus": "backfill_test"})
+        await backfill_model_tags(client, [(present, "m"), (gone, "m")])
+        await backfill_content_shas(client, [(present, "text"), (gone, "text")])
+        assert await client.hget(f"chunk:{present}", "model") == _model_tag("m").encode()
+        assert await client.hget(f"chunk:{present}", "content_sha") == (
+            chunk_content_sha("text").encode()
+        )
+        assert not await client.exists(f"chunk:{gone}")
+    finally:
+        await client.delete(f"chunk:{present}", f"chunk:{gone}")
         await client.aclose()

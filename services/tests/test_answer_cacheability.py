@@ -107,10 +107,29 @@ class StubSearchClient:
         return [1, b"ans2:about_system:entry", [b"distance", b"0"]]
 
     async def hget(self, key, field):
-        return json.dumps(self.payload)
+        return json.dumps({**self.payload, "sources": {"42": "sha-of-42"}})
 
-    async def exists(self, *keys):
-        return len(keys)  # every source chunk is still indexed
+    def pipeline(self, transaction=True):
+        return _UnchangedSources()
+
+
+class _UnchangedSources:
+    """Every source chunk still holds the text the answer was built from."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def hget(self, key, field):
+        self.calls += 1
+
+    async def execute(self):
+        return [b"sha-of-42"] * self.calls
 
 
 @pytest.mark.asyncio
@@ -126,7 +145,7 @@ class StubSearchClient:
 async def test_legacy_cached_refusals_read_as_a_miss(payload, hit):
     cache = RedisAnswerCache(StubSearchClient(payload))
     result = await cache.get("about_system", "model", [0.0] * 511 + [1.0])
-    assert result == (payload if hit else None)
+    assert result == ({**payload, "sources": {"42": "sha-of-42"}} if hit else None)
 
 
 class RecordingAnswerCache:
