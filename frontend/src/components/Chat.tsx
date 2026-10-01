@@ -198,7 +198,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
             disabled={isStreaming}
-            placeholder="Ask anything..."
+            placeholder={replacement ? 'Tap a component to explore' : 'Ask anything...'}
             className="min-w-0 flex-1 rounded-[3px] border border-hairline bg-canvas px-3 py-3 text-base text-primary outline-none placeholder:text-muted focus:border-cyan disabled:cursor-not-allowed"
           />
           {isStreaming ? (
