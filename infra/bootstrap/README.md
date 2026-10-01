@@ -64,17 +64,27 @@ and `use_lockfile = true` as `infra/envs/prod/backend.tf`, key
 `bootstrap/terraform.tfstate`). Bootstrap stays human-applied: CI cannot read
 or write this key. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
 
-Prerequisite: PR #55 (branch `fix/zram-swap`) adds bootstrap SSM permissions
-and must be **merged to `main` first**. Do not apply #55 from its branch and
-then migrate from a `main` that lacks it: the next plan would remove those
-permissions. Run everything below from an up-to-date `main` checkout that
-contains both #55 and this PR.
+This happens in two phases, because Terraform must be re-initialized as soon
+as the checkout contains the new `backend "s3"` block and refuses to plan
+until it is. The local-state check has to happen **before** this PR is on
+`main`.
 
-1. `git checkout main && git pull`, then `cd infra/bootstrap`.
-2. Check before migrating: `terraform plan` (still on local state, before
-   init changes anything) must show **no changes**. Any diff means the local
-   state and `main` disagree (for example #55 was applied from a branch or
-   not yet applied). Resolve that first; do not migrate.
+**Phase A: before this PR merges (local backend).** Pending bootstrap
+changes, such as PR #55's SSM permissions (branch `fix/zram-swap`), must be
+merged to `main` and applied from local state first. Do not apply #55 from its
+branch and then migrate from a `main` that lacks it; the next plan would
+remove those permissions.
+
+1. `git checkout main && git pull` (this PR not yet merged), then
+   `cd infra/bootstrap`. `terraform plan` (then `terraform apply` if it shows
+   the expected pending changes) must end with a plan showing **no changes**.
+   Any unexplained diff means the local state and `main` disagree; resolve it
+   first and do not migrate.
+
+**Phase B: after this PR merges (switch to S3).**
+
+2. `git pull` so the checkout has the `backend "s3"` block. Do not run
+   `plan` yet; it would fail with "Backend initialization required".
 3. Back up the local state privately, before touching the backend:
    `cp terraform.tfstate ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate && chmod 600 ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate`
 4. `terraform init -migrate-state`. Terraform sees the new backend and the
