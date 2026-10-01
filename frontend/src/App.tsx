@@ -557,6 +557,17 @@ function App() {
     }
   }, [])
 
+  // Focus rescue when the chips unmount while holding focus: on a switch to
+  // Diagram view it goes to the Diagram toggle; when the window widens past md
+  // (chips replaced by the desktop topic nav) it goes to the nav button for the
+  // current topic. Runs after the commit, so isDesktopRef and the nav are current.
+  const rescueChipFocus = () => {
+    const target = isDesktopRef.current
+      ? navRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+      : diagramButtonRef.current
+    target?.focus()
+  }
+
   const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
   // Component questions always go to About This System's conversation.
   const systemMessages = conversations.system
@@ -585,12 +596,12 @@ function App() {
   // md+ only; below md the topic is chosen with the chips above the ask box
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
-      <nav ref={navRef} aria-label="Question topic" className="order-3 flex w-full items-center justify-center gap-2 text-xs md:order-2 md:justify-start md:ml-4 md:w-auto">
+      <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
         <button
           type="button"
           aria-pressed={corpus === 'basel'}
           onClick={() => selectTopic('basel')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
+          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
         >
           About Basel
         </button>
@@ -599,7 +610,7 @@ function App() {
           type="button"
           aria-pressed={corpus === 'system'}
           onClick={() => selectTopic('system')}
-          className={`inline-flex min-h-11 items-center rounded-[3px] px-3 transition-colors hover:text-primary md:min-h-0 md:py-2 ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
+          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
         >
           About This System
         </button>
@@ -671,7 +682,7 @@ function App() {
             </div>
           ) : undefined}
           inputTopic={isDesktop || showDiagramView ? undefined : (
-            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={() => diagramButtonRef.current?.focus()} />
+            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
