@@ -661,3 +661,63 @@ def test_dropped_slow_client_is_told_to_reconnect(fake_env, monkeypatch):
         assert _events(text) == [("reconnect", {})]
 
     asyncio.run(scenario())
+
+
+# --- Review round 2 regressions -------------------------------------------------
+
+
+def test_join_while_stopping_gets_no_stale_snapshot(fake_env, monkeypatch):
+    """A pod that vanished must not reappear as a ghost from the old state."""
+    server = _FakeK8s([[_pod("retrieval-worker-a"), _pod("retrieval-worker-b")]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        server.close_gate = asyncio.Event()  # the old upstream's close blocks
+        first = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(first, lambda item: item[0] == "synced")
+        old = fake_env._upstream
+        fake_env.unsubscribe(first)
+        await asyncio.sleep(0.15)
+        assert old.cancelling() and not old.done()
+
+        server.listings = [[_pod("retrieval-worker-a")]]  # b is gone now
+        late = fake_env.try_subscribe("two", cluster.StreamLimits())
+        server.close_gate.set()
+        snapshot = await _drain(late, lambda item: item[0] == "synced")
+        pods = {payload["pod"] for kind, payload in snapshot if kind == "pod"}
+        assert pods == {"retrieval-worker-a"}
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_stopping_upstream_silences_its_poller_before_closing_the_client(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    polls = []
+
+    class _CountingRedis(_FakeRedis):
+        async def xinfo_groups(self, stream):
+            polls.append(1)
+            return await super().xinfo_groups(stream)
+
+    monkeypatch.setattr(cluster, "_redis_client", _CountingRedis)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        server.close_gate = asyncio.Event()  # the close hangs while stopping
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        old = fake_env._upstream
+        fake_env.unsubscribe(sub)
+        await asyncio.sleep(0.15)  # linger passed; old upstream stuck in aclose
+        assert old.cancelling() and not old.done()
+        count = len(polls)
+        await asyncio.sleep(0.1)  # ten poll intervals
+        assert len(polls) == count
+        server.close_gate.set()
+        await asyncio.sleep(0.05)
+        assert old.done()
+
+    asyncio.run(scenario())

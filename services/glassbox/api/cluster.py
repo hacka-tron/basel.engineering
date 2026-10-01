@@ -304,6 +304,13 @@ class ClusterHub:
         if self._linger is not None:
             self._linger.cancel()
             self._linger = None
+        if self._upstream is None or self._upstream.done():
+            # Start fresh before serving any snapshot: state left by an
+            # upstream that is still shutting down may be stale (a pod that
+            # vanished would linger as a ghost). The new list provides it.
+            self._reset_state()
+            self.upstream_starts += 1
+            self._upstream = asyncio.get_running_loop().create_task(self._run_upstream())
         if self._listed:
             for event in self._pods.values():
                 self._offer(subscriber, ("pod", {**event, "type": "ADDED"}))
@@ -312,10 +319,6 @@ class ClusterHub:
             self._offer(subscriber, ("synced", {}))
         elif self._backlog is not None:
             self._offer(subscriber, ("backlog", {"backlog": self._backlog}))
-        if self._upstream is None or self._upstream.done():
-            self._reset_state()
-            self.upstream_starts += 1
-            self._upstream = asyncio.get_running_loop().create_task(self._run_upstream())
         return subscriber
 
     def unsubscribe(self, subscriber: Subscriber) -> None:
@@ -386,7 +389,7 @@ class ClusterHub:
     async def _run_upstream(self) -> None:
         backlog_task = asyncio.get_running_loop().create_task(self._poll_backlog())
         try:
-            await self._watch_loop()
+            await self._watch_loop(backlog_task)
         finally:
             backlog_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -396,7 +399,7 @@ class ClusterHub:
             if self._upstream is None or self._upstream is asyncio.current_task():
                 self._reset_state()
 
-    async def _watch_loop(self) -> None:
+    async def _watch_loop(self, backlog_task: asyncio.Task) -> None:
         failures = 0
         while True:
             try:
@@ -417,6 +420,12 @@ class ClusterHub:
                         async for event in _watch_pods(client, resource_version):
                             self._apply_event(event)
                     finally:
+                        task = asyncio.current_task()
+                        if task is not None and task.cancelling():
+                            # Stopping: silence the poller before the
+                            # (possibly slow) client close, so it cannot
+                            # broadcast after a replacement upstream starts.
+                            backlog_task.cancel()
                         await client.aclose()
             except asyncio.CancelledError:
                 raise

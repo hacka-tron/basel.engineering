@@ -1,7 +1,7 @@
 # Cluster stream: one shared watch, capped clients, bounded lifetime
 
 **PR:** [#99](https://github.com/hacka-tron/basel.engineering/pull/99) · **Branch:** `fix/cluster-stream-cap` · **Spec:** `docs/DESIGN.md` §8 (cluster stream contract) and §9.5 "Bounded cost" · **Origin:** security pass finding 11 (PR [#96](https://github.com/hacka-tron/basel.engineering/pull/96), `project/status/2026-10-01-security-pass.md`)
-**Status:** In review (round 1 changes fixed). Needs the owner's go-ahead to merge (adds ConfigMap keys; see "Live effect").
+**Status:** Approved in review round 2 (two small follow-ups fixed). Needs the owner's go-ahead to merge (adds ConfigMap keys; see "Live effect").
 
 ## TL;DR
 
@@ -72,6 +72,12 @@ Round 1 (Opus reviewer, primer brief): **changes needed**, all fixed in the same
 - **Join during shutdown (Important):** a client joining while a cancelled upstream was still closing its Kubernetes client saw it as "running", so no new upstream started and it got only pings until its lifetime ended. The idle stop now forgets the upstream as soon as it cancels it, and a finishing upstream clears shared state only if it is still the current one. Regression test with a slow-closing fake client.
 - **Minor:** watches now carry `timeoutSeconds=300` and a 330 s read timeout (a half-open watch would have frozen every viewer; a timeout re-lists like a normal end); a dropped slow client now gets `reconnect` so the browser takes the short path; the docs said "retries after 5 s" though jitter makes the first retry 2.5 to 5 s.
 
+Round 2: **approved, safe to deploy**, with two small follow-ups fixed in the same PR, each with a test that fails on the round-1 code:
+
+- **Ghost pod after a join during shutdown:** a client joining while the old upstream was still closing got the old pod set plus `synced`, and the new upstream then listed against an empty map, so a pod that had vanished stayed as a dot. `try_subscribe` now resets state and starts the new upstream before serving any snapshot; the new list provides it.
+- **Old poller after a new upstream starts:** a stopping upstream now cancels its backlog poller before the possibly slow Kubernetes client close, so it cannot broadcast once a replacement is running.
+- Test-depth items (read-timeout restart delay, a truer join-while-stopping test, a strong reference to the cancelled upstream for shutdown) went to BACKLOG.
+
 ## Live effect (owner go-ahead needed)
 
 Merging changes production:
@@ -91,7 +97,7 @@ No Terraform, no RBAC change, no new Kubernetes objects.
 
 ## How to see it / verify it
 
-- Tests: `pytest services/tests/test_cluster_stream.py` (22 tests: unavailable path, snapshot/changes/`synced`/`reconnect` over HTTP, 503/429 with `Retry-After`, nothing opened when refused, slot reuse, env fallbacks, 25 clients → 1 list + 1 watch + 1 Redis client, late subscriber snapshot without a new list, re-list sends `DELETED`, watch failure retries without ending streams, slow subscriber dropped, upstream stops after linger and is reused within it, heartbeats and lifetime, disconnect and cancellation release the slot, plus the four round-1 regressions). Frontend: `npm test` (`lib/clusterStream.test.ts`: backoff curve and cap, snapshot replace, no timer stacking, reset on `synced`, planned reconnect, `cluster_unavailable` stops, disconnect cancels).
+- Tests: `pytest services/tests/test_cluster_stream.py` (24 tests: unavailable path, snapshot/changes/`synced`/`reconnect` over HTTP, 503/429 with `Retry-After`, nothing opened when refused, slot reuse, env fallbacks, 25 clients → 1 list + 1 watch + 1 Redis client, late subscriber snapshot without a new list, re-list sends `DELETED`, watch failure retries without ending streams, slow subscriber dropped, upstream stops after linger and is reused within it, heartbeats and lifetime, disconnect and cancellation release the slot, plus four round-1 and two round-2 regressions). Frontend: `npm test` (`lib/clusterStream.test.ts`: backoff curve and cap, snapshot replace, no timer stacking, reset on `synced`, planned reconnect, `cluster_unavailable` stops, disconnect cancels).
 - Live, after deploy: open the site, then DevTools → Network → `stream`: the response starts with `retry: 5000`, then `pod` events and `synced`, `: ping` every 15 s when quiet, and `reconnect` after 8 to 10 minutes followed by a new request. With 6 tabs from one browser, the sixth `stream` request gets 429.
 
 ## Open items
