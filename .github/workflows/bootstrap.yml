@@ -29,9 +29,18 @@ on:
 permissions:
   contents: read
 
+# PR plans get a group per PR, so they can't replace a pending
+# workflow_dispatch run (GitHub keeps only the newest pending run per group,
+# cancel-in-progress or not; see terraform.yml). Every plan here runs with
+# -lock=false, so a PR plan never contends with the apply job's lock.
+# Dispatch runs share terraform-bootstrap-state and are never cancelled
+# midway. A newer dispatch replaces a pending one; dispatch can start from
+# any branch, but only a run on main can apply (the apply job's if and the
+# bootstrap environment's main-only policy), so start the apply run from main
+# and check that the run left pending is the one you meant.
 concurrency:
-  group: terraform-bootstrap-state
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('bootstrap-pr-{0}', github.event.pull_request.number) || 'terraform-bootstrap-state' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   TF_IN_AUTOMATION: "true"
