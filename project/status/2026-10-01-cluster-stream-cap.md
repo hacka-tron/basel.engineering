@@ -1,6 +1,6 @@
 # Cluster stream: one shared watch, capped clients, bounded lifetime
 
-**PR:** PR_LINK · **Branch:** `fix/cluster-stream-cap` · **Spec:** `docs/DESIGN.md` §8 (cluster stream contract) and §9.5 "Bounded cost" · **Origin:** security pass finding 11 (PR [#96](https://github.com/hacka-tron/basel.engineering/pull/96), `project/status/2026-10-01-security-pass.md`)
+**PR:** [#99](https://github.com/hacka-tron/basel.engineering/pull/99) · **Branch:** `fix/cluster-stream-cap` · **Spec:** `docs/DESIGN.md` §8 (cluster stream contract) and §9.5 "Bounded cost" · **Origin:** security pass finding 11 (PR [#96](https://github.com/hacka-tron/basel.engineering/pull/96), `project/status/2026-10-01-security-pass.md`)
 **Status:** In review. Needs the owner's go-ahead to merge (adds ConfigMap keys; see "Live effect").
 
 ## TL;DR
