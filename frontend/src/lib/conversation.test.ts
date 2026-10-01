@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { historyForRequest, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
+import { historyForRequest, latestQuestionAnswered, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
 
 const now = 1_700_000_000_000
 const messages: ChatMessage[] = [
@@ -125,4 +125,25 @@ test('conversations saved before the idk flag existed still load', () => {
     assert.equal(restored[0].idk, undefined)
     assert.equal(historyForRequest(restored)[0].content, "I don't know from what I have.")
   })
+})
+
+test('latestQuestionAnswered: a settled answer to the latest question means re-selecting does not ask again', () => {
+  const q = 'How does the Queue component work?'
+  const turn = (state: ChatMessage['state'], extra: ChatMessage[] = []): ChatMessage[] => [
+    { id: 'u', role: 'user', content: q, createdAt: now },
+    { id: 'a', role: 'assistant', content: 'Answer', state, createdAt: now },
+    ...extra,
+  ]
+  assert.equal(latestQuestionAnswered(turn('done'), q), true)
+  assert.equal(latestQuestionAnswered(turn('retrieval_only'), q), true)
+  // Failed (Retry exists), stopped early, or still streaming: ask again.
+  assert.equal(latestQuestionAnswered(turn('error'), q), false)
+  assert.equal(latestQuestionAnswered(turn('stopped'), q), false)
+  assert.equal(latestQuestionAnswered(turn('pending'), q), false)
+  // Partial text cut off by a failure, followed by the friendly failure reply.
+  assert.equal(latestQuestionAnswered(turn('error', [{ id: 'e', role: 'assistant', content: 'Oops', state: 'error', createdAt: now }]), q), false)
+  // Another question came after it, or there is no conversation yet.
+  assert.equal(latestQuestionAnswered([...turn('done'), { id: 'u2', role: 'user', content: 'Other', createdAt: now }, { id: 'a2', role: 'assistant', content: 'x', state: 'done', createdAt: now }], q), false)
+  assert.equal(latestQuestionAnswered([], q), false)
+  assert.equal(latestQuestionAnswered(turn('done'), 'A different question'), false)
 })
