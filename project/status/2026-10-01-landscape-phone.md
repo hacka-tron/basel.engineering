@@ -1,6 +1,6 @@
 # Landscape phones keep a usable phone layout
 
-**Status:** PR [#100](https://github.com/hacka-tron/basel.engineering/pull/100) open, not merged (decisions proposed, pending the owner's review). Branch `feature/landscape-phone`.
+**Status:** PR [#100](https://github.com/hacka-tron/basel.engineering/pull/100) open, not merged (decisions proposed, pending the owner's review). **Merge it last, after #88, #89, #90 and #93:** the branch contains those four (merged in, their commits unchanged), so its diff shrinks as they land. Branch `feature/landscape-phone`.
 
 ## TL;DR
 
@@ -45,7 +45,12 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet (Opus/Codex gate pending).
+Round 1 (Opus reviewer): **approved on its own.** The redefined `md`/`max-md` variants were checked against `DESKTOP_QUERY` at 11 sizes, and tablets get the desktop layout. Two Important problems existed only in combination with other approved PRs, where git reports no conflict, so the branch now contains #88, #89, #90 and #93 and fixes them:
+
+- **#90's locked details bar** ("Select a component for details", `aria-disabled`) is a third bar variant; without `phone-landscape:col-span-2` it would have landed in the grid's second column beside the graph in landscape. Fixed; at all four landscape sizes it now sits full width under the graph at 44px.
+- **#93's Retry** focused the ask box when `(min-width: 768px)` matched, so a 896x414 phone would pop the keyboard on Retry (reproduced on main + #93). It now uses `DESKTOP_QUERY`: after Retry the focus stays off the ask box at all four landscape sizes and at 393x852, and still goes to the ask box at 1280x800. No other bare `768` media query is left in `src/`.
+
+Minors addressed: documented the Android tablet/foldable flip to the phone layout while the keyboard is up; noted the 0.65 diagram zoom as a known exception to the 44px/11px rules; noted that the safe-area padding is inert without `viewport-fit=cover` and that `sm:px-4` would override it; the deep dive, SNAPSHOT, the verification checklist and the reviewer primer list the landscape sizes and the 500px height condition; BACKLOG has the 40px Chat/Diagram segments and the 568x320 clipping.
 
 ## Operational notes and risks
 
@@ -56,7 +61,8 @@ Not reviewed yet (Opus/Codex gate pending).
 
 - `cd frontend && npm run phone`, open http://localhost:5230/phone-preview.html: the landscape frames are under the portrait ones.
 - Before/after compare page: `compare.html` in the agent's scratchpad (`.../scratchpad/landscape/compare.html`) with Chat, Chat focused, Diagram, Diagram with Worker selected and the empty chat at each landscape size. Screenshots were taken with `/api` replayed from two recorded live answers, so both runs saw the same data.
-- Unchanged proof: at 393x852, 320x568 and 1280x800 all 15 states are byte-identical before and after. One state (desktop chat) varies between runs of the same code by 20 to 40 pixels of mid-animation diagram edges, and a rerun of the new code matched the old one exactly.
+- Unchanged proof (round 1, against plain main): at 393x852, 320x568 and 1280x800 all 15 states are byte-identical before and after.
+- Unchanged proof (round 2, against main + #88 + #89 + #90 + #93): 13 of 15 states byte-identical. 320x568 chat differs by 1 pixel, and the baseline itself flips that pixel between runs. 393x852 empty chat differs in 73 pixels of rounded-corner anti-aliasing (largest channel difference 12 of 255, stable across reruns). A DOM dump of every element's position, size, radius, colours and display at all three sizes is identical, so no geometry or style changed. One state (desktop chat) varies between runs of the same code by 20 to 40 pixels of mid-animation diagram edges, and a rerun of the new code matched the old one exactly.
 - `npm test` (64 tests, including the landscape graph and the CSS/JS query sync), `npm run lint`, `npm run build` pass.
 
 ## Open items
