@@ -5,6 +5,9 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=../scripts/lib.sh
 source "$here/../scripts/lib.sh"
+# lib.sh pins PATH. REDACT_TEST_PATH (a directory with awk/sed shims) lets
+# the suite run under another awk or sed, e.g. mawk or GNU sed on macOS.
+[ -z "${REDACT_TEST_PATH:-}" ] || PATH=$REDACT_TEST_PATH:$PATH
 
 fail=0
 # expect_absent <label> <secret> <input>: the secret must not survive.
@@ -26,6 +29,19 @@ expect_present() {
     echo "ok   $1 -> $out"
   else
     echo "FAIL $1: '$2' was lost: $out"
+    fail=1
+  fi
+}
+
+# expect_same <label> <input>: output must equal input.
+expect_same() {
+  local out
+  out=$(printf '%s\n' "$2" | redact 220)
+  if [ "$out" = "$2" ]; then
+    echo "ok   $1 (unchanged)"
+  else
+    echo "FAIL $1: changed:"
+    diff <(printf '%s\n' "$2") <(printf '%s\n' "$out")
     fail=1
   fi
 }
@@ -60,6 +76,25 @@ expect_present json-pretty-object-after '"ok": true' $'{\n  "credentials": {\n  
 expect_present crlf-input 'user: bob' $'password:\r\n  crlfsecret\r\nuser: bob'  # pragma: allowlist secret
 expect_absent crlf-secret crlfsecret $'password:\r\n  crlfsecret\r\nuser: bob'  # pragma: allowlist secret
 
+# Review round 1: a value that starts on the key's line and continues on
+# the next (open quotes, folded scalars, Bearer then the token).
+expect_absent cont-double-quote LEAKdq1 $'password: "abc\n  LEAKdq1 more"\nuser: bob'  # pragma: allowlist secret
+expect_present cont-double-quote-after 'user: bob' $'password: "abc\n  LEAKdq1 more"\nuser: bob'  # pragma: allowlist secret
+expect_absent cont-single-quote LEAKsq1 $'token: \'abc\n  LEAKsq1\''  # pragma: allowlist secret
+expect_absent cont-folded-scalar LEAKfold $'client_secret: first part\n  LEAKfold second part'  # pragma: allowlist secret
+expect_absent bearer-next-line LEAKbearer $'Authorization: Bearer\n  LEAKbearer'  # pragma: allowlist secret
+# A flush-left value shaped like "word=" or "word:" is still a value.
+expect_absent flush-padded-base64 aHVudGVyMg== $'Password:\naHVudGVyMg=='  # pragma: allowlist secret
+expect_absent flush-single-pad YWRtaW4= $'Password:\nYWRtaW4='  # pragma: allowlist secret
+expect_absent flush-colon-value ab:cd $'token:\nab:cd'  # pragma: allowlist secret
+expect_same flush-env-sibling $'TOKEN=\nNEXT=value'
+# Tabs count as 8 columns, so tab-indented lines under a space-indented key
+# are still its block.
+expect_absent tab-indent LEAKtab $'    password:\n\tfirst\n\tLEAKtab'  # pragma: allowlist secret
+# A PEM BEGIN on the same line as the previous END.
+expect_absent pem-back-to-back LEAKpem2 $'-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE----------BEGIN PRIVATE KEY-----\nLEAKpem2\n-----END PRIVATE KEY-----\nafter'  # pragma: allowlist secret
+expect_present pem-back-to-back-after 'after' $'-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE----------BEGIN PRIVATE KEY-----\nLEAKpem2\n-----END PRIVATE KEY-----\nafter'  # pragma: allowlist secret
+
 # kubectl get secret -o yaml / -o json: short base64 values (under the
 # 20-character rule) must not survive, but the key names and the rest do.
 secret_yaml=$'apiVersion: v1\ndata:\n  username: YWRtaW4=\n  ca.crt: Y2E=\n  config: |\n    c2hvcnQ=\nkind: Secret\nmetadata:\n  name: app-db\ntype: Opaque'  # pragma: allowlist secret
@@ -89,18 +124,6 @@ expect_present pem-one-line-rest 'ok' 'cert -----BEGIN CERTIFICATE----- onelinep
 expect_absent pem-unterminated unterminated $'-----BEGIN PRIVATE KEY-----\nunterminated\nmore'  # pragma: allowlist secret
 
 # Negative cases: ordinary diagnose output must come through readable.
-# expect_same <label> <input>: output must equal input.
-expect_same() {
-  local out
-  out=$(printf '%s\n' "$2" | redact 220)
-  if [ "$out" = "$2" ]; then
-    echo "ok   $1 (unchanged)"
-  else
-    echo "FAIL $1: changed:"
-    diff <(printf '%s\n' "$2") <(printf '%s\n' "$out")
-    fail=1
-  fi
-}
 expect_same flux-table $'NAMESPACE     NAME          AGE   READY   STATUS\nflux-system   flux-system   3d    True    Applied revision: deploy@sha1:abc1234\napp           app-ready     3d    False   health check failed after 2m: timeout waiting for: [Deployment/app/api status: \'InProgress\']'
 expect_same section-and-free $'\n===== memory (MiB) =====\n               total        used        free      shared  buff/cache   available\nMem:            1843        1502          88           2         252         211\nSwap:           2047         812        1235'
 expect_same events-table $'NS    LAST                   COUNT   REASON      KIND   NAME\napp   2026-10-01T10:00:00Z   3       BackOff     Pod    retrieval-worker-5d9c8b7f6-abcde\napp   2026-10-01T10:01:00Z   1       Unhealthy   Pod    api-7c9d5f-xyz12'

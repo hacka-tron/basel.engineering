@@ -95,7 +95,9 @@ values after password/token/secret/key/authorization masked (also when the
 value is on the following lines: YAML blocks, pretty-printed JSON, the
 values of `data:`/`stringData:` maps, PEM blocks), JWT-like and 20+
 character base64/hex strings masked, lines cut to 160-220 characters. If the
-filter itself fails, the rest of the output is withheld, not printed raw. That
+filter itself fails, the rest of the output is withheld, not printed raw.
+Ops scripts must never read Secrets (`get secret`, jsonpath into `.data`):
+a bare value with no key around it can't be recognised. That
 filter is a safety net, not a guarantee; it has an offline test
 (`infra/modules/ops/tests/redact-test.sh`, run in CI). `ops-run.sh` runs the
 same `redact` over everything SSM returns (stdout, stderr) and over the

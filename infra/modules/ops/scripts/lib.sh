@@ -37,8 +37,16 @@ section() { printf '\n===== %s =====\n' "$*"; }
 #    - a data:/stringData:/binaryData: map (kubectl get secret -o yaml/json)
 #      keeps its keys but masks every value (short base64 values such as
 #      "YWRtaW4=" would slip past the 20-character rule below);
+#    - a key named like that WITH a value on its line: any more-indented
+#      lines after it (a quoted value continued on the next line, a folded
+#      YAML scalar, "Authorization: Bearer" then the token) collapse to one
+#      "<masked>" line;
 #    - PEM blocks (-----BEGIN ...----- to -----END ...-----) become one
 #      "<pem masked>" line; a BEGIN with no END masks the rest of the output.
+#    Indent is measured in columns (tabs to multiples of 8). Known limits:
+#    after a bare `Password:`, only the first flush-left line is masked;
+#    keyword matching is by substring, so `monkey:` or `secretKeyRef:` are
+#    over-masked (acceptable, it fails closed).
 # 2. The per-line pass (sed), unchanged in spirit:
 #    - drops URL userinfo (user:pass@) and query strings,
 #    - masks the value after password/passwd/token/secret/key/authorization/
@@ -57,6 +65,8 @@ section() { printf '\n===== %s =====\n' "$*"; }
 #
 # It is a safety net, not a guarantee: prefer printing structured fields
 # (names, counts, timestamps) over messages, and use this on what remains.
+# Ops scripts must never read Secrets (no `get secret`, no jsonpath into
+# .data): a bare value with no key around it can't be recognised here.
 # Portability: POSIX awk only (gawk on the node and in CI, mawk on Ubuntu
 # runners, BSD awk on macOS); character-class spellings instead of sed's I
 # flag keep sed working with both GNU and BSD sed.
@@ -64,15 +74,31 @@ redact() {
   local width=${1:-160}
   {
     awk -v q="'" '
-      function indent_of(s) {
+      # Leading-whitespace width in columns (a tab advances to the next
+      # multiple of 8, a "- " list marker counts as indent). Sets padlen to
+      # the length of that prefix in characters.
+      function indent_of(s,    i, c, col) {
         match(s, /^([ \t]|-[ \t])*/)
-        return RLENGTH
+        padlen = RLENGTH
+        col = 0
+        for (i = 1; i <= padlen; i++) {
+          c = substr(s, i, 1)
+          if (c == "\t") col = int(col / 8) * 8 + 8
+          else col++
+        }
+        return col
       }
       BEGIN {
         kw = "(password|passwd|token|secret|key|authorization|credential)"
         opener_kw = kw "[a-z0-9_.-]*[\"" q "]?[ \t]*[:=][ \t]*([|>][-+0-9]*|[{[])?[ \t\r]*$"
         opener_data = "^([ \t]|-[ \t])*\"?(data|stringdata|binarydata)\"?[ \t]*:[ \t]*[{]?[ \t\r]*$"
-        keyline = "^([ \t]|-[ \t])*[\"" q "]?[A-Za-z0-9_./-]+[\"" q "]?[ \t]*[:=]"
+        kwval = kw "[a-z0-9_.-]*[\"" q "]?[ \t]*[:=]"
+        # A sibling key: "name:" followed by a space or the end of the
+        # line, or "name=" followed by something other than "=" (so padded
+        # base64 like "aHVudGVyMg==" or "YWRtaW4=" and "ab:cd" are values).
+        keyline = "^([ \t]|-[ \t])*[\"" q "]?[A-Za-z0-9_./-]+[\"" q "]?[ \t]*(:([ \t\r]|$)|=[^=])"
+        # The key part of a data: map entry, printed before " <masked>".
+        datakey = "^([ \t]|-[ \t])*[\"" q "]?[A-Za-z0-9_./-]+[\"" q "]?[ \t]*:"
         mode = ""
         inpem = 0
       }
@@ -80,7 +106,13 @@ redact() {
         line = $0
         low = tolower(line)
         if (inpem) {
-          if (low ~ /-----end[^-]*-----/) inpem = 0
+          # Stay in the block if another BEGIN follows this END on the
+          # same line without its own END.
+          if (match(low, /-----end[^-]*-----/)) {
+            rest = substr(low, RSTART + RLENGTH)
+            inpem = 0
+            if (match(rest, /-----begin[^-]*-----/) && substr(rest, RSTART) !~ /-----end[^-]*-----/) inpem = 1
+          }
           next
         }
         if (line ~ /^[ \t\r]*$/) {
@@ -88,16 +120,16 @@ redact() {
           next
         }
         ind = indent_of(line)
-        pad = substr(line, 1, ind)
-        if (mode == "kw" || mode == "data") {
+        pad = substr(line, 1, padlen)
+        if (mode != "") {
           if (ind > bind) {
-            if (mode == "kw") {
+            if (mode != "data") {
               if (!shown) print pad "<masked>"
               shown = 1
             } else {
               if (cind < 0 || ind < cind) cind = ind
               if (ind == cind) {
-                if (match(line, keyline)) print substr(line, 1, RLENGTH) " <masked>"
+                if (match(line, datakey)) print substr(line, 1, RLENGTH) " <masked>"
                 else print pad "<masked>"
               }
             }
@@ -127,6 +159,13 @@ redact() {
           cind = -1
         } else if (low ~ opener_kw) {
           mode = "kw"
+          bind = ind
+          shown = 0
+        } else if (low ~ kwval) {
+          # Value starts on this line; the sed pass masks it. Any more
+          # indented lines after it are its continuation (an open quote,
+          # a folded YAML scalar, "Authorization: Bearer" then the token).
+          mode = "cont"
           bind = ind
           shown = 0
         }

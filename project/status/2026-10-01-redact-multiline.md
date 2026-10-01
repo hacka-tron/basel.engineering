@@ -1,6 +1,6 @@
 # Ops log redaction: multiline secrets
 
-**Status:** PR [#94](https://github.com/hacka-tron/basel.engineering/pull/94) open, not merged. Review pending.
+**Status:** PR [#94](https://github.com/hacka-tron/basel.engineering/pull/94) open, not merged. Review round 1 fixes pushed.
 
 ## TL;DR
 
@@ -27,6 +27,7 @@ Pass 1 (new) handles three shapes:
 
 - **Sensitive key with no value on its line** (`password:`, `TOKEN=`, `db_password: |`, `"credentials": {`): the more-indented lines after it collapse into one `<masked>` line. If the next line isn't indented and isn't itself a key (`Password:` then `hunter2`), that line is masked.
 - **`data:` / `stringData:` / `binaryData:` maps** (Kubernetes Secrets, YAML or JSON): key names are kept and every value is masked. Without this, short base64 values such as `YWRtaW4=` slipped past the existing "20+ characters" rule.
+- **Keyword key with a value on its line, continued below** (a quoted value opened after `password:` and closed on the next line, a folded YAML scalar, `Authorization: Bearer` then the token): any more-indented lines after it collapse to one `<masked>` line.
 - **PEM blocks**: everything from `-----BEGIN ...-----` to `-----END ...-----` becomes one `<pem masked>` line. A BEGIN with no END masks the rest of the output.
 
 Pass 2 is the old sed filter, plus one new rule for one-line data maps (`"data":{"user":"Ym9i"}`, as found in the `last-applied-configuration` annotation).
@@ -57,12 +58,23 @@ Pass 2 is the old sed filter, plus one new rule for one-line data maps (`"data":
 - **PEM:** on its own, inside YAML, on one line, and unterminated.
 - **Negative cases**, where the output must equal the input: Flux table, `free -m`, events table, a YAML null `password:` followed by other keys, a kernel OOM line, a reconcile log line, and plain YAML lists.
 - **Fail-closed:** awk is made to fail, and the secret must not appear.
+- **Review round 1 regressions** (each one fails on the round-0 code): continued double- and single-quoted values, a folded scalar, Bearer on the next line, flush padded base64 (`aHVudGVyMg==`, `YWRtaW4=`) and `ab:cd` after `Password:`/`token:`, tab-indented continuation under a space-indented key, and a PEM BEGIN on the same line as the previous END.
 
-`ops-run-test.sh` still passes. Shellcheck is clean, run exactly as CI runs it (`lib.sh` concatenated with each action script). Run locally on macOS (BSD tools). CI runs the tests on Ubuntu, with mawk and GNU sed.
+`ops-run-test.sh` still passes. Shellcheck is clean, run exactly as CI runs it (`lib.sh` concatenated with each action script). The suite passes under every awk/sed pair: BSD awk, mawk and gawk, each with BSD sed and GNU sed (`REDACT_TEST_PATH` points the test at shims).
 
 ## What review caught
 
-Pending.
+Round 1 (Opus reviewer): portability, fail-closed behaviour and the Terraform embedding were verified sound. Two Important leaks were fixed:
+
+- **Continued values leaked.** A value that started on the key's line and carried on to the next line (an open quote, a folded scalar) only had its first line masked. Now the more-indented lines after any keyword key are masked as well.
+- **Flush-left values were mistaken for keys.** `aHVudGVyMg==` or `ab:cd` after a bare `Password:` looked like a sibling key and was printed. Now a key needs `:` followed by a space or the end of the line, or `=` followed by something other than `=`.
+
+Minor findings fixed:
+
+- Tabs count as 8 columns when measuring indent.
+- `Authorization: Bearer` with the token on the next line is now covered by the first fix.
+- A PEM BEGIN on the same line as the previous END now opens a new block.
+- Comments in `lib.sh` and `infra/CI.md` now say that ops scripts must never read Secrets.
 
 ## Operational notes and risks
 
@@ -80,4 +92,8 @@ Pending.
 
 ## Open items
 
-None new.
+Known limits, documented in `lib.sh`:
+
+- **Only one flush-left line is masked.** After a bare `Password:`, only the first unindented line is masked; further unindented lines that look like values pass.
+- **Keywords match by substring, so some lines are over-masked.** For example, `monkey:` and `secretKeyRef:` blocks get masked. That's acceptable because it fails closed.
+- **Raw values can't be redacted.** Secret output with no key around it, such as a jsonpath into `.data`, can't be recognised. Ops scripts must not read Secrets.
