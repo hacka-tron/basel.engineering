@@ -1,6 +1,6 @@
 # Desktop topic chips and a latency readout that lights up
 
-Status: merged 2026-10-01 as PR [#82](https://github.com/hacka-tron/basel.engineering/pull/82); deploys with the next release.
+Status: merged 2026-10-01 as PR [#82](https://github.com/hacka-tron/basel.engineering/pull/82), then the desktop pills were **reverted the same day at the owner's request**: desktop is back to the "About Basel | About This System" header tabs. The latency hover from this PR was kept. Mobile keeps its pills (#78). See "Outcome" at the end.
 
 ## TL;DR
 
@@ -66,3 +66,7 @@ Frontend only; no API or infra change. The desktop message area is 41px shorter 
 ## Open items
 
 None.
+
+## Outcome (2026-10-01)
+
+The owner tried the desktop pills on the live site and asked to go back to the header tabs ("revert back to the non pill version ... set it to the tabs with the about options that were there before"). The revert restored the desktop header nav and its name-fit plumbing, and removed the desktop chips, their 768–799px label rule, and the matching DESIGN.md, deep-dive and SNAPSHOT text. The footer latency hover/focus/press highlight was re-applied. Lesson: on desktop, the owner prefers the topic choice in the header; on phones, pills above the ask box.
