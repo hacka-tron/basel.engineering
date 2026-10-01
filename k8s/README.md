@@ -95,6 +95,7 @@ else waits for the owner's approval and prints a diagnose before and after.
 | Site returns 521/522 or times out, and `diagnose` fails, times out or shows the apiserver not answering | **Ops · Reboot node**. If the after-diagnose shows no `/dev/zram0`, run **Ops · Apply zram**. |
 | Node responsive but thrashing (memory PSI `full` stays high, heavy `si`/`so`, many Slow SQL lines), or KEDA's Helm release keeps retrying | **Ops · Flux suspend or resume** (suspend) `helmrelease-keda`, then `keda`, then **Ops · KEDA on or off** `off (0)`. Optionally **Ops · Warm-up CronJob suspend or resume** (suspend). |
 | …incident over | In reverse: **KEDA on or off** `on (1)`, **Flux suspend or resume** (resume) `helmrelease-keda` then `keda`, **Warm-up CronJob** (resume). |
+| Answers come back as sources only (`retrieval_only`, "I can't write a full answer right now") | **Ops · Diagnose**, section "LLM budget": fewer than 4 units left means the daily budget is spent (it resets at 00:00 UTC); "kill switch ... ON" means the LLM was switched off. The hourly query counts and the busiest rate-limit buckets show where the budget went. |
 | `api` Running but not serving (stuck streams, readiness flapping) | **Ops · Restart deployment** `api`. This causes a few seconds of downtime. |
 | A merged fix should deploy now, or a release is stuck behind Flux's interval | **Ops · Flux reconcile**. |
 | Need to stop all deploys while investigating | **Ops · Flux suspend or resume** `flux-system` (suspend), and later resume. |

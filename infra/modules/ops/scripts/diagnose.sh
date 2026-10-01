@@ -16,7 +16,158 @@
 #     data: maps and PEM blocks) and 20+ character base64/hex/JWT-like
 #     strings masked, lines cut to 160-220 characters.
 #
+# The "LLM budget" section reads Redis counters and MySQL query-log counts
+# through kubectl exec into data/redis-0 and data/mysql-0, read-only:
+#   - Redis: only GET, TTL, EXISTS and HGET (redis_read refuses anything
+#     else) plus a SCAN of rate-limit bucket names; values are printed only
+#     after checking they are numbers;
+#   - MySQL: one read-only session (SET SESSION TRANSACTION READ ONLY) of
+#     SELECT counts; the password comes from the mysql container's own
+#     environment inside the exec (MYSQL_PWD), so it is never on a command
+#     line, in this script or in the output; question text, IPs and hashes
+#     are never selected (only counts).
+# No Secret object is read.
+#
 # SSM keeps at most 24,000 characters of output, so long lists are capped.
+
+# Print $1 if it is an integer, else "?" (an empty Redis reply means unset: 0).
+as_int() {
+  if [ -z "$1" ]; then
+    echo 0
+  elif [[ $1 =~ ^-?[0-9]+$ ]]; then
+    echo "$1"
+  else
+    echo "?"
+  fi
+}
+
+# Read-only redis-cli: commands on stdin, one reply per line on stdout.
+# Refuses (prints nothing, returns 1) unless every command is GET, TTL,
+# EXISTS or HGET on a plain key name.
+redis_read() {
+  local commands line
+  commands=$(cat)
+  while IFS= read -r line; do
+    if ! [[ $line =~ ^(GET|TTL|EXISTS|HGET)\ [A-Za-z0-9:_.-]+(\ [A-Za-z0-9_]+)?$ ]]; then
+      echo "(redis_read: refused a non read-only command)" >&2
+      return 1
+    fi
+  done <<<"$commands"
+  kc -n data exec -i redis-0 -c redis -- redis-cli --raw <<<"$commands"
+}
+
+# Daily LLM budget (services/glassbox/limits.py), kill switch
+# (services/glassbox/killswitch.py) and warm-up cap (services/glassbox/warm.py).
+budget_section() {
+  local today yesterday cap warm_cap cap_label warm_cap_label
+  today=$(date -u +%F)
+  yesterday=$(date -u -d yesterday +%F)
+  # An unreadable ConfigMap must not look like "budget spent": fall back to
+  # the code defaults (limits.py 100, warm.py 10) and say so.
+  cap=$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_DAILY_LLM_CAP}' 2>/dev/null)
+  if [[ $cap =~ ^[0-9]+$ ]]; then cap_label=$cap; else cap=100 cap_label="default 100 (configmap unreadable)"; fi
+  warm_cap=$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_WARM_DAILY_LLM_CAP}' 2>/dev/null)
+  if [[ $warm_cap =~ ^[0-9]+$ ]]; then warm_cap_label=$warm_cap; else warm_cap_label="default 10 (configmap unreadable)"; fi
+
+  local -a replies=()
+  local reply
+  while IFS= read -r reply; do replies+=("$reply"); done < <(
+    redis_read <<EOF
+GET budget:llm:$today
+GET budget:llm:rw:$today
+TTL budget:llm:$today
+GET budget:llm:$yesterday
+GET budget:llm:rw:$yesterday
+EXISTS glassbox:kill:disable_llm
+GET glassbox:kill:disable_llm
+GET warm:budget:$today
+GET warm:budget:$yesterday
+GET corpus:ver:about_me
+GET corpus:ver:about_system
+EOF
+  )
+  if [ "${#replies[@]}" -lt 11 ]; then
+    echo "(redis did not answer: ${#replies[@]} of 11 replies)"
+  else
+    local day answers rewrites used left
+    printf 'cap: %s answers/day (= %s quarter-units; answer 4, follow-up rewrite 1)\n' \
+      "$cap_label" "$((cap * 4))"
+    for day in today yesterday; do
+      if [ "$day" = today ]; then
+        answers=$(as_int "${replies[0]}") rewrites=$(as_int "${replies[1]}")
+      else
+        answers=$(as_int "${replies[3]}") rewrites=$(as_int "${replies[4]}")
+      fi
+      if [[ "$answers$rewrites" == *"?"* ]]; then
+        used="?" left="?"
+      else
+        used=$((answers * 4 + rewrites))
+        left=$((cap * 4 - used))
+      fi
+      printf '%-9s %s: answers %s, rewrite units %s, used %s of %s units, %s left\n' \
+        "$day" "$([ "$day" = today ] && echo "$today" || echo "$yesterday")" \
+        "$answers" "$rewrites" "$used" "$((cap * 4))" "$left"
+    done
+    printf 'today counter expires in: %ss (-2 = not created yet)\n' "$(as_int "${replies[2]}")"
+    local kill_state
+    case "$(as_int "${replies[5]}"):${replies[6]}" in
+      0:*) kill_state="off (flag not set)" ;;
+      1:1) kill_state="ON: LLM disabled, every answer is retrieval_only" ;;
+      1:*) kill_state="flag present but not \"1\" (ignored by the api: off)" ;;
+      *) kill_state="unknown" ;;
+    esac
+    printf 'kill switch glassbox:kill:disable_llm: %s\n' "$kill_state"
+    printf 'warm-up LLM calls: today %s, yesterday %s (cap %s/day, part of the cap above)\n' \
+      "$(as_int "${replies[7]}")" "$(as_int "${replies[8]}")" "$warm_cap_label"
+    printf 'corpus versions (bumped per changed document; older cached answers go cold): about_me %s, about_system %s\n' \
+      "$(as_int "${replies[9]}")" "$(as_int "${replies[10]}")"
+  fi
+
+  # Rate-limit buckets touched in the last 10 minutes (rl:<salted hash of
+  # the client IP>, limits.py). Fewest tokens left = busiest client lately.
+  local -a buckets=()
+  while IFS= read -r reply; do buckets+=("$reply"); done < <(
+    kc -n data exec redis-0 -c redis -- redis-cli --raw --scan --pattern 'rl:*' --count 1000 2>/dev/null |
+      grep -E '^rl:[0-9a-f]{64}$' | head -201
+  )
+  local bucket_count=${#buckets[@]}
+  if [ "$bucket_count" -gt 200 ]; then
+    buckets=("${buckets[@]:0:200}")
+    bucket_count="200+ (200 shown)"
+  fi
+  printf 'rate-limit buckets active in the last 10 min: %s (10 asks per 10 min each)\n' "$bucket_count"
+  if [ "${#buckets[@]}" -gt 0 ]; then
+    local -a tokens=()
+    while IFS= read -r reply; do tokens+=("$reply"); done < <(printf 'HGET %s tokens\n' "${buckets[@]}" | redis_read)
+    local i
+    for i in "${!buckets[@]}"; do
+      [[ ${tokens[$i]:-} =~ ^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$ ]] || continue
+      printf '%s %s\n' "${tokens[$i]}" "${buckets[$i]:3:8}"
+    done | sort -g | head -3 | while read -r left prefix; do
+      printf '  client %s...: %.1f of 10 asks left\n' "$prefix" "$left"
+    done
+  fi
+
+  # Today's query log (UTC), counts only.
+  echo "query log today (UTC):"
+  # The variables expand inside the mysql container, from its own env.
+  # shellcheck disable=SC2016
+  kc -n data exec -i mysql-0 -c mysql -- sh -c \
+    'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --connect-timeout=10 -N -B -u "$MYSQL_USER" "$MYSQL_DATABASE"' \
+    2>&1 <<'SQL' | redact 160 | head -45 || true
+SET SESSION TRANSACTION READ ONLY;
+SET SESSION max_execution_time = 10000;
+SET time_zone = '+00:00';
+SELECT CONCAT('  by mode/cache: ', mode, ' ', cache_status, ' = ', COUNT(*))
+  FROM queries WHERE created_at >= UTC_DATE() GROUP BY mode, cache_status ORDER BY mode, cache_status;
+SELECT CONCAT('  asks: ', COUNT(*), ', follow-ups (turn > 0): ', COALESCE(SUM(turn_index > 0), 0), ', generated answers (full, miss): ', COALESCE(SUM(mode = 'full' AND cache_status = 'miss'), 0))
+  FROM queries WHERE created_at >= UTC_DATE();
+SELECT CONCAT('  hour ', LPAD(HOUR(created_at), 2, '0'), 'Z: ', COUNT(*), ' asks, ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated, ', SUM(mode = 'retrieval_only'), ' retrieval_only, ', SUM(turn_index > 0), ' follow-ups')
+  FROM queries WHERE created_at >= UTC_DATE() GROUP BY HOUR(created_at) ORDER BY HOUR(created_at);
+SELECT CONCAT('  most repeated question #', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC), ': asked ', COUNT(*), ' times (', MIN(corpus), ', ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated)')
+  FROM queries WHERE created_at >= UTC_DATE() GROUP BY question ORDER BY COUNT(*) DESC LIMIT 3;
+SQL
+}
 
 main() {
   exec </dev/null 2>&1
@@ -105,6 +256,12 @@ main() {
 
   section "kernel OOM kills, last 6 hours"
   timeout 30 journalctl -k --since '-6h' --no-pager -o short-iso 2>/dev/null | grep -iE 'out of memory|oom-kill|killed process' | tail -8 | redact 200 || true
+
+  # Last, and bounded as a whole, so a slow Redis or MySQL exec can't push
+  # the node sections above past the document's 300 s limit.
+  section "LLM budget, kill switch, warm-up cap, query log (counts only)"
+  timeout --kill-after=5 60 bash -c "$(declare -f kc redact as_int redis_read budget_section); budget_section" ||
+    echo "(budget section did not finish within 60s)"
 
   section "end of diagnose"
 }
