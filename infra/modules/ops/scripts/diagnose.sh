@@ -59,11 +59,15 @@ redis_read() {
 # Daily LLM budget (services/glassbox/limits.py), kill switch
 # (services/glassbox/killswitch.py) and warm-up cap (services/glassbox/warm.py).
 budget_section() {
-  local today yesterday cap warm_cap
+  local today yesterday cap warm_cap cap_label warm_cap_label
   today=$(date -u +%F)
   yesterday=$(date -u -d yesterday +%F)
-  cap=$(as_int "$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_DAILY_LLM_CAP}' 2>/dev/null)")
-  warm_cap=$(as_int "$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_WARM_DAILY_LLM_CAP}' 2>/dev/null)")
+  # An unreadable ConfigMap must not look like "budget spent": fall back to
+  # the code defaults (limits.py 100, warm.py 10) and say so.
+  cap=$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_DAILY_LLM_CAP}' 2>/dev/null)
+  if [[ $cap =~ ^[0-9]+$ ]]; then cap_label=$cap; else cap=100 cap_label="default 100 (configmap unreadable)"; fi
+  warm_cap=$(kc -n app get configmap glassbox-config -o jsonpath='{.data.GLASSBOX_WARM_DAILY_LLM_CAP}' 2>/dev/null)
+  if [[ $warm_cap =~ ^[0-9]+$ ]]; then warm_cap_label=$warm_cap; else warm_cap_label="default 10 (configmap unreadable)"; fi
 
   local -a replies=()
   local reply
@@ -86,15 +90,15 @@ EOF
     echo "(redis did not answer: ${#replies[@]} of 11 replies)"
   else
     local day answers rewrites used left
-    printf 'configured cap: %s answers/day (= %s quarter-units; answer 4, follow-up rewrite 1)\n' \
-      "$cap" "$([ "$cap" = "?" ] && echo "?" || echo $((cap * 4)))"
+    printf 'cap: %s answers/day (= %s quarter-units; answer 4, follow-up rewrite 1)\n' \
+      "$cap_label" "$((cap * 4))"
     for day in today yesterday; do
       if [ "$day" = today ]; then
         answers=$(as_int "${replies[0]}") rewrites=$(as_int "${replies[1]}")
       else
         answers=$(as_int "${replies[3]}") rewrites=$(as_int "${replies[4]}")
       fi
-      if [[ "$answers$rewrites$cap" == *"?"* ]]; then
+      if [[ "$answers$rewrites" == *"?"* ]]; then
         used="?" left="?"
       else
         used=$((answers * 4 + rewrites))
@@ -102,7 +106,7 @@ EOF
       fi
       printf '%-9s %s: answers %s, rewrite units %s, used %s of %s units, %s left\n' \
         "$day" "$([ "$day" = today ] && echo "$today" || echo "$yesterday")" \
-        "$answers" "$rewrites" "$used" "$([ "$cap" = "?" ] && echo "?" || echo $((cap * 4)))" "$left"
+        "$answers" "$rewrites" "$used" "$((cap * 4))" "$left"
     done
     printf 'today counter expires in: %ss (-2 = not created yet)\n' "$(as_int "${replies[2]}")"
     local kill_state
@@ -114,7 +118,7 @@ EOF
     esac
     printf 'kill switch glassbox:kill:disable_llm: %s\n' "$kill_state"
     printf 'warm-up LLM calls: today %s, yesterday %s (cap %s/day, part of the cap above)\n' \
-      "$(as_int "${replies[7]}")" "$(as_int "${replies[8]}")" "$warm_cap"
+      "$(as_int "${replies[7]}")" "$(as_int "${replies[8]}")" "$warm_cap_label"
     printf 'corpus versions (bumped per changed document; older cached answers go cold): about_me %s, about_system %s\n' \
       "$(as_int "${replies[9]}")" "$(as_int "${replies[10]}")"
   fi
@@ -124,9 +128,14 @@ EOF
   local -a buckets=()
   while IFS= read -r reply; do buckets+=("$reply"); done < <(
     kc -n data exec redis-0 -c redis -- redis-cli --raw --scan --pattern 'rl:*' --count 1000 2>/dev/null |
-      grep -E '^rl:[0-9a-f]{64}$' | head -200
+      grep -E '^rl:[0-9a-f]{64}$' | head -201
   )
-  printf 'rate-limit buckets active in the last 10 min: %s (10 asks per 10 min each)\n' "${#buckets[@]}"
+  local bucket_count=${#buckets[@]}
+  if [ "$bucket_count" -gt 200 ]; then
+    buckets=("${buckets[@]:0:200}")
+    bucket_count="200+ (200 shown)"
+  fi
+  printf 'rate-limit buckets active in the last 10 min: %s (10 asks per 10 min each)\n' "$bucket_count"
   if [ "${#buckets[@]}" -gt 0 ]; then
     local -a tokens=()
     while IFS= read -r reply; do tokens+=("$reply"); done < <(printf 'HGET %s tokens\n' "${buckets[@]}" | redis_read)
@@ -155,7 +164,7 @@ SELECT CONCAT('  asks: ', COUNT(*), ', follow-ups (turn > 0): ', COALESCE(SUM(tu
   FROM queries WHERE created_at >= UTC_DATE();
 SELECT CONCAT('  hour ', LPAD(HOUR(created_at), 2, '0'), 'Z: ', COUNT(*), ' asks, ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated, ', SUM(mode = 'retrieval_only'), ' retrieval_only, ', SUM(turn_index > 0), ' follow-ups')
   FROM queries WHERE created_at >= UTC_DATE() GROUP BY HOUR(created_at) ORDER BY HOUR(created_at);
-SELECT CONCAT('  most repeated question: asked ', COUNT(*), ' times (', MIN(corpus), ', ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated)')
+SELECT CONCAT('  most repeated question #', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC), ': asked ', COUNT(*), ' times (', MIN(corpus), ', ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated)')
   FROM queries WHERE created_at >= UTC_DATE() GROUP BY question ORDER BY COUNT(*) DESC LIMIT 3;
 SQL
 }
@@ -212,9 +221,6 @@ main() {
   kc get cronjob -A 2>/dev/null || true
   kc get jobs -A --sort-by=.metadata.creationTimestamp 2>/dev/null | tail -6 || true
 
-  section "LLM budget, kill switch, warm-up cap, query log (counts only)"
-  budget_section
-
   section "flux sources"
   kc get gitrepositories.source.toolkit.fluxcd.io -A 2>/dev/null | redact 200 || true
 
@@ -250,6 +256,12 @@ main() {
 
   section "kernel OOM kills, last 6 hours"
   timeout 30 journalctl -k --since '-6h' --no-pager -o short-iso 2>/dev/null | grep -iE 'out of memory|oom-kill|killed process' | tail -8 | redact 200 || true
+
+  # Last, and bounded as a whole, so a slow Redis or MySQL exec can't push
+  # the node sections above past the document's 300 s limit.
+  section "LLM budget, kill switch, warm-up cap, query log (counts only)"
+  timeout --kill-after=5 60 bash -c "$(declare -f kc redact as_int redis_read budget_section); budget_section" ||
+    echo "(budget section did not finish within 60s)"
 
   section "end of diagnose"
 }

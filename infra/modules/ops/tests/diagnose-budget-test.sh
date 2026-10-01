@@ -27,6 +27,7 @@ date() {
 
 KILL_EXISTS=0
 KILL_VALUE=
+CONFIGMAP_OK=1
 # Stub kubectl: logs every call (and any stdin) and answers like the cluster.
 kc() {
   local input="" all="$*"
@@ -34,9 +35,14 @@ kc() {
   printf '%s\n' "$all" >>"$calls"
   [ -z "$input" ] || printf '  stdin: %s\n' "${input//$'\n'/$'\n'  stdin: }" >>"$calls"
   case "$*" in
-    *GLASSBOX_DAILY_LLM_CAP*) echo 100 ;;
-    *GLASSBOX_WARM_DAILY_LLM_CAP*) echo 10 ;;
+    *GLASSBOX_DAILY_LLM_CAP*) [ "$CONFIGMAP_OK" = 1 ] && echo 100 ;;
+    *GLASSBOX_WARM_DAILY_LLM_CAP*) [ "$CONFIGMAP_OK" = 1 ] && echo 10 ;;
     *"--scan --pattern rl:*"*)
+      if [ -n "${BUCKETS:-}" ]; then
+        local n
+        for ((n = 0; n < BUCKETS; n++)); do printf 'rl:%064x\n' "$n"; done
+        return
+      fi
       echo "rl:$(printf 'a%.0s' {1..64})"
       echo "rl:$(printf 'b%.0s' {1..64})"
       echo "rl:not-a-hash"
@@ -58,6 +64,7 @@ kc() {
           "GET corpus:ver:about_system") echo 41 ;;
           "HGET rl:a"*) echo 2.5 ;;
           "HGET rl:b"*) echo 9 ;;
+          "HGET rl:0"*) echo 10 ;;
           *) echo "UNEXPECTED $line" ;;
         esac
       done <<<"$input"
@@ -77,7 +84,7 @@ check() { # check <label> <condition-exit-status>
 out=$(budget_section 2>&1)
 printf '%s\n' "$out" | sed 's/^/     | /'
 
-grep -qF 'configured cap: 100 answers/day (= 400 quarter-units' <<<"$out"
+grep -qF 'cap: 100 answers/day (= 400 quarter-units' <<<"$out"
 check "cap from the ConfigMap" $?
 grep -qF 'today     2026-10-01: answers 27, rewrite units 9, used 117 of 400 units, 283 left' <<<"$out"
 check "today's counters and units" $?
@@ -126,6 +133,23 @@ KILL_EXISTS=1 KILL_VALUE=yes
 out=$(budget_section 2>&1)
 grep -qF 'flag present but not "1" (ignored by the api: off)' <<<"$out"
 check "kill switch flag ignored unless 1" $?
+
+# An unreadable ConfigMap falls back to the defaults, labelled, never to 0.
+KILL_EXISTS=0 KILL_VALUE='' CONFIGMAP_OK=0
+out=$(budget_section 2>&1)
+grep -qF 'cap: default 100 (configmap unreadable) answers/day (= 400 quarter-units' <<<"$out"
+check "unreadable cap falls back to the labelled default" $?
+grep -qF 'used 117 of 400 units, 283 left' <<<"$out"
+check "unreadable cap still computes against 100, not 0" $?
+grep -qF '(cap default 10 (configmap unreadable)/day' <<<"$out"
+check "unreadable warm cap falls back to the labelled default" $?
+
+# More than 200 buckets: capped, and the count says so.
+BUCKETS=201
+out=$(budget_section 2>&1)
+grep -qF 'rate-limit buckets active in the last 10 min: 200+ (200 shown)' <<<"$out"
+check "bucket scan cap is reported" $?
+BUCKETS=
 
 # redis_read refuses anything that could write.
 kc() { echo "SENT"; }
