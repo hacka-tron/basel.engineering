@@ -9,6 +9,10 @@ works. Work from the current directory — read the actual files, the
 diff, and the git history; don't trust this brief or the implementer's
 report.
 
+Read project/orchestration/reviewer-primer.md first: system map, hard
+rules, known traps by area, per-area checklist. Never read or open any
+terraform.tfstate file.
+
 You have full permissions (network, docker, ports). Use them to
 validate, NOT to change anything:
 - Do NOT edit, create, or delete tracked files. Do NOT commit, push,
@@ -25,6 +29,19 @@ validate, NOT to change anything:
 [The spec — link the design doc sections (e.g. docs/DESIGN.md §9.3)
 and restate the exact acceptance criteria. Same rigor as an
 implementation spec.]
+
+## Prior rounds
+
+[Round 1: write "none". Later rounds: path to the previous result file
+(e.g. <scratchpad>/codex-review-<branch>-result.md), plus a list of
+what was fixed since. Verify each earlier finding is actually fixed, then
+look for regressions the fixes introduced.]
+
+## PR status report
+
+[Path to the PR's report in project/status/ (written when the PR opens),
+or "none yet". Check that its claims match the code and that it carries
+no account IDs, IPs or tokens.]
 
 ## The change
 
@@ -55,11 +72,13 @@ Report in exactly this format:
 
 ```bash
 codex exec -m gpt-6-sol --dangerously-bypass-approvals-and-sandbox \
-  -C <worktree> -o <scratchpad>/codex-review-<branch>.md \
-  "$(cat <scratchpad>/codex-review-prompt.md)"
+  -C <worktree> -o <scratchpad>/codex-review-<branch>-result.md \
+  "$(cat <scratchpad>/codex-review-prompt.md)" < /dev/null
 ```
 
-Run it from Bash with `run_in_background: true` (reviews of integration-heavy diffs take 5–10+ minutes), then read the `-o` file when it finishes.
+**`< /dev/null` is required.** A backgrounded `codex exec` without it hangs waiting on stdin and never starts the review.
+
+Run it from Bash with `run_in_background: true` (reviews of integration-heavy diffs take 5–10+ minutes), then read the `-o` file when it finishes. Run at most about 3 reviews at once; disk is tight, so tell Codex to clean up `node_modules`/`dist`.
 
 ## Known constraints
 
