@@ -13,7 +13,8 @@ from services.glassbox.db.models import Base, Document, IngestionRun
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.ingest import run as ingest_run
-from services.glassbox.ingest.run import chunker_for_path, ingest
+from services.glassbox.ingest import sweep as sweep_module
+from services.glassbox.ingest.run import chunker_for_path, dry_run_sweep, ingest
 from services.glassbox.ingest.scanner import (
     scan_file,
     scan_sources,
@@ -108,7 +109,7 @@ def test_architecture_deep_dive_is_ingested_into_about_system():
     # section is split or merged, and unbuilt work stays in its own last chunk.
     chunks = chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)
     sections = [line for line in scanned.content.splitlines() if line.startswith("## ")]
-    assert len(chunks) == len(sections) == 32
+    assert len(chunks) == len(sections) == 33
     assert chunks[0].text.startswith("# Glassbox architecture deep dive")
     for chunk, heading in zip(chunks[1:], sections[1:], strict=True):
         assert chunk.text.startswith(heading)
@@ -417,4 +418,104 @@ async def test_unchanged_document_is_reembedded_when_model_changes(
                     )
         if vector_keys:
             await client.delete(*vector_keys)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
+    tmp_path, integration_stack, monkeypatch
+):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    name = tmp_path.name.replace("-", "_")
+    # The stores may hold other documents (a dev stack, earlier tests). Scope every
+    # sweep and clear in this test to its own fixture files so nothing else is read
+    # as stale, and nothing else can be deleted.
+    original_load = sweep_module.load_scope_documents
+
+    def only_fixture_documents(engine_, corpus, model_id):
+        return [doc for doc in original_load(engine_, corpus, model_id) if name in doc.source_path]
+
+    monkeypatch.setattr(sweep_module, "load_scope_documents", only_fixture_documents)
+    monkeypatch.setattr(ingest_run, "load_scope_documents", only_fixture_documents)
+    about_me = tmp_path / "corpus" / "about-me"
+    about_me.mkdir(parents=True)
+    keep_path = f"corpus/about-me/keep_{name}.md"
+    gone_path = f"corpus/about-me/gone_{name}.md"
+    (tmp_path / keep_path).write_text(f"# Keep {name}\n\nStays indexed.\n")
+    (tmp_path / gone_path).write_text(f"# Gone {name}\n\nDeleted from disk later.\n")
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+
+    def chunk_ids(path):
+        with Session(engine) as session:
+            return list(
+                session.scalars(
+                    select(DbChunk.id)
+                    .join(Document, DbChunk.document_id == Document.id)
+                    .where(Document.source_path == path)
+                )
+            )
+
+    def document_exists(path):
+        with Session(engine) as session:
+            return session.scalar(select(Document.id).where(Document.source_path == path))
+
+    redis_keys = []
+    try:
+        first = await ingest(tmp_path, engine=engine, redis_client=client, sweep="apply")
+        assert first.docs_changed == 2
+        keep_ids, gone_ids = chunk_ids(keep_path), chunk_ids(gone_path)
+        assert keep_ids and gone_ids
+        redis_keys = [f"chunk:{chunk_id}" for chunk_id in keep_ids + gone_ids]
+        assert await client.exists(*redis_keys) == len(redis_keys)
+
+        (tmp_path / gone_path).unlink()
+
+        # Read-only dry run: lists the stale file, deletes nothing.
+        plans = {plan.corpus: plan for plan in dry_run_sweep(tmp_path, engine=engine)}
+        assert [doc.source_path for doc in plans["about_me"].stale] == [gone_path]
+        assert plans["about_me"].refused is None and not plans["about_me"].deleted
+        # Report mode (the Job default) ingests but deletes nothing either.
+        version = int(await client.get("corpus:ver:about_me"))
+        reported = await ingest(tmp_path, engine=engine, redis_client=client, sweep="report")
+        assert [doc.source_path for doc in reported.sweep[0].stale] == [gone_path]
+        assert document_exists(gone_path) and chunk_ids(gone_path) == gone_ids
+        assert await client.exists(*redis_keys) == len(redis_keys)
+        assert int(await client.get("corpus:ver:about_me")) == version
+
+        applied = await ingest(tmp_path, engine=engine, redis_client=client, sweep="apply")
+        assert applied.sweep[0].deleted and applied.docs_changed == 0
+        assert document_exists(gone_path) is None and chunk_ids(gone_path) == []
+        assert not await client.exists(*(f"chunk:{chunk_id}" for chunk_id in gone_ids))
+        assert chunk_ids(keep_path) == keep_ids
+        assert await client.exists(*(f"chunk:{chunk_id}" for chunk_id in keep_ids)) == len(keep_ids)
+        assert int(await client.get("corpus:ver:about_me")) == version + 1
+
+        # --clear: the dry run lists, the real run wipes the scope.
+        listed = await ingest_run.clear(
+            "about_me", engine=engine, redis_client=client, dry_run=True
+        )
+        assert [doc.source_path for doc in listed] == [keep_path]
+        assert chunk_ids(keep_path) == keep_ids
+        await ingest_run.clear("about_me", engine=engine, redis_client=client)
+        assert document_exists(keep_path) is None
+        assert not await client.exists(*(f"chunk:{chunk_id}" for chunk_id in keep_ids))
+        assert int(await client.get("corpus:ver:about_me")) == version + 2
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                Document.__table__.delete().where(Document.source_path.in_([keep_path, gone_path]))
+            )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        if redis_keys:
+            await client.delete(*redis_keys)
         await client.aclose()
