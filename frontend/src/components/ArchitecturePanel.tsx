@@ -252,7 +252,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       ) : (
         <>
           <p className="mb-4 text-xs text-muted">
-            {portrait ? 'Tap a component to see what runs it and ask about it.' : 'Hover or focus a component to see what runs it. Select it to ask more.'}
+            {portrait ? 'Details for the component you pick appear here: what runs it, and how to ask about it.' : 'Hover or focus a component to see what runs it. Select it to ask more.'}
           </p>
           {portrait && latestAnswer && (
             <div className="mb-4">

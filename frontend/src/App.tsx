@@ -605,7 +605,7 @@ function App() {
   return (
     <div className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''}`}>
       <Collapsible open={!focusMode}>
-      <header ref={headerRef} className="relative flex shrink-0 md:min-h-[72px] flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 pb-0 pt-2 md:flex-nowrap md:gap-0 md:px-8 md:py-0">
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-wrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 pt-2 transition-[padding] duration-200 ease-out motion-reduce:transition-none ${showDiagramView ? 'pb-2' : 'pb-0'} md:flex-nowrap md:gap-0 md:px-8 md:py-0`}>
         {/*
           Below md: row one is [h1 ... Contact me, GitHub], row two is the
           topic nav. Contact me sits directly left of the GitHub icon as one
