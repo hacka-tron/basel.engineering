@@ -59,7 +59,7 @@ function PipelineStrip({ view, onViewChange, activeNode, diagramButtonRef }: Pip
                 <span className="truncate text-cyan">{activeLabel}</span>
               </>
             ) : (
-              <span className="truncate">Waiting for a component</span>
+              <span className="truncate">Select a component</span>
             )}
           </p>
         )}
