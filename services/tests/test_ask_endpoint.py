@@ -256,11 +256,11 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
         def __init__(self):
             self.values = {}
 
-        async def get(self, corpus, version, model_id, vector):
-            return self.values.get((corpus, version, model_id, struct.pack("512f", *vector)))
+        async def get(self, corpus, model_id, vector):
+            return self.values.get((corpus, model_id, struct.pack("512f", *vector)))
 
-        async def put(self, corpus, version, model_id, vector, payload):
-            self.values[(corpus, version, model_id, struct.pack("512f", *vector))] = payload
+        async def put(self, corpus, model_id, vector, payload):
+            self.values[(corpus, model_id, struct.pack("512f", *vector))] = payload
 
     class CountingLLM(FakeLLMProvider):
         calls = 0
@@ -476,7 +476,7 @@ async def test_answer_lock_wait_is_bounded(monkeypatch):
     cache = NeverFilled()
     monkeypatch.setattr(ask, "_ANSWER_LOCK_WAIT_S", 0.03)
     start = asyncio.get_running_loop().time()
-    assert await ask._wait_for_answer(cache, "about_me", 1, "model", [0.0] * 512) is None
+    assert await ask._wait_for_answer(cache, "about_me", "model", [0.0] * 512) is None
     assert asyncio.get_running_loop().time() - start < 0.2
     assert cache.calls == 1
 
