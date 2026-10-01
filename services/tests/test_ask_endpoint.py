@@ -348,6 +348,7 @@ def test_daily_budget_exhaustion_returns_sources_without_llm(monkeypatch):
     done = next(data for name, data in stream if name == "done")
     retrieval = next(data for name, data in stream if name == "retrieval")
     assert done["mode"] == "retrieval_only"
+    assert done["abstained"] is False
     assert retrieval["chunks"][0]["snippet"] == "Basel builds software."
     assert all(name != "token" for name, _ in stream)
     assert saved[0]["mode"] == "retrieval_only"
@@ -374,6 +375,7 @@ def test_kill_switch_returns_sources_without_llm_or_budget_reservation(monkeypat
     done = next(data for name, data in stream if name == "done")
     retrieval = next(data for name, data in stream if name == "retrieval")
     assert done["mode"] == "retrieval_only"
+    assert done["abstained"] is False
     assert retrieval["chunks"][0]["snippet"] == "Basel builds software."
     assert all(name != "token" for name, _ in stream)
     assert saved[0]["mode"] == "retrieval_only"

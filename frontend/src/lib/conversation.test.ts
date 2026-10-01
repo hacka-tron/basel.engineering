@@ -74,3 +74,39 @@ test('error replies are persisted as error but never sent as history', () => {
     ])
   })
 })
+
+test('a quirky "I don\'t know" reply is shown and saved, but history carries the canonical sentence', () => {
+  const convo: ChatMessage[] = [
+    { id: 'u1', role: 'user', content: 'What is his shoe size?', createdAt: now },
+    { id: 'a1', role: 'assistant', content: 'Basel forgot to write that part down. Classic Basel.', state: 'done', idk: true, createdAt: now },
+    { id: 'u2', role: 'user', content: 'ok what about projects', createdAt: now },
+  ]
+  assert.deepEqual(historyForRequest(convo), [
+    { role: 'user', content: 'What is his shoe size?' },
+    { role: 'assistant', content: "I don't know from what I have." },
+    { role: 'user', content: 'ok what about projects' },
+  ])
+  const serialized = serializeConversation(convo, now)!
+  withStorage({ 'glassbox:conv:v1:about_me': serialized }, () => {
+    const restored = loadConversation('about_me', now)
+    assert.equal(restored[1].content, 'Basel forgot to write that part down. Classic Basel.')
+    assert.equal(restored[1].idk, true)
+    assert.equal(historyForRequest(restored)[1].content, "I don't know from what I have.")
+  })
+})
+
+test('conversations saved before the idk flag existed still load', () => {
+  const old = JSON.stringify({
+    version: 1,
+    updatedAt: now,
+    messages: [
+      { id: 'a', role: 'assistant', content: "I don't know from what I have.", state: 'done', createdAt: now },
+    ],
+  })
+  withStorage({ 'glassbox:conv:v1:about_me': old }, () => {
+    const restored = loadConversation('about_me', now)
+    assert.equal(restored.length, 1)
+    assert.equal(restored[0].idk, undefined)
+    assert.equal(historyForRequest(restored)[0].content, "I don't know from what I have.")
+  })
+})

@@ -9,6 +9,7 @@ import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import { errorReplyFor } from './lib/errorReplies'
+import { pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
   historyForRequest,
@@ -63,6 +64,7 @@ function App() {
   const [queriesServed, setQueriesServed] = useState(0)
   // The last friendly failure reply shown, so the next one is never the same.
   const lastErrorReplyRef = useRef<string | null>(null)
+  const lastIdkReplyRef = useRef<string | null>(null)
   // Which conversation and assistant message the in-flight request writes to;
   // it stays fixed even if the visitor switches tabs mid-answer.
   const streamTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
@@ -353,12 +355,22 @@ function App() {
       onDone: (event) => {
         if (!isCurrent()) return
         revealFinalizeRef.current = () => {
+          // The sources didn't cover the question: swap the plain sentence for a
+          // playful one (not the last shown here, nor the latest saved above).
+          let idkReply: string | null = null
+          if (event.abstained && event.mode === 'full') {
+            const savedIdk = conversationsRef.current[targetCorpus]
+              .findLast((message) => message.role === 'assistant' && message.idk)?.content
+            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk])
+            lastIdkReplyRef.current = idkReply
+          }
           updateStreamingMessage((message) => ({
             ...message,
+            ...(idkReply ? { idk: true } : {}),
             // Budget reached or LLM switched off: the sources still came back.
-            content: event.mode === 'retrieval_only' && !message.content
+            content: idkReply ?? (event.mode === 'retrieval_only' && !message.content
               ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
-              : message.content,
+              : message.content),
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
           setLastStats({

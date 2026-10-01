@@ -11,6 +11,7 @@ Briefings for the project owner. After each substantial feature or change, the a
 
 | Date | Report | Summary | Status |
 |---|---|---|---|
+| 2026-09-30 | [Quirky "I don't know" replies](2026-09-30-quirky-idk.md) | `done.abstained` flag; the chat swaps the flat refusal for one of 20 playful replies (some blame Basel). History keeps the canonical sentence. | In review |
 | 2026-09-30 | [Chat stream resilience](2026-09-30-chat-stream-resilience.md) — PR [#48](https://github.com/hacka-tron/basel.engineering/pull/48) | 15s SSE heartbeat, generation stops server-side on Stop/disconnect, client stall watchdog, Stop button, smart auto-scroll, failures shown as friendly chat replies. | In review (Codex round 1 fixes done; awaiting re-review) |
 | 2026-09-30 | [Ingest runs after the app is healthy](2026-09-30-ingest-after-app.md) — PR [#49](https://github.com/hacka-tron/basel.engineering/pull/49) | Ingest Job moved to its own Flux Kustomization `ingest`, which waits on `app-ready` (health checks on api/worker, itself after the root `flux-system`). Nothing else moved. | Merged 2026-09-30 |
 | 2026-09-30 | [Cached refusals + planned-design label](2026-09-30-cached-refusals.md) — PR [#53](https://github.com/hacka-tron/basel.engineering/pull/53) | Refusals/empty answers are never cached (legacy ones read as a miss); live infra (KEDA, k3s, Terraform, Flux) no longer labeled "planned" in the prompt; prompt v13 invalidates old entries. | In review |
