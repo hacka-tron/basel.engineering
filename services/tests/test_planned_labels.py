@@ -308,6 +308,10 @@ LIVE_UNITS = [
     ("docs/DESIGN-005-rag-quality.md", "| Retrieval | KNN **top 8**"),
     ("docs/DESIGN-005-rag-quality.md", "| Prompt | Numbered sources"),
     ("docs/DESIGN-005-rag-quality.md", "Section 2 describes the system as it runs today."),
+    # DESIGN-005 §3.4/§3.5 headings are neutral: their already-built facts stay unmarked.
+    ("docs/DESIGN-005-rag-quality.md", "Already filters by corpus and model."),
+    ("docs/DESIGN-005-rag-quality.md", "### 3.4 Query rewriting"),
+    ("docs/DESIGN-005-rag-quality.md", "| Index migration | `ensure_index` checks only"),
     ("docs/DESIGN-004-action-plan.md", "| M3 (shipped part) | DD2 | Conversational memory"),
     (
         "docs/DESIGN-004-action-plan.md",
@@ -333,6 +337,7 @@ PLANNED_UNITS = [
     ("docs/DESIGN-005-rag-quality.md", "### 3.2 Hybrid search (planned choice, not built yet)"),
     ("docs/DESIGN-005-rag-quality.md", "4. **Hybrid retrieval** in `retrieval/search.py`"),
     ("docs/DESIGN-005-rag-quality.md", "6. **Answer log**"),
+    ("docs/DESIGN-005-rag-quality.md", "plus a per-document cap (at most 2 or 3 chunks"),
     ("docs/DESIGN-005-rag-quality.md", "6. **Answer logging:**"),
     (
         "docs/superpowers/plans/2026-10-01-rag-quality.md",
