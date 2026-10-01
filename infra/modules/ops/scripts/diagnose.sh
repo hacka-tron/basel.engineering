@@ -12,8 +12,9 @@
 #     (kine's "Slow SQL" lines include SQL arguments);
 #   - the remaining free text (Flux status columns, kernel OOM lines) goes
 #     through redact() in lib.sh: URL userinfo and query strings removed,
-#     password/token/secret/key/authorization values and 20+ character
-#     base64/hex/JWT-like strings masked, lines cut to 160-220 characters.
+#     password/token/secret/key/authorization values (also multiline ones,
+#     data: maps and PEM blocks) and 20+ character base64/hex/JWT-like
+#     strings masked, lines cut to 160-220 characters.
 #
 # SSM keeps at most 24,000 characters of output, so long lists are capped.
 

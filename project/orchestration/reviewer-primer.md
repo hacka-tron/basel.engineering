@@ -44,6 +44,7 @@ Backend / RAG (`services/glassbox/`):
 - Embedding-model isolation: chunks are tagged with a hashed model id and search filters on it; a partial re-ingest must not mix vectors. Cache keys must include model + prompt version.
 - Budgets: refund to the reserving UTC day; never refund an uncertain call (a timeout after the POST was sent); count every generation attempt; the warmer shares a daily cap and must stop on limit errors. Mixed old/new pod versions must not double-spend (counters carried across deploys).
 - Disconnect handling: poll fallback must run during continuous output, not only on quiet; cancel must close the Bedrock stream even before headers arrive.
+- Middleware must stay pure ASGI (edit `http.response.start`, pass body chunks through), like `security_headers.py`: `BaseHTTPMiddleware` or GZip would buffer or compress the SSE streams. Security headers are set in the app, not Cloudflare.
 - Alembic: new columns need migrate-before-api ordering (init gate `wait_for_migrations`, bounded per attempt). DB-backed tests skip without MySQL, so run them or say they skipped.
 
 k8s / Flux (`k8s/`):
@@ -64,14 +65,16 @@ Terraform / IAM (`infra/`):
 
 Workflows (`.github/workflows/`):
 - `release.yml` path filter must cover every path the Dockerfile `COPY`s (corpus, docs, infra, k8s, alembic.ini, .dockerignore); the regression test must parse continued `COPY` lines.
-- Manual `workflow_dispatch` on an old ref can mint a higher `build-N`; `sync-deploy-branch` and Flux both push `deploy` without retry (race).
+- `build-N` is the run number, so any run outranks older builds: manual `workflow_dispatch` releases must stay gated on "SHA is `main`'s current head" (`release-provenance.sh`; an ancestor check would let old commits through). That check only exists on refs whose `release.yml` contains it (dispatch runs the selected ref's workflow); old branches and tags are refused by the release role's trust, which requires `token.actions.githubusercontent.com:ref` = `refs/heads/main` (PR #98, applied), with the `release` environment's `main`-only branch policy (owner setting) as a second layer. Keep that condition on `release_trust`. `sync-deploy-branch` races Flux on `deploy`: it must keep re-fetching, re-merging and pushing without force (`sync-deploy-branch.sh`, tested against a bare repo with a racing push).
 - Required checks cannot be path-filtered; the default `GITHUB_TOKEN` never triggers workflows on PRs it opens; environment gates (`terraform-prod`) are the apply control, so check plan jobs never get write credentials.
+- Concurrency groups keep one running and one pending run; a newly queued run replaces the pending one even with `cancel-in-progress: false`. PR plans and main applies must never share a group (`terraform-pr-<n>` vs `terraform-prod-main`, same split in bootstrap.yml), and PR plans run `-lock=false` so they can't hold the state lock against an apply.
 - Run `actionlint`; read `permissions:`, `if:` fork guards, and which secrets each job can see.
+- Third-party actions are pinned by full SHA with a plain `# vX.Y.Z` comment (the form Dependabot keeps updated; reject the old `# vX (vX.Y.Z)` form). Dependabot sends one grouped monthly `ci:` PR. Runners are pinned to `ubuntu-24.04` (not `ubuntu-latest`) until Ubuntu 26 images are proven.
 
 ## Per-area checklist (run it yourself and paste summary lines)
 
 - **All:** `git diff origin/main...HEAD --stat`; read every touched file plus what it integrates with; `git diff --check`; grep the diff for secrets, account IDs, IPs.
-- **Frontend:** `cd frontend && npm ci && npm run lint && npm test && npm run build`; for UI changes, check 375/414/768/1024/1440 px per `MOBILE_DESIGN.md` (no horizontal scroll, tap targets, arrows visible, focus order); exercise Stop, error and reload paths with a mocked or local `/api/ask`.
+- **Frontend:** `cd frontend && npm ci && npm run lint && npm test && npm run build`; for UI changes, check 375/414/768/1024/1440 px plus landscape phones 568x320/667x375/740x360/896x414 per `MOBILE_DESIGN.md` (`md` also needs more than 500 px of height below 1024 px of width; use `DESKTOP_QUERY` from `lib/layout.ts`, never a bare `(min-width: 768px)`) (no horizontal scroll, tap targets, arrows visible, focus order); exercise Stop, error and reload paths with a mocked or local `/api/ask`.
 - **Backend:** `.venv/bin/python -m pytest services/tests -q` (about 134 tests; note skipped DB-backed ones) and `.venv/bin/ruff check services eval`; for ask/cache/budget changes run a real local compose stack and one end-to-end SSE (`curl -N`) plus a concurrent or failure case.
 - **k8s:** `kubectl kustomize k8s/base`, `k8s/overlays/prod`, and each flux/ingest/keda overlay; confirm ordering (`dependsOn`, `wait`), memory limits, RBAC rules, annotation values.
 - **Terraform:** `terraform fmt -check -recursive`; in each root `terraform init -backend=false && terraform validate`. No plan, no apply, no state.

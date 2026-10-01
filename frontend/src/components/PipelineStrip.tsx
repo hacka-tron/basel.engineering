@@ -72,9 +72,13 @@ function PipelineStrip({ view, onViewChange, activeNode, diagramButtonRef }: Pip
             type="button"
             aria-pressed={view === option}
             onClick={() => onViewChange(option)}
-            // 40px tall inside the 2px-padded group; the pseudo-element
-            // extends the tap area to 48px.
-            className={`relative inline-flex h-10 items-center rounded-[2px] px-3 transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] focus-visible:outline-1 focus-visible:outline-cyan ${view === option ? 'bg-canvas text-cyan' : 'text-muted hover:text-primary'}`}
+            // Visibly 40px tall inside the 2px-padded, bordered group (46px
+            // outline). The tap area is 48px tall: the pseudo-element reaches
+            // 4px above and below the segment, past the group's border, and
+            // sideways to the group's outer edges, so a tap anywhere on the
+            // control hits a segment. Making the segments h-11 instead would
+            // grow the strip by 4px and take it from the messages.
+            className={`relative inline-flex h-10 items-center rounded-[2px] px-3 transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] first:after:-left-[3px] last:after:-right-[3px] focus-visible:outline-1 focus-visible:outline-cyan ${view === option ? 'bg-canvas text-cyan' : 'text-muted hover:text-primary'}`}
           >
             {option === 'chat' ? 'Chat' : 'Diagram'}
           </button>

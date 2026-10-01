@@ -20,6 +20,7 @@ from services.glassbox.retrieval.search import search_chunks
 from services.glassbox.worker import main as worker_module
 from services.glassbox.worker.main import (
     GROUP_NAME,
+    RETRIEVAL_FAILED_MESSAGE,
     STREAM_NAME,
     enqueue_retrieval_job,
     enqueue_synthetic_jobs,
@@ -199,6 +200,8 @@ async def test_malformed_job_does_not_crash_and_is_acked_locally():
     assert client.events[0][0] == "trace:bad-job"
     assert client.events[0][1]["type"] == "error"
     assert client.events[0][1]["code"] == "internal"
+    # The ValueError's text ("embedding must contain ...") stays in the log.
+    assert client.events[0][1]["message"] == RETRIEVAL_FAILED_MESSAGE
     assert client.acked == [(STREAM_NAME, GROUP_NAME, b"1-0")]
 
 
@@ -502,7 +505,8 @@ async def test_bad_embedding_publishes_error_and_is_acked(integration_stack, iso
             )
             error = await next_trace_message(pubsub, "error")
             assert error["code"] == "internal"
-            assert "embedding" in error["message"]
+            # Fixed text: exception detail stays in the worker log.
+            assert error["message"] == RETRIEVAL_FAILED_MESSAGE
             assert (
                 await client.xpending_range(isolated_stream, GROUP_NAME, message_id, message_id, 1)
                 == []

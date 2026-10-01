@@ -1,6 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
+import { DESKTOP_QUERY } from '../lib/layout'
+import { askButtonMode, lastSentQuestion, shouldRecallQuestion } from '../lib/askInput'
+import { planRetry, retryableReplyId, retryWaitSeconds } from '../lib/chatRetry'
+import { chatAnnouncement } from '../lib/chatAnnouncement'
 import suggestedQuestions from '../suggested-questions.json'
 
 // One list shared with the backend: `python -m services.glassbox.warm` asks
@@ -16,6 +20,8 @@ type ChatProps = {
   isStreaming: boolean
   onAsk: (question: string) => void
   onStop: () => void
+  /** Re-asks the failed question of the latest failure reply. */
+  onRetry: () => void
   onNewChat: () => void
   inputAccessory?: ReactNode
   /** Below md in Chat view, the topic chips; rendered directly above the ask box. */
@@ -34,9 +40,18 @@ const FOLLOW_THRESHOLD_PX = 80
 // answer it just asked for.
 const STOP_GUARD_MS = 400
 
-function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAccessory, inputTopic, replacement, onInputFocusChange }: ChatProps) {
+function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat, inputAccessory, inputTopic, replacement, onInputFocusChange }: ChatProps) {
   const [question, setQuestion] = useState('')
   const messagesRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // After Up-arrow recall, put the caret at the end of the recalled text.
+  const caretToEndRef = useRef(false)
+  useLayoutEffect(() => {
+    if (!caretToEndRef.current) return
+    caretToEndRef.current = false
+    const input = inputRef.current
+    if (input) input.setSelectionRange(input.value.length, input.value.length)
+  }, [question])
   const askedAtRef = useRef(0)
   // Smart auto-scroll (DESIGN-002 §6.3): follow new content only while the
   // visitor is at the bottom; scrolling up pauses it and offers a pill back.
@@ -83,12 +98,17 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
 
   // The message list mutates on every streamed token; a live region on the
   // whole list would re-announce (or re-read) on each mutation. Instead, a
-  // separate off-screen live region holds the settled assistant text only —
-  // it's empty for the whole duration of a stream (so no per-token
-  // announcements) and becomes non-empty in a single mutation once
-  // `isStreaming` flips false, which a screen reader announces once.
+  // separate off-screen live region holds one short settled text — it's
+  // empty for the whole duration of a stream (so no per-token announcements)
+  // and changes in a single mutation once `isStreaming` flips false, which a
+  // screen reader announces once. Stop says "Answer stopped."; an answer
+  // interrupted by sending a new question says nothing (the new one is
+  // already on its way); a rate-limit countdown ending on Retry says so
+  // (lib/chatAnnouncement.ts).
   const lastMessage = messages[messages.length - 1]
-  const announcement = !isStreaming && lastMessage?.role === 'assistant' ? lastMessage.content : ''
+  const [silencedReplyId, setSilencedReplyId] = useState<string | null>(null)
+  const [retryReadyReplyId, setRetryReadyReplyId] = useState<string | null>(null)
+  const announcement = chatAnnouncement(messages, { isStreaming, silencedReplyId, retryReadyReplyId })
 
   // A suggested question is asked straight away, the same way as Send.
   function handleSuggestionClick(event: MouseEvent<HTMLButtonElement>) {
@@ -99,12 +119,58 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
     onAsk(suggestion)
   }
 
+  // Up arrow in an empty ask box recalls this topic's last question (§6.4).
+  // Never during IME composition (Up picks a candidate there; keyCode 229 is
+  // Safari's composition signal), with a modifier, or once there is text.
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    const recall = shouldRecallQuestion({
+      key: event.key,
+      value: event.currentTarget.value,
+      caret: event.currentTarget.selectionStart,
+      composing: event.nativeEvent.isComposing || event.keyCode === 229,
+      modified: event.shiftKey || event.altKey || event.ctrlKey || event.metaKey,
+    })
+    if (!recall) return
+    const last = lastSentQuestion(messages)
+    if (!last) return
+    event.preventDefault()
+    caretToEndRef.current = true
+    setQuestion(last)
+  }
+
+  // Retry shows only under the latest failure reply, never mid-request.
+  const retryId = isStreaming ? null : retryableReplyId(messages)
+
+  function handleRetry() {
+    if (isStreaming) return
+    const retriedQuestionId = planRetry(messages)?.userMessageId
+    askedAtRef.current = performance.now()
+    setFollowing(true)
+    onRetry()
+    // The Retry button goes away with the failure reply. On desktop keyboard
+    // focus moves to the ask box. On a phone that would pop up the keyboard,
+    // so focus moves to the retried question instead (focusable, tabIndex
+    // -1): keyboard and screen-reader users keep their place, and the new
+    // answer appears right below it.
+    if (window.matchMedia(DESKTOP_QUERY).matches) {
+      inputRef.current?.focus({ preventScroll: true })
+    } else if (retriedQuestionId) {
+      messagesRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(retriedQuestionId)}"]`)?.focus({ preventScroll: true })
+    }
+  }
+
+  // While an answer streams the box stays usable: with text in it the button
+  // sends (stopping the current answer first), empty it is Stop (§6.4).
+  const buttonMode = askButtonMode(isStreaming, question)
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmedQuestion = question.trim()
-    if (!trimmedQuestion || isStreaming) return
+    if (!trimmedQuestion) return
     askedAtRef.current = performance.now()
     setFollowing(true)
+    // Stop-and-send: the interrupted reply is never announced.
+    if (buttonMode === 'stop-and-send' && lastMessage?.role === 'assistant') setSilencedReplyId(lastMessage.id)
     onAsk(trimmedQuestion)
     setQuestion('')
   }
@@ -123,7 +189,15 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
               if (message.role === 'assistant' && !message.content && !pending && !stopped) return null
               const showSources = message.role === 'assistant' && !pending && (message.sources?.length ?? 0) > 0
               return (
-                <div key={message.id} className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end' : 'self-start'}`}>
+                <div
+                  key={message.id}
+                  data-message-id={message.id}
+                  // Questions take focus after Retry on a phone (handleRetry), so
+                  // they get a role and name for predictable screen-reader output
+                  // and a focus ring for keyboard users (focus-visible only).
+                  {...(message.role === 'user' ? { tabIndex: -1, role: 'group', 'aria-label': questionLabel(message.content) } : {})}
+                  className={`flex min-w-0 max-w-[90%] flex-col gap-1.5 ${message.role === 'user' ? 'self-end rounded-[3px] outline-hidden focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-cyan' : 'self-start'}`}
+                >
                   {(message.content || pending) && <div
                     // Failure replies and text cut off by a failure get a dashed border.
                     className={`whitespace-pre-wrap break-words rounded-[3px] border max-w-[65ch] px-4 py-3 text-[13px] leading-[1.6] ${message.role === 'user' ? 'bg-canvas' : 'bg-panel'} ${message.state === 'error' ? 'border-dashed border-hairline text-muted' : 'border-hairline text-primary'}`}
@@ -131,6 +205,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
                     {message.content || '…'}
                   </div>}
                   {stopped && <p className="px-1 text-[11px] leading-relaxed text-muted">Stopped</p>}
+                  {message.id === retryId && <RetryButton retryAt={message.retryAt} onRetry={handleRetry} onReady={() => setRetryReadyReplyId(message.id)} />}
                   {showSources && (
                     <p className="break-words px-1 text-[11px] leading-relaxed text-muted">
                       <span>Sources: </span>
@@ -191,20 +266,22 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
 
       {inputAccessory}
 
-      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 ${inputTopic ? 'pb-2' : 'py-2'}`}>
+      {/* A phone held sideways puts the topic chips beside the ask box: one row instead of two. */}
+      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 phone-landscape:flex phone-landscape:items-center phone-landscape:gap-2 ${inputTopic ? 'pb-2 phone-landscape:pt-2' : 'py-2'}`}>
         {inputTopic}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 phone-landscape:min-w-0 phone-landscape:flex-1">
           <input
+            ref={inputRef}
+            onKeyDown={handleKeyDown}
             onFocus={() => onInputFocusChange?.(true)}
             onBlur={() => onInputFocusChange?.(false)}
             aria-label="Ask anything"
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            disabled={isStreaming}
             placeholder="Ask anything..."
-            className="min-w-0 flex-1 rounded-[3px] border border-hairline bg-canvas px-3 py-3 text-[13px] leading-[1.6] text-primary outline-none placeholder:text-muted focus:border-cyan disabled:cursor-not-allowed"
+            className="min-w-0 flex-1 rounded-[3px] border border-hairline bg-canvas px-3 py-3 text-[13px] leading-[1.6] text-primary outline-none placeholder:text-muted focus:border-cyan"
           />
-          {isStreaming ? (
+          {buttonMode === 'stop' ? (
             // Replaces Send while an answer streams (DESIGN-002 §6.1/§6.2).
             <button
               type="button"
@@ -217,7 +294,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
           ) : (
             <button
               type="submit"
-              aria-label="Send question"
+              aria-label={buttonMode === 'stop-and-send' ? 'Stop answer and send question' : 'Send question'}
               className="min-w-11 rounded-[3px] border border-hairline bg-canvas px-4 text-lg text-muted transition-colors hover:text-primary"
             >
               →
@@ -239,6 +316,54 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onNewChat, inputAc
         </p>
       </div>
     </section>
+  )
+}
+
+// Accessible name of a question in the message list ("Your question: ..."),
+// shortened so a long question is not read twice in full.
+const QUESTION_LABEL_MAX_CHARS = 80
+function questionLabel(content: string): string {
+  const text = content.replace(/\s+/g, ' ').trim()
+  const short = text.length > QUESTION_LABEL_MAX_CHARS ? `${text.slice(0, QUESTION_LABEL_MAX_CHARS - 1).trimEnd()}…` : text
+  return `Your question: ${short}`
+}
+
+/**
+ * Retry under a failure reply. After a rate limit it stays disabled, counting
+ * down, until the server's retry-after has passed, so it never re-hits the
+ * limit. Mounted with the failure reply, so its clock starts fresh.
+ */
+function RetryButton({ retryAt, onRetry, onReady }: { retryAt?: number; onRetry: () => void; onReady: () => void }) {
+  const [now, setNow] = useState(() => Date.now())
+  const wait = retryWaitSeconds(retryAt, now)
+  const onReadyRef = useRef(onReady)
+  useEffect(() => {
+    onReadyRef.current = onReady
+  }, [onReady])
+  useEffect(() => {
+    // Counts down only while there is a wait; its end is announced once.
+    if (retryAt === undefined || retryAt <= Date.now()) return
+    const timer = window.setInterval(() => {
+      const current = Date.now()
+      setNow(current)
+      if (current >= retryAt) {
+        window.clearInterval(timer)
+        onReadyRef.current()
+      }
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [retryAt])
+  return (
+    <button
+      type="button"
+      onClick={() => { if (wait === 0) onRetry() }}
+      disabled={wait > 0}
+      aria-label={wait > 0 ? `Retry question, available in ${wait} seconds` : 'Retry question'}
+      className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-[3px] border border-hairline bg-canvas px-3 text-xs text-muted transition-colors hover:text-primary focus-visible:text-primary disabled:cursor-not-allowed disabled:hover:text-muted md:min-h-0 md:py-1.5"
+    >
+      <span aria-hidden="true">↻</span>
+      {wait > 0 ? `Retry in ${wait}s` : 'Retry'}
+    </button>
   )
 }
 

@@ -71,7 +71,7 @@ env:
 jobs:
   diagnose:
     name: diagnose (read-only)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ops-read
     timeout-minutes: 20
     permissions:
@@ -83,7 +83,7 @@ jobs:
         run: |
           echo "::error::Run ops runbooks from main only (this run is on $GITHUB_REF)."
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run summary
         run: |
           {
@@ -103,7 +103,7 @@ jobs:
             echo
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Assume read-only ops role
-        uses: aws-actions/configure-aws-credentials@v6.3.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::404379474987:role/glassbox-ops-read
@@ -119,16 +119,16 @@ jobs:
     # Runs even when the "before" diagnose failed: a hung node is exactly
     # when reboot-node is needed.
     if: ${{ !cancelled() && inputs.action != 'diagnose' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ops
     timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Assume ops role
-        uses: aws-actions/configure-aws-credentials@v6.3.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::404379474987:role/glassbox-ops
