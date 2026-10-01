@@ -528,3 +528,96 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
         if redis_keys:
             await client.delete(*redis_keys)
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or_delete(
+    tmp_path, integration_stack, monkeypatch
+):
+    """A cached answer outlives other documents' re-ingests, not its own sources'."""
+    from uuid import uuid4
+
+    from services.glassbox.cache.answer import KEY_PREFIX, RedisAnswerCache, _model_tag
+
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    name = tmp_path.name.replace("-", "_")
+    original_load = sweep_module.load_scope_documents
+
+    def only_fixture_documents(engine_, corpus, model_id):
+        return [doc for doc in original_load(engine_, corpus, model_id) if name in doc.source_path]
+
+    monkeypatch.setattr(sweep_module, "load_scope_documents", only_fixture_documents)
+    monkeypatch.setattr(ingest_run, "load_scope_documents", only_fixture_documents)
+    paths = {role: f"corpus/about-me/{role}_{name}.md" for role in ("source", "other", "deleted")}
+    (tmp_path / "corpus" / "about-me").mkdir(parents=True)
+    for role, path in paths.items():
+        (tmp_path / path).write_text(f"# {role} {name}\n\nFirst version.\n")
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+
+    def chunk_ids(path):
+        with Session(engine) as session:
+            return list(
+                session.scalars(
+                    select(DbChunk.id)
+                    .join(Document, DbChunk.document_id == Document.id)
+                    .where(Document.source_path == path)
+                )
+            )
+
+    cache = RedisAnswerCache(client)
+    model_id = f"test-{uuid4().hex}"
+    v_source = [1.0] + [0.0] * 511
+    v_deleted = [0.0, 1.0] + [0.0] * 510
+
+    def payload(path):
+        return {
+            "answer": f"An answer from {path}.",
+            "chunks": [{"chunk_id": chunk_id, "source_path": path} for chunk_id in chunk_ids(path)],
+        }
+
+    try:
+        await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        from_source, from_deleted = payload(paths["source"]), payload(paths["deleted"])
+        await cache.put("about_me", model_id, v_source, from_source)
+        await cache.put("about_me", model_id, v_deleted, from_deleted)
+
+        version = int(await client.get("corpus:ver:about_me"))
+        (tmp_path / paths["other"]).write_text(f"# other {name}\n\nEdited.\n")
+        changed = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert changed.docs_changed == 1
+        assert int(await client.get("corpus:ver:about_me")) == version + 1
+        assert await cache.get("about_me", model_id, v_source) == from_source
+        assert await cache.get("about_me", model_id, v_deleted) == from_deleted
+
+        (tmp_path / paths["source"]).write_text(f"# source {name}\n\nEdited.\n")
+        await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert await cache.get("about_me", model_id, v_source) is None
+        assert await cache.get("about_me", model_id, v_deleted) == from_deleted
+
+        (tmp_path / paths["deleted"]).unlink()
+        swept = await ingest(tmp_path, engine=engine, redis_client=client, sweep="apply")
+        assert swept.sweep[0].deleted
+        assert await cache.get("about_me", model_id, v_deleted) is None
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                Document.__table__.delete().where(Document.source_path.in_(list(paths.values())))
+            )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        async for key in client.scan_iter("chunk:*"):
+            if name.encode() in (await client.hget(key, "source_path") or b""):
+                await client.delete(key)
+        async for key in client.scan_iter(f"{KEY_PREFIX}about_me:*"):
+            if await client.hget(key, "model") == _model_tag(model_id).encode():
+                await client.delete(key)
+        await client.aclose()

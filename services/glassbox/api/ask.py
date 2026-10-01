@@ -26,7 +26,6 @@ from services.glassbox.cache.embedding import (
     embedding_cache_key,
     normalize_question,
 )
-from services.glassbox.cache.retrieval import RedisRetrievalCache
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.killswitch import get_kill_switch
@@ -335,18 +334,18 @@ def get_answer_cache(client) -> AnswerCache:
     return RedisAnswerCache(client)
 
 
-def _answer_lock_key(corpus: str, version: int, model_id: str, question: str) -> str:
-    identity = f"{corpus}\0{version}\0{model_id}\0{normalize_question(question)}"
+def _answer_lock_key(corpus: str, model_id: str, question: str) -> str:
+    identity = f"{corpus}\0{model_id}\0{normalize_question(question)}"
     return f"lock:answer:{hashlib.sha256(identity.encode()).hexdigest()}"
 
 
 async def _wait_for_answer(
-    cache: AnswerCache, corpus: str, version: int, model_id: str, embedding: list[float]
+    cache: AnswerCache, corpus: str, model_id: str, embedding: list[float]
 ) -> dict | None:
     deadline = time.monotonic() + _ANSWER_LOCK_WAIT_S
     while time.monotonic() < deadline:
         await asyncio.sleep(0.1)
-        answer = await cache.get(corpus, version, model_id, embedding)
+        answer = await cache.get(corpus, model_id, embedding)
         if answer:
             return answer
     return None
@@ -535,31 +534,26 @@ async def _stream(
             yield await stage(
                 "embed", "end", duration_ms=round((time.monotonic() - embed_started) * 1000)
             )
-        corpus_version = await RedisRetrievalCache(client).version(request.corpus)
         answer_cache = get_answer_cache(client)
         # The semantic answer cache is skipped both ways for follow-ups (DESIGN-002
         # §5.3): their answer depends on the conversation, not just the words. No
         # read, no lock, no write, so a first-question answer can never be replayed.
+        # It is not keyed by the corpus version: the cache itself checks on every
+        # read that the answer's source chunks are still indexed (cache/answer.py).
         answer_hit = None
         if not history:
-            answer_hit = await answer_cache.get(
-                request.corpus, corpus_version, answer_model_id, embedding
-            )
+            answer_hit = await answer_cache.get(request.corpus, answer_model_id, embedding)
         if not history and not answer_hit:
-            key = _answer_lock_key(
-                request.corpus, corpus_version, answer_model_id, request.question
-            )
+            key = _answer_lock_key(request.corpus, answer_model_id, request.question)
             token = uuid4().hex
             acquired = await client.set(key, token, nx=True, px=_ANSWER_LOCK_TTL_MS)
             if acquired:
                 lock_key, lock_token = key, token
                 # The first writer may have filled the cache between our read and SET.
-                answer_hit = await answer_cache.get(
-                    request.corpus, corpus_version, answer_model_id, embedding
-                )
+                answer_hit = await answer_cache.get(request.corpus, answer_model_id, embedding)
             else:
                 answer_hit = await _wait_for_answer(
-                    answer_cache, request.corpus, corpus_version, answer_model_id, embedding
+                    answer_cache, request.corpus, answer_model_id, embedding
                 )
                 # Bounded fallback: answer independently if the writer is slow or failed.
         if not history:
@@ -740,14 +734,12 @@ async def _stream(
 
         total_ms = elapsed_ms(request_start_ts)
         tokens_in, tokens_out = _token_counts(prompt, "".join(response_parts), llm_usage)
-        if not history and (
-            cache_skip is None
-            and await RedisRetrievalCache(client).version(request.corpus) == corpus_version
-        ):
+        # No corpus-version check here: the cache skips the write if a source chunk
+        # was re-ingested meanwhile, and every read re-validates the sources.
+        if not history and cache_skip is None:
             try:
                 await answer_cache.put(
                     request.corpus,
-                    corpus_version,
                     answer_model_id,
                     embedding,
                     {

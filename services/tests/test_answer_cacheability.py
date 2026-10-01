@@ -104,10 +104,13 @@ class StubSearchClient:
     async def execute_command(self, *args):
         if args[0] == "FT.INFO":
             return []
-        return [1, b"ans:about_system:v1:legacy", [b"distance", b"0"]]
+        return [1, b"ans2:about_system:entry", [b"distance", b"0"]]
 
     async def hget(self, key, field):
         return json.dumps(self.payload)
+
+    async def exists(self, *keys):
+        return len(keys)  # every source chunk is still indexed
 
 
 @pytest.mark.asyncio
@@ -122,7 +125,7 @@ class StubSearchClient:
 )
 async def test_legacy_cached_refusals_read_as_a_miss(payload, hit):
     cache = RedisAnswerCache(StubSearchClient(payload))
-    result = await cache.get("about_system", 1, "model", [0.0] * 511 + [1.0])
+    result = await cache.get("about_system", "model", [0.0] * 511 + [1.0])
     assert result == (payload if hit else None)
 
 
@@ -132,13 +135,13 @@ class RecordingAnswerCache:
         self.puts = []
         self.model_ids = []
 
-    async def get(self, corpus, version, model_id, vector):
+    async def get(self, corpus, model_id, vector):
         self.model_ids.append(model_id)
-        return self.values.get((corpus, version, model_id, struct.pack("512f", *vector)))
+        return self.values.get((corpus, model_id, struct.pack("512f", *vector)))
 
-    async def put(self, corpus, version, model_id, vector, payload):
+    async def put(self, corpus, model_id, vector, payload):
         self.puts.append(payload)
-        self.values[(corpus, version, model_id, struct.pack("512f", *vector))] = payload
+        self.values[(corpus, model_id, struct.pack("512f", *vector))] = payload
 
 
 class ScriptedLLM(FakeLLMProvider):
