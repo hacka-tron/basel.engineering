@@ -39,6 +39,8 @@ export type DoneEvent = {
   // that stopped is gone, so in practice the browser never receives it.
   mode: 'full' | 'retrieval_only' | 'stopped'
   answer_cache: 'hit' | 'miss'
+  // True when the answer is the plain "I don't know from what I have." sentence.
+  abstained?: boolean
   tokens_in?: number
   tokens_out?: number
 }

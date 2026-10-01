@@ -335,6 +335,10 @@ Acceptance: after pressing Stop, no further output tokens are billed beyond abou
 - **Auto-scroll (§6.3).** Implemented as specified: follow while within 80 px of the bottom, a "Jump to latest" pill otherwise, and sending a question or switching tabs resumes following.
 - **Not yet built.** §6.4 (input enabled while streaming, send-stops-current, Up-arrow recall) and the Retry control in §6.1's `error` state. `DoneEvent.mode` accepts `stopped` per §9.2, but in practice the stopped client never receives a `done` event.
 
+### 6.7 Playful "I don't know" replies
+
+When `done.abstained` is true and the streamed text, trimmed, is exactly the canonical sentence (a client-side guard), the client replaces the displayed text with one of 20 light-hearted replies from `frontend/src/lib/idkReplies.ts` (some playfully blame Basel, never the visitor; About This System draws from the lines that fit it plus a few about the docs), random and never the same as the last one shown or saved in that conversation. The swap happens at `done`, after the short canonical sentence has been revealed. The message is stored with its shown text plus `idk: true` (an optional field; older saves load unchanged). Conversation history sends the canonical sentence for such a turn rather than the joke, so the server and the §5.2 rewriter see what was actually said, and the user/assistant alternation stays intact (omitting the turn would leave two user turns in a row). The mobile architecture inspector shows the same stored text. The server, caching and query logging are unchanged.
+
 ---
 
 ## 7. Feature 5: Streaming delivery hardening
@@ -398,6 +402,7 @@ type AskRequest = {
 
 - New `NodeId`: `"rewrite"`.
 - `DoneEvent.mode` gains `"stopped"`.
+- New field on `DoneEvent`: `abstained: boolean`. True only when the whole answer, normalized for case, punctuation and "do not", equals the canonical "I don't know from what I have." (the model said exactly that, or no sources were found). It is stricter than the loose `is_abstention` check used for caching and logging, so an answer such as "I don't know from what I have, but he built X on k3s" is false and shown as written. False for real answers, cache hits and `retrieval_only`. The client uses it to show a playful reply instead (§6.7).
 - New optional field on `RetrievalEvent`: `rewritten_query?: string`.
 - Heartbeat comments (`: ping`) may appear anywhere in the stream; parsers must ignore them.
 
