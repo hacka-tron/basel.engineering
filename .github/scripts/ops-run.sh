@@ -44,7 +44,10 @@ instance_id() {
 }
 
 # send_and_wait <document> <parameters-json> <max-wait-seconds> <title>
-# Prints the command's output and returns its success.
+# Prints the command's output and returns its success. The output is also left
+# in LAST_STDOUT. With QUIET=1 nothing is printed or added to the summary
+# (used for the tiny boot-id probes).
+LAST_STDOUT=''
 send_and_wait() {
   local document=$1 parameters=$2 max_wait=$3 title=$4
   local instance command_id deadline status invocation result stdout stderr
@@ -81,6 +84,11 @@ send_and_wait() {
   done
 
   stdout=$(jq -r '.StandardOutputContent // ""' <<<"$invocation")
+  LAST_STDOUT=$stdout
+  if [ "${QUIET:-0}" = 1 ]; then
+    [ "$status" = Success ]
+    return
+  fi
   stderr=$(jq -r '.StandardErrorContent // ""' <<<"$invocation")
   echo "::group::$title output ($status)"
   printf '%s\n' "$stdout"
@@ -117,32 +125,62 @@ diagnose() {
   send_and_wait glassbox-ops-diagnose '{}' 600 "$title"
 }
 
+# boot_info <max-wait-seconds>: prints "<boot_id> <boot_epoch>" from the
+# read-only glassbox-ops-boot-id document, or nothing if the node did not
+# answer in time (a late answer is harmless: the document only reads).
+boot_info() {
+  local id epoch
+  QUIET=1 send_and_wait glassbox-ops-boot-id '{}' "$1" boot-id >/dev/null || return 0
+  id=$(sed -n 's/^boot_id=//p' <<<"$LAST_STDOUT" | head -1)
+  epoch=$(sed -n 's/^boot_epoch=//p' <<<"$LAST_STDOUT" | head -1)
+  [ -n "$id" ] && [ "$id" != unknown ] && echo "$id ${epoch:-0}"
+  return 0
+}
+
 reboot_node() {
-  local instance rebooted_at ping online_at started=$SECONDS
+  local instance rebooted_at started=$SECONDS before before_id='' info now_id now_epoch
   instance=$(instance_id)
+
+  # An SSM ping or a successful command only proves the agent is reachable,
+  # and a pre-reboot ping can look like one after the reboot. The kernel's
+  # boot ID changes on every boot, so remember it and wait for a different
+  # one. If the node can't answer now (the usual reason to reboot it), fall
+  # back to its boot time: it must be later than the reboot request.
+  before=$(boot_info 90)
+  before_id=${before%% *}
+  if [ -n "$before_id" ]; then
+    log "boot id before the reboot: $before_id"
+  else
+    log "could not read the boot id before the reboot (node not answering); will require a boot time after the request instead"
+  fi
+
   rebooted_at=$(date -u +%s)
   log "rebooting $instance (EC2 RebootInstances: ACPI reboot, forced by AWS after ~4 minutes if the OS ignores it)"
   aws ec2 reboot-instances --region "$REGION" --instance-ids "$instance"
 
-  # Wait for the SSM agent to check in again after the reboot: first ping
-  # newer than the reboot request + 60s, up to 20 minutes.
+  # Poll for up to 20 minutes. Every probe goes through SSM, so it only
+  # succeeds while the agent is up; success needs a new boot.
   local deadline=$((SECONDS + 1200))
   sleep 60
   while [ "$SECONDS" -lt "$deadline" ]; do
-    ping=$(aws ssm describe-instance-information --region "$REGION" \
-      --filters "Key=InstanceIds,Values=$instance" \
-      --query 'InstanceInformationList[0].[PingStatus,LastPingDateTime]' --output text 2>/dev/null || true)
-    online_at=$(date -u -d "$(cut -f2 <<<"$ping")" +%s 2>/dev/null || echo 0)
-    if [ "$(cut -f1 <<<"$ping")" = Online ] && [ "$online_at" -gt $((rebooted_at + 60)) ]; then
-      log "SSM agent back online; giving k3s 90s to start before the after-diagnose"
-      sleep 90
-      echo "Reboot: SSM agent back online $((SECONDS - started))s after the request." >>"$SUMMARY"
-      return 0
+    info=$(boot_info 60)
+    if [ -n "$info" ]; then
+      now_id=${info%% *}
+      now_epoch=${info##* }
+      if { [ -n "$before_id" ] && [ "$now_id" != "$before_id" ]; } ||
+        { [ -z "$before_id" ] && [ "$now_epoch" -ge "$rebooted_at" ]; }; then
+        log "node rebooted: boot id $now_id, up since epoch $now_epoch; giving k3s 90s to start before the after-diagnose"
+        sleep 90
+        echo "Reboot: new boot id seen $((SECONDS - started))s after the request (was ${before_id:-unknown})." >>"$SUMMARY"
+        return 0
+      fi
+      log "node answers but has not rebooted yet (boot id unchanged)"
+    else
+      log "waiting for the node (no answer from the SSM agent)"
     fi
-    log "waiting for the node (SSM: ${ping:-no data})"
     sleep 20
   done
-  die "the node did not report to SSM within 20 minutes of the reboot; check the EC2 console (instance status checks)"
+  die "no reboot detected within 20 minutes of the request: the boot id never changed (${before_id:-unknown before}) or the node never answered; check the EC2 console (instance status checks)"
 }
 
 apply_zram() {

@@ -39,6 +39,13 @@ locals {
       parameters  = []
       timeout     = 300
     }
+    boot-id = {
+      description = "Read-only: print this boot's ID and boot time. reboot-node uses it to prove the node really rebooted."
+      script      = "boot-id.sh"
+      fixed_args  = []
+      parameters  = []
+      timeout     = 60
+    }
     restart-deployment = {
       description = "kubectl rollout restart of one known Deployment, then wait for the rollout."
       script      = "restart-deployment.sh"

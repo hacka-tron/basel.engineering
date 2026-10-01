@@ -42,7 +42,7 @@ main() {
   fi
 
   section "flux objects now"
-  kc get kustomizations.kustomize.toolkit.fluxcd.io -A | cut -c1-200 || true
-  kc get helmreleases.helm.toolkit.fluxcd.io -A | cut -c1-200 || true
+  kc get kustomizations.kustomize.toolkit.fluxcd.io -A | redact 200 || true
+  kc get helmreleases.helm.toolkit.fluxcd.io -A | redact 200 || true
 }
 main "$@"

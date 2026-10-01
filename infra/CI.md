@@ -63,14 +63,25 @@ Every run starts with a read-only `diagnose` (no approval) so the approver
 sees the node's state first. Mutating actions then wait for the owner in the
 protected `ops` environment, act, and run `diagnose` again. Output appears in
 the job log (collapsed groups) and in the run summary. The repository is
-public, so diagnose prints no secrets. It counts k3s "Slow SQL" lines but
-never prints them, because kine logs SQL arguments. SSM keeps only the first
+public, so diagnose is built to be safe to publish. It runs no `describe`
+and no environment dump. Warning events print only namespace, last-seen time,
+count, reason and involved object kind and name, never the message. k3s log
+lines are never printed, only counted per category (timeouts, etcd/kine,
+connection errors, TLS, image pull, memory, disk, probes; kine's "Slow SQL"
+lines contain SQL arguments). The few remaining free-text columns (Flux
+status, kernel OOM lines) pass through a redaction filter (`redact` in
+`infra/modules/ops/scripts/lib.sh`): URL userinfo and query strings removed,
+values after password/token/secret/key/authorization masked, JWT-like and 20+
+character base64/hex strings masked, lines cut to 160-220 characters. That
+filter is a safety net, not a guarantee; it has an offline test
+(`infra/modules/ops/tests/redact-test.sh`, run in CI). SSM keeps only the
+first
 24,000 characters of a command's output.
 
 | Action | What it does | When to use it | Approval |
 |---|---|---|---|
 | `diagnose` | Read-only snapshot: uptime, memory, swap and zram, memory/IO/CPU pressure (PSI), vmstat, largest processes, k3s service, nodes and conditions, `kubectl top`, all pods, deployments, CronJobs and Jobs, Flux sources, Kustomizations and HelmReleases, KEDA, the newest warning events, k3s error lines from the last 30 minutes, kernel OOM kills. Every command is time-bounded. | First step of any incident (521/522, slow site, stuck deploy). Any time you want to look. | None (`ops-read`) |
-| `reboot-node` | EC2 `RebootInstances` on the tagged glassbox instance. This is an ACPI reboot that AWS forces after about 4 minutes. Waits up to 20 minutes for the SSM agent to check in again, gives k3s 90s, then runs diagnose. | The node is unresponsive: diagnose times out or the apiserver doesn't answer, or memory/IO pressure stays pegged and nothing else helps. | `ops` |
+| `reboot-node` | EC2 `RebootInstances` on the tagged glassbox instance. This is an ACPI reboot that AWS forces after about 4 minutes. Reads the kernel boot ID first (read-only `glassbox-ops-boot-id` document), then waits up to 20 minutes for a different boot ID, so a ping from before the reboot can't pass for success; if the node can't answer beforehand it requires a boot time after the request instead. Fails clearly if it never changes. Then gives k3s 90s and runs diagnose. | The node is unresponsive: diagnose times out or the apiserver doesn't answer, or memory/IO pressure stays pegged and nothing else helps. | `ops` |
 | `restart-deployment` (`deployment`: `api`, `retrieval-worker`, `traefik`) | `kubectl rollout restart` plus a wait of up to 10 minutes for the rollout. | A pod is Running but wedged (stuck streams, not serving), or Traefik is routing badly. `api` rolls with `maxSurge: 0`, so the site is down for a few seconds. | `ops` |
 | `flux-suspend` (`flux_target`) | Sets `spec.suspend: true`, like `flux suspend`. Targets: Kustomizations `keda`, `keda-scaling`, `ingest`, `app-ready` and `flux-system`, and `helmrelease-keda` (the KEDA HelmRelease). | Stop Flux re-applying something during an incident, for example KEDA Helm retries thrashing the node (`helmrelease-keda`, `keda`), or skip an ingest run (`ingest`). `flux-system` freezes **all** deploys. | `ops` |
 | `flux-resume` (`flux_target`) | Sets `spec.suspend: false` and requests a reconcile, waiting up to 5 minutes for it, like `flux resume`. | Undo a suspend once the incident is over. | `ops` |
@@ -105,7 +116,7 @@ Both roles are defined in `infra/bootstrap/runbooks.tf`. They reuse
   `ssm:SendCommand` only with `glassbox-ops-*` and `glassbox-zram-swap`, on
   the tagged instance. It can call `ec2:RebootInstances` only on the tagged
   instance, and `ssm:GetDocument` only on `glassbox-zram-swap`. It has the
-  same reads as `glassbox-ops-read`. It has no StartSession, no
+  same reads as `glassbox-ops-read`. `glassbox-ops-boot-id` is covered by its `glassbox-ops-*` document wildcard; `glassbox-ops-read` still sends only `glassbox-ops-diagnose`. It has no StartSession, no
   Stop/Terminate, no AWS-RunShellScript, and no document writes.
 
 ## Bootstrap via pipeline

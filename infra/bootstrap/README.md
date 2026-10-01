@@ -8,12 +8,15 @@ trusts the protected `terraform-plan` environment), and `glassbox-ci-release`
 **Already applied to the real AWS account** (`404379474987`) — this is not a
 placeholder module.
 
-This root has no remote backend; its own `terraform.tfstate` stays local
-because the bucket doesn't exist until after the first apply. That state
-file is the only record of what exists here — keep it and any backups
-private and outside Git, and always run `terraform plan` before changing
-anything, since a diff against stale local state can propose destroying
-real resources.
+This root started with local state, because the bucket didn't exist until
+its first apply. Once PR #59 is merged and the one-time owner setup in
+`infra/CI.md` ("One-time owner setup") has been done, its state lives in S3
+and changes go through `.github/workflows/bootstrap.yml` (plan on PRs, apply
+after owner approval) instead of a manual local apply. Until then, and for
+that one-time setup, the local `terraform.tfstate` is the only record of what
+exists here: keep it and any backups private and outside Git, and always run
+`terraform plan` before changing anything, since a diff against stale local
+state can propose destroying real resources.
 
 ```sh
 terraform init
@@ -25,15 +28,15 @@ terraform output plan_role_arn
 terraform output release_role_arn
 ```
 
-The owner applies changes to this module manually with their own AWS CLI
-credentials — CI cannot bootstrap itself, since the roles it would assume
+The first apply and the one-time setup are manual, with the owner's own AWS
+CLI credentials: CI cannot bootstrap itself, since the roles it would assume
 don't exist until this module has already run. `infra/envs/prod/backend.tf`
 already references the real bucket this module created; `state_bucket_name`
 only needs re-checking if this module is ever re-run against a fresh
 account.
 
-After a bootstrap code change, the owner must review and apply this
-local-state root manually before merging a workflow that depends on the
+Before the pipeline is set up, a bootstrap code change must be reviewed and
+applied manually by the owner before merging a workflow that depends on the
 changed roles. `glassbox-ci-plan` can read production state and project SSM
 parameters, and can write only the production state lockfile.
 `glassbox-ci-release` can only push to the `glassbox` ECR repository.

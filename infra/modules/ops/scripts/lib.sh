@@ -23,6 +23,30 @@ die() {
 }
 section() { printf '\n===== %s =====\n' "$*"; }
 
+# redact [max-width]: filter for any free text that reaches the (public)
+# Actions log. Reads stdin, writes stdout. It
+#   - drops URL userinfo (user:pass@) and query strings,
+#   - masks the value after password/passwd/token/secret/key/authorization/
+#     credential (key=value, key: value, JSON "key":"value") and Bearer values,
+#   - masks JWT-like strings and any run of 20+ base64/hex characters,
+#   - truncates every line to max-width characters (default 160).
+# Masking happens before truncation so a cut can't leave a token prefix.
+# It is a safety net, not a guarantee: prefer printing structured fields
+# (names, counts, timestamps) over messages, and use this on what remains.
+# Character-class spellings instead of sed's I flag keep it working with
+# both GNU and BSD sed (the offline test runs on either).
+redact() {
+  local width=${1:-160}
+  sed -E \
+    -e 's#(://)[^/@[:space:]]*@#\1<userinfo>@#g' \
+    -e 's#\?[^[:space:]"'"'"'<>]*#?<query>#g' \
+    -e 's#([bB][eE][aA][rR][eE][rR])[[:space:]]+[^[:space:]]+#\1 <masked>#g' \
+    -e 's#([pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[tT][oO][kK][eE][nN]|[sS][eE][cC][rR][eE][tT]|[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL])[A-Za-z0-9_.-]*("|'"'"')?[[:space:]]*[=:][[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:],;&]+)#\1\2=<masked>#g' \
+    -e 's#eyJ[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*#<jwt>#g' \
+    -e 's#[A-Za-z0-9+/=_]{20,}#<masked>#g' |
+    cut -c1-"$width"
+}
+
 # kubectl with hard upper bounds: on a node thrashing in swap the apiserver
 # can accept a request and then never answer it.
 kc() { timeout --kill-after=10 90 k3s kubectl --request-timeout=60s "$@"; }
@@ -56,7 +80,7 @@ flux_request_reconcile() {
   while [ "$SECONDS" -lt "$deadline" ]; do
     handled=$(kc -n "$namespace" get "$resource" -o jsonpath='{.status.lastHandledReconcileAt}' 2>/dev/null || true)
     if [ "$handled" = "$token" ]; then
-      log "$namespace/$resource reconciled: $(kc -n "$namespace" get "$resource" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status} {.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null | cut -c1-200)"
+      log "$namespace/$resource reconciled: $(kc -n "$namespace" get "$resource" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status} {.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null | redact 200)"
       return 0
     fi
     sleep 5

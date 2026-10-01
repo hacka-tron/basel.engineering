@@ -51,6 +51,9 @@ jobs:
             cat "$scripts/lib.sh" "$script" | shellcheck -s bash -
           done
           shellcheck .github/scripts/*.sh
+          shellcheck -x -P SCRIPTDIR infra/modules/ops/tests/*.sh
+      - name: Test runbook output redaction
+        run: bash infra/modules/ops/tests/redact-test.sh
 
   plan:
     needs: validate
