@@ -1,6 +1,6 @@
 # Security pass leftovers: response headers, short-salt test, ops-read trust
 
-**PR:** _(link added when opened)_ · **Branch:** `security/headers-and-leftovers` · **Docs:** `docs/DESIGN.md` §11, `docs/architecture/deep-dive.md` ("Web security headers", a new section, so the ingest test now expects 33 chunks), `infra/CI.md` "Roles"
+**PR:** [#112](https://github.com/hacka-tron/basel.engineering/pull/112) · **Branch:** `security/headers-and-leftovers` · **Docs:** `docs/DESIGN.md` §11, `docs/architecture/deep-dive.md` ("Web security headers", a new section, so the ingest test now expects 33 chunks), `infra/CI.md` "Roles"
 **Status:** PR open, not reviewed yet. No production access was used (no AWS, SSM, kubectl, Terraform plan or apply, workflow runs, or GitHub settings changes). One live check: a HEAD request to the public site, which today sends none of these headers.
 
 ## TL;DR
