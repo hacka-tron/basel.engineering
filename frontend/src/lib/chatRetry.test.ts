@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { holdSaveDuringRetry, planRetry, retryableReplyId, retryWaitSeconds, withoutFailedAttempt } from './chatRetry.ts'
 import { historyForRequest, type ChatMessage } from './conversation.ts'
-import { BUDGET_EXHAUSTED_REPLY } from './errorReplies.ts'
+import { BUDGET_REPLIES, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 
 const settled: ChatMessage[] = [
   { id: 'u1', role: 'user', content: 'What did Basel build?', createdAt: 1 },
@@ -57,7 +57,17 @@ test('only the latest message can be retried', () => {
 test('pending, stopped and budget replies are not retryable', () => {
   assert.equal(planRetry([...failed.slice(0, 3), { id: 'p', role: 'assistant', content: '', state: 'pending', createdAt: 2 }]), null)
   assert.equal(planRetry([...failed.slice(0, 3), { id: 's', role: 'assistant', content: 'Part', state: 'stopped', createdAt: 2 }]), null)
-  assert.equal(planRetry([...failed.slice(0, 3), { id: 'b', role: 'assistant', content: BUDGET_EXHAUSTED_REPLY, state: 'error', createdAt: 2 }]), null)
+  // Budget replies are recognized by their flag, whichever random text they show.
+  for (const content of BUDGET_REPLIES) {
+    const messages: ChatMessage[] = [...failed.slice(0, 3), { id: 'b', role: 'assistant', content, state: 'error', budget: true, createdAt: 2 }]
+    assert.equal(planRetry(messages), null)
+    assert.equal(retryableReplyId(messages), null)
+  }
+})
+
+test('a generic failure that happens to read like a budget reply is still retryable', () => {
+  assert.equal(planRetry([...failed.slice(0, 3), { id: 'e', role: 'assistant', content: BUDGET_REPLIES[0], state: 'error', createdAt: 2 }])?.userMessageId, 'u2')
+  assert.equal(planRetry([...failed.slice(0, 3), { id: 'e', role: 'assistant', content: LEGACY_BUDGET_ERROR_REPLY, state: 'error', createdAt: 2 }])?.userMessageId, 'u2')
 })
 
 test('a failure whose question was trimmed off the display cap is not retryable', () => {

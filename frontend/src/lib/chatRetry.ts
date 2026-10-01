@@ -7,7 +7,6 @@
 // Kept free of React so it can be unit tested with Node's built-in runner.
 
 import type { ChatMessage } from './conversation.ts'
-import { BUDGET_EXHAUSTED_REPLY } from './errorReplies.ts'
 
 export type RetryPlan = {
   /** The failed user question, asked again as is. */
@@ -26,12 +25,12 @@ function isErrorReply(message: ChatMessage): boolean {
  * The retry for a conversation whose latest message is a failure reply, or
  * null. Only the latest failure can be retried: retrying an older one would
  * splice a new answer into the middle of a conversation that has moved on.
- * The daily-budget reply is not retryable (it would fail the same way until
+ * A daily-budget reply (marked `budget`) is not retryable (it would fail the same way until
  * tomorrow), nor is a failure whose question was trimmed off the display cap.
  */
 export function planRetry(messages: readonly ChatMessage[]): RetryPlan | null {
   const last = messages[messages.length - 1]
-  if (!last || !isErrorReply(last) || last.content === BUDGET_EXHAUSTED_REPLY) return null
+  if (!last || !isErrorReply(last) || last.budget) return null
   let index = messages.length - 1
   // Skip the reply and any partial answer the failure cut off (also `error`).
   while (index >= 0 && isErrorReply(messages[index])) index -= 1

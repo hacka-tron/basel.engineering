@@ -2,8 +2,10 @@
 // instead of a bare "Request failed (…)" banner. Generic failures get one of
 // these at random (never the same one twice in a row); failures that carry
 // something the visitor needs to know (a wait time, the daily budget) get a
-// specific reply that keeps that information. Kept free of imports so it can
-// be unit tested with Node's built-in runner.
+// specific reply that keeps that information. Unit tested with Node's
+// built-in runner.
+
+import { pickBudgetReply } from './budgetReplies.ts'
 
 export const ERROR_REPLIES: readonly string[] = [
   "Oops — looks like something's wrong with the backend. Mind trying that again?",
@@ -39,9 +41,6 @@ export function pickErrorReply(avoid: Avoid = null, random: () => number = Math.
   return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
 }
 
-// Exported so Retry can leave it out: retrying won't help until tomorrow.
-export const BUDGET_EXHAUSTED_REPLY = "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
-
 export type FailedRequest = { code: string; retry_after_s?: number }
 
 /** The chat reply for a failed request. */
@@ -58,6 +57,8 @@ export function errorReplyFor(
       : 'a moment'
     return `The site's getting a lot of questions right now. Give it ${wait}, then ask again and I'll be ready.`
   }
-  if (failure.code === 'budget_exhausted') return BUDGET_EXHAUSTED_REPLY
+  // One of the playful budget replies (lib/budgetReplies.ts). The caller marks
+  // the message `budget: true`, which is what keeps Retry off it.
+  if (failure.code === 'budget_exhausted') return pickBudgetReply(avoid, random)
   return pickErrorReply(avoid, random)
 }
