@@ -84,13 +84,14 @@ Visual rules:
 
 ### 4.2 Mobile layout
 
-Below 768px the chat takes the full width. The row above the ask box shows the pipeline as small labeled dots that light up in sequence (no heading), next to a **Chat | Diagram** switch.
+Below 768px, and on a phone held sideways (landscape, at most 500px tall and under 1024px wide, so wider phones such as an iPhone 11 at 896x414 included), the chat takes the full width. The row above the ask box shows the pipeline as small labeled dots that light up in sequence (no heading), next to a **Chat | Diagram** switch.
 
 - **Diagram replaces the chat in place.** Diagram swaps the message list for the architecture graph, drawn in a two-column portrait arrangement (`portraitNodes`/`portraitEdges` in `frontend/src/architecture.ts`; same fixed node size and handles) so all 11 components fit a phone without panning. The header, ask box and footer stay, so a visitor can ask and watch the request run through the diagram. There is no overlay or bottom sheet. Entering the diagram pushes a history entry: browser Back, Escape, the Chat segment, or "Continue in chat →" return to the conversation, and focus returns to the Diagram toggle.
-- **Details panel.** Under the diagram, starts collapsed to a 44px bar. Tapping a component asks about it and opens the panel with its implementation and the streamed answer. The panel is capped at 40% of the region (the diagram keeps at least 280px) and has a collapse button that works while a component stays selected. Tapping any component reopens it; re-tapping the selected one while collapsed only reopens it (no new request).
+- **Details panel.** Under the diagram, starts collapsed to a 44px bar. Until a component is selected the bar reads "Select a component for details" and cannot be opened (it is `aria-disabled` but stays focusable so the hint is reachable); it never shows the latest chat answer. Tapping a component asks about it and opens the panel with its implementation and the streamed answer. The panel is capped at 40% of the region (the diagram keeps at least 280px) and has a collapse button that works while a component stays selected. Tapping any component reopens it; re-tapping the selected one while collapsed only reopens it (no new request).
 - **Focus mode.** While the ask box has focus, the header and footer slide away (200ms grid-row transition, none with reduced motion) so the conversation keeps its room with the keyboard up. They return on blur; a blur caused by a tap waits for the tap to finish so the tapped control does not move under the finger. The message list stays pinned to the latest message through the resize.
 - **Footer.** New chat moves into the footer, right-aligned immediately left of the capacity icon (the stats stay on the left and always keep one line). It is always a 44px "+" icon styled like the capacity icon: tap starts a new chat, press-and-hold shows a "New chat" tooltip without starting one (`frontend/src/hooks/useLongPressTooltip.ts`, shared with the capacity icon and the latency readout). The latency readout shows only the number (`312ms`), never a cache marker; hover, focus, or a long press explains it (time to first token, whether it was served from the answer cache, total). The privacy note moves into its tooltip and under the suggested questions.
 - **Header.** One row in both Chat and Diagram views: the name on the left (it shortens to "Basel A-R" only when the full name would not fit, below about 292px), then an envelope icon (Copy email) directly left of the GitHub icon. The envelope is used at every width, desktop included: hover or focus shows "Copy email", and a click shows "Email copied" (or the address itself if the clipboard is unavailable) in a floating bubble, so nothing in the row shifts.
+- **Landscape phones.** Held sideways, the same phone layout is compacted for the short height: the header is one 44px row without extra padding, the topic chips sit beside the ask box instead of above it, and the footer is 44px tall with the capacity icon as the stress-test button. In Diagram view the header slides away (the footer stays), the graph uses a three-row landscape arrangement (`landscapeNodes`/`landscapeEdges`) so all 11 components fit, and the details panel opens beside the diagram instead of below it. The rules are in `project/MOBILE_DESIGN.md` "Landscape phones".
 - **Topic chips.** On phones the topic is picked with "Asking about (Basel) (System)" chips directly above the ask box, shown only in Chat view. In Diagram view they are hidden and the topic stays as it was; tapping a component switches to About This System.
 
 ### 4.3 Corpus toggle and suggested questions
@@ -193,7 +194,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - **Endpoints:**
   - `POST /api/ask` returns an SSE stream (section 8)
   - `POST /api/demo/load` triggers the stress test
-  - `GET /api/cluster/stream` returns SSE of worker pod events
+  - `GET /api/cluster/stream` returns SSE of worker pod events and the queue backlog, from one shared Kubernetes watch per api process, with caps on concurrent streams (section 9.5)
   - `GET /api/stats` returns footer numbers
   - `GET /healthz`, `GET /readyz`
 - **Responsibilities:** rate limiting, answer cache, enqueue, trace forwarding, prompt building, LLM streaming, budget enforcement, query logging.
@@ -406,7 +407,14 @@ Cluster view stream (`GET /api/cluster/stream`):
 
 ```ts
 type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: string; ready: boolean };
+// event: pod                  PodEvent
+// event: backlog              { backlog: number }   consumer-group lag, sent when it changes
+// event: synced               {}                    the snapshot is complete
+// event: reconnect            {}                    planned end of this connection; reconnect soon
+// event: cluster_unavailable  { message: string }   no in-cluster Kubernetes access; do not retry
 ```
+
+Each connection starts with a `retry:` hint, then a snapshot: one `pod` event (type `ADDED`) per current worker pod, the last backlog reading, and `synced`. After that, `pod` and `backlog` events carry changes. A `: ping` comment goes out after 15 seconds without other output. Over a cap the endpoint answers `503` (all slots busy) or `429` (too many streams from one IP) with `Retry-After` and a small JSON body, and opens nothing. Section 9.5 has the limits.
 
 ---
 
@@ -506,6 +514,16 @@ roleRef:
 ```
 
 The endpoint only forwards pod name, phase and readiness for pods labeled `app=retrieval-worker`. Nothing else leaves the cluster.
+
+#### Bounded cost
+
+The endpoint is public and unauthenticated, so what an idle visitor can hold open is bounded (`services/glassbox/api/cluster.py`):
+
+- **One shared upstream per api process.** The first subscriber starts one Kubernetes list+watch and one Redis client that polls the consumer-group lag every 2 seconds. Every SSE client reads from its own bounded in-process queue (256 events) fed by that upstream, so 1 or 100 open tabs cost the Kubernetes API server and Redis the same. A late subscriber gets the current pods and backlog from memory, without a new list. The upstream stops 30 seconds after the last subscriber leaves. Each watch asks the API server to end it after 300 seconds (`timeoutSeconds`), and a watch that sends nothing for 330 seconds is treated as half-open. When a watch ends either way, the hub lists again after 1 second and sends `DELETED` for pods that went away in the gap. When a list or watch fails, it retries with backoff (2 s, doubling, up to 30 s) and the open streams stay connected. Only a missing in-cluster ServiceAccount (local dev) sends `cluster_unavailable`, which ends every stream.
+- **Caps.** At most `GLASSBOX_CLUSTER_STREAM_MAX_CLIENTS` (default 100) concurrent streams per api process, and `GLASSBOX_CLUSTER_STREAM_MAX_PER_IP` (default 5) per client IP. The IP key is the salted hash from `client_ip_hash` in `services/glassbox/limits.py`, the same one the ask rate limit uses. Over a cap the response is `503` or `429` with `Retry-After: GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S` (default 30), and nothing is opened. The api runs one replica with one uvicorn worker, so the per-process cap is the site-wide cap.
+- **Lifetime and heartbeat.** Each connection lives at most `GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S` (default 600 s, cut at a random 80 to 100 percent of it so clients do not reconnect in step), then gets `reconnect` and is closed. A `: ping` goes out after `GLASSBOX_CLUSTER_STREAM_HEARTBEAT_S` (default 15 s) of silence, which keeps Cloudflare's 100 s idle timeout from closing a quiet stream and makes writes to a dead peer fail. The server also checks for a disconnect every 5 s. A client that falls 256 events behind is dropped: it gets `reconnect` and comes back to a fresh snapshot.
+- **Sizing.** The api container requests 120 Mi and is limited to 256 Mi. With the shared upstream, one stream costs a connection, a few coroutines and a small queue, on the order of tens of KB, so 100 streams cost a few MB and about 7 heartbeat writes a second. Before this, each stream held its own watch, Kubernetes client and Redis connection.
+- **Browser behaviour** (`frontend/src/lib/clusterStream.ts`). The client handles reconnects itself instead of relying on EventSource's built-in retry. On `reconnect` it comes back after 0.5 to 3 s. On any error, including a refused connection (EventSource cannot see the 429/503 status), it closes the stream and retries with exponential backoff and equal jitter: the first retry comes 2.5 to 5 s later, and the nominal delay doubles from 5 s up to 2 minutes (so each wait is half to all of it); a completed snapshot resets the backoff. The last pod dots and backlog stay on screen while it is disconnected, and each new snapshot replaces the pod set. `cluster_unavailable` stops it for good, and the diagram shows the plain worker node.
 
 ### 9.6 NetworkPolicy
 
@@ -653,7 +671,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 **GitHub Actions**
 
-- On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment), retrieval eval (section 15).
+- On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment). The retrieval eval (section 15) is planned for CI but runs by hand today.
 - On merge to `main`:
   - Build the single multi-stage application image for arm64 and push to GitHub Container Registry, tagged with the commit SHA. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed.
   - Update the image tag in `k8s/overlays/prod` (commit by the workflow).
@@ -720,7 +738,7 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 
 - **Unit tests:** chunkers (per file type), cache key construction and versioning, rate limiter, trace event ordering.
 - **Integration tests:** Docker Compose with MySQL + Redis + fake providers; full ask flow end to end, asserting the SSE event sequence.
-- **Retrieval eval (runs in CI):** `eval/questions.yaml` with about 30 questions and the source paths that should be retrieved. Reports **recall@5** and **MRR**. CI fails if recall@5 drops more than 5 points below the stored baseline. This is the RAG equivalent of a regression test and a strong interview talking point.
+- **Retrieval eval (manual today; not in CI yet):** `eval/run_eval.py` reads `eval/golden.yaml` (or `eval/questions.yaml` until that exists) with the source paths, and optionally the gold text snippets, that should be retrieved. It searches at the production k=8 and reports file-level **recall@5** and **MRR** (kept for continuity), recall@8 and MRR@8, chunk-level recall@8 and MRR@8 (a retrieved chunk from an expected source contains a gold snippet), and **noise@8** (the share of retrieved chunks from `services/tests/` or `docs/superpowers/plans/`), overall, per corpus and per category. A run fails against the stored baseline if the question set changed, recall@5 drops more than 5 points, chunk-level recall@8 drops at all, or noise@8 rises more than 5 points. A free, lexical-only variant is planned to run in CI (DESIGN-005 §5.4, RAG quality plan phase 9); until then the eval runs by hand and the unit tests for its metric math run in CI. This is the RAG equivalent of a regression test and a strong interview talking point.
 - **Load test:** k6 or Locust script against a staging run to measure p50/p95 latency and confirm the KEDA scale-up time.
 - **Infra:** `terraform validate`, `tflint`, `checkov` or `trivy config` for misconfigurations.
 

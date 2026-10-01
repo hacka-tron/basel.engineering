@@ -10,10 +10,13 @@ from starlette.requests import Request
 
 from services.glassbox.limits import (
     ANSWER_BUDGET_UNITS,
+    MIN_IP_HASH_SALT_LENGTH,
     REWRITE_BUDGET_UNITS,
     RedisDailyBudget,
     RedisRateLimiter,
+    client_address,
     client_ip_hash,
+    validate_ip_hash_salt,
 )
 
 
@@ -175,13 +178,16 @@ def test_daily_budget_rejects_unknown_unit_sizes():
         asyncio.run(budget.reserve(units=3))
 
 
-def _request(peer: str, forwarded: str) -> Request:
+def _request(peer: str, forwarded: str | None = None, **headers: str) -> Request:
+    raw = [(name.replace("_", "-").encode(), value.encode()) for name, value in headers.items()]
+    if forwarded is not None:
+        raw.append((b"x-forwarded-for", forwarded.encode()))
     return Request(
         {
             "type": "http",
             "method": "POST",
             "path": "/api/ask",
-            "headers": [(b"x-forwarded-for", forwarded.encode())],
+            "headers": raw,
             "client": (peer, 12345),
         }
     )
@@ -195,3 +201,143 @@ def test_forwarded_ip_is_used_only_for_trusted_proxy(monkeypatch):
     untrusted = client_ip_hash(_request("198.51.100.1", "203.0.113.4"))
     assert trusted == direct
     assert trusted != untrusted
+
+
+@pytest.fixture
+def proxy_env(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_IP_HASH_SALT", "test-salt")
+    monkeypatch.setenv("GLASSBOX_TRUSTED_PROXY_CIDRS", "10.42.0.0/16")
+    monkeypatch.delenv("GLASSBOX_CLIENT_IP_HEADER", raising=False)
+
+
+def test_spoofed_leftmost_forwarded_entry_is_ignored(proxy_env):
+    # A proxy that appends (rather than replaces) keeps whatever the client
+    # sent on the left. The rightmost untrusted hop is the one to believe.
+    spoofed = _request("10.42.0.9", "198.51.100.77, 203.0.113.4")
+    assert client_address(spoofed) == "203.0.113.4"
+    assert client_ip_hash(spoofed) == client_ip_hash(_request("10.42.0.9", "203.0.113.4"))
+
+
+def test_forwarded_walk_skips_trusted_hops_and_stops_at_garbage(proxy_env):
+    assert client_address(_request("10.42.0.9", "203.0.113.4, 10.42.0.3")) == "203.0.113.4"
+    # Only trusted hops: nothing better than the peer.
+    assert client_address(_request("10.42.0.9", "10.42.0.3")) == "10.42.0.9"
+    # An unparsable hop ends the walk instead of trusting what is left of it.
+    assert client_address(_request("10.42.0.9", "203.0.113.4, not-an-ip")) == "10.42.0.9"
+    assert client_address(_request("10.42.0.9")) == "10.42.0.9"
+
+
+def test_client_ip_header_wins_from_trusted_proxy_only(proxy_env, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "CF-Connecting-IP")
+    via_proxy = _request("10.42.0.9", "198.51.100.77, 162.158.1.1", cf_connecting_ip="203.0.113.4")
+    assert client_address(via_proxy) == "203.0.113.4"
+    # From an untrusted peer the header is just client input.
+    direct = _request("198.51.100.1", None, cf_connecting_ip="203.0.113.4")
+    assert client_address(direct) == "198.51.100.1"
+    # Missing or garbage header: fall back to X-Forwarded-For.
+    assert client_address(_request("10.42.0.9", "203.0.113.4")) == "203.0.113.4"
+    garbage = _request("10.42.0.9", "203.0.113.4", cf_connecting_ip="x")
+    assert client_address(garbage) == "203.0.113.4"
+    # IPv6 is normalised, so one visitor maps to one bucket.
+    v6 = _request("10.42.0.9", None, cf_connecting_ip="2001:DB8::0001")
+    assert client_address(v6) == "2001:db8::1"
+
+
+def test_ipv6_visitors_share_a_bucket_per_64(proxy_env, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "cf-connecting-ip")
+
+    def hashed(address: str) -> str:
+        return client_ip_hash(_request("10.42.0.9", None, cf_connecting_ip=address))
+
+    assert hashed("2001:db8:1:2::1") == hashed("2001:db8:1:2:ffff::7")
+    assert hashed("2001:db8:1:2::1") != hashed("2001:db8:1:3::1")
+    assert hashed("203.0.113.4") != hashed("203.0.113.5")
+
+
+def test_ipv4_mapped_ipv6_shares_the_ipv4_bucket(proxy_env, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "cf-connecting-ip")
+
+    def hashed(address: str) -> str:
+        return client_ip_hash(_request("10.42.0.9", None, cf_connecting_ip=address))
+
+    assert hashed("::ffff:203.0.113.4") == hashed("203.0.113.4")
+    assert hashed("::ffff:203.0.113.4") != hashed("::ffff:203.0.113.5")
+
+
+@pytest.fixture
+def fallback_warnings(proxy_env, monkeypatch, caplog):
+    from services.glassbox import limits
+
+    monkeypatch.setenv("GLASSBOX_CLIENT_IP_HEADER", "cf-connecting-ip")
+    monkeypatch.setattr(limits, "_last_fallback_warning", float("-inf"))
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(limits.time, "monotonic", lambda: clock["now"])
+    caplog.set_level("WARNING", logger="services.glassbox.limits")
+
+    def count() -> int:
+        return sum("trusted proxy fallback" in record.getMessage() for record in caplog.records)
+
+    return clock, count, caplog
+
+
+def test_missing_client_ip_header_warns_at_most_once_a_minute(fallback_warnings):
+    clock, count, caplog = fallback_warnings
+    # Header stripped: Traefik's XFF holds only a trusted hop, so the key
+    # falls back to the proxy (one shared bucket).
+    stripped = _request("10.42.0.9", "10.42.0.3")
+    assert client_address(stripped) == "10.42.0.9"
+    client_address(stripped)
+    assert count() == 1
+    clock["now"] += 30
+    client_address(_request("10.42.0.9", "10.42.0.3", cf_connecting_ip="garbage"))
+    assert count() == 1
+    clock["now"] += 31
+    client_address(stripped)
+    assert count() == 2
+    # No addresses in the log line.
+    assert all("10.42" not in record.getMessage() for record in caplog.records)
+
+
+def test_no_fallback_warning_when_header_present_or_not_proxied(fallback_warnings):
+    _, count, _ = fallback_warnings
+    client_address(_request("10.42.0.9", "10.42.0.3", cf_connecting_ip="203.0.113.4"))
+    # The in-cluster warmer: trusted peer, no forwarding headers at all.
+    client_address(_request("10.42.0.9"))
+    # Untrusted peer: headers are ignored anyway.
+    client_address(_request("198.51.100.1", "10.42.0.3"))
+    assert count() == 0
+
+
+def test_salt_is_optional_unless_required(monkeypatch):
+    monkeypatch.delenv("GLASSBOX_REQUIRE_IP_HASH_SALT", raising=False)
+    monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
+    validate_ip_hash_salt()
+
+
+@pytest.mark.parametrize("salt", [None, "", "   ", "x" * (MIN_IP_HASH_SALT_LENGTH - 1)])
+def test_required_salt_fails_closed(monkeypatch, salt):
+    monkeypatch.setenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "true")
+    if salt is None:
+        monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
+    else:
+        monkeypatch.setenv("GLASSBOX_IP_HASH_SALT", salt)
+    with pytest.raises(ValueError, match="GLASSBOX_IP_HASH_SALT"):
+        validate_ip_hash_salt()
+
+
+def test_required_salt_accepts_a_real_salt(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "true")
+    monkeypatch.setenv("GLASSBOX_IP_HASH_SALT", "s" * 64)
+    validate_ip_hash_salt()
+
+
+def test_api_refuses_to_start_without_required_salt(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from services.glassbox.api.main import app
+
+    monkeypatch.setenv("GLASSBOX_REQUIRE_IP_HASH_SALT", "true")
+    monkeypatch.delenv("GLASSBOX_IP_HASH_SALT", raising=False)
+    with pytest.raises(ValueError, match="GLASSBOX_IP_HASH_SALT"):
+        with TestClient(app):
+            pass

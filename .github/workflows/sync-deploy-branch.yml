@@ -12,23 +12,33 @@ on:
   push:
     branches: [main]
 
+# One sync at a time, never cancelled midway. GitHub keeps only the newest
+# pending run, which is fine: each run merges the latest main, not its own SHA.
 concurrency:
   group: sync-deploy-branch
   cancel-in-progress: false
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - run: |
+      - name: Configure git identity
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin deploy
-          git checkout deploy
-          git merge origin/main --no-edit -m "sync: merge main into deploy"
-          git push origin deploy
+      # Flux's ImageUpdateAutomation also pushes to deploy (image tag bumps),
+      # so this push can lose a race. The script re-fetches, re-merges onto
+      # the new deploy tip and pushes again (up to 5 attempts, no force push,
+      # so Flux's commit is never dropped). Flux in turn retries its own
+      # rejected push on its next 1-minute reconcile, from the new tip.
+      - name: Merge main into deploy and push
+        env:
+          SYNC_MAX_ATTEMPTS: "5"
+          SYNC_RETRY_DELAY: "5"
+        run: .github/scripts/sync-deploy-branch.sh
