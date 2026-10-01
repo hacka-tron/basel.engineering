@@ -269,7 +269,7 @@ type StoredConversation = {
 - **Fail safe.** Every read and write is wrapped in `try/catch`. If storage is unavailable, full, blocked (some private browsing modes), or holds data that fails validation, the app falls back to in-memory only and works normally.
 - **New chat.** A "New chat" button clears the current corpus's key and resets the view. Suggested-question chips reappear when a conversation is empty.
 - **Multiple tabs.** Last write wins. Optional stretch: listen for the `storage` event to refresh a conversation changed in another tab.
-- **Privacy note.** Data stays in the visitor's own browser. A small line under the input ("Chats are saved in this browser. New chat clears it.") keeps that transparent, which matters on shared computers.
+- **Privacy note.** Data stays in the visitor's own browser. On desktop a small line under the input ("Chats are saved in this browser. New chat clears it.") keeps that transparent, which matters on shared computers. Below 768px New chat sits in the footer instead (DD1 §4.2): its tooltip carries the note, and a line under the suggested questions repeats it.
 
 **Restored-state behavior:** restored assistant messages render with their sources, but the architecture panel starts idle (traces are not persisted; they describe a past request, and replaying them would be misleading).
 
