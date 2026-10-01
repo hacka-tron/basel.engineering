@@ -1,6 +1,6 @@
 # Retrieval eval v2: k=8, chunk-level hits, noise@8
 
-**PR:** PR_LINK · **Branch:** `feature/rag-p2-retrieval-eval` (from `main` at `2484403`)
+**PR:** PR [#95](https://github.com/hacka-tron/basel.engineering/pull/95) · **Branch:** `feature/rag-p2-retrieval-eval` (from `main` at `2484403`)
 **Plan:** phase 2 of the RAG quality plan (`docs/superpowers/plans/2026-10-01-rag-quality.md`, PR [#92](https://github.com/hacka-tron/basel.engineering/pull/92)); design in `docs/DESIGN-005-rag-quality.md` §5.2.
 **Status:** In review, not merged.
 
