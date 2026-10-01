@@ -84,6 +84,10 @@ Now the groups are split by event (workflow-level `concurrency`):
 - `-lock-timeout=10m` on the main plan and apply covers a lock still held by
   something else (for example a PR run started from an older copy of this
   workflow, which still locked).
+- **Switch-over:** runs already queued under the old `terraform-prod-state`
+  group (started before this change merged) aren't serialized with the new
+  `terraform-prod-main` group. Until they have all finished, approve only the
+  newest main run and reject older waiting ones.
 - GitHub also offers `queue: max` (up to 100 pending, FIFO). Not used: it
   would make the owner approve every superseded main run in turn.
 

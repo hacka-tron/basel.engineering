@@ -34,8 +34,10 @@ permissions:
 # cancel-in-progress or not; see terraform.yml). Every plan here runs with
 # -lock=false, so a PR plan never contends with the apply job's lock.
 # Dispatch runs share terraform-bootstrap-state and are never cancelled
-# midway; a newer dispatch replacing a pending one is fine, since both plan
-# main's head.
+# midway. A newer dispatch replaces a pending one; dispatch can start from
+# any branch, but only a run on main can apply (the apply job's if and the
+# bootstrap environment's main-only policy), so start the apply run from main
+# and check that the run left pending is the one you meant.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('bootstrap-pr-{0}', github.event.pull_request.number) || 'terraform-bootstrap-state' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

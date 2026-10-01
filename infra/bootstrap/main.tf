@@ -62,11 +62,25 @@ resource "aws_s3_bucket_public_access_block" "state" {
 # policy as "updated in-place ... (known after apply)" even though the JSON
 # comes out identical and apply changes nothing. The resulting ARNs are the
 # same strings (the roles have no path); depends_on on the bucket policy below
-# keeps the roles created before the policy names them.
+# keeps the roles created before the policy names them. The names live in one
+# local, used by the aws_iam_role resources too, so they can't drift apart.
+#
+# Caveat: AWS stores a role principal in a resource policy as the role's
+# unique ID. If one of these roles is ever replaced (destroyed and created
+# again), the stored deny keeps pointing at the old ID, so it no longer
+# covers the new role, until the next bootstrap apply rewrites this policy
+# (AWS then shows the dead principal as a bare unique ID, which the plan
+# reports as a diff). Run that apply right after replacing a CI role.
 locals {
+  ci_role_names = {
+    ci      = "glassbox-ci"
+    plan    = "glassbox-ci-plan"
+    release = "glassbox-ci-release"
+  }
+
   bootstrap_state_denied_role_arns = [
-    for name in ["glassbox-ci", "glassbox-ci-plan", "glassbox-ci-release"] :
-    "arn:aws:iam::${var.aws_account_id}:role/${name}"
+    for role in ["ci", "plan", "release"] :
+    "arn:aws:iam::${var.aws_account_id}:role/${local.ci_role_names[role]}"
   ]
 }
 
@@ -183,7 +197,7 @@ data "aws_iam_policy_document" "ci_trust" {
 }
 
 resource "aws_iam_role" "ci" {
-  name               = "glassbox-ci"
+  name               = local.ci_role_names.ci
   assume_role_policy = data.aws_iam_policy_document.ci_trust.json
 }
 
@@ -453,7 +467,7 @@ data "aws_iam_policy_document" "plan_trust" {
 }
 
 resource "aws_iam_role" "plan" {
-  name               = "glassbox-ci-plan"
+  name               = local.ci_role_names.plan
   assume_role_policy = data.aws_iam_policy_document.plan_trust.json
 }
 
@@ -664,7 +678,7 @@ data "aws_iam_policy_document" "release_trust" {
 }
 
 resource "aws_iam_role" "release" {
-  name               = "glassbox-ci-release"
+  name               = local.ci_role_names.release
   assume_role_policy = data.aws_iam_policy_document.release_trust.json
 }
 
