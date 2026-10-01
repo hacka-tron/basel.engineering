@@ -42,7 +42,7 @@ export function pickErrorReply(avoid: Avoid = null, random: () => number = Math.
 // Exported so Retry can leave it out: retrying won't help until tomorrow.
 export const BUDGET_EXHAUSTED_REPLY = "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."
 
-export type FailedRequest ={ code: string; retry_after_s?: number }
+export type FailedRequest = { code: string; retry_after_s?: number }
 
 /** The chat reply for a failed request. */
 // Limits are per client IP, which several visitors can share, so these

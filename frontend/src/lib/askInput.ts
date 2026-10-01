@@ -15,7 +15,10 @@ export type ArrowUpContext = {
   modified: boolean
 }
 
-/** True if the caret sits on the first line of `value` (always, for one line). */
+/**
+ * True if the caret sits on the first line of `value`. Always true for today's
+ * single-line <input>; kept so a future multi-line textarea needs no change.
+ */
 export function caretOnFirstLine(value: string, caret: number | null): boolean {
   if (caret === null) return !value.includes('\n')
   return !value.slice(0, caret).includes('\n')

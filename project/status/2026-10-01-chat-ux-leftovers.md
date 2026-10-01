@@ -1,7 +1,7 @@
 # Chat UX leftovers: type while streaming, Up-arrow recall, Retry
 
 **PR:** [#93](https://github.com/hacka-tron/basel.engineering/pull/93) · **Branch:** `feature/chat-ux-leftovers` · **Spec:** `docs/DESIGN-002-followups.md` §6.1 (`error`), §6.4 (implementation notes there)
-**Status:** In review (not yet reviewed). Frontend only; no API, schema or infra change.
+**Status:** In review (Opus round 1 APPROVED; minor fixes applied). Frontend only; no API, schema or infra change.
 
 ## TL;DR
 
@@ -38,7 +38,7 @@ sequenceDiagram
 
 - `lib/askInput.ts`: `shouldRecallQuestion`, `lastSentQuestion`, `askButtonMode` (send / stop / stop-and-send).
 - `lib/chatRetry.ts`: `planRetry` (only the latest failure, never the budget reply), `withoutFailedAttempt`, `retryWaitSeconds`.
-- Both are plain TypeScript with `node --test` tests (15 new tests, 73 total).
+- Both are plain TypeScript with `node --test` tests (16 new tests, 74 total).
 
 ## Key design decisions & trade-offs
 
@@ -52,7 +52,19 @@ sequenceDiagram
 
 ## What review caught
 
-Not reviewed yet (Opus reviewer per the standing process while Codex is out of usage).
+Opus review round 1 (Codex is out of usage): **APPROVED**, no Critical or Important findings. Fixed in this PR:
+
+- A question whose answer failed was still sent as a `history` user turn. Re-sending it with Up-arrow and Enter (instead of Retry) put the same question in twice. Now a question goes into `history` only once its reply has settled (`done`, `stopped` or `retrieval_only`); unit test added. This also keeps "Retry sends what the failed request sent" true.
+- A formatting typo in `errorReplies.ts`, and a comment on `caretOnFirstLine` (always true for the single-line input; kept for a future textarea).
+
+Logged to `project/BACKLOG.md` ("Chat UX follow-ups (from the #93 review)"):
+
+1. A reload during a retry loses the failure reply and the Retry button (the conversation is saved before the new answer settles).
+2. Screen-reader announcements: during stop-and-send the live region holds the stopped partial for one render, there is no "answer stopped" announcement, and nothing says Retry became available after the countdown.
+3. On phones focus falls to `<body>` after Retry (deliberate, so the keyboard doesn't pop up; revisit).
+4. Stop-and-send looks the same as Send to sighted users; only the accessible name changes. Owner design call.
+5. Component questions are recognised by wording only (`COMPONENT_QUESTIONS` in `App.tsx`).
+6. No tests for the App wiring (queued-ask effect, `isCurrent` guard, retry wiring); consider extracting a hook or a component-test setup.
 
 ## Operational notes & risks
 
