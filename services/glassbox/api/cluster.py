@@ -73,6 +73,11 @@ _IDLE_LINGER_S = 30.0
 _WATCH_RESTART_S = 1.0
 _WATCH_RETRY_BASE_S = 2.0
 _WATCH_RETRY_MAX_S = 30.0
+# Ask the API server to end each watch after this long (a normal re-list
+# follows), and give up on a watch that sends nothing for longer than that
+# plus a margin: a half-open watch would otherwise freeze every viewer.
+_WATCH_TIMEOUT_S = 300
+_WATCH_READ_TIMEOUT_S = _WATCH_TIMEOUT_S + 30.0
 # How often a stream checks whether its client is still there.
 _DISCONNECT_POLL_S = 5.0
 # `retry:` hint for EventSource clients that reconnect on their own (a tab
@@ -150,7 +155,7 @@ def _incluster_client() -> tuple[httpx.AsyncClient, str]:
         base_url=base_url,
         verify=str(ca_path),
         headers={"Authorization": f"Bearer {token}"},
-        timeout=httpx.Timeout(10.0, read=None),
+        timeout=httpx.Timeout(10.0, read=_WATCH_READ_TIMEOUT_S),
     )
     return client, base_url
 
@@ -184,7 +189,11 @@ async def _list_pods(client: httpx.AsyncClient) -> tuple[list[dict], str | None]
 
 async def _watch_pods(client: httpx.AsyncClient, resource_version: str | None):
     """Yield pod events until the API server ends the watch or reports an error."""
-    params = {"labelSelector": _LABEL_SELECTOR, "watch": "true"}
+    params = {
+        "labelSelector": _LABEL_SELECTOR,
+        "watch": "true",
+        "timeoutSeconds": str(_WATCH_TIMEOUT_S),
+    }
     if resource_version:
         params["resourceVersion"] = resource_version
     async with client.stream("GET", _PODS_PATH, params=params) as watch_response:
@@ -326,7 +335,11 @@ class ClusterHub:
     async def _stop_when_idle(self) -> None:
         await asyncio.sleep(self._idle_linger_s)
         if not self._subscribers and self._upstream is not None:
+            # Forget it at once: the cancelled task may still be closing its
+            # clients, and a subscriber arriving meanwhile must start a fresh
+            # upstream rather than wait on one that is going away.
             self._upstream.cancel()
+            self._upstream = None
 
     def _offer(self, subscriber: Subscriber, item) -> None:
         try:
@@ -378,7 +391,10 @@ class ClusterHub:
             backlog_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await backlog_task
-            self._reset_state()
+            # A replacement upstream may already be running (started while
+            # this one was stopping); its state is not ours to clear.
+            if self._upstream is None or self._upstream is asyncio.current_task():
+                self._reset_state()
 
     async def _watch_loop(self) -> None:
         failures = 0
@@ -404,6 +420,10 @@ class ClusterHub:
                         await client.aclose()
             except asyncio.CancelledError:
                 raise
+            except httpx.ReadTimeout:
+                # A watch silent past the server's own timeout: treat it as
+                # half-open and re-list, like a normal end.
+                LOGGER.warning("pod watch read timed out; re-listing")
             except Exception:
                 failures += 1
                 LOGGER.exception("pod watch failed (attempt %d); retrying", failures)
@@ -461,7 +481,12 @@ async def _subscriber_events(subscriber: Subscriber, lifetime_s: float) -> Async
             item = await asyncio.wait_for(subscriber.queue.get(), timeout=remaining)
         except TimeoutError:
             continue
-        if item is _CLOSE or subscriber.dropped:
+        if item is _CLOSE:
+            return
+        if subscriber.dropped:
+            # Fell behind and lost its slot: send it down the short
+            # reconnect path to a fresh snapshot.
+            yield frame("reconnect", {})
             return
         kind, payload = item
         yield frame(kind, payload)
@@ -485,6 +510,10 @@ async def _stream(
         hub.unsubscribe(subscriber)
 
 
+async def _release(hub: ClusterHub, subscriber: Subscriber) -> None:
+    hub.unsubscribe(subscriber)
+
+
 @router.get("/api/cluster/stream")
 async def cluster_stream(request: Request) -> Response:
     limits = StreamLimits.from_env()
@@ -505,6 +534,8 @@ async def cluster_stream(request: Request) -> Response:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         # Also release the slot if the body never started (client gone before
-        # the first chunk); unsubscribe is idempotent.
-        background=BackgroundTask(hub.unsubscribe, subscriber),
+        # the first chunk); unsubscribe is idempotent. Async on purpose: a
+        # sync background function runs in Starlette's threadpool, off the
+        # event loop, where the hub's bookkeeping and idle timer cannot run.
+        background=BackgroundTask(_release, hub, subscriber),
     )

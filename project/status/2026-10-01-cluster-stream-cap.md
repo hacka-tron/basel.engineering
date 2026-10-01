@@ -1,7 +1,7 @@
 # Cluster stream: one shared watch, capped clients, bounded lifetime
 
 **PR:** [#99](https://github.com/hacka-tron/basel.engineering/pull/99) · **Branch:** `fix/cluster-stream-cap` · **Spec:** `docs/DESIGN.md` §8 (cluster stream contract) and §9.5 "Bounded cost" · **Origin:** security pass finding 11 (PR [#96](https://github.com/hacka-tron/basel.engineering/pull/96), `project/status/2026-10-01-security-pass.md`)
-**Status:** In review. Needs the owner's go-ahead to merge (adds ConfigMap keys; see "Live effect").
+**Status:** In review (round 1 changes fixed). Needs the owner's go-ahead to merge (adds ConfigMap keys; see "Live effect").
 
 ## TL;DR
 
@@ -9,7 +9,7 @@
 - Now each api process runs **one** shared watch and **one** Redis poller and fans their events out to every client through a small in-process queue. 1 tab or 100 tabs cost the API server and Redis the same.
 - **Caps:** 100 concurrent streams per api process (the api runs one replica and one worker, so this is the site-wide cap) and 5 per client IP. Over a cap: `503` or `429` with `Retry-After: 30`, and nothing is opened.
 - **Lifetime and heartbeat:** a connection lasts at most 10 minutes (cut at a random 8 to 10), then gets a `reconnect` event. A `: ping` goes out after 15 s of silence, and the server checks for disconnects every 5 s, so dead clients are reaped.
-- **Browser:** reconnects on its own with backoff (5 s, doubling up to 2 minutes, with jitter) and keeps the last pod dots on screen while disconnected.
+- **Browser:** reconnects on its own with backoff (first retry after 2.5 to 5 s, nominal delay doubling up to 2 minutes, with jitter) and keeps the last pod dots on screen while disconnected.
 - Design: **full fan-out**, not caps-only.
 
 ## What changed for a visitor
@@ -38,11 +38,11 @@ flowchart LR
 ```
 
 - **`ClusterHub`** (`services/glassbox/api/cluster.py`) is started by the first subscriber and stopped 30 s after the last one leaves, so lifetime reconnects and reloads reuse the running watch. It keeps the current pods and the last backlog reading, so a new subscriber gets a snapshot from memory (`pod` ADDED events, `backlog`, then `synced`) without another list call.
-- **Watch upkeep:** when the API server ends a watch (normal, every half hour or so), the hub lists again after 1 s and sends `DELETED` for pods that disappeared in between. If a list or watch fails, it retries with backoff (2 s, doubling, up to 30 s) and keeps the streams open. Before, any watch failure sent `cluster_unavailable`, which turned the view off for that tab until reload. `cluster_unavailable` is now sent only when there is no in-cluster ServiceAccount at all (local dev). A watch `ERROR` event (for example 410 Gone) triggers a re-list instead of being forwarded as a pod.
+- **Watch upkeep:** each watch asks the API server to end it after 300 s (`timeoutSeconds`), and one silent for 330 s is treated as half-open. When a watch ends, the hub lists again after 1 s and sends `DELETED` for pods that disappeared in between. If a list or watch fails, it retries with backoff (2 s, doubling, up to 30 s) and keeps the streams open. Before, any watch failure sent `cluster_unavailable`, which turned the view off for that tab until reload. `cluster_unavailable` is now sent only when there is no in-cluster ServiceAccount at all (local dev). A watch `ERROR` event (for example 410 Gone) triggers a re-list instead of being forwarded as a pod.
 - **Backlog** is broadcast only when it changes; heartbeats keep the connection alive in between.
 - **Caps** are checked and recorded synchronously on the event loop (no await between check and update), so concurrent connects cannot race past them. The per-IP key is `client_ip_hash()` from `services/glassbox/limits.py`, the same salted hash the ask rate limit uses, called rather than reimplemented so #96's spoof-resistant client IP applies automatically.
-- **Slow clients:** a subscriber 256 events behind is dropped (its stream ends; it reconnects to a fresh snapshot) instead of buffering without bound.
-- **Slot release** is idempotent and happens in three places: the stream generator's `finally`, a Starlette background task (covers a client that leaves before the body starts), and the hub itself when it drops a client.
+- **Slow clients:** a subscriber 256 events behind is dropped (it gets `reconnect` and comes back to a fresh snapshot) instead of buffering without bound.
+- **Slot release** is idempotent and happens in three places: the stream generator's `finally`, an async Starlette background task (covers a client that leaves before the body starts; it must be async so it runs on the event loop), and the hub itself when it drops a client.
 - **Heartbeat and disconnect** reuse `with_heartbeat` from `api/sse.py`, the same helper `/api/ask` uses.
 - **Browser** (`frontend/src/lib/clusterStream.ts`): EventSource's own retry is not used, because EventSource cannot read a 429/503 status and would otherwise either stop for good or retry at a fixed interval. The client closes on any error and reconnects with exponential backoff; a completed snapshot (`synced`) resets it. On `reconnect` it returns after a short random pause. A tab still running the old bundle during the rollout ignores `synced`/`reconnect` and falls back to EventSource's retry, guided by the `retry: 5000` hint.
 
@@ -65,7 +65,12 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet (Opus reviewer with the primer brief, since Codex is out of usage).
+Round 1 (Opus reviewer, primer brief): **changes needed**, all fixed in the same PR. The design itself (synchronous caps, snapshot taken atomically with the join, counts never negative) was confirmed.
+
+- **CI red:** the longer "Live cluster view" paragraph pushed its deep-dive section past the 500-token chunk limit (33 chunks instead of 32). The paragraph is back to its original length plus one sentence, and the cap details moved to a short "Cluster view cost limits" paragraph in the Kubernetes security section, which had room. Still one chunk per section.
+- **Leaked upstream (Important):** the release for a client that left before its body started was a sync function, which Starlette runs in its threadpool. There the hub could not arm its idle timer, so if that was the last client, the watch and poller ran forever, and the bookkeeping was changed off the event loop. The release is now `async`. Regression test: awaiting the response's background task releases the slot and stops the upstream after the linger.
+- **Join during shutdown (Important):** a client joining while a cancelled upstream was still closing its Kubernetes client saw it as "running", so no new upstream started and it got only pings until its lifetime ended. The idle stop now forgets the upstream as soon as it cancels it, and a finishing upstream clears shared state only if it is still the current one. Regression test with a slow-closing fake client.
+- **Minor:** watches now carry `timeoutSeconds=300` and a 330 s read timeout (a half-open watch would have frozen every viewer; a timeout re-lists like a normal end); a dropped slow client now gets `reconnect` so the browser takes the short path; the docs said "retries after 5 s" though jitter makes the first retry 2.5 to 5 s.
 
 ## Live effect (owner go-ahead needed)
 
@@ -86,7 +91,7 @@ No Terraform, no RBAC change, no new Kubernetes objects.
 
 ## How to see it / verify it
 
-- Tests: `pytest services/tests/test_cluster_stream.py` (18 tests: unavailable path, snapshot/changes/`synced`/`reconnect` over HTTP, 503/429 with `Retry-After`, nothing opened when refused, slot reuse, env fallbacks, 25 clients → 1 list + 1 watch + 1 Redis client, late subscriber snapshot without a new list, re-list sends `DELETED`, watch failure retries without ending streams, slow subscriber dropped, upstream stops after linger and is reused within it, heartbeats and lifetime, disconnect and cancellation release the slot). Frontend: `npm test` (`lib/clusterStream.test.ts`: backoff curve and cap, snapshot replace, no timer stacking, reset on `synced`, planned reconnect, `cluster_unavailable` stops, disconnect cancels).
+- Tests: `pytest services/tests/test_cluster_stream.py` (22 tests: unavailable path, snapshot/changes/`synced`/`reconnect` over HTTP, 503/429 with `Retry-After`, nothing opened when refused, slot reuse, env fallbacks, 25 clients → 1 list + 1 watch + 1 Redis client, late subscriber snapshot without a new list, re-list sends `DELETED`, watch failure retries without ending streams, slow subscriber dropped, upstream stops after linger and is reused within it, heartbeats and lifetime, disconnect and cancellation release the slot, plus the four round-1 regressions). Frontend: `npm test` (`lib/clusterStream.test.ts`: backoff curve and cap, snapshot replace, no timer stacking, reset on `synced`, planned reconnect, `cluster_unavailable` stops, disconnect cancels).
 - Live, after deploy: open the site, then DevTools → Network → `stream`: the response starts with `retry: 5000`, then `pod` events and `synced`, `: ping` every 15 s when quiet, and `reconnect` after 8 to 10 minutes followed by a new request. With 6 tabs from one browser, the sixth `stream` request gets 429.
 
 ## Open items

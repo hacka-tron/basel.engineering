@@ -9,6 +9,7 @@ what a client can hold open.
 import asyncio
 import json
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -103,6 +104,10 @@ class _FakeK8s:
         self.list_calls = 0
         self.watch_calls = 0
         self.closed_clients = 0
+        self.watch_params: list[dict] = []
+        self.watch_error: Exception | None = None
+        # When set, closing a client waits for this event (a slow shutdown).
+        self.close_gate: asyncio.Event | None = None
 
     def client(self):
         server = self
@@ -117,9 +122,14 @@ class _FakeK8s:
 
             def stream(self, method, path, params=None):
                 server.watch_calls += 1
+                server.watch_params.append(params or {})
+                if server.watch_error is not None:
+                    raise server.watch_error
                 return _WatchResponse(server)
 
             async def aclose(self):
+                if server.close_gate is not None:
+                    await server.close_gate.wait()
                 server.closed_clients += 1
 
         return _Client(), "https://fake"
@@ -565,5 +575,89 @@ def test_cancelled_stream_releases_its_slot(fake_env, monkeypatch):
         with pytest.raises(asyncio.CancelledError):
             await task
         assert fake_env.client_count == 0
+
+    asyncio.run(scenario())
+
+
+# --- Review round 1 regressions -------------------------------------------------
+
+
+def test_release_for_a_body_that_never_started_runs_on_the_loop(fake_env, monkeypatch):
+    """The response's background release must be async: a sync one runs in the
+    threadpool, where the hub cannot arm its idle timer, so the upstream would
+    run forever after the last client left before its body started."""
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        response = await cluster.cluster_stream(_request())
+        assert response.status_code == 200
+        assert fake_env.client_count == 1
+        upstream = fake_env._upstream
+        # Starlette runs this after the response even if the body never ran.
+        await response.background()
+        assert fake_env.client_count == 0
+        await asyncio.sleep(0.2)
+        assert upstream.done()
+        assert server.closed_clients == 1
+
+    asyncio.run(scenario())
+
+
+def test_client_joining_while_the_hub_stops_gets_a_fresh_upstream(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        server.close_gate = asyncio.Event()  # the old upstream's shutdown hangs
+        first = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(first, lambda item: item[0] == "synced")
+        old = fake_env._upstream
+        fake_env.unsubscribe(first)
+        await asyncio.sleep(0.15)  # past the 0.05 s linger: old upstream cancelled
+        assert old.cancelling() and not old.done()
+
+        server.close_gate.set()  # new clients close normally; old one finishes too
+        late = fake_env.try_subscribe("two", cluster.StreamLimits())
+        snapshot = await _drain(late, lambda item: item[0] == "synced")
+        assert any(kind == "pod" for kind, _ in snapshot)
+        assert fake_env.upstream_starts == 2
+        await asyncio.sleep(0.05)
+        assert old.done()
+        # The finishing old upstream must not wipe the new one's state.
+        assert fake_env._listed and "retrieval-worker-a" in fake_env._pods
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_watch_asks_for_a_server_timeout_and_relists_after_a_read_timeout(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    server.watch_error = httpx.ReadTimeout("silent watch")
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        items = await _drain(sub, lambda item: item[0] == "synced")
+        await _drain(sub, lambda item: item[0] == "synced")  # a second list
+        assert all(kind != "cluster_unavailable" for kind, _ in items)
+        assert server.list_calls >= 2
+        assert server.watch_params[0]["timeoutSeconds"] == str(cluster._WATCH_TIMEOUT_S)
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_dropped_slow_client_is_told_to_reconnect(fake_env, monkeypatch):
+    async def scenario():
+        sub = cluster.Subscriber("slow", 4)
+        sub.queue.put_nowait(
+            ("pod", {"type": "ADDED", "pod": "a", "phase": "Running", "ready": True})
+        )
+        sub.dropped = True
+        text = "".join([chunk async for chunk in cluster._subscriber_events(sub, 60)])
+        assert _events(text) == [("reconnect", {})]
 
     asyncio.run(scenario())
