@@ -33,7 +33,7 @@ function legacyCopy(text: string): boolean {
 /** Sized like the GitHub mark beside it (24px, 28px from sm); the tight viewBox makes the envelope fill it optically. */
 function EnvelopeIcon() {
   return (
-    <svg viewBox="2 2 20 20" className="size-6 sm:size-7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="2 2 20 20" className="size-6 sm:size-7 md:size-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
     </svg>
