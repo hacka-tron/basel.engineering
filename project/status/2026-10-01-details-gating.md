@@ -1,6 +1,6 @@
 # Mobile diagram: details bar locked until a component is selected
 
-**Status:** In review (PR link in the index). Not merged.
+**Status:** In review, PR [#90](https://github.com/hacka-tron/basel.engineering/pull/90). Not merged.
 
 ## TL;DR
 
