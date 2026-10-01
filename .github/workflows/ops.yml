@@ -103,7 +103,8 @@ jobs:
               cronjob-suspend|cronjob-resume) echo "- CronJob: \`$CRONJOB\`" ;;
             esac
             if [ -n "$REASON" ]; then
-              printf -- '- Reason: %s\n' "$REASON"
+              # REASON arrives via env (never interpolated here) and is redacted.
+              printf -- '- Reason: %s\n' "$(printf '%s' "$REASON" | .github/scripts/ops-run.sh redact)"
             fi
             echo
           } >> "$GITHUB_STEP_SUMMARY"

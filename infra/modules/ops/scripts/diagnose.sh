@@ -52,7 +52,7 @@ main() {
   systemctl show k3s -p ActiveEnterTimestamp -p NRestarts --no-pager || true
 
   section "nodes"
-  kc get nodes -o wide || echo "(apiserver did not answer)"
+  kc get nodes || echo "(apiserver did not answer)"
   kc get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} ({.reason}){"\n"}{end}' || true
 
   section "kubectl top (metrics-server)"

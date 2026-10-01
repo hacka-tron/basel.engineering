@@ -50,10 +50,12 @@ jobs:
             echo "shellcheck lib.sh + ${script##*/}"
             cat "$scripts/lib.sh" "$script" | shellcheck -s bash -
           done
-          shellcheck .github/scripts/*.sh
+          shellcheck -x -P SCRIPTDIR .github/scripts/*.sh
           shellcheck -x -P SCRIPTDIR infra/modules/ops/tests/*.sh
       - name: Test runbook output redaction
-        run: bash infra/modules/ops/tests/redact-test.sh
+        run: |
+          bash infra/modules/ops/tests/redact-test.sh
+          bash infra/modules/ops/tests/ops-run-test.sh
 
   plan:
     needs: validate

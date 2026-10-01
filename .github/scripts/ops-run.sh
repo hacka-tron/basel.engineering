@@ -3,6 +3,7 @@
 #
 #   ops-run.sh diagnose
 #   ops-run.sh act <action>
+#   ops-run.sh redact      (stdin to stdout through redact(); for free text)
 #
 # Inputs come from environment variables set by the workflow (never
 # interpolated into this script): DEPLOYMENT, FLUX_TARGET, KEDA_REPLICAS,
@@ -13,6 +14,21 @@
 # (infra/modules/ops, and glassbox-zram-swap in infra/modules/compute); the
 # assumed role can't send any other document.
 set -euo pipefail
+
+# Single shared redact() (the one the on-node scripts use). lib.sh also sets
+# PATH/KUBECONFIG and its own log/die; keep the runner's PATH and define this
+# script's log/die below, after the source.
+runner_path=$PATH
+# shellcheck source=../../infra/modules/ops/scripts/lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../infra/modules/ops/scripts/lib.sh"
+PATH=$runner_path
+unset KUBECONFIG
+
+# Everything printed to the public log or the step summary goes through
+# redact (SSM output, even though the on-node scripts already redact their own
+# free text: this is the second, independent pass). Width is generous because
+# the on-node scripts already truncated their lines.
+REDACT_WIDTH=400
 
 REGION=${AWS_REGION:-us-east-1}
 SUMMARY=${GITHUB_STEP_SUMMARY:-/dev/null}
@@ -50,7 +66,7 @@ instance_id() {
 LAST_STDOUT=''
 send_and_wait() {
   local document=$1 parameters=$2 max_wait=$3 title=$4
-  local instance command_id deadline status invocation result stdout stderr
+  local instance command_id deadline status invocation result stdout stderr raw_len
 
   instance=$(instance_id)
   log "sending $document to $instance (parameters: $parameters)"
@@ -84,17 +100,19 @@ send_and_wait() {
   done
 
   stdout=$(jq -r '.StandardOutputContent // ""' <<<"$invocation")
-  LAST_STDOUT=$stdout
+  LAST_STDOUT=$stdout # raw, only parsed (boot-id probe), never printed
   if [ "${QUIET:-0}" = 1 ]; then
     [ "$status" = Success ]
     return
   fi
-  stderr=$(jq -r '.StandardErrorContent // ""' <<<"$invocation")
+  raw_len=${#stdout}
+  stdout=$(redact "$REDACT_WIDTH" <<<"$stdout")
+  stderr=$(jq -r '.StandardErrorContent // ""' <<<"$invocation" | redact "$REDACT_WIDTH")
   echo "::group::$title output ($status)"
   printf '%s\n' "$stdout"
   [ -z "$stderr" ] || printf -- '--- stderr ---\n%s\n' "$stderr"
   echo "::endgroup::"
-  if [ "${#stdout}" -ge 23900 ]; then
+  if [ "$raw_len" -ge 23900 ]; then
     echo "::warning::SSM keeps only the first 24,000 characters of output; the end of the $title output may be cut off."
   fi
   {
@@ -138,25 +156,35 @@ boot_info() {
 }
 
 reboot_node() {
-  local instance rebooted_at started=$SECONDS before before_id='' info now_id now_epoch
+  local instance started=$SECONDS before before_id='' info now_id now_epoch
   instance=$(instance_id)
 
   # An SSM ping or a successful command only proves the agent is reachable,
   # and a pre-reboot ping can look like one after the reboot. The kernel's
   # boot ID changes on every boot, so remember it and wait for a different
-  # one. If the node can't answer now (the usual reason to reboot it), fall
-  # back to its boot time: it must be later than the reboot request.
+  # one. That is the only success. (A boot time compared with this runner's
+  # clock is not proof: a skewed node clock can make the pre-reboot boot look
+  # new.) If the node can't answer now, still reboot it (that is usually why
+  # the button is pressed) but end non-zero, since a restart can't be proven.
   before=$(boot_info 90)
   before_id=${before%% *}
   if [ -n "$before_id" ]; then
     log "boot id before the reboot: $before_id"
   else
-    log "could not read the boot id before the reboot (node not answering); will require a boot time after the request instead"
+    log "could not read the boot id before the reboot (node not answering)"
   fi
 
-  rebooted_at=$(date -u +%s)
   log "rebooting $instance (EC2 RebootInstances: ACPI reboot, forced by AWS after ~4 minutes if the OS ignores it)"
   aws ec2 reboot-instances --region "$REGION" --instance-ids "$instance"
+
+  if [ -z "$before_id" ]; then
+    local msg="reboot issued; could not prove the node restarted (no pre-reboot boot ID)"
+    echo "::warning::$msg"
+    echo "**Warning:** $msg. Check the after-diagnose and the EC2 console." >>"$SUMMARY"
+    # Give the node time to come back so the after-diagnose is useful.
+    sleep 150
+    return 1
+  fi
 
   # Poll for up to 20 minutes. Every probe goes through SSM, so it only
   # succeeds while the agent is up; success needs a new boot.
@@ -167,8 +195,7 @@ reboot_node() {
     if [ -n "$info" ]; then
       now_id=${info%% *}
       now_epoch=${info##* }
-      if { [ -n "$before_id" ] && [ "$now_id" != "$before_id" ]; } ||
-        { [ -z "$before_id" ] && [ "$now_epoch" -ge "$rebooted_at" ]; }; then
+      if [ "$now_id" != "$before_id" ]; then
         log "node rebooted: boot id $now_id, up since epoch $now_epoch; giving k3s 90s to start before the after-diagnose"
         sleep 90
         echo "Reboot: new boot id seen $((SECONDS - started))s after the request (was ${before_id:-unknown})." >>"$SUMMARY"
@@ -180,7 +207,7 @@ reboot_node() {
     fi
     sleep 20
   done
-  die "no reboot detected within 20 minutes of the request: the boot id never changed (${before_id:-unknown before}) or the node never answered; check the EC2 console (instance status checks)"
+  die "no reboot detected within 20 minutes of the request: the boot id never changed (${before_id}) or the node never answered; check the EC2 console (instance status checks)"
 }
 
 apply_zram() {
@@ -240,5 +267,6 @@ act() {
 case "${1:-}" in
   diagnose) diagnose "${2:-diagnose}" ;;
   act) act "${2:-}" ;;
-  *) die "usage: ops-run.sh diagnose [title] | act <action>" ;;
+  redact) tr '\n' ' ' | redact 200; echo ;;
+  *) die "usage: ops-run.sh diagnose [title] | act <action> | redact" ;;
 esac

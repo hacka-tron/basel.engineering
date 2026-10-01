@@ -74,8 +74,10 @@ status, kernel OOM lines) pass through a redaction filter (`redact` in
 values after password/token/secret/key/authorization masked, JWT-like and 20+
 character base64/hex strings masked, lines cut to 160-220 characters. That
 filter is a safety net, not a guarantee; it has an offline test
-(`infra/modules/ops/tests/redact-test.sh`, run in CI). SSM keeps only the
-first
+(`infra/modules/ops/tests/redact-test.sh`, run in CI). `ops-run.sh` runs the
+same `redact` over everything SSM returns (stdout, stderr) and over the
+`reason` input before printing or adding it to the step summary
+(`ops-run-test.sh`). SSM keeps only the first
 24,000 characters of a command's output.
 
 | Action | What it does | When to use it | Approval |
