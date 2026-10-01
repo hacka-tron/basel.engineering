@@ -47,7 +47,7 @@ Section 8 lists every change to DD1's contracts and schema in one place. Section
 
 ### 3.1 Problem (not built)
 
-DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. The design already keeps all durable state outside the node (RDS for data, Git for configuration), so the node itself is replaceable. Recovery just needs to be automatic.
+DD1 runs k3s on a single EC2 instance. If that instance fails, the whole site is down until someone manually rebuilds it. The design already keeps all durable state outside the node (RDS for data, Git for configuration), so the node itself is replaceable. Recovery just needs to be automatic. Correction: MySQL later moved in-cluster (DD1 §10.5), so that premise no longer holds; see 3.9 for the revised plan.
 
 ### 3.2 Design (not built)
 
@@ -110,6 +110,18 @@ Recorded here as the production answer, with trade-offs:
 ### 3.8 Cost (not built)
 
 No change. Auto Scaling groups and launch templates are free; there is still one instance.
+
+### 3.9 Revised plan: backups first, then the Auto Scaling group (planned, not built yet)
+
+Sections 3.1 to 3.8 assumed the data lived in RDS. It does not: MySQL runs in-cluster on a `local-path` volume on the node's root disk (DD1 §10.5), so a replacement node built by 3.3 would come back empty. The scoped plan is `docs/superpowers/plans/2026-10-01-self-healing-node.md`; this is its summary.
+
+- **What a lost node loses today:** k3s state, both data volumes, the Flux Git credential, the hand-made Kubernetes Secrets and the zram association's target. Content is rebuilt from Git for cents. The `queries` log is lost for good. A `reindex` from MySQL to Redis (DD1 §6.5) also has to be added, because ingest skips unchanged documents.
+- **Phase 1:** CloudWatch recover and reboot alarms with an email topic, and a free uptime probe. About $0.20 a month, no downtime.
+- **Phase 2:** nightly `mysqldump` to a private S3 bucket (30-day retention), plus "Ops" runbooks to back up now, check a restore in a scratch database, and restore. Under $0.05 a month, no downtime.
+- **Phase 3:** reindex from MySQL, pinned k3s and Flux versions, an idempotent boot script, a Flux deploy key in SSM, and a tag-targeted zram association.
+- **Phase 4:** launch template and a size-1 group at capacity 0, a rehearsal on a throwaway group, then a cutover with 10 to 20 minutes of downtime and an EIP-based rollback. The boot script needs a temporary public IP (the subnet has no NAT) and `ec2:AssociateAddress`.
+- **Not chosen first:** a persistent data volume (best recovery point, but more failure modes and a maintenance window to move the data); daily EBS snapshots as an optional extra safety net.
+- **Owner decisions:** cost ceiling, acceptable downtime, whether the question log matters (nightly versus hourly dumps, or a persistent volume), the alert address, and the go-ahead for the cutover.
 
 ---
 
