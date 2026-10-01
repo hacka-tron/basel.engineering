@@ -1,6 +1,6 @@
 # Landscape phones keep a usable phone layout
 
-**Status:** PR open, not merged (decisions proposed, pending the owner's review). Branch `feature/landscape-phone`.
+**Status:** PR [#100](https://github.com/hacka-tron/basel.engineering/pull/100) open, not merged (decisions proposed, pending the owner's review). Branch `feature/landscape-phone`.
 
 ## TL;DR
 
