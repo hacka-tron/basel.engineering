@@ -7,9 +7,9 @@
 ## TL;DR
 
 - The retrieval eval now measures what production does: it searches at **k=8** (the worker's value) instead of 5, and keeps recall@5/MRR so old numbers still compare.
-- New **chunk-level** score: a hit only counts if a retrieved chunk actually contains the case's gold text snippet, not just any chunk of the right file. This stops `docs/DESIGN.md` (about 40 chunks) from counting as a hit whatever section comes back.
+- New **chunk-level** score: a hit only counts if a retrieved chunk from an expected source file actually contains the case's gold text snippet, not just any chunk of the right file. This stops `docs/DESIGN.md` (about 40 chunks) from counting as a hit whatever section comes back.
 - New **noise@8**: the share of retrieved chunks that come from test code or implementation plans. The stale Titan baseline's misses were mostly that kind of noise; it gets a number now, and phase 6 aims for 0.
-- The regression gate also checks chunk-level recall@8 and noise@8, once a baseline has them. The two stored baselines are still v1 and parse unchanged.
+- The regression gate also checks chunk-level recall@8 (must not drop, as DESIGN-005 §5.4 says) and noise@8 (+5 points), once a baseline has them. The two stored baselines are still v1 and parse unchanged.
 - No paid calls, no infra, no change to the live request path.
 
 ## What changed for a visitor
@@ -31,28 +31,30 @@ flowchart LR
 
 - `eval/run_eval.py` loads chunk paths **and text** from MySQL, so it can check gold snippets. Snippet matching ignores case and whitespace runs, so a chunker that re-wraps lines doesn't break it.
 - Scoring is a set of pure functions (`score_case`, `score_chunks`, `contains_snippet`, `is_noise`, `score_retrieval`, `summarize`, `regression_reason`). They are what the unit tests exercise, with synthetic retrieval results and no Redis.
-- The result records a `question_set_fingerprint`. A baseline written from a different question set is refused instead of compared, because recall over 30 questions and over 70 aren't the same number.
+- The result records a `question_set_fingerprint`. A v2 baseline from a different question set is refused instead of compared, because recall over 30 questions and over 70 aren't the same number. v1 baselines have no fingerprint, so for those the sorted case ids are compared instead.
 
 ## Key design decisions & trade-offs
 
 - **Reads `golden.yaml` when it exists, otherwise `questions.yaml`.** Phase 1 (the golden dataset) is being built in parallel. The loader accepts either a `cases:` or a `questions:` list and treats `gold_snippets` and `category` as optional, so this merges before or after phase 1 with no edit. The only shared format assumption: a case has `id`, `corpus`, `question`, `expected_sources`, and optionally `category`, `gold_snippets` and `history`.
 - **Which golden cases are scored.** Cases without `expected_sources` (unanswerable, injection) have no retrieval target. Multi-turn cases retrieve with a paid LLM rewrite in production, so embedding the raw follow-up would measure something production never does. Both are skipped here; the answer eval (phase 1) covers them.
-- **Chunk hit = any snippet in any of the top 8.** This is the plan's definition taken literally. "Must contain all snippets" was the alternative; it would punish cases whose facts are spread over two chunks, and the answer eval already checks completeness.
+- **Chunk hit = a top-8 chunk from an expected source that contains any snippet.** The source check was added in review: tests quote doc prose verbatim (e.g. `test_planned_labels.py`), so without it a test chunk holding the snippet counted as a hit, and the metric rewarded the noise it is meant to measure. "Must contain all snippets" was the alternative; it would punish cases whose facts are spread over two chunks, and the answer eval already checks completeness.
 - **noise@8 is a micro average**, noisy chunks over all retrieved chunks, so every retrieved chunk weighs the same. Prefixes: `services/tests/` and `docs/superpowers/plans/`, as the plan says.
 - **One search at k=8, top 5 sliced from it**, instead of a second KNN at k=5. HNSW is approximate, so in rare cases this can differ from the old separate k=5 query. It halves Redis calls and keeps @5 and @8 consistent with each other.
-- **Gate tolerance is 5 points for all three gates**, the same as the existing recall@5 rule. The plan says to gate noise@8 but doesn't give a tolerance. DESIGN-005's CI gate wants noise@8 = 0 later, but today's corpus still contains tests and plans (phase 6 removes them), so a zero rule would fail every run now.
+- **Gate tolerances:** recall@5 keeps its 5 points; chunk-level recall@8 has none, matching DESIGN-005 §5.4 ("does not drop"); noise@8 gets 5 points. The plan says to gate noise@8 but doesn't give a tolerance. DESIGN-005's CI gate wants noise@8 = 0 later, but today's corpus still contains tests and plans (phase 6 removes them), so a zero rule would fail every run now.
 - **Baselines not rewritten.** Both stored baselines have stale corpus fingerprints, so no fresh fake run could pass against them anyway. The fake one would also go stale again when `golden.yaml` lands. They stay in the v1 format and are gated on recall@5 only, and a test proves they still parse and gate. The next intentional `--write-baseline` adds the v2 fields; the Titan one is phase 3 (paid).
 - **`unreachable_gold_snippets`.** The runner lists cases whose snippet no indexed chunk contains, such as a snippet that straddles a chunk boundary. Otherwise a bad snippet would look like a retrieval miss.
 
 ## What review caught
 
-Pending review.
+Round 1 (changes needed):
+- **Important:** chunk hits didn't check the chunk's source, so a `services/tests/` chunk quoting the doc snippet counted as a hit, and so did the unreachable-snippet check. Fixed: a chunk counts only if it comes from an expected source and contains a snippet, with a test where a noise chunk holding the snippet ranks above the gold chunk.
+- **Minor:** v1 baselines skipped the question-set check (it now compares their case ids); the chunk gate allowed −5 points against the design's "does not drop" (now 0); the README now says multi-turn cases have no free retrieval signal; DESIGN.md §15 cites DESIGN-005, so #92 should merge first.
 
 ## Operational notes & risks
 
 - None for production: only `eval/`, tests and docs changed.
 - **No local end-to-end run was possible.** Docker Desktop's daemon on the dev machine stopped answering (even `/_ping` timed out), and restarting it would have stopped the shared compose stack. I didn't restart it, and no native MySQL/Redis was installed. Instead, `services/tests/test_eval_retrieval_e2e.py` does a fake-provider ingest of a two-file fixture (a doc and a `services/tests/` file) into the CI MySQL/Redis services. It then runs `evaluate()` and asserts rank-1 file and chunk hits, the noise count, an unreachable snippet and the per-category summary. That test runs in CI on this PR and is the end-to-end proof. It skips locally when the stack isn't there.
-- When `golden.yaml` lands, the default dataset changes, so the next run needs a reviewed `--write-baseline`. The question-set check enforces that.
+- When `golden.yaml` lands, the default dataset changes, so the next run needs a reviewed `--write-baseline`. The question-set check enforces that, against v2 baselines by fingerprint and against v1 baselines by case ids.
 
 ## How to see it / verify it
 

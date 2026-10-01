@@ -86,9 +86,19 @@ def test_snippet_match_ignores_case_and_whitespace_runs():
 
 
 def test_chunk_level_uses_first_chunk_with_a_gold_snippet_within_eight():
-    texts = ["other", "the DESIGN.md chunk without it", "has 512 MiB here"]
-    assert score_chunks(texts, ["512 MiB"]) == (1, pytest.approx(1 / 3))
-    assert score_chunks(["x"] * 8 + ["512 MiB"], ["512 MiB"]) == (0, 0.0)
+    chunks = [(DOC, "other"), (DOC, "the DESIGN.md chunk without it"), (DOC, "has 512 MiB here")]
+    assert score_chunks(chunks, ["512 MiB"], {DOC}) == (1, pytest.approx(1 / 3))
+    assert score_chunks([(DOC, "x")] * 8 + [(DOC, "512 MiB")], ["512 MiB"], {DOC}) == (0, 0.0)
+
+
+def test_noise_chunk_quoting_the_snippet_is_not_a_chunk_hit():
+    # Tests quote doc prose verbatim; only the expected source's chunk counts.
+    chunks = [(TEST, "assert '512 MiB' in prompt"), (PLAN, "512 MiB"), (DOC, "limit is 512 MiB")]
+    assert score_chunks(chunks, ["512 MiB"], {DOC}) == (1, pytest.approx(1 / 3))
+    assert score_chunks(chunks[:2], ["512 MiB"], {DOC}) == (0, 0.0)
+    case = score_retrieval(_case(), _retrieved((TEST, "512 MiB quoted"), (DOC, "limit is 512 MiB")))
+    assert (case["chunk_hit"], case["chunk_reciprocal_rank"]) == (1, 0.5)
+    assert case["noise_count"] == 1
 
 
 def test_noise_prefixes_cover_tests_and_plans_only():
@@ -163,11 +173,13 @@ def _v2(**overall):
     }
 
 
-def test_regression_gates_chunk_recall_and_noise_with_five_point_tolerance():
+def test_regression_gates_chunk_recall_strictly_and_noise_with_five_points():
     baseline = _v2()
-    assert regression_reason(_v2(chunk_recall_at_8=0.66, noise_at_8=0.34), baseline) is None
+    assert regression_reason(_v2(chunk_recall_at_8=0.7, noise_at_8=0.34), baseline) is None
+    assert regression_reason(_v2(chunk_recall_at_8=0.75), baseline) is None
+    # DESIGN-005 §5.4: chunk-level recall@8 must not drop at all.
     assert "Chunk-level recall@8 regressed" in regression_reason(
-        _v2(chunk_recall_at_8=0.64), baseline
+        _v2(chunk_recall_at_8=0.69), baseline
     )
     assert "Noise@8 rose" in regression_reason(_v2(noise_at_8=0.36), baseline)
     assert "Recall@5 regressed" in regression_reason(_v2(recall_at_5=0.7), baseline)
@@ -188,11 +200,15 @@ def test_committed_v1_baselines_still_parse_and_gate_on_recall_at_5(name):
         **_v2(recall_at_5=baseline["overall"]["recall_at_5"]),
         "embedding_model": baseline["embedding_model"],
         "dataset_fingerprint": baseline["dataset_fingerprint"],
+        "cases": [{"id": case["id"]} for case in reversed(baseline["cases"])],
     }
-    # v1 baselines lack the v2 fields, so only recall@5 gates.
+    # v1 baselines lack the v2 fields, so recall@5 and the case ids gate.
     assert regression_reason(result, baseline) is None
     result["overall"]["recall_at_5"] -= 0.06
     assert "Recall@5 regressed" in regression_reason(result, baseline)
+    result["overall"]["recall_at_5"] += 0.06
+    result["cases"].append({"id": "new-golden-case"})
+    assert "Question set changed" in regression_reason(result, baseline)
 
 
 def test_loader_accepts_golden_cases_and_skips_non_retrieval_cases(tmp_path: Path):

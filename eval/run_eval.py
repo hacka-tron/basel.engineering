@@ -43,6 +43,8 @@ CONTINUITY_K = 5
 NOISE_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
 CORPORA = ("about_me", "about_system")
 TOLERANCE = 0.05
+# DESIGN-005 §5.4: chunk-level recall@8 must not drop at all.
+CHUNK_TOLERANCE = 0.0
 MIN_CASES = 25
 
 
@@ -66,12 +68,24 @@ def contains_snippet(text: str, snippets: list[str]) -> bool:
     return any(_squash(snippet) in haystack for snippet in snippets)
 
 
+def is_gold_chunk(source: str, text: str, expected: set[str], snippets: list[str]) -> bool:
+    """A gold chunk comes from an expected source and contains a gold snippet.
+
+    The source check matters: tests quote doc prose verbatim, so a test chunk holding
+    the snippet must not count as a hit (it is noise, not the answer's source).
+    """
+    return source in expected and contains_snippet(text, snippets)
+
+
 def score_chunks(
-    texts: list[str], snippets: list[str], k: int = PRODUCTION_TOP_K
+    chunks: list[tuple[str, str]],
+    snippets: list[str],
+    expected: set[str],
+    k: int = PRODUCTION_TOP_K,
 ) -> tuple[int, float]:
-    """Chunk-level hit and reciprocal rank: the first retrieved chunk holding a gold snippet."""
-    for rank, text in enumerate(texts[:k], start=1):
-        if contains_snippet(text, snippets):
+    """Chunk-level hit and reciprocal rank over ``(source, text)`` pairs, best first."""
+    for rank, (source, text) in enumerate(chunks[:k], start=1):
+        if is_gold_chunk(source, text, expected, snippets):
             return 1, 1 / rank
     return 0, 0.0
 
@@ -89,7 +103,9 @@ def score_retrieval(item: dict, retrieved: list[tuple[int, str, str]]) -> dict:
     hit_at_8, reciprocal_rank_at_8 = score_case(sources, expected, PRODUCTION_TOP_K)
     snippets = item.get("gold_snippets") or []
     chunk_hit, chunk_rr = (
-        score_chunks([text for _, _, text in top], snippets) if snippets else (None, None)
+        score_chunks([(source, text) for _, source, text in top], snippets, expected)
+        if snippets
+        else (None, None)
     )
     noise_count = sum(is_noise(source) for source in sources)
     return {
@@ -251,9 +267,10 @@ async def evaluate(questions: list[dict]) -> dict:
             if missing:
                 raise ValueError(f"{item['id']} expected sources are not indexed: {missing}")
             snippets = item.get("gold_snippets") or []
+            expected = set(item["expected_sources"])
             if snippets and not any(
-                corpus == item["corpus"] and contains_snippet(text, snippets)
-                for _, corpus, _, text in chunk_rows
+                corpus == item["corpus"] and is_gold_chunk(path, text, expected, snippets)
+                for _, corpus, path, text in chunk_rows
             ):
                 # The snippet straddles a chunk boundary or the text moved: no chunk can hit.
                 unreachable.append(item["id"])
@@ -286,11 +303,15 @@ def baseline_path(model_id: str) -> Path:
     return BASELINE_DIR / f"{safe_id}.json"
 
 
+def _case_ids(run: dict) -> list[str]:
+    return sorted(case["id"] for case in run.get("cases", []))
+
+
 def regression_reason(result: dict, baseline: dict) -> str | None:
     """Why ``result`` fails against ``baseline``, or None.
 
-    v1 baselines (no v2 fields) are gated on recall@5 only; the v2 gates apply once the
-    baseline carries the field.
+    v1 baselines (no v2 fields) are gated on recall@5 and their case ids; the v2 gates
+    apply once the baseline carries the field.
     """
     if baseline["embedding_model"] != result["embedding_model"]:
         return "Baseline embedding model differs from the selected provider"
@@ -299,7 +320,12 @@ def regression_reason(result: dict, baseline: dict) -> str | None:
     if baseline["dataset_fingerprint"] != result["dataset_fingerprint"]:
         return "Corpus content changed; review misses and refresh the baseline intentionally"
     prior_set = baseline.get("question_set_fingerprint")
-    if prior_set is not None and prior_set != result.get("question_set_fingerprint"):
+    if prior_set is not None:
+        changed = prior_set != result.get("question_set_fingerprint")
+    else:
+        # v1 baselines have no fingerprint: compare the case ids instead.
+        changed = _case_ids(baseline) != _case_ids(result)
+    if changed:
         return "Question set changed; review misses and refresh the baseline intentionally"
     prior, current = baseline["overall"], result["overall"]
     if current["recall_at_5"] < prior["recall_at_5"] - TOLERANCE:
@@ -307,7 +333,7 @@ def regression_reason(result: dict, baseline: dict) -> str | None:
     prior_chunk = prior.get("chunk_recall_at_8")
     if prior_chunk is not None:
         current_chunk = current.get("chunk_recall_at_8")
-        if current_chunk is None or current_chunk < prior_chunk - TOLERANCE:
+        if current_chunk is None or current_chunk < prior_chunk - CHUNK_TOLERANCE:
             shown = "n/a" if current_chunk is None else f"{current_chunk:.3f}"
             return f"Chunk-level recall@8 regressed from {prior_chunk:.3f} to {shown}"
     prior_noise = prior.get("noise_at_8")
