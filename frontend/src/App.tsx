@@ -571,8 +571,6 @@ function App() {
   const selectedAnswer = selectedReply ? selectedReply.content
     : selectedNode ? 'Waiting for the current answer…' : null
 
-  const latestAnswer = messages.findLast((message) => message.role === 'assistant' && message.state !== 'pending')?.content || null
-
   const headerRef = useRef<HTMLElement>(null)
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
@@ -665,7 +663,6 @@ function App() {
                 retrievedChunks={retrievedChunks}
                 selectedNode={selectedNode}
                 answerText={selectedAnswer}
-                latestAnswer={latestAnswer}
                 onContinueInChat={() => showMobileView('chat')}
                 onInspect={handleInspectComponent}
                 workerPods={shownWorkerPods}
