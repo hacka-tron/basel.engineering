@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { BUDGET_REPLIES, CANONICAL_BUDGET_REPLY, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
+import { planRetry } from './chatRetry.ts'
 import { historyForRequest, latestQuestionAnswered, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
 
 const now = 1_700_000_000_000
@@ -108,6 +110,64 @@ test('a quirky "I don\'t know" reply is shown and saved, but history carries the
     assert.equal(restored[1].content, 'Basel forgot to write that part down. Classic Basel.')
     assert.equal(restored[1].idk, true)
     assert.equal(historyForRequest(restored)[1].content, "I don't know from what I have.")
+  })
+})
+
+test('a budget reply is shown and saved, but history carries the canonical sentence', () => {
+  const quirky = BUDGET_REPLIES[0]
+  const convo: ChatMessage[] = [
+    { id: 'u1', role: 'user', content: 'What did Basel build?', createdAt: now },
+    { id: 'a1', role: 'assistant', content: quirky, state: 'retrieval_only', budget: true, sources: [{ source_path: 'a.md', title: 'A' }], createdAt: now },
+    { id: 'u2', role: 'user', content: 'Tell me more', createdAt: now },
+    { id: 'e2', role: 'assistant', content: BUDGET_REPLIES[1], state: 'error', budget: true, createdAt: now },
+  ]
+  const history = historyForRequest(convo)
+  assert.deepEqual(history, [
+    { role: 'user', content: 'What did Basel build?' },
+    { role: 'assistant', content: CANONICAL_BUDGET_REPLY },
+  ])
+  for (const turn of history) assert.ok(!BUDGET_REPLIES.includes(turn.content))
+  const serialized = serializeConversation(convo, now)!
+  withStorage({ 'glassbox:conv:v1:about_me': serialized }, () => {
+    const restored = loadConversation('about_me', now)
+    // The picked text is stored, so it stays the same after a reload.
+    assert.equal(restored[1].content, quirky)
+    assert.equal(restored[1].budget, true)
+    assert.equal(restored[3].content, BUDGET_REPLIES[1])
+    assert.equal(restored[3].budget, true)
+    assert.deepEqual(historyForRequest(restored), history)
+    assert.equal(planRetry(restored), null)
+  })
+})
+
+test('the old fixed budget failure reply loads as a budget reply, so Retry stays off it', () => {
+  const old = JSON.stringify({
+    version: 1,
+    updatedAt: now,
+    messages: [
+      { id: 'u', role: 'user', content: 'Hi', createdAt: now },
+      { id: 'b', role: 'assistant', content: LEGACY_BUDGET_ERROR_REPLY, state: 'error', createdAt: now },
+      { id: 'r', role: 'assistant', content: CANONICAL_BUDGET_REPLY, state: 'retrieval_only', createdAt: now },
+    ],
+  })
+  withStorage({ 'glassbox:conv:v1:about_me': old }, () => {
+    const restored = loadConversation('about_me', now)
+    assert.equal(restored[1].budget, true)
+    assert.equal(planRetry(restored.slice(0, 2)), null)
+    // An old retrieval_only note keeps its text, and history sends it unchanged.
+    assert.equal(restored[2].budget, undefined)
+    assert.equal(restored[2].content, CANONICAL_BUDGET_REPLY)
+  })
+})
+
+test('a non-boolean budget flag is rejected as corrupt', () => {
+  const bad = JSON.stringify({
+    version: 1,
+    updatedAt: now,
+    messages: [{ id: 'a', role: 'assistant', content: 'x', state: 'retrieval_only', budget: 'yes', createdAt: now }],
+  })
+  withStorage({ 'glassbox:conv:v1:about_me': bad }, () => {
+    assert.deepEqual(loadConversation('about_me', now), [])
   })
 })
 

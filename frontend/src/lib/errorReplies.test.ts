@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { BUDGET_REPLIES } from './budgetReplies.ts'
 import { ERROR_REPLIES, errorReplyFor, pickErrorReply } from './errorReplies.ts'
 
 test('there are 20 distinct, short replies', () => {
@@ -41,8 +42,9 @@ test('rate limiting keeps the wait time', () => {
   assert.match(errorReplyFor({ code: 'rate_limited' }), /a moment/)
 })
 
-test('an exhausted daily budget says so', () => {
-  assert.match(errorReplyFor({ code: 'budget_exhausted' }), /answer limit for today/)
+test('an exhausted daily budget gets one of the playful budget replies', () => {
+  for (let i = 0; i < 50; i++) assert.ok(BUDGET_REPLIES.includes(errorReplyFor({ code: 'budget_exhausted' })))
+  assert.equal(errorReplyFor({ code: 'budget_exhausted' }, null, () => 0), BUDGET_REPLIES[0])
 })
 
 test('no reply blames the visitor', () => {
@@ -50,7 +52,7 @@ test('no reply blames the visitor', () => {
     ...ERROR_REPLIES,
     errorReplyFor({ code: 'rate_limited', retry_after_s: 37 }),
     errorReplyFor({ code: 'rate_limited' }),
-    errorReplyFor({ code: 'budget_exhausted' }),
+    ...BUDGET_REPLIES,
   ]
   const blame = /\b(you asked|you've asked|your fault|too many questions|slow down|lot of questions at once|you did|you broke|you sent)\b/i
   for (const reply of replies) assert.doesNotMatch(reply, blame, reply)
