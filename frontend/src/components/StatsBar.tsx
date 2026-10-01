@@ -1,7 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { DemoCapacity } from '../hooks/useStressTest'
-import { newChatFit, type NewChatFit } from '../lib/footerFit'
-import { lastStatsParts, type LastStats } from '../lib/lastStats'
+import { useLongPressTooltip } from '../hooks/useLongPressTooltip'
+import { lastStatsDetails, lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
 
 type StatsBarProps = {
@@ -19,10 +19,6 @@ type StatsBarProps = {
   topicLabel?: string
 }
 
-const LONG_PRESS_MS = 500
-// The square "+" New chat button (w-8).
-const COMPACT_NEW_CHAT_PX = 32
-const LONG_PRESS_SLOP_PX = 10
 const TOOLTIP_AUTO_HIDE_MS = 4000
 
 /**
@@ -75,89 +71,11 @@ function StatsBar({
   const tooltipId = useId()
   const wideTooltipId = useId()
   const [wideTooltipOpen, setWideTooltipOpen] = useState(false)
-  const [tooltipOpen, setTooltipOpen] = useState(false)
-  const pressTimerRef = useRef<number | null>(null)
-  // One gesture state decides whether the release runs the test:
-  // idle -> pressing -> longpress | cancelled -> (next pointerdown) idle.
-  // Only a gesture that is still `idle`/`pressing` at click time runs it.
-  // Keyboard clicks (detail === 0) have no pointer gesture and always run.
-  const gestureRef = useRef<'idle' | 'pressing' | 'longpress' | 'cancelled'>('idle')
-  const activePointersRef = useRef(new Set<number>())
-  const pressStartRef = useRef<{ x: number; y: number } | null>(null)
-
-  function clearPressTimer() {
-    if (pressTimerRef.current !== null) {
-      window.clearTimeout(pressTimerRef.current)
-      pressTimerRef.current = null
-    }
-  }
-
-  function cancelGesture() {
-    clearPressTimer()
-    if (gestureRef.current === 'pressing') gestureRef.current = 'cancelled'
-  }
-
-  // Touch/pen only: a ~500ms hold opens the details instead of running the
-  // test. Mouse users get the hover tooltip, so they never need a long-press.
-  // A second finger, a cancel, or drifting past the slop cancels the gesture.
-  function handlePointerDown(e: React.PointerEvent) {
-    clearPressTimer()
-    if (e.pointerType === 'mouse') {
-      activePointersRef.current.clear()
-      gestureRef.current = 'idle'
-      return
-    }
-    activePointersRef.current.add(e.pointerId)
-    if (activePointersRef.current.size > 1) {
-      gestureRef.current = 'cancelled'
-      return
-    }
-    gestureRef.current = 'pressing'
-    pressStartRef.current = { x: e.clientX, y: e.clientY }
-    pressTimerRef.current = window.setTimeout(() => {
-      pressTimerRef.current = null
-      gestureRef.current = 'longpress'
-      setTooltipOpen(true)
-    }, LONG_PRESS_MS)
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    const start = pressStartRef.current
-    if (!start || gestureRef.current !== 'pressing') return
-    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP_PX) cancelGesture()
-  }
-
-  function handlePointerUp(e: React.PointerEvent) {
-    activePointersRef.current.delete(e.pointerId)
-    clearPressTimer()
-  }
-
-  function handlePointerCancel(e: React.PointerEvent) {
-    activePointersRef.current.delete(e.pointerId)
-    cancelGesture()
-    gestureRef.current = 'cancelled'
-  }
-
-  function handleClick(e: React.MouseEvent) {
-    const state = gestureRef.current
-    gestureRef.current = 'idle'
-    if (e.detail !== 0 && (state === 'longpress' || state === 'cancelled')) return
-    setTooltipOpen(false)
-    if (!disabled) onStressTest?.()
-  }
-
-  useEffect(() => {
-    if (!tooltipOpen) return
-    const hide = window.setTimeout(() => setTooltipOpen(false), TOOLTIP_AUTO_HIDE_MS)
-    function onDocPointerDown(e: PointerEvent) {
-      if (!(e.target as Element | null)?.closest?.('[data-stress-button]')) setTooltipOpen(false)
-    }
-    document.addEventListener('pointerdown', onDocPointerDown)
-    return () => {
-      window.clearTimeout(hide)
-      document.removeEventListener('pointerdown', onDocPointerDown)
-    }
-  }, [tooltipOpen])
+  const { open: stressPressOpen, ref: stressPressRef, ...stressPressHandlers } = useLongPressTooltip<HTMLButtonElement>(() => { if (!disabled) onStressTest?.() })
+  const tooltipOpen = stressPressOpen
+  const latencyTooltipId = useId()
+  const { open: latencyPressOpen, ref: latencyPressRef, ...latencyPressHandlers } = useLongPressTooltip<HTMLButtonElement>()
+  const { open: newChatPressOpen, ref: newChatPressRef, ...newChatPressHandlers } = useLongPressTooltip<HTMLButtonElement>(() => { if (!newChatDisabled) onNewChat?.() })
 
   useEffect(() => {
     if (!wideTooltipOpen) return
@@ -172,124 +90,96 @@ function StatsBar({
     }
   }, [wideTooltipOpen])
 
-  // Escape dismisses either tooltip; blurring also drops the CSS focus-visible one.
+  // Escape dismisses the wide tooltip; blurring also drops the CSS focus-visible one.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      setTooltipOpen(false)
       setWideTooltipOpen(false)
       const active = document.activeElement as HTMLElement | null
-      if (active?.closest?.('[data-stress-details], [data-stress-button]')) active.blur()
+      if (active?.closest?.('[data-stress-details]')) active.blur()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  useEffect(() => clearPressTimer, [])
-
-  // Labelled "New chat" when the measured free width allows it, otherwise a
-  // compact "+" with the same action and tooltip (lib/footerFit.ts). The stats
-  // never wrap or shrink to make room.
   const newChatTooltipId = useId()
-  const footerRef = useRef<HTMLElement>(null)
-  const statsRef = useRef<HTMLDivElement>(null)
-  const stressRef = useRef<HTMLDivElement>(null)
-  const newChatLabelRef = useRef<HTMLSpanElement>(null)
-  const prefixMeasureRef = useRef<HTMLSpanElement>(null)
-  const [fit, setFit] = useState<NewChatFit>('label')
-  const fitRef = useRef(fit)
-  const newChatCompact = fit !== 'label'
-  const timingPrefix = latency.timing.startsWith('first token ') ? 'first token ' : ''
-  const hasTimingPrefix = timingPrefix !== ''
-  const hasNewChat = onNewChat !== undefined
-  useLayoutEffect(() => {
-    const footer = footerRef.current
-    const stats = statsRef.current
-    if (!hasNewChat || !footer || !stats) return
-    function measure() {
-      if (!footer || !stats || !stressRef.current || !newChatLabelRef.current || !prefixMeasureRef.current) return
-      const style = getComputedStyle(footer)
-      const prefix = hasTimingPrefix ? prefixMeasureRef.current.getBoundingClientRect().width : 0
-      // While tight the prefix is not drawn; add it back so the choice is
-      // always made against the full-length stats.
-      const shownStats = stats.getBoundingClientRect().width
-      const next = newChatFit({
-        available: footer.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-        stats: fitRef.current === 'tight' ? shownStats + prefix : shownStats,
-        prefix,
-        stressControl: stressRef.current.getBoundingClientRect().width,
-        label: newChatLabelRef.current.getBoundingClientRect().width,
-        compact: COMPACT_NEW_CHAT_PX,
-      })
-      fitRef.current = next
-      setFit(next)
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(footer)
-    observer.observe(stats)
-    if (stressRef.current) observer.observe(stressRef.current)
-    return () => observer.disconnect()
-  }, [hasNewChat, hasTimingPrefix])
 
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
     // desktop md: values) so this row fits at ~375px. It must not scroll
-    // (overflow-x-auto would clip the absolutely-positioned capacity
-    // tooltip, which opens upward out of the footer). "queries served" also drops to "queries" below `sm`,
+    // (overflow-x-auto would clip the absolutely-positioned tooltips, which
+    // open upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
-    <footer ref={footerRef} className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
-      {/* Below md: stats then New chat, as one group. At md+ the wrapper
-          dissolves (display: contents) and New chat lives under the ask box. */}
-      <div className="flex min-w-0 items-center gap-3 md:contents">
-      <div ref={statsRef} className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
-        {/* Always one line: the stats are never wrapped or squeezed. */}
-        <span className="flex leading-normal" title={fit === 'tight' ? latency.timing : undefined}>
-          {hasNewChat && timingPrefix ? (
-            <span>
-              <span className={fit === 'tight' ? 'sr-only' : undefined}>{timingPrefix}</span>
-              {latency.timing.slice(timingPrefix.length)}
-            </span>
-          ) : (
-            <span>{latency.timing}</span>
-          )}
+    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+      {/* Below md: stats then the "+" New chat icon, as one group. At md+ the
+          wrapper dissolves (display: contents) and New chat lives under the
+          ask box. */}
+      <div className="flex min-w-0 items-center gap-2 md:contents">
+      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
+        {/* Always one line: the stats are never wrapped or squeezed. The
+            timing is a focusable control so hover, focus, and a long press
+            (touch) explain what the number is; a tap does nothing. */}
+        <button
+          type="button"
+          ref={latencyPressRef}
+          aria-label={`${latency.description}: ${latency.timing}${latency.cached ? ', cached' : ''}`}
+          aria-describedby={latencyTooltipId}
+          onClick={latencyPressHandlers.onClick}
+          onPointerDown={latencyPressHandlers.onPointerDown}
+          onPointerMove={latencyPressHandlers.onPointerMove}
+          onPointerUp={latencyPressHandlers.onPointerUp}
+          onPointerCancel={latencyPressHandlers.onPointerCancel}
+          onContextMenu={latencyPressHandlers.onContextMenu}
+          className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
+        >
+          <span>{latency.timing}</span>
           {latency.cached && <span className="ml-1">· cached</span>}
-        </span>
+          <span
+            id={latencyTooltipId}
+            role="tooltip"
+            className={`pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-64 max-w-[calc(100vw-2rem)] space-y-1 whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg [@media(hover:hover)]:group-hover:block group-focus-visible:block ${latencyPressOpen ? 'block' : 'hidden'}`}
+          >
+            {lastStatsDetails(lastStats ?? null).map((line) => <span key={line} className="block">{line}</span>)}
+          </span>
+        </button>
         <span className="border-l border-hairline pl-2 sm:pl-3 md:pl-5">
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
       {onNewChat && (
+        // Same behaviour as the capacity icon: tap acts, press-and-hold shows
+        // the details without acting. Always the "+" icon (no width switching).
         <button
           type="button"
-          onClick={onNewChat}
-          disabled={newChatDisabled}
-          aria-label={newChatCompact ? 'New chat' : undefined}
+          ref={newChatPressRef}
+          aria-label="New chat"
+          aria-disabled={newChatDisabled}
           aria-describedby={newChatTooltipId}
-          className={`group relative inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-[3px] border border-hairline text-xs text-primary outline-none transition-colors after:absolute after:-inset-y-1.5 after:content-[''] hover:border-cyan hover:text-cyan focus-visible:ring-1 focus-visible:ring-cyan disabled:cursor-not-allowed disabled:text-muted disabled:hover:border-hairline md:hidden ${newChatCompact ? 'w-8 after:-inset-x-1.5' : 'px-2.5 after:-inset-x-1'}`}
+          onClick={newChatPressHandlers.onClick}
+          onPointerDown={newChatPressHandlers.onPointerDown}
+          onPointerMove={newChatPressHandlers.onPointerMove}
+          onPointerUp={newChatPressHandlers.onPointerUp}
+          onPointerCancel={newChatPressHandlers.onPointerCancel}
+          onContextMenu={newChatPressHandlers.onContextMenu}
+          className={`group relative flex size-11 shrink-0 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan md:hidden ${newChatDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          {newChatCompact ? (
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
-          ) : 'New chat'}
+          <span
+            aria-hidden="true"
+            className={`flex items-center justify-center text-muted transition-colors group-hover:text-primary group-focus-visible:text-primary group-active:text-primary ${newChatDisabled ? 'opacity-40' : ''}`}
+          >
+            <svg viewBox="0 0 16 16" className="size-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
+          </span>
           <span
             id={newChatTooltipId}
             role="tooltip"
-            className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-56 max-w-[calc(100vw-2rem)] whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg [@media(hover:hover)]:group-hover:block group-focus-visible:block"
+            className={`pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-56 max-w-[calc(100vw-2rem)] whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${newChatPressOpen ? 'block' : 'hidden'}`}
           >
             New chat: clears the {topicLabel} conversation only. Chats are saved in this browser.
           </span>
         </button>
       )}
-      {onNewChat && (
-        // Measures the labelled button so the choice above never depends on
-        // what is currently rendered.
-        <>
-          <span ref={newChatLabelRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 inline-flex h-8 items-center whitespace-nowrap border px-2.5 text-xs md:hidden">New chat</span>
-          <span ref={prefixMeasureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre md:hidden">first token </span>
-        </>
-      )}
       </div>
-      <div ref={stressRef} className="flex shrink-0 items-center sm:gap-2">
+      <div className="flex shrink-0 items-center sm:gap-2">
         {/* >= sm: a labelled button runs the test; the icon beside it is
             details-only (hover/focus shows the tooltip, click/tap toggles it),
             so there is exactly one control per action. Both are display:none
@@ -337,13 +227,13 @@ function StatsBar({
             ? `Stress test on cooldown, ${stressTestCooldownSeconds}s remaining`
             : `Run stress test (${stressTestCapacity.sufficient ? 'real' : 'simulated'})`}
           aria-describedby={tooltipId}
-          data-stress-button
-          onClick={handleClick}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerCancel}
-          onContextMenu={(e) => e.preventDefault()}
+          ref={stressPressRef}
+          onClick={stressPressHandlers.onClick}
+          onPointerDown={stressPressHandlers.onPointerDown}
+          onPointerMove={stressPressHandlers.onPointerMove}
+          onPointerUp={stressPressHandlers.onPointerUp}
+          onPointerCancel={stressPressHandlers.onPointerCancel}
+          onContextMenu={stressPressHandlers.onContextMenu}
           className={`group relative -mr-2.5 flex size-11 touch-manipulation select-none items-center justify-center rounded-full outline-none [-webkit-touch-callout:none] focus-visible:ring-1 focus-visible:ring-cyan sm:hidden ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <Avatar paths={stressTestCapacity.sufficient ? TIGER_FACE_PATHS : RABBIT_FACE_PATHS} dimmed={disabled} />
