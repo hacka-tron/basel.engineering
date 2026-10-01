@@ -48,3 +48,17 @@ export function createRefitter(measure: () => Size, fit: (size: Size) => void, f
     },
   }
 }
+
+/**
+ * A zoom floor that gives way just enough for the whole graph to fit. Normally
+ * the fit stops at `floor` and pans instead of shrinking further (labels stay
+ * readable). Where the graph must be seen whole (the landscape phone diagram
+ * with the details panel open beside it), the floor drops to the zoom at which
+ * the graph fills the box with only `margin` px around it (instead of the
+ * usual proportional padding), but never below `lowest`. When the graph
+ * already fits that way at `floor`, `floor` is returned as is.
+ */
+export function squeezedMinZoom(bounds: Bounds, size: Size, floor: number, lowest: number, margin = 0): number {
+  const snug = Math.min((size.width - 2 * margin) / bounds.width, (size.height - 2 * margin) / bounds.height)
+  return Math.min(floor, Math.max(lowest, snug))
+}
