@@ -1,4 +1,14 @@
-"""Measure recall@5 and MRR through the live Redis retrieval path."""
+"""Retrieval eval v2 through the live Redis retrieval path.
+
+Searches at the production k (8, as in ``worker/main.py``) and reports:
+
+- file-level recall@5 and MRR@5 (unchanged, for continuity with older baselines),
+- file-level recall@8 and MRR@8,
+- chunk-level recall@8 and MRR@8 (a retrieved chunk's text contains a ``gold_snippet``),
+- ``noise@8``: the share of retrieved chunks from tests or implementation plans,
+
+overall, per corpus and per category. See ``eval/README.md``.
+"""
 
 import argparse
 import asyncio
@@ -22,44 +32,177 @@ from services.glassbox.providers.factory import get_embedding_provider
 from services.glassbox.retrieval.search import search_chunks
 
 HERE = Path(__file__).resolve().parent
+GOLDEN_PATH = HERE / "golden.yaml"
 QUESTIONS_PATH = HERE / "questions.yaml"
 BASELINE_DIR = HERE / "baselines"
 
+# Matches the retrieval worker's KNN size (services/glassbox/worker/main.py).
+PRODUCTION_TOP_K = 8
+CONTINUITY_K = 5
+# Sources that should never ground an answer: test code and implementation plans.
+NOISE_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
+CORPORA = ("about_me", "about_system")
+TOLERANCE = 0.05
+MIN_CASES = 25
 
-def score_case(retrieved: list[str], expected: set[str]) -> tuple[int, float]:
-    for rank, source in enumerate(retrieved[:5], start=1):
+
+def score_case(
+    retrieved: list[str], expected: set[str], k: int = CONTINUITY_K
+) -> tuple[int, float]:
+    """File-level hit and reciprocal rank within the top ``k`` sources."""
+    for rank, source in enumerate(retrieved[:k], start=1):
         if source in expected:
             return 1, 1 / rank
     return 0, 0.0
 
 
-def summarize(cases: list[dict]) -> dict:
-    def metrics(selected: list[dict]) -> dict:
-        return {
-            "count": len(selected),
-            "recall_at_5": round(sum(case["hit"] for case in selected) / len(selected), 4),
-            "mrr": round(sum(case["reciprocal_rank"] for case in selected) / len(selected), 4),
-        }
+def _squash(text: str) -> str:
+    return " ".join(text.split()).casefold()
 
+
+def contains_snippet(text: str, snippets: list[str]) -> bool:
+    """True when ``text`` contains any snippet, ignoring case and whitespace runs."""
+    haystack = _squash(text)
+    return any(_squash(snippet) in haystack for snippet in snippets)
+
+
+def score_chunks(
+    texts: list[str], snippets: list[str], k: int = PRODUCTION_TOP_K
+) -> tuple[int, float]:
+    """Chunk-level hit and reciprocal rank: the first retrieved chunk holding a gold snippet."""
+    for rank, text in enumerate(texts[:k], start=1):
+        if contains_snippet(text, snippets):
+            return 1, 1 / rank
+    return 0, 0.0
+
+
+def is_noise(source_path: str) -> bool:
+    return source_path.startswith(NOISE_PREFIXES)
+
+
+def score_retrieval(item: dict, retrieved: list[tuple[int, str, str]]) -> dict:
+    """Score one case from its retrieved ``(chunk_id, source_path, text)`` triples, best first."""
+    top = retrieved[:PRODUCTION_TOP_K]
+    sources = [source for _, source, _ in top]
+    expected = set(item["expected_sources"])
+    hit, reciprocal_rank = score_case(sources, expected, CONTINUITY_K)
+    hit_at_8, reciprocal_rank_at_8 = score_case(sources, expected, PRODUCTION_TOP_K)
+    snippets = item.get("gold_snippets") or []
+    chunk_hit, chunk_rr = (
+        score_chunks([text for _, _, text in top], snippets) if snippets else (None, None)
+    )
+    noise_count = sum(is_noise(source) for source in sources)
     return {
-        "overall": metrics(cases),
-        "by_corpus": {
-            corpus: metrics([case for case in cases if case["corpus"] == corpus])
-            for corpus in ("about_me", "about_system")
-        },
+        "id": item["id"],
+        "corpus": item["corpus"],
+        "category": item.get("category", "fact"),
+        "expected_sources": item["expected_sources"],
+        # Top 5 only, as in v1 baselines; the full top 8 is in retrieved_at_8.
+        "retrieved_sources": sources[:CONTINUITY_K],
+        "hit": hit,
+        "reciprocal_rank": reciprocal_rank,
+        "retrieved_at_8": [{"chunk_id": chunk_id, "source": source} for chunk_id, source, _ in top],
+        "hit_at_8": hit_at_8,
+        "reciprocal_rank_at_8": reciprocal_rank_at_8,
+        "chunk_hit": chunk_hit,
+        "chunk_reciprocal_rank": chunk_rr,
+        "noise_count": noise_count,
+        "retrieved_count": len(sources),
     }
 
 
-def load_questions(path: Path = QUESTIONS_PATH) -> list[dict]:
+def _mean(values: list[float]) -> float:
+    return round(sum(values) / len(values), 4)
+
+
+def metrics(selected: list[dict]) -> dict:
+    result = {
+        "count": len(selected),
+        "recall_at_5": _mean([case["hit"] for case in selected]),
+        "mrr": _mean([case["reciprocal_rank"] for case in selected]),
+    }
+    if all("hit_at_8" in case for case in selected):
+        chunked = [case for case in selected if case.get("chunk_hit") is not None]
+        retrieved = sum(case["retrieved_count"] for case in selected)
+        result.update(
+            {
+                "recall_at_8": _mean([case["hit_at_8"] for case in selected]),
+                "mrr_at_8": _mean([case["reciprocal_rank_at_8"] for case in selected]),
+                "chunk_count": len(chunked),
+                "chunk_recall_at_8": (
+                    _mean([case["chunk_hit"] for case in chunked]) if chunked else None
+                ),
+                "chunk_mrr_at_8": (
+                    _mean([case["chunk_reciprocal_rank"] for case in chunked]) if chunked else None
+                ),
+                # Micro average: noisy chunks over all retrieved chunks.
+                "noise_at_8": (
+                    round(sum(case["noise_count"] for case in selected) / retrieved, 4)
+                    if retrieved
+                    else 0.0
+                ),
+            }
+        )
+    return result
+
+
+def summarize(cases: list[dict]) -> dict:
+    def grouped(key: str, order: tuple[str, ...] = ()) -> dict:
+        names = list(order) + sorted({case[key] for case in cases} - set(order))
+        groups = {name: [case for case in cases if case[key] == name] for name in names}
+        return {name: metrics(group) for name, group in groups.items() if group}
+
+    summary = {"overall": metrics(cases), "by_corpus": grouped("corpus", CORPORA)}
+    if all("category" in case for case in cases):
+        summary["by_category"] = grouped("category")
+    return summary
+
+
+def default_questions_path() -> Path:
+    """golden.yaml (phase 1 of the RAG quality plan) once it exists, else questions.yaml."""
+    return GOLDEN_PATH if GOLDEN_PATH.exists() else QUESTIONS_PATH
+
+
+def load_questions(path: Path | None = None) -> list[dict]:
+    """Load the retrieval cases: those with expected sources and no conversation history.
+
+    Accepts a top-level ``questions`` (v1) or ``cases`` (golden v2) list. Cases without
+    ``expected_sources`` (unanswerable, injection) and multi-turn cases (retrieval uses a
+    paid LLM rewrite there) are answer-eval cases and are skipped here.
+    """
+    path = path or default_questions_path()
     data = yaml.safe_load(path.read_text())
-    questions = data["questions"]
-    ids = [item["id"] for item in questions]
-    if len(ids) != len(set(ids)) or len(questions) < 25:
-        raise ValueError("evaluation needs at least 25 unique questions")
+    items = data.get("cases", data.get("questions"))
+    if not isinstance(items, list):
+        raise ValueError(f"{path.name} needs a top-level 'cases' or 'questions' list")
+    ids = [item["id"] for item in items]
+    if len(ids) != len(set(ids)):
+        raise ValueError("evaluation case ids must be unique")
+    questions = [item for item in items if item.get("expected_sources") and not item.get("history")]
+    if len(questions) < MIN_CASES:
+        raise ValueError(f"evaluation needs at least {MIN_CASES} retrieval cases")
     for item in questions:
-        if item["corpus"] not in {"about_me", "about_system"} or not item["expected_sources"]:
+        snippets = item.get("gold_snippets", [])
+        if item["corpus"] not in CORPORA or not isinstance(snippets, list):
             raise ValueError(f"invalid evaluation case: {item['id']}")
+        if any(not isinstance(snippet, str) or not snippet.strip() for snippet in snippets):
+            raise ValueError(f"{item['id']} has an empty gold snippet")
     return questions
+
+
+def question_set_fingerprint(questions: list[dict]) -> str:
+    """Hash of everything that affects scoring, so baselines from other sets are not compared."""
+    material = sorted(
+        (
+            item["id"],
+            item["corpus"],
+            item["question"],
+            sorted(item["expected_sources"]),
+            sorted(item.get("gold_snippets") or []),
+        )
+        for item in questions
+    )
+    return hashlib.sha256(json.dumps(material).encode()).hexdigest()
 
 
 async def evaluate(questions: list[dict]) -> dict:
@@ -85,23 +228,20 @@ async def evaluate(questions: list[dict]) -> dict:
                     f"index models {sorted(models)} do not match selected "
                     f"{provider.model_id}; re-ingest first"
                 )
-            by_chunk = dict(
-                session.execute(
-                    select(Chunk.id, Document.source_path).join(
-                        Document, Chunk.document_id == Document.id
-                    )
-                ).all()
-            )
+            chunk_rows = session.execute(
+                select(Chunk.id, Document.corpus, Document.source_path, Chunk.text).join(
+                    Document, Chunk.document_id == Document.id
+                )
+            ).all()
+        by_chunk = {chunk_id: (path, text) for chunk_id, _, path, text in chunk_rows}
         fingerprint = hashlib.sha256(
             "\n".join(
                 sorted(f"{doc.corpus}:{doc.source_path}:{doc.content_hash}" for doc in documents)
             ).encode()
         ).hexdigest()
-        versions = {
-            corpus: await RedisRetrievalCache(client).version(corpus)
-            for corpus in ("about_me", "about_system")
-        }
+        versions = {corpus: await RedisRetrievalCache(client).version(corpus) for corpus in CORPORA}
         cases = []
+        unreachable = []
         for item in questions:
             missing = [
                 path
@@ -110,27 +250,29 @@ async def evaluate(questions: list[dict]) -> dict:
             ]
             if missing:
                 raise ValueError(f"{item['id']} expected sources are not indexed: {missing}")
+            snippets = item.get("gold_snippets") or []
+            if snippets and not any(
+                corpus == item["corpus"] and contains_snippet(text, snippets)
+                for _, corpus, _, text in chunk_rows
+            ):
+                # The snippet straddles a chunk boundary or the text moved: no chunk can hit.
+                unreachable.append(item["id"])
             vector = (await provider.embed([normalize_question(item["question"])]))[0]
             matches = await search_chunks(
-                client, vector, item["corpus"], provider.model_id, top_k=5
+                client, vector, item["corpus"], provider.model_id, top_k=PRODUCTION_TOP_K
             )
-            retrieved = [by_chunk[match["chunk_id"]] for match in matches]
-            hit, reciprocal_rank = score_case(retrieved, set(item["expected_sources"]))
-            cases.append(
-                {
-                    "id": item["id"],
-                    "corpus": item["corpus"],
-                    "expected_sources": item["expected_sources"],
-                    "retrieved_sources": retrieved,
-                    "hit": hit,
-                    "reciprocal_rank": reciprocal_rank,
-                }
-            )
+            retrieved = [(match["chunk_id"], *by_chunk[match["chunk_id"]]) for match in matches]
+            cases.append(score_retrieval(item, retrieved))
         return {
+            "eval_version": 2,
+            "top_k": PRODUCTION_TOP_K,
             "embedding_model": provider.model_id,
             "index_name": CHUNK_INDEX_NAME,
             "corpus_versions": versions,
             "dataset_fingerprint": fingerprint,
+            "question_set_fingerprint": question_set_fingerprint(questions),
+            "noise_prefixes": list(NOISE_PREFIXES),
+            "unreachable_gold_snippets": unreachable,
             **summarize(cases),
             "cases": cases,
         }
@@ -145,28 +287,61 @@ def baseline_path(model_id: str) -> Path:
 
 
 def regression_reason(result: dict, baseline: dict) -> str | None:
+    """Why ``result`` fails against ``baseline``, or None.
+
+    v1 baselines (no v2 fields) are gated on recall@5 only; the v2 gates apply once the
+    baseline carries the field.
+    """
     if baseline["embedding_model"] != result["embedding_model"]:
         return "Baseline embedding model differs from the selected provider"
     if baseline["index_name"] != result["index_name"]:
         return "Baseline search index differs from the current index"
     if baseline["dataset_fingerprint"] != result["dataset_fingerprint"]:
         return "Corpus content changed; review misses and refresh the baseline intentionally"
-    prior = baseline["overall"]["recall_at_5"]
-    current = result["overall"]["recall_at_5"]
-    if current < prior - 0.05:
-        return f"Recall@5 regressed from {prior:.3f} to {current:.3f}"
+    prior_set = baseline.get("question_set_fingerprint")
+    if prior_set is not None and prior_set != result.get("question_set_fingerprint"):
+        return "Question set changed; review misses and refresh the baseline intentionally"
+    prior, current = baseline["overall"], result["overall"]
+    if current["recall_at_5"] < prior["recall_at_5"] - TOLERANCE:
+        return f"Recall@5 regressed from {prior['recall_at_5']:.3f} to {current['recall_at_5']:.3f}"
+    prior_chunk = prior.get("chunk_recall_at_8")
+    if prior_chunk is not None:
+        current_chunk = current.get("chunk_recall_at_8")
+        if current_chunk is None or current_chunk < prior_chunk - TOLERANCE:
+            shown = "n/a" if current_chunk is None else f"{current_chunk:.3f}"
+            return f"Chunk-level recall@8 regressed from {prior_chunk:.3f} to {shown}"
+    prior_noise = prior.get("noise_at_8")
+    if prior_noise is not None:
+        current_noise = current.get("noise_at_8", 1.0)
+        if current_noise > prior_noise + TOLERANCE:
+            return f"Noise@8 rose from {prior_noise:.3f} to {current_noise:.3f}"
     return None
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-baseline", action="store_true")
+    parser.add_argument(
+        "--questions",
+        type=Path,
+        default=None,
+        help="dataset file (default: eval/golden.yaml if present, else eval/questions.yaml)",
+    )
     args = parser.parse_args()
-    result = asyncio.run(evaluate(load_questions()))
+    result = asyncio.run(evaluate(load_questions(args.questions)))
     path = baseline_path(result["embedding_model"])
-    summary = {key: result[key] for key in ("embedding_model", "overall", "by_corpus")}
+    summary = {
+        key: result[key]
+        for key in ("embedding_model", "top_k", "overall", "by_corpus", "by_category")
+    }
     print(json.dumps(summary, indent=2))
-    print("misses:", ", ".join(case["id"] for case in result["cases"] if not case["hit"]))
+    cases = result["cases"]
+    print("misses@5:", ", ".join(case["id"] for case in cases if not case["hit"]))
+    print("misses@8:", ", ".join(case["id"] for case in cases if not case["hit_at_8"]))
+    print("chunk misses@8:", ", ".join(case["id"] for case in cases if case["chunk_hit"] == 0))
+    print("noisy cases:", ", ".join(case["id"] for case in cases if case["noise_count"]))
+    if result["unreachable_gold_snippets"]:
+        print("unreachable gold snippets:", ", ".join(result["unreachable_gold_snippets"]))
     if args.write_baseline:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(result, indent=2) + "\n")

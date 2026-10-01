@@ -653,7 +653,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 **GitHub Actions**
 
-- On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment), retrieval eval (section 15).
+- On pull request: lint and unit tests (Python + TypeScript), `terraform fmt -check`, `terraform validate`, `tflint`, `terraform plan` (posted as a PR comment). The retrieval eval (section 15) is planned for CI but runs by hand today.
 - On merge to `main`:
   - Build the single multi-stage application image for arm64 and push to GitHub Container Registry, tagged with the commit SHA. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed.
   - Update the image tag in `k8s/overlays/prod` (commit by the workflow).
@@ -720,7 +720,7 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 
 - **Unit tests:** chunkers (per file type), cache key construction and versioning, rate limiter, trace event ordering.
 - **Integration tests:** Docker Compose with MySQL + Redis + fake providers; full ask flow end to end, asserting the SSE event sequence.
-- **Retrieval eval (runs in CI):** `eval/questions.yaml` with about 30 questions and the source paths that should be retrieved. Reports **recall@5** and **MRR**. CI fails if recall@5 drops more than 5 points below the stored baseline. This is the RAG equivalent of a regression test and a strong interview talking point.
+- **Retrieval eval (manual today; not in CI yet):** `eval/run_eval.py` reads `eval/golden.yaml` (or `eval/questions.yaml` until that exists) with the source paths, and optionally the gold text snippets, that should be retrieved. It searches at the production k=8 and reports file-level **recall@5** and **MRR** (kept for continuity), recall@8 and MRR@8, chunk-level recall@8 and MRR@8 (a retrieved chunk contains a gold snippet), and **noise@8** (the share of retrieved chunks from `services/tests/` or `docs/superpowers/plans/`), overall, per corpus and per category. A run fails against the stored baseline if recall@5 or chunk-level recall@8 drops more than 5 points or noise@8 rises more than 5 points. A free, lexical-only variant is planned to run in CI (DESIGN-005 §5.4, RAG quality plan phase 9); until then the eval runs by hand and the unit tests for its metric math run in CI. This is the RAG equivalent of a regression test and a strong interview talking point.
 - **Load test:** k6 or Locust script against a staging run to measure p50/p95 latency and confirm the KEDA scale-up time.
 - **Infra:** `terraform validate`, `tflint`, `checkov` or `trivy config` for misconfigurations.
 
