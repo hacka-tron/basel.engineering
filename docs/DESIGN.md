@@ -88,7 +88,7 @@ The chat takes the full width. The diagram collapses into a horizontal "pipeline
 
 ### 4.3 Corpus toggle and suggested questions
 
-The header toggle switches which corpus is queried. Each corpus has 3 to 4 suggested question chips so no one faces a blank box:
+The header toggle switches which corpus is queried. Each corpus has 3 to 4 suggested question chips so no one faces a blank box. They live in `frontend/src/suggested-questions.json`, which the answer-cache warm-up (§7.3) also reads:
 
 - **About Basel:** "What has Basel built with distributed systems?", "What did Basel work on at YouTube?", "Is Basel a fit for a platform engineering role?"
 - **About This System:** "How does the caching work?", "Why k3s instead of EKS?", "What happens when I press stress test?", "Show me the Terraform for the database."
@@ -178,6 +178,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - **Streaming:** `fetch` with a streaming body reader parsing SSE (not `EventSource`, which cannot send POST bodies).
 - **Hosting:** built to static files, served directly by Traefik on the EC2 node (no S3/CloudFront). Cloudflare fronts the node for TLS and edge proxying.
 - **Dev mode:** a mock SSE server replays recorded traces so the UI can be built before the backend exists.
+- **Footer latency:** the footer shows the last answer's client-measured time to first token (`first token 612ms`), with `· cached` on a semantic answer-cache hit. When no token arrived (budget reached or LLM off, so only sources came back) it shows the whole-request time labelled `total`, never passed off as a first-token time.
 
 ### 6.2 API service
 
@@ -327,6 +328,8 @@ Three layers, cheapest check first:
 
 Invalidation uses **versioned keys**: ingestion bumps `corpus:ver:{corpus}`, and every cache key embeds the version, so old entries simply stop being read and age out. No scan-and-delete.
 
+**Warm-up of the suggested questions.** The suggested question chips (§4.3) are the questions most visitors ask first, so their answers are kept in the semantic answer cache. `python -m services.glassbox.warm` reads `frontend/src/suggested-questions.json` (the same file the chips come from) and asks each one through `POST /api/ask` in-cluster, exactly like a visitor's first question, so the embedding, retrieval and answer caches fill the same way. A still-cached answer comes back as a hit and costs nothing; only expired or invalidated ones are regenerated. It runs from the `warm-answers` CronJob every 2 hours and at the end of each deploy's ingest Job (after ingestion may have bumped a corpus version). It goes through the normal rate limiter and daily budget. Every ask that may have reached generation counts, including one that errored after the LLM started: at most one per suggested question per run (7 today), and at most `GLASSBOX_WARM_DAILY_LLM_CAP` (10) per UTC day across all runs, enforced by an atomic Redis counter `warm:budget:{date}` (48h TTL). A slot is reserved before each ask, under that day's key, and handed back to the same key only when it is certain nothing was generated: a hit, no sources, an error event before the LLM stage, a 4xx or 429, or a connection refused before the request was sent. A timeout, reset or 5xx after sending counts as an LLM call. Warm-ups can therefore take at most 10 of the 100 daily answers from visitors. The run also stops at the first `rate_limited`/`budget_exhausted` error, HTTP 429, or `retrieval_only` answer. Why every 2 hours rather than daily: answers expire 24 hours after they are written and a run skips anything still cached, so a daily run landing just before expiry would leave that answer cold for most of a day.
+
 ---
 
 ## 8. Trace event contract
@@ -416,6 +419,7 @@ type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: st
 | `app` | `api` | Deployment (1 replica) | Startup/liveness probes on `/healthz`, readiness on `/readyz` (5s timeouts); `maxSurge: 0` rollout; waits for migrations |
 | `app` | `retrieval-worker` | Deployment, scaled by KEDA (1 to 3) | Requests 50m CPU / 64Mi, limit 128Mi; `maxSurge: 0` rollout; waits for migrations |
 | `app` | `ingest` | Job (per deploy) + CronJob (nightly) | Idempotent |
+| `app` | `warm-answers` | CronJob (every 2h) | Warms the suggested questions' answer cache via the api (§7.3); ~21 MiB, 48Mi limit; Redis only for its daily cap counter |
 | `app` | `migrate` | Job (pre-deploy) | Schema migrations |
 | `data` | `redis` | StatefulSet (1) + PVC 1Gi | NetworkPolicy restricted |
 | `data` | `mysql` | StatefulSet (1) + PVC 4Gi | NetworkPolicy restricted; see 10.5 for why this replaced RDS |
@@ -497,8 +501,8 @@ The endpoint only forwards pod name, phase and readiness for pods labeled `app=r
 
 ### 9.6 NetworkPolicy
 
-- `data/redis` accepts traffic only from pods in `app` and from KEDA.
-- Default deny ingress in `app` except from Traefik to `api`.
+- `data/redis` accepts traffic only from pods in `app` (api, retrieval-worker, ingest, warm-answers) and from KEDA.
+- Default deny ingress in `app` except from Traefik to `api`, and from pods labelled `glassbox/answer-warmer: "true"` (the `warm-answers` CronJob and the ingest Job's warm-up tail) to `api` on port 8000.
 - (k3s ships an embedded network policy controller.)
 
 ### 9.7 Memory budget on a 2 GiB node
