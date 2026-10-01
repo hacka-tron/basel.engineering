@@ -184,7 +184,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - **Streaming:** `fetch` with a streaming body reader parsing SSE (not `EventSource`, which cannot send POST bodies).
 - **Hosting:** built to static files, served directly by Traefik on the EC2 node (no S3/CloudFront). Cloudflare fronts the node for TLS and edge proxying.
 - **Dev mode:** a mock SSE server replays recorded traces so the UI can be built before the backend exists.
-- **Footer latency:** the footer shows the last answer's client-measured time to first token (`first token 612ms`), with `· cached` on a semantic answer-cache hit. When no token arrived (budget reached or LLM off, so only sources came back) it shows the whole-request time labelled `total`, never passed off as a first-token time.
+- **Footer latency:** the footer shows the last answer's client-measured time to first token as a bare number (`612ms`), with `· cached` on a semantic answer-cache hit. Hover, focus or long-press explains it (time to first token, plus the whole-answer time or the cache hit). When no token arrived (budget reached or LLM off, so only sources came back) it shows the whole-request time labelled `total`, never passed off as a first-token time.
 
 ### 6.2 API service
 
