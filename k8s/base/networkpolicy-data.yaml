@@ -41,7 +41,9 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [api, retrieval-worker, ingest]
+                # warm-answers: only the shared daily warm-up counter
+                # (warm:budget:{date}); it has no MySQL access.
+                values: [api, retrieval-worker, ingest, warm-answers]
       ports:
         - protocol: TCP
           port: 6379

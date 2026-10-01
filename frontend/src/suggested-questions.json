@@ -1,0 +1,13 @@
+{
+  "about_me": [
+    "What has Basel built with distributed systems?",
+    "What did Basel work on at YouTube?",
+    "Is Basel a fit for a platform engineering role?"
+  ],
+  "about_system": [
+    "How does the caching work?",
+    "Why k3s instead of EKS?",
+    "What happens when I press stress test?",
+    "Show me the Terraform for the database."
+  ]
+}

@@ -14,4 +14,7 @@ data:
   BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
   BEDROCK_LLM_MODEL_ID: us.amazon.nova-lite-v1:0
   GLASSBOX_DAILY_LLM_CAP: "100"
+  # Answer-cache warm-up: LLM calls per UTC day across all warm-up runs
+  # (CronJob + post-deploy), out of the 100 above (services/glassbox/warm.py).
+  GLASSBOX_WARM_DAILY_LLM_CAP: "10"
   GLASSBOX_TRUSTED_PROXY_CIDRS: "10.42.0.0/16"
