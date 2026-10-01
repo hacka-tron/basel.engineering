@@ -1,6 +1,8 @@
 name: Release
 
 on:
+  # Manual runs are for rebuilding main's current head (e.g. after a failed
+  # or flaky run); any other commit or ref is refused, see the provenance step.
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -41,6 +43,18 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      # Flux deploys the highest build-N, and N (github.run_number) grows
+      # with every run whatever commit it builds. So a manual run must be on
+      # main and build main's current head, or it would mint the highest
+      # number for a stale commit and Flux would roll production back to it.
+      # Checked here, before AWS credentials or the build; push runs skip it.
+      # A re-run of an old manual run keeps its old SHA and is refused too.
+      - name: Check release provenance
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: .github/scripts/release-provenance.sh
       - id: tag
         # Also tags with a prefixed run number: short git SHAs have no
         # inherent ordering, but Flux's ImagePolicy needs to pick "the

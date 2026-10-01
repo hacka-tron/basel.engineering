@@ -47,6 +47,47 @@ The apply job computes a fresh plan after approval, so review any drift visible
 in its log. GitHub environment approval is the production change gate; a merge
 alone does not apply infrastructure.
 
+## Release and the deploy branch
+
+`release.yml` builds the image on every push to `main` that touches an image
+input and pushes it to ECR as `<short-sha>`, `build-N` and `latest`, where N
+is `github.run_number`. Flux's `ImagePolicy` deploys the highest `build-N`.
+Two safeguards keep that honest:
+
+- **Manual runs build only `main`'s current head.** Actions → Release → Run
+  workflow is for rebuilding after a failed or flaky run. Because N grows with
+  every run whatever commit it builds, a manual run on another branch or tag,
+  or on a `main` commit that is no longer the head (for example a run that
+  queued behind another release while a merge landed, or a re-run of an old
+  manual run), would get the highest number and Flux would roll production
+  back to it. The first step (`.github/scripts/release-provenance.sh`)
+  refuses such runs before AWS credentials are requested: it requires
+  `github.ref` to be `refs/heads/main` and `github.sha` to equal
+  `git ls-remote origin refs/heads/main`. Equality, not "is an ancestor of
+  main": every old release is an ancestor. If it refuses, start a new run on
+  `main`. Push runs skip the check: they only fire on `main`, and the
+  `release-main` concurrency group runs them in order, so a newer commit
+  always gets a higher number. (Re-running an old push run re-pushes its own,
+  lower, `build-N`, which Flux ignores.)
+- **The deploy-branch sync retries instead of losing a race.**
+  `sync-deploy-branch.yml` merges `main` into `deploy` on every push to
+  `main`; Flux's `ImageUpdateAutomation` commits tag bumps to the same
+  branch. When Flux pushes between the sync's fetch and push, the sync's push
+  is rejected as non-fast-forward. `.github/scripts/sync-deploy-branch.sh`
+  then re-fetches both branches, rebuilds the merge on the new `deploy` tip
+  and pushes again, up to 5 attempts with 5, 10, 15 and 20 s waits. It never
+  force-pushes, so Flux's commits are never dropped. A merge conflict is not
+  retried (exit 2), and running out of attempts fails the job (exit 1); in
+  both cases `deploy` is left as it was, and the fix is to resolve the
+  conflict or re-run the job. The workflow is one-at-a-time
+  (`sync-deploy-branch` concurrency group, not cancelled midway). Flux's own
+  rejected push is retried at its next 1-minute reconcile from the new tip.
+
+Both scripts have offline tests against local bare repositories, run by the
+Terraform workflow's validate job (`.github/scripts/tests/`). The sync test
+uses a `git` shim that pushes a competing "Flux" commit just before the
+script's push, so the retry path sees a real non-fast-forward rejection.
+
 ## Runbooks (push-button operations)
 
 Every routine production operation is a button: **Actions → "Ops · ..."**

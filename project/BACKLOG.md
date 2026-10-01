@@ -25,7 +25,7 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 
 **Roadmap after that** (owner's earlier list; details in the sections below):
 
-- Release pipeline hardening (manual-dispatch build-number trust, `sync-deploy-branch` push race).
+- ~~Release pipeline hardening~~: in review, PR on branch `ci/release-hardening` (see `project/status/2026-10-01-release-hardening.md`).
 - Chat UX leftovers: Retry on error replies, typing while an answer streams, Up-arrow recall.
 - Security pass: IP-hash salt and trusted proxy CIDRs verified in production, Terraform preview credential audit.
 - Self-healing node (ASG + EIP reassociation, M3).
@@ -116,7 +116,7 @@ Owner wants this worked first, ahead of the security/infra/data-pipeline groups 
 
 - **Bring KEDA back** (RESUME HERE item 1). KEDA is suspended and scaled to 0 since the 2026-09-30 incident.
 - **ops `redact()`: multiline secret values (key on one line, value on the next) are not masked; process whole outputs, not line by line.** `infra/modules/ops/scripts/lib.sh` runs `sed` per line, so `password:\n  value` leaks the value. Make it handle whole outputs, and extend `infra/modules/ops/tests/redact-test.sh`. (Checked 2026-10-01: `redact()` is still a per-line `sed`, so this is open.)
-- **Release pipeline hardening:** a manual `workflow_dispatch` release run against an old ref could mint a higher `build-N` and get deployed (build number alone doesn't prove current-`main` provenance); `sync-deploy-branch.yml` and Flux both push to `deploy` with no retry, so a race could drop a sync. (The release path filter was fixed in #51; migrate-before-api ordering in #47; ingest-after-app in #49.)
+- **Release pipeline hardening (in review, branch `ci/release-hardening`, status report `project/status/2026-10-01-release-hardening.md`):** a manual `workflow_dispatch` release run is now refused unless it is on `main` and builds `main`'s current head, so it can no longer mint a higher `build-N` for a stale commit; `sync-deploy-branch.yml` now re-fetches, re-merges and retries a rejected push (5 attempts, never forced). Remaining, not blocking: Flux's own push has no retry beyond its next 1-minute reconcile (acceptable, it recomputes from the new tip); a sync that exhausts its attempts or hits a merge conflict fails the job visibly but nothing re-runs it automatically until the next `main` push. (The release path filter was fixed in #51; migrate-before-api ordering in #47; ingest-after-app in #49.)
 - **Release-time memory pressure and stalled chats.** Mitigated by #47 (probe timeouts, `maxSurge: 0`, graceful drain), #49 (ingest after rollout), #48 (client watchdog and Stop) and zram (#55). Still worth a check on the first releases after KEDA returns: probe timeouts, swap in/out, and whether an in-flight SSE request survives a pod replacement.
 - **M3 (DD2) remainder:** self-healing node (ASG + Elastic IP reassociation). Also §7.5 scripted `curl -N` timing check through Cloudflare after each deploy, and TTFT logging (`queries.ttft_ms`, §9.3).
 - **Docs drift:** add "Status: planned" tags to unbuilt sections of `docs/DESIGN*.md`, and do a drift pass so the design docs match the deep dive and the code (zram, ops runbooks, bootstrap pipeline, mobile layout, KEDA status).

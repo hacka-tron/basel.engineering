@@ -52,10 +52,17 @@ jobs:
           done
           shellcheck -x -P SCRIPTDIR .github/scripts/*.sh
           shellcheck -x -P SCRIPTDIR infra/modules/ops/tests/*.sh
+          shellcheck -x -P SCRIPTDIR .github/scripts/tests/*.sh
       - name: Test runbook output redaction
         run: |
           bash infra/modules/ops/tests/redact-test.sh
           bash infra/modules/ops/tests/ops-run-test.sh
+      # Release provenance and deploy-branch sync retry, against local bare
+      # repositories (the sync test races a fake Flux push).
+      - name: Test release workflow scripts
+        run: |
+          bash .github/scripts/tests/release-provenance-test.sh
+          bash .github/scripts/tests/sync-deploy-branch-test.sh
 
   plan:
     needs: validate
