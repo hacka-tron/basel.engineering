@@ -120,16 +120,18 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
     if (message.sources !== undefined && (!Array.isArray(message.sources) || !message.sources.every(isSource))) return null
     if (message.idk !== undefined && typeof message.idk !== 'boolean') return null
     if (message.budget !== undefined && typeof message.budget !== 'boolean') return null
-    // Saves from before the flag carry the one fixed budget failure reply.
-    const budget = message.budget === true
-      || (message.role === 'assistant' && message.state === 'error' && message.content === LEGACY_BUDGET_ERROR_REPLY)
+    // Only assistant replies carry these flags; a user message never does.
+    // Saves from before the budget flag carry the one fixed budget failure reply.
+    const assistant = message.role === 'assistant'
+    const budget = assistant && (message.budget === true
+      || (message.state === 'error' && message.content === LEGACY_BUDGET_ERROR_REPLY))
     messages.push({
       id: message.id,
       role: message.role,
       content: message.content,
       state: message.state as StoredState | undefined,
       sources: message.sources as MessageSource[] | undefined,
-      ...(message.idk === true ? { idk: true } : {}),
+      ...(assistant && message.idk === true ? { idk: true } : {}),
       ...(budget ? { budget: true } : {}),
       createdAt: message.createdAt,
     })

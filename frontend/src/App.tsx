@@ -450,7 +450,9 @@ function App() {
           }
           // Budget reached or LLM switched off: the sources still came back, and
           // a playful budget reply goes above them (picked once, then stored).
-          const budgetReply = event.mode === 'retrieval_only' ? nextBudgetReply(targetCorpus) : null
+          // Picked only when it will be shown: no answer token ever arrived.
+          const noText = firstTokenLatencyRef.current === null
+          const budgetReply = event.mode === 'retrieval_only' && noText ? nextBudgetReply(targetCorpus) : null
           updateStreamingMessage((message) => ({
             ...message,
             // Only the bare canonical sentence is swapped (never a real answer).

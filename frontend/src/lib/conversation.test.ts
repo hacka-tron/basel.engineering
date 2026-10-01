@@ -160,6 +160,23 @@ test('the old fixed budget failure reply loads as a budget reply, so Retry stays
   })
 })
 
+test('budget and idk flags are honoured only on assistant replies', () => {
+  const stored = JSON.stringify({
+    version: 1,
+    updatedAt: now,
+    messages: [
+      { id: 'u', role: 'user', content: 'Hi', budget: true, idk: true, createdAt: now },
+      { id: 'u2', role: 'user', content: LEGACY_BUDGET_ERROR_REPLY, createdAt: now },
+    ],
+  })
+  withStorage({ 'glassbox:conv:v1:about_me': stored }, () => {
+    const restored = loadConversation('about_me', now)
+    assert.equal(restored[0].budget, undefined)
+    assert.equal(restored[0].idk, undefined)
+    assert.equal(restored[1].budget, undefined)
+  })
+})
+
 test('a non-boolean budget flag is rejected as corrupt', () => {
   const bad = JSON.stringify({
     version: 1,
