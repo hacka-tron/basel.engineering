@@ -366,6 +366,7 @@ type DoneEvent = {
   total_ms: number;
   mode: "full" | "retrieval_only";
   answer_cache: "hit" | "miss";
+  abstained?: boolean;   // true only when the whole answer is exactly "I don't know from what I have."
   tokens_in?: number; tokens_out?: number;
 };
 
@@ -391,7 +392,7 @@ event: token
 data: {"text":"The database runs on "}
 
 event: done
-data: {"total_ms":1840,"mode":"full","answer_cache":"miss","tokens_in":2900,"tokens_out":212}
+data: {"total_ms":1840,"mode":"full","answer_cache":"miss","abstained":false,"tokens_in":2900,"tokens_out":212}
 ```
 
 Cluster view stream (`GET /api/cluster/stream`):
