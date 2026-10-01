@@ -67,12 +67,28 @@ test('error replies are persisted as error but never sent as history', () => {
     assert.deepEqual(restored.map((message) => [message.id, message.state]), [
       ['u1', undefined], ['a1', 'done'], ['u2', undefined], ['a2', 'error'], ['r2', 'error'],
     ])
+    // The failed question is left out too, so re-sending it can't duplicate it.
     assert.deepEqual(historyForRequest(restored), [
       { role: 'user', content: 'First question' },
       { role: 'assistant', content: 'A real answer.' },
-      { role: 'user', content: 'Second question' },
     ])
   })
+})
+
+test('re-sending a failed question (Up-arrow and Enter) never puts it in history twice', () => {
+  const chat: ChatMessage[] = [
+    { id: 'u1', role: 'user', content: 'First question', createdAt: now },
+    { id: 'a1', role: 'assistant', content: 'A real answer.', state: 'done', createdAt: now },
+    { id: 'u2', role: 'user', content: 'Tell me more', createdAt: now },
+    { id: 'r2', role: 'assistant', content: 'Oops — something broke.', state: 'error', createdAt: now },
+  ]
+  // History for re-sending "Tell me more" is what the failed request sent.
+  assert.deepEqual(historyForRequest(chat), [
+    { role: 'user', content: 'First question' },
+    { role: 'assistant', content: 'A real answer.' },
+  ])
+  // A question with no settled reply yet (still pending) is left out as well.
+  assert.deepEqual(historyForRequest([...chat.slice(0, 3), { id: 'p', role: 'assistant', content: '', state: 'pending', createdAt: now }]), historyForRequest(chat))
 })
 
 test('a quirky "I don\'t know" reply is shown and saved, but history carries the canonical sentence', () => {
@@ -81,10 +97,10 @@ test('a quirky "I don\'t know" reply is shown and saved, but history carries the
     { id: 'a1', role: 'assistant', content: 'Basel forgot to write that part down. Classic Basel.', state: 'done', idk: true, createdAt: now },
     { id: 'u2', role: 'user', content: 'ok what about projects', createdAt: now },
   ]
+  // u2 has no reply yet, so it isn't history (it is the question being asked).
   assert.deepEqual(historyForRequest(convo), [
     { role: 'user', content: 'What is his shoe size?' },
     { role: 'assistant', content: "I don't know from what I have." },
-    { role: 'user', content: 'ok what about projects' },
   ])
   const serialized = serializeConversation(convo, now)!
   withStorage({ 'glassbox:conv:v1:about_me': serialized }, () => {

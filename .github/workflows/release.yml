@@ -1,6 +1,11 @@
 name: Release
 
 on:
+  # Manual runs are for rebuilding main's current head (e.g. after a failed
+  # or flaky run). The provenance step refuses any other commit or ref, but
+  # only on refs whose release.yml contains it: the real gate for old
+  # branches/tags is the `release` environment restricted to `main`
+  # (owner setting, see infra/CI.md "Release and the deploy branch").
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -40,7 +45,21 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+      # Flux deploys the highest build-N, and N (github.run_number) grows
+      # with every run whatever commit it builds. So a manual run must be on
+      # main and build main's current head, or it would mint the highest
+      # number for a stale commit and Flux would roll production back to it.
+      # Checked here, before AWS credentials or the build; push runs skip it.
+      # (A re-run keeps its run_number, so it can't outrank newer builds; an
+      # old manual run's re-run is refused anyway, its SHA no longer being
+      # main's head.)
+      - name: Check release provenance
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: .github/scripts/release-provenance.sh
       - id: tag
         # Also tags with a prefixed run number: short git SHAs have no
         # inherent ordering, but Flux's ImagePolicy needs to pick "the
@@ -53,7 +72,7 @@ jobs:
         run: |
           echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "build_number=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-      - uses: aws-actions/configure-aws-credentials@v6.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::404379474987:role/glassbox-ci-release
@@ -66,9 +85,9 @@ jobs:
       # runs). ECR sidesteps that whole class of problem rather than
       # working around it.
       - id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2 (v2.1.7)
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3 (v3.12.0)
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6 (v6.19.2)
         with:
           context: .
           file: ./Dockerfile
