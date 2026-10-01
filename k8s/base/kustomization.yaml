@@ -14,5 +14,6 @@ resources:
   - api-service.yaml
   - api-ingress.yaml
   - worker-deployment.yaml
+  - warm-cronjob.yaml
   - networkpolicy-data.yaml
   - networkpolicy-app.yaml

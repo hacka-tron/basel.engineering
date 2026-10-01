@@ -27,15 +27,15 @@ flowchart LR
     M -->|historyForRequest| H["history: canonical sentence"]
 ```
 
-- **Server.** `abstained` is true on the model-abstention path and the no-sources path (the same condition that already sets `timings["abstained"]`); false on cache hits, retrieval-only and normal answers.
+- **Server.** `abstained` is true only when the whole answer equals the canonical sentence (`is_exact_abstention`) or no sources were found; false on cache hits, retrieval-only and normal answers. Loose abstentions that go on to say something ("I don't know from what I have, but...") stay false, so real partial answers are never replaced. Caching and logging still use the loose check.
 - **Client.** The canonical sentence streams in as usual (it is short), then at `done` the text is swapped. `lib/idkReplies.ts` mirrors `errorReplies.ts` (20 replies, `pickIdkReply(avoid)`).
 
 ## Key design decisions & trade-offs
 
 - **History carries the canonical sentence, not the joke and not nothing.** DESIGN-002 §5.1 treats prior assistant turns as untrusted context for rewriting. Omitting the turn would leave two user turns in a row; sending the quip would give the rewriter noise. The canonical text is what the server actually said.
 - **Storage shape.** Optional `idk: true` on a stored message; `version` stays 1, old saves have no flag and load unchanged. A save made before this change that holds the plain sentence just shows the plain sentence.
-- **One shared reply list**, not per corpus. They are written to fit both corpora.
-- **Tone guard.** A test blocks visitor-blaming and insulting words; Basel jokes stay fond and about him "forgetting to write it down", never about his skills.
+- **Per-corpus pools.** About This System uses the shared lines that fit (no "projects" nudge) plus four about the docs. The client also swaps only when the streamed text is exactly the canonical sentence.
+- **Tone guard.** A test blocks visitor-blaming and insulting words; Basel jokes stay fond and about him "forgetting to write it down", never about his skills or promises.
 
 ## Operational notes & risks
 

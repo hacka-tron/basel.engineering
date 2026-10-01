@@ -8,8 +8,9 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
+import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
-import { pickIdkReply } from './lib/idkReplies'
+import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream } from './lib/clusterStream'
 import {
   historyForRequest,
@@ -60,7 +61,7 @@ function App() {
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [lastStats, setLastStats] = useState<{ latencyMs: number; cacheStatus: 'hit' | 'miss'; tokensOut?: number } | null>(null)
+  const [lastStats, setLastStats] = useState<LastStats | null>(null)
   const [queriesServed, setQueriesServed] = useState(0)
   // The last friendly failure reply shown, so the next one is never the same.
   const lastErrorReplyRef = useRef<string | null>(null)
@@ -361,22 +362,26 @@ function App() {
           if (event.abstained && event.mode === 'full') {
             const savedIdk = conversationsRef.current[targetCorpus]
               .findLast((message) => message.role === 'assistant' && message.idk)?.content
-            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk])
+            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, targetCorpus)
             lastIdkReplyRef.current = idkReply
           }
           updateStreamingMessage((message) => ({
             ...message,
-            ...(idkReply ? { idk: true } : {}),
             // Budget reached or LLM switched off: the sources still came back.
-            content: idkReply ?? (event.mode === 'retrieval_only' && !message.content
-              ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
-              : message.content),
+            // Only the bare canonical sentence is swapped (never a real answer).
+            ...(idkReply && isCanonicalIdk(message.content) ? { content: idkReply, idk: true } : {
+              content: event.mode === 'retrieval_only' && !message.content
+                ? "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
+                : message.content,
+            }),
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
+          // No token (sources only): keep firstTokenMs null so the footer
+          // labels the whole-request time as total, not as a first token.
           setLastStats({
-            latencyMs: firstTokenLatencyRef.current ?? event.total_ms,
+            firstTokenMs: firstTokenLatencyRef.current,
+            totalMs: event.total_ms,
             cacheStatus: event.answer_cache,
-            tokensOut: event.tokens_out,
           })
           setQueriesServed((current) => current + 1)
           finishRequest()
@@ -555,7 +560,7 @@ function App() {
             aria-label="View source on GitHub"
             className="absolute right-0.5 top-0 flex size-11 items-center justify-center text-muted transition-colors hover:text-primary md:static md:size-auto"
           >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 16 16" className="size-6 sm:size-7" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
             </svg>
           </a>

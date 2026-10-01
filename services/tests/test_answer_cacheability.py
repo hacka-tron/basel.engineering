@@ -186,6 +186,25 @@ def test_refusals_and_empty_answers_are_never_cached(monkeypatch, reply):
         assert row["timings"].get("abstained") == (1 if reply.strip() else None)
 
 
+@pytest.mark.parametrize(
+    ("reply", "flag"),
+    [
+        (ABSTENTION_ANSWER, True),
+        ("i dont know from what i have", True),
+        ("I do not know from what I have.", True),
+        # Loose abstentions (kept out of the cache) that still say something: not flagged.
+        ("I don't know from what I have, but he did build a RAG system on k3s.", False),
+        ("It is unclear whether he used Kafka. He used Redis streams for the queue.", False),
+        ("The sources don't say. Basel built it on k3s.", False),
+        ("A real answer about the queue.", False),
+    ],
+)
+def test_done_flags_only_the_exact_abstention_sentence(monkeypatch, reply, flag):
+    llm = ScriptedLLM(reply)
+    _, _, _, dones = _ask_twice(monkeypatch, llm)
+    assert [done["abstained"] for done in dones] == [flag, flag]
+
+
 def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypatch):
     llm = ScriptedLLM()
     cache, saved, streams, dones = _ask_twice(

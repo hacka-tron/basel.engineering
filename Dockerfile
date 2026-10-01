@@ -24,6 +24,9 @@ COPY docs/ docs/
 COPY infra/ infra/
 COPY k8s/ k8s/
 COPY --from=frontend-build /app/frontend/dist frontend/dist
+# The answer-cache warm-up (services/glassbox/warm.py) reads the same
+# suggested questions the frontend shows.
+COPY frontend/src/suggested-questions.json frontend/src/suggested-questions.json
 
 USER glassbox
 EXPOSE 8000

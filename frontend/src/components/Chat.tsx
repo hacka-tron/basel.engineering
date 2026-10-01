@@ -1,19 +1,13 @@
 import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
+import suggestedQuestions from '../suggested-questions.json'
 
+// One list shared with the backend: `python -m services.glassbox.warm` asks
+// these same questions to keep their answers cached (DESIGN.md §7.3).
 const questions: Record<Corpus, string[]> = {
-  basel: [
-    'What has Basel built with distributed systems?',
-    'What did Basel work on at YouTube?',
-    'Is Basel a fit for a platform engineering role?',
-  ],
-  system: [
-    'How does the caching work?',
-    'Why k3s instead of EKS?',
-    'What happens when I press stress test?',
-    'Show me the Terraform for the database.',
-  ],
+  basel: suggestedQuestions.about_me,
+  system: suggestedQuestions.about_system,
 }
 
 type ChatProps = {
