@@ -1,6 +1,6 @@
 # Stale-document sweep and `--clear` (RAG plan phase 6, part 1)
 
-**Status:** PR open, not merged. Branch `feature/rag-p6-stale-sweep`. Written 2026-10-01 while the owner was asleep; every decision below was made without the owner and can be reversed.
+**Status:** PR [#101](https://github.com/hacka-tron/basel.engineering/pull/101) open, not merged. Branch `feature/rag-p6-stale-sweep`. Written 2026-10-01 while the owner was asleep; every decision below was made without the owner and can be reversed.
 
 ## TL;DR
 
