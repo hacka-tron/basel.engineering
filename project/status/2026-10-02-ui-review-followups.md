@@ -1,6 +1,6 @@
 # UI review follow-ups: retry reload, announcements, phone focus, landscape fit
 
-**Status:** In review, PR [#PR](https://github.com/hacka-tron/basel.engineering/pull/PR). Not merged.
+**Status:** In review, PR [#113](https://github.com/hacka-tron/basel.engineering/pull/113). Not merged.
 
 ## TL;DR
 
