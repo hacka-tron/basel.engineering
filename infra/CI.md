@@ -15,7 +15,9 @@ required reviewer, while `terraform-prod` still requires owner approval and
 accepts only `main`.
 
 
-**Action pinning:** Third-party actions are pinned by SHA with a version comment; Dependabot updates them. Never use a bare tag or branch in `uses:`.
+**Action pinning:** Third-party actions are pinned by full 40-char SHA with a plain `# vX.Y.Z` comment (not `# vX (vX.Y.Z)`; Dependabot keeps only the plain form current). Never use a bare tag or branch in `uses:`. Dependabot (`.github/dependabot.yml`) opens one grouped `ci:` PR per month for all github-actions updates.
+
+**Runner pin:** Workflows run on `ubuntu-24.04` (and `ubuntu-24.04-arm` for the release build), not `ubuntu-latest`, so the 2026-10-19 move of `ubuntu-latest` to Ubuntu 26 cannot silently change our runners (Python 3.12 and Node 22 toolcache availability on 26.04 is unproven). BACKLOG: revisit the `ubuntu-24.04` runner pin after Ubuntu 26 images are proven.
 ## Environment setup and recovery
 
 1. In GitHub repository Settings → Environments, create `terraform-plan` and
