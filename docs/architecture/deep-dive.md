@@ -165,6 +165,10 @@ Glassbox is a public site that calls paid models, so every generated answer pass
 
 **Other limits.** Questions are capped at 1,000 characters, history at 50 messages of 4,000 characters (6 messages and 4,000 characters actually used), answers at 400 output tokens and rewrites at 60. At startup the API validates provider configuration: an unknown provider mode, a non-positive daily cap or a malformed Bedrock model ID stops the app from starting rather than failing on the first request. The IAM instance role can invoke only the Titan embedding model and the specific Nova Lite and Claude Haiku inference profiles.
 
+## Web security headers: HSTS, framing and browser features
+
+The API itself, not Cloudflare, adds security headers to every response: the page, static assets, API JSON, 404s and the SSE streams. They are HSTS for 180 days on the apex only (no `includeSubDomains`, no preload), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` with `Content-Security-Policy: frame-ancestors 'none'`, and a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and other unused browser features. A plain ASGI middleware (`services/glassbox/api/security_headers.py`) adds them when the response starts and passes body chunks through untouched, so SSE still streams unbuffered. A CSP that restricts scripts and styles is not set yet; the details and the follow-up plan are in `docs/DESIGN.md` §11.
+
 ## Data stores: MySQL tables and what they hold
 
 MySQL 8.0 is the Glassbox source of truth. It runs in the Kubernetes cluster as the `mysql` StatefulSet in the `data` namespace, with a 4 GiB persistent volume on the node's `local-path` storage. It is not Amazon RDS. Alembic migrations in `services/glassbox/db/migrations` define the schema (revisions `0001_initial_schema`, `0002_add_queries_table`, `0003_query_turn_columns` and `0004_query_mode_stopped`), and SQLAlchemy models live in `services/glassbox/db/models.py`.

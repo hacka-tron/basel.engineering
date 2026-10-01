@@ -664,6 +664,19 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 | Cluster API exposure | Kubernetes API port not opened publicly; Flux pulls from GitHub; admin via SSM Session Manager |
 | Long-lived CI credentials | GitHub Actions uses OIDC to assume a scoped IAM role |
 | Over-broad in-cluster permissions | Read-only, namespace-scoped RBAC for the cluster view; NetworkPolicies |
+| Clickjacking, MIME sniffing, downgrade to HTTP | Security response headers set by the API on every response (below) |
+
+**Security response headers.** The API sets these on every HTTP response it sends: the page, static assets, API JSON, 404s and both SSE streams (`services/glassbox/api/security_headers.py`):
+
+| Header | Value | Why |
+|---|---|---|
+| `Strict-Transport-Security` | `max-age=15552000` (180 days) | Browsers use HTTPS only for the apex. No `includeSubDomains`: only the apex record is in Terraform, and other names in the zone (`www` is not served by this app) are not guaranteed to serve HTTPS. No `preload`, which is hard to undo. |
+| `X-Content-Type-Options` | `nosniff` | Scripts and styles must be served with their real type. |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Links to other sites send only the origin. |
+| `X-Frame-Options` and `Content-Security-Policy` | `DENY` and `frame-ancestors 'none'` | No site can frame the page. |
+| `Permissions-Policy` | camera, microphone, geolocation, payment, USB, sensors, fullscreen and similar set to `()` | The site uses none of them. The clipboard is not restricted, because the Contact control copies the email address. |
+
+It is a plain ASGI middleware that adds headers to the response start and passes body chunks through unchanged, so SSE keeps streaming with `X-Accel-Buffering: no` and nothing is compressed or buffered. A route that sets one of these headers itself keeps its own value. It lives in the app rather than in a Cloudflare response-header rule so that it is tested and shipped with the code and also applies in local development. A Cloudflare rule would need a new Terraform ruleset plus Transform Rules permissions on both Cloudflare tokens. One gap is known: Starlette's outermost error handler sends the bare 500 page for an unhandled exception without these headers. The CSP restricts only framing. A CSP that restricts scripts and styles is a follow-up: it starts in Report-Only mode after an audit of the Vite build (the inline iOS zoom script in `index.html`, React Flow styles, self-hosted fonts).
 
 ---
 
