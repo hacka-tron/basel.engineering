@@ -50,7 +50,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 ### CI/CD and operations (`.github/workflows/`)
 
-- `ci.yml` (backend tests with MySQL/Redis services, frontend lint/test/build; required on `main`), `release.yml` (native arm64 build → ECR, `build-N` tags), `sync-deploy-branch.yml` (`main` → `deploy`), `terraform.yml` (plan on PR, `terraform-prod`-gated apply).
+- `ci.yml` (backend tests with MySQL/Redis services, frontend lint/test/build; required on `main`), `release.yml` (native arm64 build → ECR, `build-N` tags; a manual run must build `main`'s current head, `.github/scripts/release-provenance.sh`), `sync-deploy-branch.yml` (`main` → `deploy`, re-fetch/re-merge/retry up to 5 times on a rejected push, never forced, `.github/scripts/sync-deploy-branch.sh`), `terraform.yml` (plan on PR, `terraform-prod`-gated apply).
 - `bootstrap.yml`: plan on PRs (`bootstrap-plan`), approval-gated apply from `main` (`bootstrap`) only if the re-plan's SHA-256 fingerprint matches the reviewed plan. First live use applied the zram IAM fixes (#64, #66).
 - Ops runbooks: eight "Ops · ..." wrappers (Diagnose, Reboot node, Restart deployment, Flux suspend or resume, Flux reconcile, KEDA on or off, Warm-up CronJob suspend or resume, Apply zram) calling reusable `ops.yml`. Diagnose: `ops-read`, no approval, redacted output. Everything else: owner approves `ops`, diagnose before and after. Reboot proves itself by boot-ID change. Runbook table: `infra/CI.md` "Runbooks"; incident playbook: `k8s/README.md` "Incidents".
 - GitHub environments: `terraform-plan`, `terraform-prod`, `release`, `ops-read`, `ops`, `bootstrap-plan`, `bootstrap`.
