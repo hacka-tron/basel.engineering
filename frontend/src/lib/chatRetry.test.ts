@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { planRetry, retryableReplyId, retryWaitSeconds, withoutFailedAttempt } from './chatRetry.ts'
+import { holdSaveDuringRetry, planRetry, retryableReplyId, retryWaitSeconds, withoutFailedAttempt } from './chatRetry.ts'
 import { historyForRequest, type ChatMessage } from './conversation.ts'
 import { BUDGET_EXHAUSTED_REPLY } from './errorReplies.ts'
 
@@ -74,4 +74,18 @@ test('retryWaitSeconds counts down to zero', () => {
   assert.equal(retryWaitSeconds(1_500, 1000), 1)
   assert.equal(retryWaitSeconds(1000, 1000), 0)
   assert.equal(retryWaitSeconds(500, 1000), 0)
+})
+
+test('a pending retry holds the saved conversation (with its failure reply) until the new reply settles', () => {
+  const plan = planRetry(failed)!
+  const retrying: ChatMessage[] = [
+    ...withoutFailedAttempt(failed, plan.userMessageId),
+    { id: 'r2', role: 'assistant', content: 'Partial', state: 'pending', createdAt: 3 },
+  ]
+  assert.equal(holdSaveDuringRetry(retrying, 'r2'), true)
+  // Settled (done, stopped, or failed again and replaced by a new error reply): save.
+  assert.equal(holdSaveDuringRetry(retrying.map((m) => m.id === 'r2' ? { ...m, state: 'done' as const } : m), 'r2'), false)
+  assert.equal(holdSaveDuringRetry(retrying.filter((m) => m.id !== 'r2'), 'r2'), false)
+  // Not a retry: a normal ask saves its question straight away.
+  assert.equal(holdSaveDuringRetry(retrying, null), false)
 })

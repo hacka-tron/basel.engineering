@@ -62,3 +62,17 @@ export function retryWaitSeconds(retryAt: number | undefined, now: number): numb
   if (retryAt === undefined) return 0
   return Math.max(0, Math.ceil((retryAt - now) / 1000))
 }
+
+/**
+ * Whether the conversation must keep its saved form for now: true while the
+ * reply to an in-flight retry is still pending. Retry removes the failure
+ * reply from the shown conversation at once, but the saved copy keeps it (and
+ * so the Retry button) until the new answer settles, so a reload mid-retry
+ * comes back to the failed question with a working Retry. Nothing new is
+ * written in the meantime: the pending reply is never saved, as in a normal
+ * mid-answer reload, and no error that did not happen is invented.
+ */
+export function holdSaveDuringRetry(messages: readonly ChatMessage[], retryReplyId: string | null): boolean {
+  if (retryReplyId === null) return false
+  return messages.some((message) => message.id === retryReplyId && message.state === 'pending')
+}
