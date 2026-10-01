@@ -1,69 +1,64 @@
-# Mobile header: one row, topic chips above the ask box
+# Mobile header: one row, topic chips in Chat view, envelope Contact
 
-**Status:** In review, PR [#78](https://github.com/hacka-tron/basel.engineering/pull/78) · **Scope:** `frontend/` below 768px only; desktop pixel-identical.
+**Status:** In review, PR [#78](https://github.com/hacka-tron/basel.engineering/pull/78) · **Scope:** `frontend/`. Phones: header, topic chips, Contact. Desktop: only the Contact control changes (text to envelope icon).
 
 ## TL;DR
 
-The phone header is now a single 61px row (name, Contact me, GitHub) in both Chat and Diagram views. The question topic moved out of the header into a row of two chips directly above the ask box: "Asking about (● Basel) (○ System)". The topic dropdown in the header row was built and measured first, but it failed the owner's fit rule, so per the owner's decision rule this ships option 4 (chips) instead. The dropdown attempt is the first commit on the branch for reference.
+The phone header is now a single 61px row (name, envelope, GitHub) in both Chat and Diagram views. The question topic moved out of the header into two chips directly above the ask box, "Asking about (● Basel) (○ System)", shown in Chat view only. Contact is an envelope icon ("Copy email") at every width, desktop included. The owner compared three options live (a topic dropdown in the header row, the chips, and the current two-row header) and chose the chips plus the envelope icon. Chat and Diagram heights equal origin/main at every phone width; desktop differs from main only in the Contact area.
 
-## Why not the dropdown
+## What changed for a visitor
 
-Owner's rule: at 375px and wider the header row may use at most one fallback (short name or an icon-only Contact, not both), with 16px gaps and 44px targets.
-
-Measured in headless Chrome with the real fonts (row = name, "About Basel ▾" menu button at 14px, Contact, GitHub):
-
-| Width | Steps needed |
-|---|---|
-| ≥ 519px (shrinking) / 528px (growing) | none: full name + "Contact me" |
-| 428–518px / 438–527px | short name "Basel A-R" + "Contact me" |
-| < 428px / < 438px | short name and envelope icon (both fallbacks) |
-
-So every common phone (360, 375, 390, 414) needed both fallbacks. At 375px the one-fallback layout is 53px short. A shorter button label ("Basel ▾") saves about 50px, still not enough, and loses clarity. Screenshots of the attempt, with the menu open, are in the session scratchpad (`dropdown-<width>-<view>[-menu-open].png`). The menu itself worked: 44px items, checkmark on the current topic, on screen at 320px (x 83–275).
-
-## What changed for a visitor (phones)
-
-- Header: one row, 8px padding above and below (61px), the same in Chat and Diagram. The full name shows from 376px (it stays down to 366px when shrinking); below that it reads "Basel A-R". Contact keeps its text label at every width.
-- Topic: chips directly above the ask box in both views. Tapping one switches the topic exactly as the old nav did (same handler: one conversation per topic, component selection cleared when going to About Basel). The topic is now always visible next to where the question is typed, including in Diagram view, where it used to be hidden.
-- Removed: the Diagram-view collapse of the old nav row, its focus rescue, and the animated bottom padding.
+- **Phone header:** one row, 8px padding above and below (61px), the same in Chat and Diagram. The full name now fits from 292px, so it shows on every phone (it shortens to "Basel A-R" at 291px and below and returns from 300px; before this PR it shortened below 367px).
+- **Topic (phones):** chips directly above the ask box in Chat view. Tapping one switches the topic exactly as the desktop nav does (same handler: one conversation per topic, component selection cleared when going to About Basel). Diagram view hides the chips and keeps the topic: a question typed there uses the current topic, and tapping a component switches to About This System, as before.
+- **Contact (all widths):** an envelope icon the size of the GitHub mark beside it. Hover or keyboard focus shows "Copy email"; a click copies the address and shows "Email copied". If copying fails, the bubble shows the address itself for 5 seconds so it can be read. The bubble floats under the icon, so the row never moves.
+- **Removed:** the Diagram-view collapse of the old nav row, its focus rescue, and the animated bottom padding.
 
 ## How it works
 
 ```
-header  [Basel Abdel-Rahman ........ Contact me (gh)]   61px, py-2, flex-nowrap
-main    messages / diagram
+header  [Basel Abdel-Rahman ............ (✉) (gh)]   61px, py-2, flex-nowrap
+main    messages (Chat) / diagram (Diagram)
         PipelineStrip  [stages ...      Chat|Diagram]
-        input box  [Asking about (● Basel) (○ System)]  44px, replaces the 8px top padding
+        input box  [Asking about (● Basel) (○ System)]  Chat view only: 44px, replaces the 8px top padding
                    [Ask anything...              ][→]
 footer  stats ... + (bunny)
 ```
 
-- `components/TopicChips.tsx`: `role="radiogroup"` labelled "Asking about", buttons with `role="radio"` and `aria-checked`, roving tabindex, arrows/Home/End move and select (wrapping). Visible labels "Basel"/"System"; accessible names are the full topic names (contain the visible text). Chip text 14px, label 12px, each target 44px tall.
-- `Chat.tsx` gains an `inputTopic` slot rendered above the form, mobile only; on desktop nothing is passed, so the container keeps its `py-2`.
-- `App.tsx`: one `selectTopic` handler for desktop nav and chips. The header is `flex-nowrap` with `py-2`; the Contact/GitHub group is `max-md:shrink-0` so a long name is shortened by `useFullNameFits` rather than squeezing Contact (with `nowrap`, it used to get squeezed: the measured width shrank and the full name stayed too long).
+- `components/TopicChips.tsx`: `role="radiogroup"` labelled "Asking about", buttons with `role="radio"` and `aria-checked`, roving tabindex, arrows/Home/End move and select (wrapping). Accessible names are the full topic names. App passes it to `Chat`'s `inputTopic` slot only below md and only in Chat view; in Diagram view it unmounts (no hidden focusable control). If a chip has focus when it unmounts (e.g. browser Forward into Diagram view), a layout-effect cleanup hands focus to the Diagram toggle.
+- `components/ContactReveal.tsx`: one envelope button everywhere, `aria-label="Copy email"`. A single out-of-flow bubble is the tooltip while idle (shown on `@media (hover: hover)` hover or `focus-visible`) and the result after a click; a separate `sr-only` polite live region announces the result.
+- `components/Collapsible.tsx`: the inner wrapper is `min-w-0`. Without it the one-row header's min-content width (292px) made the grid item grow past the screen, so on very narrow screens the name never shortened and the row overflowed.
 
-## Measurements (viewport height 740; origin/main vs this branch)
+## Measurements (headless Chrome, production builds, origin/main vs this branch)
 
-| Width | Header (main → branch) | Name | Name–Contact gap | Chat message area | Diagram area |
+| Width × height | Header Chat (main → branch) | Header Diagram | Name | Chat message area | Diagram |
 |---|---|---|---|---|---|
-| 320 | 97 → 61 | Basel A-R | 54 | 472 → 472 (0) | 508 → 472 (−36) |
-| 360 | 97 → 61 | Basel A-R | 93 | 472 → 472 (0) | 508 → 472 (−36) |
-| 375 | 97 → 61 | Basel Abdel-Rahman | 24 | 472 → 472 (0) | 508 → 472 (−36) |
-| 390 | 97 → 61 | Basel Abdel-Rahman | 38 | 472 → 472 (0) | 508 → 472 (−36) |
-| 414 | 97 → 61 | Basel Abdel-Rahman | 61 | 472 → 472 (0) | 508 → 472 (−36) |
+| 320×740 | 97 → 61 | 61 → 61 | Basel Abdel-Rahman (main: Basel A-R) | 475 → 475 | 467 → 467 |
+| 360×740 | 97 → 61 | 61 → 61 | Basel Abdel-Rahman (main: Basel A-R) | 475 → 475 | 467 → 467 |
+| 375×740 | 97 → 61 | 61 → 61 | Basel Abdel-Rahman | 475 → 475 | 467 → 467 |
+| 390×740 | 97 → 61 | 61 → 61 | Basel Abdel-Rahman | 475 → 475 | 467 → 467 |
+| 414×740 | 97 → 61 | 61 → 61 | Basel Abdel-Rahman | 475 → 475 | 467 → 467 |
+| 375×667 | | | | 402 → 402 | 394 → 394 |
 
-One row at every width 320–767 (row items' centres within 1px), no horizontal scroll. At 375×667 the same deltas hold (chat 399 → 399, diagram 435 → 399).
-
-The chip row costs 36px net (44px row minus the 8px padding it replaces). In Chat that is exactly the 36px the header gave back. In Diagram view the old header was already 61px, so the diagram is 36px shorter than on main. That is the price of showing the topic in Diagram view, which the owner asked for.
+One row at every width (all header items share one top), no horizontal scroll, every header target 44×44. Gap between the name and the icons: 44px at 320, 97px at 375. The chips row is 44px tall; it costs 36px in Chat, exactly what the one-row header gave back.
 
 ## Verified
 
 - `npm run lint`, `tsc -b`, `npm test` (58 pass), `npm run build`.
-- Topic switching: chip "About This System" then a question sent `corpus: about_system`; back to "About Basel" sent `about_me`; in Diagram view the chip switched and the ask sent `about_system`. Suggested questions switch with the topic.
-- Keyboard: Tab order is Contact, GitHub, suggestions, pipeline, Chat, Diagram, checked chip, ask box. ArrowRight selects System, wraps back to Basel; End/Home work; Tab leaves the group to the ask box.
-- Focus mode: with the ask box focused (header and footer hidden), tapping a chip switches the topic.
-- Desktop: screenshots at 768×1024, 1024×900 and 1440×900 of origin/main and this branch (both production builds) differ in 0 pixels.
+- Topic and corpus (mocked `/api/ask`, request bodies checked at 375px): Basel chip sent `about_me`; System chip sent `about_system`; in Diagram view (no chips mounted) a typed question sent `about_system` while System was current and `about_me` while Basel was current; a component tap then a typed question sent `about_system` and the chips show System back in Chat.
+- Keyboard: Tab order on a phone is Copy email, GitHub, suggestions, pipeline, Chat, Diagram, checked chip, ask box, Send. ArrowRight selects System and wraps back to Basel. Diagram toggle, history Back to Chat, focus a chip, history Forward: focus lands on the Diagram toggle.
+- Contact: Enter on the focused envelope with the clipboard blocked shows the address (320px: bubble x 58–270, on screen; header stays 61px); with the clipboard allowed it shows "Email copied". Desktop (1024): hover shows "Copy email", moving away hides it, Shift+Tab focus shows it, Enter shows "Email copied" and the live region announces it.
+- Desktop pixel diff vs origin/main at 768×900, 1024×900, 1440×900: 692 differing pixels each, all inside the Contact area (box x 613–695 / 869–951 / 1285–1367, y 25–46; that is where "Contact me" was and the envelope is). The name, nav, GitHub icon (same position) and everything below the header are identical.
+- Screenshots: `topic-dropdown-final/` in the session scratchpad (`m<width>-chat|diagram.png`, envelope states, `d<width>-main|branch.png`, desktop tooltip and "Email copied").
+
+## Options compared (history)
+
+1. Topic dropdown in the header row (commit a0b0c98): worked (44px items, on screen at 320px) but with "Contact me" as text the row needed the short name and an icon Contact below 428px.
+2. Chips above the ask box (this PR).
+3. The existing two-row header.
+
+The owner picked 2 with the envelope from 1, then asked for the chips in Chat view only and the envelope on desktop too.
 
 ## Risks / open items
 
-- Diagram view has 36px less height than on main. If that matters, the chips could share the PipelineStrip row in Diagram view, where it holds only a status line.
-- The dropdown attempt's code (row-one measured fallbacks, envelope Contact with a toast) is in the branch history (first commit) if a wider-screen variant is wanted later.
+- `frontend/phone-preview.html` (from #76) still captions the 360px frame "name shortens below 367"; it now shortens below 292px. Left untouched in this PR.
+- The tooltip uses hover only on devices that can hover, so on phones it appears only with keyboard focus; the click result always shows.
