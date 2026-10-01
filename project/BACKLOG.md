@@ -116,6 +116,7 @@ Code-level pass done 2026-10-01 (`project/status/2026-10-01-security-pass.md`): 
 - `glassbox-ops-read` also trusts the plain `ref:refs/heads/main` subject; drop it if nothing needs it, so only the `ops-read` environment can run diagnose.
 - Add an app-level startup test for a too-short salt (today only the function-level test covers it; review minor on #96).
 - Origin protection is still IP-range-only (see Open decisions). The origin IP is in git history, so anyone can route to it through their own Cloudflare account; Authenticated Origin Pulls would close that.
+- **After the Bootstrap apply of #98:** state in the deep dive (`docs/architecture/deep-dive.md`, IAM roles summary) that the release role requires `refs/heads/main`; drop the "Status: pending apply" line in `infra/CI.md` "Release role trust" and the pending note in `infra/bootstrap/README.md`; and fix the sentences that say the release role trusts any `environment:release` subject (#91's `infra/CI.md` release section, `project/orchestration/reviewer-primer.md` Workflows traps, #91's status report and its BACKLOG follow-up item).
 
 ## Infrastructure & reliability
 
