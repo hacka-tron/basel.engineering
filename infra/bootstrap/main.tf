@@ -1,9 +1,22 @@
 resource "random_id" "state_bucket" {
   byte_length = 8
+
+  # The id is part of the bucket name: replacing it would rename (replace) the
+  # state bucket that holds every Terraform state in this project.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket" "state" {
   bucket = "glassbox-tfstate-${var.aws_account_id}-${random_id.state_bucket.hex}"
+
+  # Holds the state of this root (bootstrap/terraform.tfstate) and of
+  # infra/envs/prod. Losing it is an outage, so Terraform must refuse to
+  # destroy or replace it. Removing this line is a deliberate, reviewed act.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "state" {
@@ -30,6 +43,71 @@ resource "aws_s3_bucket_public_access_block" "state" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# Bucket-level guardrails. Nothing here widens access.
+#   - DenyInsecureTransport: every request must use TLS.
+#   - DenyDeleteBucket: nobody (not even the owner) can delete the bucket
+#     without first removing this policy, a second deliberate step on top of
+#     prevent_destroy.
+#   - DenyCiAccessToBootstrapState: the CI roles can never read, write or
+#     delete this root's own state (bootstrap/*). That state defines the CI
+#     roles' permissions, so CI must not be able to tamper with it. The roles'
+#     IAM policies don't grant it either; this explicit deny is a second layer.
+data "aws_iam_policy_document" "state_bucket" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  statement {
+    sid       = "DenyDeleteBucket"
+    effect    = "Deny"
+    actions   = ["s3:DeleteBucket"]
+    resources = [aws_s3_bucket.state.arn]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+  }
+
+  statement {
+    sid       = "DenyCiAccessToBootstrapState"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = ["${aws_s3_bucket.state.arn}/bootstrap/*"]
+
+    principals {
+      type = "AWS"
+      identifiers = [
+        aws_iam_role.ci.arn,
+        aws_iam_role.plan.arn,
+        aws_iam_role.release.arn,
+      ]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "state" {
+  bucket = aws_s3_bucket.state.id
+  policy = data.aws_iam_policy_document.state_bucket.json
+
+  # Public access block settings must be in place before a policy is attached.
+  depends_on = [aws_s3_bucket_public_access_block.state]
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -293,15 +371,41 @@ data "aws_iam_policy_document" "ci" {
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.state.arn]
+
+    # List only what the envs/prod backend needs: its own prefix, the exact
+    # state key (the backend lists with prefix = key), and the default
+    # workspace-enumeration prefix env:/ (empty, workspaces are not used).
+    # Never bootstrap/.
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values = [
+        "envs/prod",
+        "envs/prod/*",
+        "env:/",
+        "env:/*",
+      ]
+    }
   }
 
   statement {
-    sid       = "ReadWriteStateAndLockfiles"
+    sid       = "StateBucketLocation"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [aws_s3_bucket.state.arn]
+  }
+
+  # Scoped to the production state prefix only (state object + S3-native
+  # .tflock lockfile). Deliberately NOT the whole bucket: CI must not be able
+  # to read or change bootstrap/terraform.tfstate, the state that defines
+  # CI's own permissions.
+  statement {
+    sid       = "ReadWriteProductionStateAndLockfile"
     effect    = "Allow"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.state.arn}/*"]
+    resources = ["${aws_s3_bucket.state.arn}/envs/prod/*"]
   }
 }
 
@@ -458,7 +562,29 @@ data "aws_iam_policy_document" "plan" {
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.state.arn]
+
+    # List only what the envs/prod backend needs: its own prefix, the exact
+    # state key (the backend lists with prefix = key), and the default
+    # workspace-enumeration prefix env:/ (empty, workspaces are not used).
+    # Never bootstrap/.
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values = [
+        "envs/prod",
+        "envs/prod/*",
+        "env:/",
+        "env:/*",
+      ]
+    }
+  }
+
+  statement {
+    sid       = "StateBucketLocation"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
     resources = [aws_s3_bucket.state.arn]
   }
 
