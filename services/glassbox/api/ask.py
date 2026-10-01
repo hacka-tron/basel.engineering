@@ -390,6 +390,22 @@ def _save_query(
         LOGGER.warning("Query log write failed for %s", request_id, exc_info=True)
 
 
+# Worker error text is never relayed as-is: an older worker (rolling deploy)
+# published str(exc), which can carry SQL, hostnames or AWS error detail.
+_PUBLIC_WORKER_ERROR_MESSAGES = {
+    "rate_limited": "Too many questions. Please try again soon.",
+    "budget_exhausted": "The daily answer budget is used up. Please try again tomorrow.",
+    "internal": "The request could not be completed",
+}
+
+
+def _public_worker_error(event: WorkerError) -> dict:
+    payload: dict = {"code": event.code, "message": _PUBLIC_WORKER_ERROR_MESSAGES[event.code]}
+    if event.retry_after_s is not None:
+        payload["retry_after_s"] = event.retry_after_s
+    return payload
+
+
 async def _stream(
     request: AskRequest, request_id: str, request_start_ts: int, client_hash: str
 ) -> AsyncIterator[str]:
@@ -622,12 +638,7 @@ async def _stream(
                     if event.request_id != request_id:
                         raise ValueError("worker trace request_id mismatch")
                     settled = True
-                    yield frame(
-                        "error",
-                        event.model_dump(
-                            include={"code", "message", "retry_after_s"}, exclude_none=True
-                        ),
-                    )
+                    yield frame("error", _public_worker_error(event))
                     return
                 elif kind == "retrieval":
                     event = WorkerRetrieval.model_validate(raw)
