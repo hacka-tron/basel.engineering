@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "phone": "vite --config vite.phone.config.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --test 'src/**/*.test.ts'",
