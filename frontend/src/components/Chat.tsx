@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
+import { DESKTOP_QUERY } from '../lib/layout'
 import { askButtonMode, lastSentQuestion, shouldRecallQuestion } from '../lib/askInput'
 import { retryableReplyId, retryWaitSeconds } from '../lib/chatRetry'
 import suggestedQuestions from '../suggested-questions.json'
@@ -141,7 +142,7 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
     onRetry()
     // The Retry button goes away with the failure reply; keep keyboard focus
     // in the chat on desktop (on a phone this would pop up the keyboard).
-    if (window.matchMedia('(min-width: 768px)').matches) inputRef.current?.focus({ preventScroll: true })
+    if (window.matchMedia(DESKTOP_QUERY).matches) inputRef.current?.focus({ preventScroll: true })
   }
 
   // While an answer streams the box stays usable: with text in it the button
@@ -241,9 +242,10 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
 
       {inputAccessory}
 
-      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 ${inputTopic ? 'pb-2' : 'py-2'}`}>
+      {/* A phone held sideways puts the topic chips beside the ask box: one row instead of two. */}
+      <div className={`shrink-0 px-4 md:px-7 md:pb-7 md:pt-0 phone-landscape:flex phone-landscape:items-center phone-landscape:gap-2 ${inputTopic ? 'pb-2 phone-landscape:pt-2' : 'py-2'}`}>
         {inputTopic}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 phone-landscape:min-w-0 phone-landscape:flex-1">
           <input
             ref={inputRef}
             onKeyDown={handleKeyDown}
