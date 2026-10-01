@@ -32,13 +32,13 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 - `eval/golden.yaml` (new): the ~70 cases from DESIGN-005 §5.1. Migrate the 30 `questions.yaml` cases verbatim (same ids) and add `gold_snippets` and `must_include` to them. Add the suggested questions from `frontend/src/suggested-questions.json`, the `planned`, `live`, `unanswerable`, `multi_turn` and `injection` categories. Mark about 20% of cases `holdout: true`. Fill `must_include` for About This System facts from the source files; mark About Basel facts `needs_owner_review: true`.
 - `eval/schema.py` (new): load and validate (unique ids, known categories, regexes compile, every `gold_snippet` occurs in its expected source file in the repo, `history` alternates roles).
 - `eval/graders.py` (new): pure functions `fact_coverage(answer, patterns)`, `abstained(answer)` (reuses `providers.base.is_exact_abstention` / `is_abstention`), `status_ok(answer, category)`, `rewrite_ok(rewrite, patterns)`, `injection_ok(answer)` (no system-prompt fragments).
-- `eval/run_answers.py` (new): for each case, call the same building blocks the API uses: the rewrite prompt (`api/ask.py:_rewrite_prompt`), embedding, `search_chunks`, `_load_chunks`, `_prompt`, the provider's `generate`. Do this in-process, **not through `/api/ask`**, so the live rate limit, budget and answer cache are untouched. Write JSONL to `eval/runs/` (gitignored except committed baselines) with question, rewrite, retrieved chunk ids and paths, prompt version, answer, token usage, latency and grader results. Print a summary per category. `--paid` is required with `GLASSBOX_PROVIDER=bedrock` (mirror `GLASSBOX_EVAL_ALLOW_PAID`). Add `--cases` and `--category` filters and `--max-cases`.
+- `eval/run_answers.py` (new): for each case, call the same building blocks the API uses: the rewrite prompt (`api/ask.py:_rewrite_prompt`), embedding, `search_chunks`, `_load_chunks`, `_prompt`, the provider's `generate`. Do this in-process, **not through `/api/ask`**, so the live rate limit, budget and answer cache are untouched. Write JSONL to `eval/runs/` (gitignored except committed baselines) with question, rewrite, retrieved chunk ids and paths, prompt version, answer, token usage, latency and grader results. Print a summary per category. Any non-fake provider requires both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1` (the same env switch as `run_eval`), so one copied flag can never spend. Add `--cases` and `--category` filters and `--max-cases`.
 - Keep `eval/questions.yaml` and `run_eval.py` working until phase 2 replaces them.
 
 **Tests** (`services/tests/test_eval_graders.py`, `test_eval_golden.py`)
 - Each grader on fixture answers, including the real thin stress-test answer, which must fail `fact_coverage`, and a v14-style answer, which must pass.
 - Schema validation runs on the committed `golden.yaml` (this is what makes it a CI check).
-- `run_answers` end to end with the fake provider against the CI MySQL/Redis services: produces one JSONL row per case and refuses Bedrock without `--paid`.
+- `run_answers` end to end with the fake provider against the CI MySQL/Redis services: produces one JSONL row per case and refuses Bedrock unless both `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1` are set.
 
 **Acceptance:** `pytest` green; `python -m eval.run_answers` with the fake provider runs every case locally; the summary lists per-category numbers; no network calls.
 
@@ -138,7 +138,7 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 **Autonomous: no.** Infra change through the Bootstrap workflow, owner approval.
 
-**Files:** `infra/bootstrap/main.tf` (role `glassbox-eval` with `bedrock:InvokeModel` on Titan V2, Nova Lite and the judge model only, OIDC subject from `local.github_oidc_subject_prefix`, environment `eval`), `.github/workflows/eval.yml` (`workflow_dispatch` plus an optional label trigger; brings up MySQL/Redis services, ingests with Titan, runs `run_eval` and `run_answers --paid --judge`, posts the summary as a PR comment, uploads JSONL as an artifact), `infra/CI.md`.
+**Files:** `infra/bootstrap/main.tf` (role `glassbox-eval` with `bedrock:InvokeModel` on Titan V2, Nova Lite and the judge model only, OIDC subject from `local.github_oidc_subject_prefix`, environment `eval`), `.github/workflows/eval.yml` (`workflow_dispatch` plus an optional label trigger; brings up MySQL/Redis services, ingests with Titan, runs `run_eval` and `run_answers --paid --judge` with `GLASSBOX_EVAL_ALLOW_PAID=1`, posts the summary as a PR comment, uploads JSONL as an artifact), `infra/CI.md`.
 
 **Acceptance:** one approved run on a PR posts a comment; cost per run is shown in the comment from measured token usage.
 
