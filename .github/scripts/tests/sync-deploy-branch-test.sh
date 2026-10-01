@@ -6,7 +6,7 @@
 # nothing is force-pushed over Flux's commits, the attempt bound, and that
 # conflicts are not retried.
 # Helpers below are called through check "$@", which shellcheck can't see.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
