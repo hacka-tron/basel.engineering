@@ -256,7 +256,7 @@ The Glassbox stress-test button is built to show queue-driven autoscaling live. 
 
 **KEDA scaling (when KEDA is on).** KEDA 2.21 is installed by a Flux HelmRelease. A `ScaledObject` named `retrieval-worker` uses the `redis-streams` trigger on stream `retrieval:jobs` and consumer group `workers`, with `lagCount: 10` (target backlog per replica), a 5-second polling interval, `minReplicaCount: 1` and `maxReplicaCount: 3`. KEDA drives a Horizontal Pod Autoscaler. Scale-down uses a 45-second stabilization window and may remove all extra replicas every 15 seconds, so workers return to 1 about a minute after the backlog drains. The worker Deployment deliberately has no fixed `replicas` field, so Flux and the HPA never fight over it.
 
-**Live cluster view.** `GET /api/cluster/stream` is an SSE endpoint that lists and watches pods labeled `app=retrieval-worker` in the `app` namespace, and polls the consumer group's lag (the same metric KEDA uses) every 2 seconds. It forwards only pod name, phase and readiness, plus the backlog number. The browser subscribes with native `EventSource`. When there is no in-cluster Kubernetes access, the endpoint sends `cluster_unavailable` and the diagram falls back to the plain worker node.
+**Live cluster view.** `GET /api/cluster/stream` is an SSE endpoint that lists and watches pods labeled `app=retrieval-worker` in the `app` namespace, and polls the consumer group's lag (the same metric KEDA uses) every 2 seconds. It forwards only pod name, phase and readiness, plus the backlog number. All viewers share one watch per api process. The browser subscribes with native `EventSource`. When there is no in-cluster Kubernetes access, the endpoint sends `cluster_unavailable` and the diagram falls back to the plain worker node.
 
 ## KEDA status: suspended since the memory incident
 
@@ -291,6 +291,8 @@ Swap now goes to compressed RAM first: `/dev/zram0` with priority 100, the `lzo-
 ## Kubernetes security: RBAC, NetworkPolicies and node access
 
 **RBAC for the cluster view.** The `api` Deployment runs as the `api` ServiceAccount, which has two narrow grants. A namespaced Role, `pod-viewer`, allows `get`, `list` and `watch` on pods in the `app` namespace only; `GET /api/cluster/stream` uses it to watch retrieval-worker pods. A ClusterRole, `glassbox-node-reader`, allows only `list` on `nodes` and on `nodes` in the `metrics.k8s.io` API group; `GET /api/demo/capacity` uses it to read node allocatable memory, the `MemoryPressure` condition and live memory usage. Nothing else about pods or nodes leaves the cluster. The endpoints forward only pod name, phase, readiness and a capacity verdict. No workload can create, modify or delete Kubernetes objects.
+
+**Cluster view cost limits.** The stream is public, so its cost is bounded. Each api process runs one pod watch and one Redis poller and fans them out to every viewer, allows at most 100 streams (5 per client IP; over that, 503 or 429 with `Retry-After`), and ends each stream after at most 10 minutes with a `reconnect` event. The browser then reconnects, backs off after errors (up to 2 minutes) and keeps the last pod dots on screen.
 
 **NetworkPolicies.** k3s ships an embedded NetworkPolicy controller, and Glassbox uses it for both namespaces:
 

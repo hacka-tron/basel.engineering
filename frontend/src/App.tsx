@@ -18,7 +18,7 @@ import type { LastStats } from './lib/lastStats'
 import { errorReplyFor } from './lib/errorReplies'
 import { planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
-import { connectClusterStream } from './lib/clusterStream'
+import { connectClusterStream, podMapFromSnapshot } from './lib/clusterStream'
 import {
   historyForRequest,
   loadConversation,
@@ -116,7 +116,10 @@ function App() {
   // Stress test: pod dots + backlog counter (DESIGN.md §9.4), fed by a
   // standing /api/cluster/stream connection — kept simple and always-on
   // rather than opened/closed around each stress-test click, since the
-  // cluster can also scale from real (non-synthetic) traffic. `podsById`
+  // cluster can also scale from real (non-synthetic) traffic. The server
+  // caps concurrent streams; when a connection is refused or drops,
+  // lib/clusterStream.ts retries with backoff and the last pods and backlog
+  // stay on screen until the next snapshot replaces them. `podsById`
   // undefined means "no cluster view available" (e.g. local dev without a
   // live Kubernetes API); ArchitecturePanel only renders pod dots when it's
   // defined, so this degrades to today's plain worker node rather than
@@ -151,6 +154,7 @@ function App() {
 
   useEffect(() => {
     const disconnect = connectClusterStream({
+      onSnapshot: (pods) => setPodsById(podMapFromSnapshot(pods)),
       onPod: (event) => {
         setPodsById((current) => {
           const next = { ...(current ?? {}) }

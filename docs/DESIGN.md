@@ -194,7 +194,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - **Endpoints:**
   - `POST /api/ask` returns an SSE stream (section 8)
   - `POST /api/demo/load` triggers the stress test
-  - `GET /api/cluster/stream` returns SSE of worker pod events
+  - `GET /api/cluster/stream` returns SSE of worker pod events and the queue backlog, from one shared Kubernetes watch per api process, with caps on concurrent streams (section 9.5)
   - `GET /api/stats` returns footer numbers
   - `GET /healthz`, `GET /readyz`
 - **Responsibilities:** rate limiting, answer cache, enqueue, trace forwarding, prompt building, LLM streaming, budget enforcement, query logging.
@@ -407,7 +407,14 @@ Cluster view stream (`GET /api/cluster/stream`):
 
 ```ts
 type PodEvent = { type: "ADDED" | "MODIFIED" | "DELETED"; pod: string; phase: string; ready: boolean };
+// event: pod                  PodEvent
+// event: backlog              { backlog: number }   consumer-group lag, sent when it changes
+// event: synced               {}                    the snapshot is complete
+// event: reconnect            {}                    planned end of this connection; reconnect soon
+// event: cluster_unavailable  { message: string }   no in-cluster Kubernetes access; do not retry
 ```
+
+Each connection starts with a `retry:` hint, then a snapshot: one `pod` event (type `ADDED`) per current worker pod, the last backlog reading, and `synced`. After that, `pod` and `backlog` events carry changes. A `: ping` comment goes out after 15 seconds without other output. Over a cap the endpoint answers `503` (all slots busy) or `429` (too many streams from one IP) with `Retry-After` and a small JSON body, and opens nothing. Section 9.5 has the limits.
 
 ---
 
@@ -507,6 +514,16 @@ roleRef:
 ```
 
 The endpoint only forwards pod name, phase and readiness for pods labeled `app=retrieval-worker`. Nothing else leaves the cluster.
+
+#### Bounded cost
+
+The endpoint is public and unauthenticated, so what an idle visitor can hold open is bounded (`services/glassbox/api/cluster.py`):
+
+- **One shared upstream per api process.** The first subscriber starts one Kubernetes list+watch and one Redis client that polls the consumer-group lag every 2 seconds. Every SSE client reads from its own bounded in-process queue (256 events) fed by that upstream, so 1 or 100 open tabs cost the Kubernetes API server and Redis the same. A late subscriber gets the current pods and backlog from memory, without a new list. The upstream stops 30 seconds after the last subscriber leaves. Each watch asks the API server to end it after 300 seconds (`timeoutSeconds`), and a watch that sends nothing for 330 seconds is treated as half-open. When a watch ends either way, the hub lists again after 1 second and sends `DELETED` for pods that went away in the gap. When a list or watch fails, it retries with backoff (2 s, doubling, up to 30 s) and the open streams stay connected. Only a missing in-cluster ServiceAccount (local dev) sends `cluster_unavailable`, which ends every stream.
+- **Caps.** At most `GLASSBOX_CLUSTER_STREAM_MAX_CLIENTS` (default 100) concurrent streams per api process, and `GLASSBOX_CLUSTER_STREAM_MAX_PER_IP` (default 5) per client IP. The IP key is the salted hash from `client_ip_hash` in `services/glassbox/limits.py`, the same one the ask rate limit uses. Over a cap the response is `503` or `429` with `Retry-After: GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S` (default 30), and nothing is opened. The api runs one replica with one uvicorn worker, so the per-process cap is the site-wide cap.
+- **Lifetime and heartbeat.** Each connection lives at most `GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S` (default 600 s, cut at a random 80 to 100 percent of it so clients do not reconnect in step), then gets `reconnect` and is closed. A `: ping` goes out after `GLASSBOX_CLUSTER_STREAM_HEARTBEAT_S` (default 15 s) of silence, which keeps Cloudflare's 100 s idle timeout from closing a quiet stream and makes writes to a dead peer fail. The server also checks for a disconnect every 5 s. A client that falls 256 events behind is dropped: it gets `reconnect` and comes back to a fresh snapshot.
+- **Sizing.** The api container requests 120 Mi and is limited to 256 Mi. With the shared upstream, one stream costs a connection, a few coroutines and a small queue, on the order of tens of KB, so 100 streams cost a few MB and about 7 heartbeat writes a second. Before this, each stream held its own watch, Kubernetes client and Redis connection.
+- **Browser behaviour** (`frontend/src/lib/clusterStream.ts`). The client handles reconnects itself instead of relying on EventSource's built-in retry. On `reconnect` it comes back after 0.5 to 3 s. On any error, including a refused connection (EventSource cannot see the 429/503 status), it closes the stream and retries with exponential backoff and equal jitter: the first retry comes 2.5 to 5 s later, and the nominal delay doubles from 5 s up to 2 minutes (so each wait is half to all of it); a completed snapshot resets the backoff. The last pod dots and backlog stay on screen while it is disconnected, and each new snapshot replaces the pod set. `cluster_unavailable` stops it for good, and the diagram shows the plain worker node.
 
 ### 9.6 NetworkPolicy
 
