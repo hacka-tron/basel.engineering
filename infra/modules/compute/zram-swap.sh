@@ -119,6 +119,32 @@ if [ "$(id -u)" != 0 ]; then
   exit 1
 fi
 
+# Remove the zram sysctl file, restore AL2023 defaults, then VERIFY the result
+# (file gone, live values equal the defaults). Prints ROLLBACK FAILED naming
+# each problem and returns 1 if anything is still wrong.
+rollback_sysctls() {
+  local bad="" kv k v cur
+  if [ -e "$SYSCTL_CONF" ]; then
+    rm -f "$SYSCTL_CONF" 2>/dev/null
+    if [ -e "$SYSCTL_CONF" ]; then
+      bad="$bad $SYSCTL_CONF still exists;"
+    else
+      echo "[zram] removed $SYSCTL_CONF from an earlier run" >&2
+    fi
+  fi
+  for kv in vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10; do
+    k="${kv%%=*}" v="${kv#*=}"
+    sysctl -w "$kv" >/dev/null 2>&1 || true
+    cur="$(sysctl -n "$k" 2>/dev/null || echo unreadable)"
+    [ "$cur" = "$v" ] || bad="$bad $k=$cur (want $v);"
+  done
+  if [ -n "$bad" ]; then
+    echo "[zram] ROLLBACK FAILED:$bad zram-tuned VM settings may still be in effect" >&2
+    return 1
+  fi
+  echo "[zram] AL2023 default VM sysctls verified in effect" >&2
+}
+
 # Safety net for EVERY exit path in apply mode, including `set -e` aborts
 # anywhere below: if /dev/zram0 is not an active swap device when the script
 # exits, the swap-happy sysctls must not stay in effect - with only the EBS
@@ -131,10 +157,16 @@ on_exit() {
   if [ "$DRY_RUN" = 0 ] && ! zram_swap_active; then
     echo "[zram] ERROR: $ZRAM_DEV is not an active swap device; zram sysctls NOT in effect" >&2
     systemctl --no-pager status "$SETUP_UNIT" "$SWAP_UNIT" 2>&1 | tail -20 >&2 || true
-    if [ -f "$SYSCTL_CONF" ]; then
-      rm -f "$SYSCTL_CONF" || true
-      sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10 >&2 || true
-      echo "[zram] removed $SYSCTL_CONF from an earlier run and restored AL2023 default VM sysctls" >&2
+    rollback_sysctls || rc=1
+    # Pre-existing gap: the script never disables /swapfile, but if it was
+    # already off (and zram failed too) the node has no swap at all. Try to
+    # turn it back on and say so.
+    if [ -z "$(swapon --show=NAME --noheadings 2>/dev/null)" ] && [ -f /swapfile ]; then
+      if swapon /swapfile >&2 2>&1; then
+        echo "[zram] no swap was active; re-enabled /swapfile" >&2
+      else
+        echo "[zram] WARNING: no swap is active and /swapfile could not be re-enabled" >&2
+      fi
     fi
     swapon --show >&2 || true
     if [ "$rc" = 0 ]; then rc=1; fi
