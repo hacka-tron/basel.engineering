@@ -1,7 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { architectureNodes, type NodeId } from '../architecture'
 
-export type MobileView = 'chat' | 'diagram'
+import type { MobileView } from '../lib/diagramNav'
+export type { MobileView }
 
 type PipelineStripProps = {
   view: MobileView

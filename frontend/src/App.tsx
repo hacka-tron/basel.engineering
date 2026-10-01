@@ -3,7 +3,8 @@ import Chat from './components/Chat'
 import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePanel'
 import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
-import PipelineStrip, { type MobileView } from './components/PipelineStrip'
+import PipelineStrip from './components/PipelineStrip'
+import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useStressTest } from './hooks/useStressTest'
@@ -49,8 +50,7 @@ function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
   // Below md the diagram replaces the conversation in place (no overlay).
   // A reload while in the diagram keeps it (its history entry survives).
-  const [mobileView, setMobileView] = useState<MobileView>(() =>
-    (window.history.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram' ? 'diagram' : 'chat')
+  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state))
   // Focus mode: below md, the header and footer slide away while the ask box
   // has focus, so the conversation keeps its room with the keyboard up.
   const [askFocused, setAskFocused] = useState(false)
@@ -478,46 +478,25 @@ function App() {
   // The diagram view is a history entry, so the browser's Back button (and
   // Escape, "Chat", or "Continue in chat") returns to the conversation.
   const diagramButtonRef = useRef<HTMLButtonElement | null>(null)
-  const diagramRegionRef = useRef<HTMLDivElement>(null)
-  const restoreFocusAfterDiagram = useCallback(() => {
-    // Focus inside the diagram is about to unmount; hand it to the toggle.
-    const active = document.activeElement
-    if (!active || active === document.body || diagramRegionRef.current?.contains(active)) {
-      requestAnimationFrame(() => diagramButtonRef.current?.focus())
-    }
-  }, [])
+  const [diagramNav] = useState(() => createDiagramNav({
+    history: window.history,
+    setView: setMobileView,
+    afterRender: (callback) => { requestAnimationFrame(callback) },
+    focusDiagramToggle: () => diagramButtonRef.current?.focus(),
+  }))
+  const showMobileView = diagramNav.showView
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
-      const view = (event.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram' ? 'diagram' : 'chat'
-      if (view === 'chat') restoreFocusAfterDiagram()
-      setMobileView(view)
+      diagramNav.handlePopState(event.state)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [restoreFocusAfterDiagram])
-  const showMobileView = useCallback((view: MobileView) => {
-    if (view === 'diagram') {
-      if ((window.history.state as { glassboxView?: MobileView } | null)?.glassboxView !== 'diagram') {
-        window.history.pushState({ glassboxView: 'diagram' }, '')
-      }
-      setMobileView('diagram')
-      return
-    }
-    restoreFocusAfterDiagram()
-    if ((window.history.state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram') {
-      window.history.back()
-    } else {
-      setMobileView('chat')
-    }
-  }, [restoreFocusAfterDiagram])
+  }, [diagramNav])
   useEffect(() => {
     if (!showDiagramView) return
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !event.defaultPrevented) showMobileView('chat')
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [showDiagramView, showMobileView])
+    document.addEventListener('keydown', diagramNav.handleKeyDown)
+    return () => document.removeEventListener('keydown', diagramNav.handleKeyDown)
+  }, [showDiagramView, diagramNav])
 
   // Leaving the ask box restores the header and footer. If a tap caused the
   // blur, wait until it is released: restoring mid-tap would slide the button
@@ -638,7 +617,7 @@ function App() {
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
           replacement={showDiagramView ? (
-            <div ref={diagramRegionRef} className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
+            <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
               <ArchitecturePanel
                 portrait
                 fitMinZoom={0.75}
