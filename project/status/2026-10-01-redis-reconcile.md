@@ -1,6 +1,6 @@
 # Redis chunk index rebuilt from MySQL on every ingest run
 
-**Status:** PR open (branch `fix/redis-reconcile-from-mysql`), in review. Not merged, not live.
+**Status:** PR [#122](https://github.com/hacka-tron/basel.engineering/pull/122) open, in review. Not merged, not live.
 
 ## TL;DR
 
