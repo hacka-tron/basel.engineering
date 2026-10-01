@@ -85,7 +85,7 @@ iOS behaviour: under the iPhone emulation the viewport became `width=device-widt
 
 - `services/tests/test_csp_report.py` (50 cases): both report formats are accepted and logged sanitized; a sensitive-content sweep (query strings, fragments, samples, user agent, referrer, XFF IP, IP hash, original policy); sanitizer edge cases (userinfo, IPv4/IPv6 literals, extensions, newline injection, odd paths); oversize by declared length and by a chunked body; invalid JSON/shapes (400); wrong content type (415); the per-visitor limit and its own `rl:csp` key; the per-process log cap and its summary line; the per-request report cap; Redis down; no DB access; the default `rl:` prefix unchanged.
 - `services/tests/test_security_headers.py`: the Report-Only header and `Reporting-Endpoints` are on HTML, assets, API JSON, 404/422, `/api/ask` SSE and `/api/cluster/stream` SSE. The exact directive set is pinned, with no `unsafe-*`, `data:` or wildcards. `index.html` has no inline script or style, and `ios-zoom.js` has the same logic.
-- Full suite: 573 passed, 24 skipped (Redis/MySQL-backed skips). `ruff check` and `ruff format --check` are clean. Frontend `npm ci`, `npm test` (119 passed), `npm run lint` and `npm run build` pass. `bash -n` on `diagnose.sh`, the ops `redact-test.sh` and `ops-run-test.sh` pass, and `terraform fmt -check` passes for the ops module.
+- Full suite (after rebasing on main): 652 passed, 22 skipped (Redis/MySQL-backed skips). `ruff check` and `ruff format --check` are clean. Frontend `npm ci`, `npm test` (118 passed), `npm run lint` and `npm run build` pass. `bash -n` on `diagnose.sh`, the ops `redact-test.sh` and `ops-run-test.sh` pass, and `terraform fmt -check` passes for the ops module.
 
 ## What review caught
 
