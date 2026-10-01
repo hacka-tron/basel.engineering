@@ -530,7 +530,33 @@ Measured on the live node on 2026-09-30 during a rollout (process RSS, not pod r
 
 The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at 128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this 2 GiB node, which is staying at 2 GiB; it was 5 workers before that decision.
 
-Tight, and confirmed tight in practice, not just on paper — MySQL's real memory needs pushed the earlier 150-250Mi estimate up during the first live deploy. Mitigations: a 1 GiB swap file created in user data, embeddings offloaded to Bedrock (no local model), MySQL's own memory tuned down explicitly (`innodb_buffer_pool_size`, `key_buffer_size`, `performance_schema=OFF`, etc. - see `k8s/base/mysql-statefulset.yaml`) rather than just raising its limit, and a documented upgrade path to `t4g.medium` (4 GiB) if memory pressure shows up despite that.
+Tight, and confirmed tight in practice, not just on paper — MySQL's real memory needs pushed the earlier 150-250Mi estimate up during the first live deploy. Mitigations: compressed-RAM (zram) swap ahead of a 1 GiB swap file (below), embeddings offloaded to Bedrock (no local model), MySQL's own memory tuned down explicitly (`innodb_buffer_pool_size`, `key_buffer_size`, `performance_schema=OFF`, etc. - see `k8s/base/mysql-statefulset.yaml`) rather than just raising its limit, and a documented upgrade path to `t4g.medium` (4 GiB) if memory pressure shows up despite that.
+
+#### Swap: zram first, `/swapfile` as overflow
+
+**Why.** On 2026-09-30 the node was thrashing against its EBS-backed swap: about 500 MB of the 1 GiB `/swapfile` in use, swap-in ~8.5 MB/s and swap-out ~6 MB/s, ~1,580 disk reads/s, memory PSI `full` ~37–40% and IO PSI `full` ~65–75%. k3s keeps its SQLite datastore on the same gp3 volume, so that IO pressure surfaced as "Slow SQL" warnings, apiserver handler timeouts, and a KEDA Helm upgrade failing on a timed-out CRD apply. The largest swapped process was k3s-server itself (~400 MB in swap).
+
+**What.** `/dev/zram0` is a compressed block device in RAM used as swap at priority 100, so the kernel swaps there first. The existing `/swapfile` stays enabled at priority -2 and only takes pages once zram is full. Settings:
+
+- Size `min(ram / 2, 1024)` MiB of *uncompressed* capacity (about 920 MiB on this node). Only the compressed pages use RAM, typically a third to a half of what is stored.
+- Compressor `lzo-rle`. The AL2023 6.18 kernel builds only zram's LZO backend (`CONFIG_ZRAM_BACKEND_ZSTD`/`LZ4` are off), so zstd isn't available. The script picks zstd, then lz4, then lzo-rle, based on what the kernel offers, so a later kernel with zstd gets it automatically.
+- `/etc/sysctl.d/99-glassbox-zram.conf`: `vm.swappiness=150` (with RAM-backed swap, pushing anonymous pages to zram is cheaper than dropping file cache and re-reading it from EBS), `vm.page-cluster=0` (no swap read-ahead: zram has no seek cost), `vm.watermark_boost_factor=0`, `vm.watermark_scale_factor=125` (steadier kswapd, no reclaim bursts).
+
+**How it is managed.** zram-generator ships on AL2023, but its packaged `/usr/lib/systemd/zram-generator.conf` sets `host-memory-limit=800`, which turns zram off on any instance with more than 800 MiB RAM. `infra/modules/compute/zram-swap.sh` writes `/etc/systemd/zram-generator.conf` to override that, which makes zram persistent across reboots, and activates zram0 now if it isn't already active. It writes and applies the sysctl file **only after `/dev/zram0` is confirmed active in `swapon --show`**, because a high swappiness with only disk swap would make thrashing worse. An exit trap covers every failure path, including `set -e` aborts and a failed `/swapfile` re-enable. If zram0 isn't active swap when the run ends, the run fails, and any sysctl file left by an earlier run (for example, zram broke after a reboot) is removed and AL2023's defaults restored. The script is idempotent and never turns swap off. Terraform delivers it as the SSM Command document `glassbox-zram-swap`. A State Manager association (`infra/modules/compute/zram.tf`) runs it on the node when the association is created, whenever the document changes, and weekly (Sunday 04:00 UTC) to repair drift. It isn't in `user_data`, because user data only runs on first boot and changing it stops and starts the instance. Run output stays in SSM's association history; there is no S3 or CloudWatch log sink. IAM: `glassbox-ci` may manage only `glassbox-*` documents, and it can create or update associations only for those documents. Associations are also tag-scoped: `aws:RequestTag/project=glassbox` is required to create one, and `aws:ResourceTag/project=glassbox` to describe, update or delete one. IAM can't restrict an association's *targets* to this node, so the role could still run a `glassbox-*` document on another instance in the account. Its pre-existing region-wide `ssm:AddTagsToResource` also means it could tag a foreign association into scope. Both are accepted: there is one instance and no other associations, and the role already has `ec2:*` (see the comment in `infra/bootstrap/main.tf`). Changing the zram size or compressor while zram0 is in use applies at the next reboot. The script logs this instead of turning the device off.
+
+**How to check** (as root on the node, e.g. via SSM Run Command):
+
+```sh
+swapon --show                      # /dev/zram0 prio 100 first, /swapfile prio -2
+zramctl                            # DATA (stored) vs COMPR/TOTAL (RAM used), ALGORITHM
+cat /proc/pressure/memory /proc/pressure/io
+vmstat 5 3                         # si/so columns: swap traffic, mostly zram now
+sysctl vm.swappiness vm.page-cluster
+```
+
+Compare with the baseline above. The target is IO PSI `full` well below 65–75% and swap-in from disk near zero, with `/swapfile` USED shrinking as its pages come back in. If zram fills and `/swapfile` usage grows again, the working set really does exceed RAM, and the `t4g.medium` upgrade is the next step.
+
+**Rollback** (manual, as root on the node): first delete or stop the association (remove `infra/modules/compute/zram.tf`, or in the meantime `aws ssm delete-association`) so the weekly run doesn't undo the rollback. Then run `swapoff /dev/zram0`. This needs enough free RAM plus `/swapfile` room to take zram's pages back. Then run `systemctl stop systemd-zram-setup@zram0.service`, `rm /etc/systemd/zram-generator.conf /etc/sysctl.d/99-glassbox-zram.conf`, `systemctl daemon-reload`, and `sysctl -w vm.swappiness=60 vm.page-cluster=3 vm.watermark_boost_factor=15000 vm.watermark_scale_factor=10`. AL2023's packaged default then keeps zram off across reboots.
 
 ---
 
@@ -577,7 +603,7 @@ infra/
 - `t4g.small`, Amazon Linux 2023 or Ubuntu ARM, 20 GB gp3 root volume. As of this writing, AWS runs a `t4g.small` free trial (750 hours/month, all accounts, through Dec 31 2026) that covers this instance's compute cost entirely — not something to design around long-term, but worth knowing it's currently free (see §14).
 - **`credit_specification { cpu_credits = "standard" }`**. T4g defaults to unlimited mode, which bills for sustained CPU above baseline. Standard mode throttles instead of charging.
 - IAM instance role with least privilege: `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the two model ARNs, `ssm:GetParameter` on `/glassbox/*`, SSM Session Manager for shell access (no SSH port open).
-- `user_data`: create swap, install k3s, install Flux bootstrap prerequisites.
+- `user_data`: create swap, install k3s, install Flux bootstrap prerequisites. It only runs on first boot, so later host configuration goes through Terraform-managed SSM State Manager associations instead. The first one sets up zram swap (§9.7).
 - Elastic IP so the Cloudflare-proxied origin address survives stop/start.
 - **AMI is pinned after first launch** (`lifecycle { ignore_changes = [ami] }`): the AMI comes from the SSM "latest" parameter, and k3s/MySQL/Redis state lives on the root volume, so a newly published AL2023 image must not force a replacement. Patch in place with `dnf`; to intentionally roll to a new AMI, take a backup and, with owner approval, run `terraform apply -replace=module.compute.aws_instance.glassbox`.
 

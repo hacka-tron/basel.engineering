@@ -52,6 +52,12 @@ resource "aws_iam_openid_connect_provider" "github" {
 # string.
 locals {
   github_oidc_subject_prefix = "repo:hacka-tron@14956857/basel.engineering@1394092219"
+
+  # State Manager associations of the project's own (glassbox-*) documents.
+  ssm_association_resources = [
+    "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*",
+    "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*",
+  ]
 }
 
 # Applies infrastructure changes after approval of the terraform-prod GitHub
@@ -127,6 +133,90 @@ data "aws_iam_policy_document" "ci" {
       "ssm:PutParameter",
       "ssm:RemoveTagsFromResource",
     ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  # infra/modules/compute/zram.tf: the glassbox-zram-swap Command document
+  # and the State Manager association that runs it on the node.
+  #
+  # Scope: documents are limited to the glassbox- name prefix and can't be
+  # shared (no ModifyDocumentPermission). Create/UpdateAssociation are also
+  # authorized against the document they name, so only glassbox-* documents
+  # can be associated (never AWS-RunShellScript). Associations are scoped by
+  # tag (SSM supports aws:RequestTag on CreateAssociation and
+  # aws:ResourceTag on Describe/Update/DeleteAssociation): only associations
+  # tagged project=glassbox can be created, read, changed or deleted.
+  #
+  # Residual risk: IAM never checks an association's Targets (InstanceIds or
+  # target tags) against any resource, so this role could still run a
+  # glassbox-* document it wrote on another instance in this region. And the
+  # pre-existing RegionalParameterStore statement grants
+  # ssm:AddTagsToResource region-wide, so the role could tag a foreign
+  # association project=glassbox to bring it into scope. Accepted: the
+  # account has exactly one instance and no other associations, and this
+  # role already has ec2:* in the region (it could equally rewrite the
+  # instance's user_data).
+  statement {
+    sid    = "ManageProjectSsmDocuments"
+    effect = "Allow"
+    actions = [
+      "ssm:CreateDocument",
+      "ssm:DeleteDocument",
+      "ssm:DescribeDocument",
+      "ssm:DescribeDocumentPermission",
+      "ssm:GetDocument",
+      "ssm:ListDocumentVersions",
+      "ssm:UpdateDocument",
+      "ssm:UpdateDocumentDefaultVersion",
+    ]
+    resources = ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*"]
+  }
+
+  # Associations must carry the project=glassbox tag (Terraform's
+  # default_tags; the provider sends it in CreateAssociation's Tags).
+  statement {
+    sid       = "CreateTaggedProjectSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:CreateAssociation"]
+    resources = local.ssm_association_resources
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/project"
+      values   = ["glassbox"]
+    }
+  }
+
+  statement {
+    sid    = "ManageTaggedProjectSsmAssociations"
+    effect = "Allow"
+    actions = [
+      "ssm:DeleteAssociation",
+      "ssm:DescribeAssociation",
+      "ssm:UpdateAssociation",
+    ]
+    # The condition is checked per resource: the association and, for
+    # UpdateAssociation, the glassbox-* document it names (also tagged
+    # project=glassbox by default_tags).
+    resources = local.ssm_association_resources
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/project"
+      values   = ["glassbox"]
+    }
+  }
+
+  statement {
+    sid       = "ListSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:ListAssociations", "ssm:ListAssociationVersions", "ssm:ListDocuments"]
     resources = ["*"]
 
     condition {
@@ -294,6 +384,46 @@ data "aws_iam_policy_document" "plan" {
     resources = [
       "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/glassbox/*",
     ]
+  }
+
+  # Refresh of the glassbox-zram-swap document and its association
+  # (infra/modules/compute/zram.tf), including their tags.
+  statement {
+    sid    = "ReadProjectSsmDocuments"
+    effect = "Allow"
+    actions = [
+      "ssm:DescribeDocument",
+      "ssm:DescribeDocumentPermission",
+      "ssm:GetDocument",
+      "ssm:ListTagsForResource",
+    ]
+    resources = ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:document/glassbox-*"]
+  }
+
+  statement {
+    sid       = "ReadTaggedProjectSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:DescribeAssociation", "ssm:ListTagsForResource"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:association/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/project"
+      values   = ["glassbox"]
+    }
+  }
+
+  statement {
+    sid       = "ListSsmAssociations"
+    effect    = "Allow"
+    actions   = ["ssm:ListAssociations", "ssm:ListAssociationVersions", "ssm:ListDocuments"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
   }
 
   statement {
