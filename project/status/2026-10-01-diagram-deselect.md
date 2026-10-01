@@ -1,6 +1,6 @@
 # Diagram: deselect by empty space, the details chevron, or Escape
 
-**Status:** In review, PR #TBD. Not merged.
+**Status:** In review, PR [#114](https://github.com/hacka-tron/basel.engineering/pull/114). Not merged.
 
 ## TL;DR
 
