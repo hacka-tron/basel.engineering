@@ -12,7 +12,7 @@ type StatsBarProps = {
   stressTestSubmitting?: boolean
   stressTestCapacity?: DemoCapacity
   stressTestRealCooldownSeconds?: number | null
-  /** Below md the New chat control lives here, right after the stats. */
+  /** Below md the New chat control lives here, right-aligned beside the capacity icon. */
   onNewChat?: () => void
   newChatDisabled?: boolean
   /** Topic whose conversation New chat clears, e.g. "About Basel". */
@@ -111,10 +111,6 @@ function StatsBar({
     // open upward out of the footer). "queries served" also drops to "queries" below `sm`,
     // since that's the single biggest chunk of text width at this size.
     <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
-      {/* Below md: stats then the "+" New chat icon, as one group. At md+ the
-          wrapper dissolves (display: contents) and New chat lives under the
-          ask box. */}
-      <div className="flex min-w-0 items-center gap-2 md:contents">
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
         {/* Always one line: the stats are never wrapped or squeezed. The
             timing is a focusable control so hover, focus, and a long press
@@ -146,6 +142,10 @@ function StatsBar({
           {queriesServed} <span className="hidden sm:inline">queries served</span><span className="sm:hidden">queries</span>
         </span>
       </div>
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* Below md: the "+" New chat icon sits at the right, in the same
+            group as the capacity icon, so it comes after the stats in DOM and
+            focus order. At md+ New chat lives under the ask box. */}
       {onNewChat && (
         // Same behaviour as the capacity icon: tap acts, press-and-hold shows
         // the details without acting. Always the "+" icon (no width switching).
@@ -172,14 +172,13 @@ function StatsBar({
           <span
             id={newChatTooltipId}
             role="tooltip"
-            className={`pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-56 max-w-[calc(100vw-2rem)] whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${newChatPressOpen ? 'block' : 'hidden'}`}
+            className={`pointer-events-none absolute bottom-full right-0 z-20 mb-1 w-56 max-w-[calc(100vw-2rem)] whitespace-normal rounded-[3px] border border-hairline bg-panel p-2 text-left text-xs font-normal leading-relaxed text-primary shadow-lg group-hover:block group-focus-visible:block ${newChatPressOpen ? 'block' : 'hidden'}`}
           >
             New chat: clears the {topicLabel} conversation only. Chats are saved in this browser.
           </span>
         </button>
       )}
-      </div>
-      <div className="flex shrink-0 items-center sm:gap-2">
+
         {/* >= sm: a labelled button runs the test; the icon beside it is
             details-only (hover/focus shows the tooltip, click/tap toggles it),
             so there is exactly one control per action. Both are display:none
