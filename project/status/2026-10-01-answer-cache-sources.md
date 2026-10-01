@@ -45,7 +45,7 @@ Fake providers only. No live calls, no RAG eval.
 - Existing lock tests (one LLM call for simultaneous misses, bounded wait) pass with the new signature.
 - Real Redis Stack and MySQL (skipped locally, they run in CI): the answer cache against Redis Stack (scoping, missing chunk, legacy entry invisible), the existing repeat-request test, and an end-to-end ingest test. That test edits an unrelated doc (hit), edits the source doc (miss), then deletes a doc with `sweep=apply` (miss).
 - Round 1 added in-memory tests for a reused id holding different text (miss), a hash without `content_sha` (miss), and unverifiable payloads not written. It added a Redis Stack check of the `content_sha` mismatch, and a real-Redis test that the model-tag backfill never recreates a deleted key. The ingest test now also asserts that `content_sha` is written.
-- After merging #122: `pytest services/tests` locally 661 passed, 25 skipped (DB/Redis-backed; CI runs them). `ruff check services eval` is clean.
+- After merging #122: `pytest services/tests` locally 661 passed, 25 skipped (DB/Redis-backed); in CI 684 passed, 2 skipped (only the two "Phase 1a about_me chunks" fixtures), so the Redis/MySQL integration tests ran. `ruff check services eval` is clean.
 
 ## Operational notes and risks
 
