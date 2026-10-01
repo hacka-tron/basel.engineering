@@ -1,6 +1,6 @@
 # Docs drift pass: planned markers and design docs brought up to date
 
-**Status:** PR open (docs and tests only). No code, prompt or infra change; takes effect on the next release's ingest Job.
+**Status:** PR [#120](https://github.com/hacka-tron/basel.engineering/pull/120) open (docs and tests only). No code, prompt or infra change; takes effect on the next release's ingest Job.
 
 ## TL;DR
 
