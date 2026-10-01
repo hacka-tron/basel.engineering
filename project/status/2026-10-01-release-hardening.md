@@ -1,6 +1,6 @@
 # Release pipeline hardening: manual-run provenance and deploy-branch retry
 
-**PR:** PR [#91](https://github.com/hacka-tron/basel.engineering/pull/91) · **Branch:** `ci/release-hardening` · **Backlog item:** "Release pipeline hardening"
+**PR:** [#91](https://github.com/hacka-tron/basel.engineering/pull/91) · **Branch:** `ci/release-hardening` · **Backlog item:** "Release pipeline hardening"
 **Status:** In review (PR opened 2026-10-01; not merged).
 
 ## TL;DR
