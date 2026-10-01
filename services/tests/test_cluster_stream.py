@@ -1,38 +1,71 @@
-"""Tests for the /api/cluster/stream SSE endpoint (DESIGN.md §9.4/§9.5)."""
+"""Tests for the /api/cluster/stream SSE endpoint (DESIGN.md §9.4/§9.5).
 
+The Kubernetes API and Redis are faked: one fake API server counts how many
+list/watch calls it receives, so the tests can prove that many SSE clients
+share one upstream watch, and that the caps, lifetime and heartbeat bound
+what a client can hold open.
+"""
+
+import asyncio
 import json
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
+from services.glassbox.api import cluster
 from services.glassbox.api.main import app
+from services.glassbox.worker.main import GROUP_NAME
 
 
-def _events(response):
-    return [
-        (name.removeprefix("event: "), json.loads(data.removeprefix("data: ")))
-        for frame in response.text.strip().split("\n\n")
-        for name, data in [frame.splitlines()]
-    ]
+def _events(text):
+    """Parse SSE text into (event, data) pairs, skipping retry and ping frames."""
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = block.splitlines()
+        names = [line.removeprefix("event: ") for line in lines if line.startswith("event: ")]
+        data = [line.removeprefix("data: ") for line in lines if line.startswith("data: ")]
+        if names and data:
+            out.append((names[0], json.loads(data[0])))
+    return out
 
 
-def test_reports_unavailable_without_incluster_config(monkeypatch):
-    """No ServiceAccount token/host env vars — the real local-dev situation."""
-    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
-    monkeypatch.delenv("KUBERNETES_SERVICE_PORT_HTTPS", raising=False)
-    monkeypatch.delenv("KUBERNETES_SERVICE_PORT", raising=False)
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-
-    response = TestClient(app).get("/api/cluster/stream")
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    names = [name for name, _ in _events(response)]
-    assert "cluster_unavailable" in names
+def _pod(name, *, ready=True, phase="Running"):
+    return {
+        "metadata": {"name": name, "uid": "secret-uid"},
+        "spec": {"nodeName": "node-1"},
+        "status": {
+            "phase": phase,
+            "conditions": [{"type": "Ready", "status": "True" if ready else "False"}],
+        },
+    }
 
 
-class _FakeWatchResponse:
-    def __init__(self, lines):
-        self._lines = lines
+class _FakeRedis:
+    def __init__(self, lag=7):
+        self.lag = lag
+
+    async def xinfo_groups(self, _stream):
+        return [{"name": GROUP_NAME, "lag": self.lag}]
+
+    async def aclose(self):
+        pass
+
+
+class _ListResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+class _WatchResponse:
+    def __init__(self, server):
+        self._server = server
 
     async def __aenter__(self):
         return self
@@ -44,62 +77,143 @@ class _FakeWatchResponse:
         pass
 
     async def aiter_lines(self):
-        for line in self._lines:
+        if self._server.watch_lines is not None:
+            for line in self._server.watch_lines:
+                yield line
+            return
+        while True:
+            line = await self._server.live.get()
+            if line is None:
+                return
             yield line
 
 
-class _FakeListResponse:
-    def __init__(self, payload):
-        self._payload = payload
+class _FakeK8s:
+    """A fake API server. `listings` are returned in order (the last one repeats).
 
-    def raise_for_status(self):
-        pass
+    With `watch_lines` set, each watch replays those lines and ends (the API
+    server closing the watch). Otherwise the watch blocks on `live`, a queue
+    the test pushes lines into; None ends the watch.
+    """
 
-    def json(self):
-        return self._payload
+    def __init__(self, listings, watch_lines=None):
+        self.listings = listings
+        self.watch_lines = watch_lines
+        self.live: asyncio.Queue | None = None
+        self.list_calls = 0
+        self.watch_calls = 0
+        self.closed_clients = 0
+
+    def client(self):
+        server = self
+
+        class _Client:
+            async def get(self, path, params=None):
+                index = min(server.list_calls, len(server.listings) - 1)
+                server.list_calls += 1
+                return _ListResponse(
+                    {"metadata": {"resourceVersion": "1"}, "items": server.listings[index]}
+                )
+
+            def stream(self, method, path, params=None):
+                server.watch_calls += 1
+                return _WatchResponse(server)
+
+            async def aclose(self):
+                server.closed_clients += 1
+
+        return _Client(), "https://fake"
 
 
-class _FakeK8sClient:
-    def __init__(self, pods, watch_lines):
-        self._pods = pods
-        self._watch_lines = watch_lines
-
-    async def get(self, path, params=None):
-        return _FakeListResponse({"metadata": {"resourceVersion": "1"}, "items": self._pods})
-
-    def stream(self, method, path, params=None):
-        return _FakeWatchResponse(self._watch_lines)
-
-    async def aclose(self):
-        pass
-
-
-def test_forwards_pod_and_backlog_events_from_a_fake_cluster(monkeypatch):
-    from services.glassbox.api import cluster
-
-    pod = {
-        "metadata": {"name": "retrieval-worker-abc123"},
-        "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]},
-    }
-    watch_line = json.dumps(
-        {
-            "type": "MODIFIED",
-            "object": {
-                "metadata": {"name": "retrieval-worker-abc123"},
-                "status": {
-                    "phase": "Running",
-                    "conditions": [{"type": "Ready", "status": "False"}],
-                },
-            },
-        }
-    )
-    fake_client = _FakeK8sClient([pod], [watch_line])
-    monkeypatch.setattr(cluster, "_incluster_client", lambda: (fake_client, "https://fake"))
+@pytest.fixture
+def fake_env(monkeypatch):
+    """A fresh hub, fake Redis, and fast timings."""
+    hub = cluster.ClusterHub(idle_linger_s=0.05)
+    monkeypatch.setattr(cluster, "HUB", hub)
+    monkeypatch.setattr(cluster, "_redis_client", lambda: _FakeRedis())
     monkeypatch.setattr(cluster, "_BACKLOG_POLL_S", 0.01)
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setattr(cluster, "_WATCH_RESTART_S", 0.05)
+    monkeypatch.setattr(cluster, "_WATCH_RETRY_BASE_S", 0.05)
+    for name in (
+        "GLASSBOX_CLUSTER_STREAM_MAX_CLIENTS",
+        "GLASSBOX_CLUSTER_STREAM_MAX_PER_IP",
+        "GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S",
+        "GLASSBOX_CLUSTER_STREAM_HEARTBEAT_S",
+        "GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return hub
 
-    response = TestClient(app).get("/api/cluster/stream")
-    events = _events(response)
+
+def _request(client_ip="203.0.113.5", disconnected=lambda: False):
+    async def receive():
+        await asyncio.sleep(3600)
+        return {"type": "http.disconnect"}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/cluster/stream",
+            "headers": [],
+            "query_string": b"",
+            "client": (client_ip, 50000),
+        },
+        receive,
+    )
+
+    async def is_disconnected():
+        return disconnected()
+
+    request.is_disconnected = is_disconnected  # type: ignore[method-assign]
+    return request
+
+
+async def _drain(subscriber, until, timeout=2.0):
+    """Collect (kind, payload) items from a subscriber's queue until `until` matches."""
+    items = []
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        assert remaining > 0, f"timed out; got {items}"
+        item = await asyncio.wait_for(subscriber.queue.get(), timeout=remaining)
+        items.append(item)
+        if until(item):
+            return items
+
+
+# --- Endpoint (TestClient) ---------------------------------------------------
+
+
+def test_reports_unavailable_without_incluster_config(fake_env, monkeypatch):
+    """No ServiceAccount token/host env vars — the real local-dev situation."""
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    monkeypatch.delenv("KUBERNETES_SERVICE_PORT_HTTPS", raising=False)
+    monkeypatch.delenv("KUBERNETES_SERVICE_PORT", raising=False)
+
+    with TestClient(app) as client:
+        response = client.get("/api/cluster/stream")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    names = [name for name, _ in _events(response.text)]
+    assert names[-1] == "cluster_unavailable"
+    assert fake_env.client_count == 0
+
+
+def test_forwards_pod_and_backlog_events_then_asks_for_reconnect(fake_env, monkeypatch):
+    watch_line = json.dumps(
+        {"type": "MODIFIED", "object": _pod("retrieval-worker-abc123", ready=False)}
+    )
+    server = _FakeK8s([[_pod("retrieval-worker-abc123")]], watch_lines=[watch_line])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S", "0.4")
+
+    with TestClient(app) as client:
+        response = client.get("/api/cluster/stream")
+    assert response.text.startswith("retry: ")
+    events = _events(response.text)
+    names = [name for name, _ in events]
     pod_events = [data for name, data in events if name == "pod"]
 
     assert pod_events[0] == {
@@ -114,22 +228,342 @@ def test_forwards_pod_and_backlog_events_from_a_fake_cluster(monkeypatch):
         "phase": "Running",
         "ready": False,
     } in pod_events
+    # The snapshot ends with `synced`; the planned close is a `reconnect` event.
+    assert names.index("synced") > names.index("pod")
+    assert names[-1] == "reconnect"
+    assert ("backlog", {"backlog": 7}) in events
     # Only name/phase/ready ever leave the cluster — never the full pod object.
     assert all(set(data.keys()) == {"type", "pod", "phase", "ready"} for data in pod_events)
-    assert any(name == "backlog" for name, _ in events)
+    assert fake_env.client_count == 0
 
 
 def test_pod_only_forwards_name_phase_ready_never_full_object():
-    from services.glassbox.api.cluster import _pod_event
-
     pod = {
         "metadata": {"name": "retrieval-worker-xyz", "uid": "secret-uid", "labels": {"a": "b"}},
         "spec": {"nodeName": "ip-10-0-0-1"},
         "status": {"phase": "Pending", "conditions": []},
     }
-    assert _pod_event("ADDED", pod) == {
+    assert cluster._pod_event("ADDED", pod) == {
         "type": "ADDED",
         "pod": "retrieval-worker-xyz",
         "phase": "Pending",
         "ready": False,
     }
+
+
+# --- Caps ---------------------------------------------------------------------
+
+
+def test_global_cap_returns_503_with_retry_after(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_CLIENTS", "2")
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S", "45")
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        first = await cluster.cluster_stream(_request("203.0.113.1"))
+        second = await cluster.cluster_stream(_request("203.0.113.2"))
+        third = await cluster.cluster_stream(_request("203.0.113.3"))
+        assert first.status_code == 200 and second.status_code == 200
+        assert third.status_code == 503
+        assert third.headers["retry-after"] == "45"
+        assert json.loads(third.body)["error"] == "cluster_stream_busy"
+        assert fake_env.client_count == 2
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_per_ip_cap_returns_429_and_other_ips_still_connect(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_PER_IP", "2")
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        statuses = [
+            (await cluster.cluster_stream(_request("198.51.100.7"))).status_code for _ in range(3)
+        ]
+        assert statuses == [200, 200, 429]
+        rejected = await cluster.cluster_stream(_request("198.51.100.7"))
+        assert rejected.headers["retry-after"] == str(cluster.DEFAULT_RETRY_AFTER_S)
+        other = await cluster.cluster_stream(_request("198.51.100.8"))
+        assert other.status_code == 200
+        assert fake_env.client_count == 3
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_rejection_opens_no_upstream(fake_env, monkeypatch):
+    """Over the cap nothing is started: no watch, no Redis client."""
+    calls = []
+    monkeypatch.setattr(cluster, "_incluster_client", lambda: calls.append("k8s"))
+    limits = cluster.StreamLimits(max_clients=1)
+
+    async def scenario():
+        fake_env._bind_loop()
+        fake_env._subscribers.add(cluster.Subscriber("x", 4))  # occupy the only slot
+        assert fake_env.try_subscribe("y", limits) == "global"
+        await asyncio.sleep(0.05)
+        assert calls == [] and fake_env.upstream_starts == 0
+
+    asyncio.run(scenario())
+
+
+def test_released_slot_can_be_reused(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    limits = cluster.StreamLimits(max_clients=1, max_per_ip=1)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("a", limits)
+        assert fake_env.try_subscribe("a", limits) == "global"
+        fake_env.unsubscribe(sub)
+        fake_env.unsubscribe(sub)  # idempotent: must not go negative
+        assert fake_env.clients_for("a") == 0
+        again = fake_env.try_subscribe("a", limits)
+        assert isinstance(again, cluster.Subscriber)
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_limits_from_env_fall_back_to_safe_defaults(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_CLIENTS", "0")
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_PER_IP", "not-a-number")
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_MAX_LIFETIME_S", "-5")
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_HEARTBEAT_S", "")
+    monkeypatch.setenv("GLASSBOX_CLUSTER_STREAM_RETRY_AFTER_S", "12")
+    assert cluster.StreamLimits.from_env() == cluster.StreamLimits(retry_after_s=12)
+
+
+# --- Fan-out --------------------------------------------------------------------
+
+
+def test_many_clients_share_one_watch_and_one_redis_client(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    redis_clients = []
+
+    def make_redis():
+        redis_clients.append(_FakeRedis())
+        return redis_clients[-1]
+
+    monkeypatch.setattr(cluster, "_redis_client", make_redis)
+    limits = cluster.StreamLimits()
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        subs = [fake_env.try_subscribe(f"ip-{i}", limits) for i in range(25)]
+        for sub in subs:
+            await _drain(sub, lambda item: item[0] == "synced")
+        await server.live.put(
+            json.dumps({"type": "MODIFIED", "object": _pod("retrieval-worker-a", ready=False)})
+        )
+        for sub in subs:
+            items = await _drain(sub, lambda item: item[0] == "pod")
+            assert items[-1][1]["ready"] is False
+        assert server.list_calls == 1
+        assert server.watch_calls == 1
+        assert len(redis_clients) == 1
+        assert fake_env.upstream_starts == 1
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_late_subscriber_gets_snapshot_without_a_new_watch(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a"), _pod("retrieval-worker-b", ready=False)]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    limits = cluster.StreamLimits()
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        first = fake_env.try_subscribe("one", limits)
+        await _drain(first, lambda item: item[0] == "synced")
+        await asyncio.sleep(0.05)  # let the backlog poll report once
+        late = fake_env.try_subscribe("two", limits)
+        snapshot = await _drain(late, lambda item: item[0] == "synced")
+        pods = {payload["pod"]: payload for kind, payload in snapshot if kind == "pod"}
+        assert set(pods) == {"retrieval-worker-a", "retrieval-worker-b"}
+        assert all(payload["type"] == "ADDED" for payload in pods.values())
+        assert ("backlog", {"backlog": 7}) in snapshot
+        assert server.list_calls == 1 and server.watch_calls == 1
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_relist_after_watch_ends_reports_pods_that_vanished(fake_env, monkeypatch):
+    server = _FakeK8s(
+        [[_pod("retrieval-worker-a"), _pod("retrieval-worker-b")], [_pod("retrieval-worker-a")]],
+        watch_lines=[],
+    )
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        items = await _drain(sub, lambda item: item[0] == "pod" and item[1]["type"] == "DELETED")
+        assert items[-1][1]["pod"] == "retrieval-worker-b"
+        assert server.list_calls >= 2
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_watch_failure_retries_instead_of_ending_streams(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    attempts = []
+
+    def flaky_client():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("apiserver hiccup")
+        return server.client()
+
+    monkeypatch.setattr(cluster, "_incluster_client", flaky_client)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        items = await _drain(sub, lambda item: item[0] == "synced")
+        assert all(kind != "cluster_unavailable" for kind, _ in items)
+        assert len(attempts) == 2
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_slow_subscriber_is_dropped_not_buffered(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    hub = cluster.ClusterHub(queue_size=3, idle_linger_s=0.05)
+    monkeypatch.setattr(cluster, "HUB", hub)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        slow = hub.try_subscribe("slow", cluster.StreamLimits())
+        await asyncio.sleep(0.05)
+        for i in range(10):
+            await server.live.put(
+                json.dumps({"type": "MODIFIED", "object": _pod(f"retrieval-worker-{i}")})
+            )
+        await asyncio.sleep(0.05)
+        assert slow.dropped
+        assert hub.client_count == 0
+        assert slow.queue.qsize() <= 3
+        await hub.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_upstream_stops_after_last_subscriber_leaves(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        upstream = fake_env._upstream
+        fake_env.unsubscribe(sub)
+        await asyncio.sleep(0.2)
+        assert upstream.done()
+        assert server.closed_clients == 1
+
+    asyncio.run(scenario())
+
+
+def test_reconnect_within_linger_reuses_the_watch(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    hub = cluster.ClusterHub(idle_linger_s=1.0)
+    monkeypatch.setattr(cluster, "HUB", hub)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = hub.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        hub.unsubscribe(sub)
+        again = hub.try_subscribe("one", cluster.StreamLimits())
+        await _drain(again, lambda item: item[0] == "synced")
+        assert hub.upstream_starts == 1 and server.watch_calls == 1
+        await hub.aclose()
+
+    asyncio.run(scenario())
+
+
+# --- Per-connection stream: heartbeat, lifetime, disconnect --------------------
+
+
+def test_stream_sends_heartbeats_and_ends_at_max_lifetime(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    limits = cluster.StreamLimits(max_lifetime_s=0.5, heartbeat_s=0.1)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("one", limits)
+        chunks = [chunk async for chunk in cluster._stream(fake_env, sub, _request(), limits)]
+        text = "".join(chunks)
+        assert text.count(": ping") >= 2
+        assert _events(text)[-1][0] == "reconnect"
+        assert fake_env.client_count == 0
+
+    asyncio.run(scenario())
+
+
+def test_disconnected_client_releases_its_slot(fake_env, monkeypatch):
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    monkeypatch.setattr(cluster, "_DISCONNECT_POLL_S", 0.05)
+    limits = cluster.StreamLimits(max_lifetime_s=60, heartbeat_s=60)
+    gone = {"value": False}
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("one", limits)
+
+        async def consume():
+            return [
+                chunk
+                async for chunk in cluster._stream(
+                    fake_env, sub, _request(disconnected=lambda: gone["value"]), limits
+                )
+            ]
+
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.1)
+        assert fake_env.client_count == 1
+        gone["value"] = True
+        await asyncio.wait_for(task, timeout=1.0)
+        assert fake_env.client_count == 0
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_stream_releases_its_slot(fake_env, monkeypatch):
+    """Starlette cancels the body iterator when the client goes away."""
+    server = _FakeK8s([[]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    limits = cluster.StreamLimits(max_lifetime_s=60, heartbeat_s=60)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        sub = fake_env.try_subscribe("one", limits)
+
+        async def consume():
+            async for _chunk in cluster._stream(fake_env, sub, _request(), limits):
+                pass
+
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert fake_env.client_count == 0
+
+    asyncio.run(scenario())
