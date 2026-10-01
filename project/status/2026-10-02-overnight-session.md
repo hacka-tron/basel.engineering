@@ -18,6 +18,12 @@ Nothing touched production. No paid LLM or embedding calls were made, and no wor
 
 Merge in this order. Each PR has its own review summary in its description.
 
+**Update 2026-10-02 (morning):**
+- #88 is merged, and every open branch has `main` merged in.
+- The UI group is chained (#89 → #90 → #93 → #100, each containing the one before), and so is the ops pair (#94 → #102). Merge each chain in order with no conflicts.
+- **The RAG PRs (#92, #95, #97, #101) are parked:** the owner wants to add more documentation and resources before any RAG analysis.
+- #96, #99, #91 and #98 stay separate and get re-synced right before each merge.
+
 | # | PR | What | Needs from the owner |
 |---|---|---|---|
 | 1 | #88 | Footer drops the visible "· cached" | — |
