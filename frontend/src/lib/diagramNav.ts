@@ -38,8 +38,9 @@ export function createDiagramNav(deps: DiagramNavDeps) {
     }
   }
 
-  /** A started stress test must show its workers: open the diagram on mobile
-   * (no extra history entry if it is already shown); desktop shows it always. */
+  /** Every stress-test tap (including one ignored during the countdown or an
+   * in-flight request) shows the workers: open the diagram on mobile (no
+   * extra history entry if it is already shown); desktop shows it always. */
   function revealDiagram(isDesktop: boolean) {
     if (!isDesktop) showView('diagram')
   }

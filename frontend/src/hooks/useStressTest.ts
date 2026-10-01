@@ -46,10 +46,7 @@ export type StressTestState = {
  * real burst's 5-minute server-side cooldown runs — it plays the simulated
  * version. `onReal` fires when a real burst starts so the page can show its
  * worker visualization. */
-// onBegin runs synchronously when a click is accepted (before any request),
-// so UI reactions to the tap (e.g. showing the diagram) happen immediately
-// and can't override a choice the visitor makes while the request is pending.
-export function useStressTest(onVisual?: () => void, onReal?: () => void, onBegin?: () => void): StressTestState {
+export function useStressTest(onVisual?: () => void, onReal?: () => void): StressTestState {
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [capacity, setCapacity] = useState<DemoCapacity>(unknownCapacity)
@@ -132,7 +129,6 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void, onBegi
   const trigger = useCallback(async () => {
     if (busyRef.current || cooldownSeconds !== null) return
     busyRef.current = true
-    onBegin?.()
     setIsSubmitting(true)
     try {
       if (realCooldownSeconds !== null) {
@@ -172,7 +168,7 @@ export function useStressTest(onVisual?: () => void, onReal?: () => void, onBegi
       setIsSubmitting(false)
       busyRef.current = false
     }
-  }, [cooldownSeconds, realCooldownSeconds, startCountdown, startRealCooldown, onVisual, onReal, onBegin])
+  }, [cooldownSeconds, realCooldownSeconds, startCountdown, startRealCooldown, onVisual, onReal])
 
   const shownCapacity: DemoCapacity = realCooldownSeconds !== null
     ? { sufficient: false, realCooldown: true, reason: 'A real stress test just ran.' }

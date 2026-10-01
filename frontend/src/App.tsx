@@ -183,16 +183,17 @@ function App() {
     if (!clusterViewRef.current) startVisualStressTest()
   }, [startVisualStressTest])
 
-  // An accepted stress-test tap (real or simulated, including cooldown clicks)
-  // shows the diagram on mobile at once, before the capacity/load request, so
-  // a later Chat tap while the request is pending wins. A long press only shows
-  // details and never triggers. Refs: the nav is created further down.
+  // Every stress-test tap shows the diagram on mobile at once: one that starts
+  // a run, and one ignored while a run is in flight or counting down (the
+  // animation is still playing there). It runs before any request, so a
+  // later Chat tap while the request is pending wins. A long press only shows
+  // details and never taps. Refs: the nav is created further down.
   const isDesktopRef = useRef(false)
   const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
-  const onStressBegin = useCallback(() => {
+  const onStressTap = useCallback(() => {
     revealDiagramRef.current(isDesktopRef.current)
   }, [])
-  const stressTest = useStressTest(startVisualStressTest, startRealStressTest, onStressBegin)
+  const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
     : Array.from({ length: simulatedPodCount }, (_, index) => ({ name: `demo-worker-${index}`, ready: true }))
@@ -669,6 +670,7 @@ function App() {
         lastStats={lastStats}
         queriesServed={queriesServed}
         onStressTest={handleStressTestClick}
+        onStressTap={onStressTap}
         stressTestCooldownSeconds={stressTest.cooldownSeconds}
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
