@@ -67,7 +67,7 @@ Workflows (`.github/workflows/`):
 - `build-N` is the run number, so any run outranks older builds: manual `workflow_dispatch` releases must stay gated on "SHA is `main`'s current head" (`release-provenance.sh`; an ancestor check would let old commits through). That check only exists on refs whose `release.yml` contains it (dispatch runs the selected ref's workflow); old branches and tags are refused by the release role's trust, which requires `token.actions.githubusercontent.com:ref` = `refs/heads/main` (PR #98, applied), with the `release` environment's `main`-only branch policy (owner setting) as a second layer. Keep that condition on `release_trust`. `sync-deploy-branch` races Flux on `deploy`: it must keep re-fetching, re-merging and pushing without force (`sync-deploy-branch.sh`, tested against a bare repo with a racing push).
 - Required checks cannot be path-filtered; the default `GITHUB_TOKEN` never triggers workflows on PRs it opens; environment gates (`terraform-prod`) are the apply control, so check plan jobs never get write credentials.
 - Run `actionlint`; read `permissions:`, `if:` fork guards, and which secrets each job can see.
-- Third-party actions are pinned by SHA with a version comment; Dependabot updates them.
+- Third-party actions are pinned by full SHA with a plain `# vX.Y.Z` comment (the form Dependabot keeps updated; reject the old `# vX (vX.Y.Z)` form). Dependabot sends one grouped monthly `ci:` PR. Runners are pinned to `ubuntu-24.04` (not `ubuntu-latest`) until Ubuntu 26 images are proven.
 
 ## Per-area checklist (run it yourself and paste summary lines)
 
