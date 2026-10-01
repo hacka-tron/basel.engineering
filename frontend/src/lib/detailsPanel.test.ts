@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { portraitDetailsState } from './detailsPanel.ts'
+import { deselectsOnKey } from './detailsPanel.ts'
 
-test('locked whenever no component is selected, even if it was left open', () => {
-  assert.equal(portraitDetailsState(false, false), 'locked')
-  assert.equal(portraitDetailsState(false, true), 'locked')
+const escape = { key: 'Escape', defaultPrevented: false }
+
+test('Escape deselects while a component is selected', () => {
+  assert.equal(deselectsOnKey(escape, true), true)
 })
 
-test('follows the open/collapse choice once a component is selected', () => {
-  assert.equal(portraitDetailsState(true, true), 'open')
-  assert.equal(portraitDetailsState(true, false), 'collapsed')
+test('Escape with nothing selected is left for the next handler (back to Chat)', () => {
+  assert.equal(deselectsOnKey(escape, false), false)
+})
+
+test('other keys never deselect', () => {
+  assert.equal(deselectsOnKey({ key: 'Enter', defaultPrevented: false }, true), false)
+  assert.equal(deselectsOnKey({ key: 'Esc', defaultPrevented: false }, true), false)
+})
+
+test('an Escape another handler already used, or one ending an IME composition, is ignored', () => {
+  assert.equal(deselectsOnKey({ ...escape, defaultPrevented: true }, true), false)
+  assert.equal(deselectsOnKey({ ...escape, isComposing: true }, true), false)
 })

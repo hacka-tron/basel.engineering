@@ -2,7 +2,7 @@ import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Nod
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, landscapeEdges, landscapeNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
-import { PORTRAIT_DETAILS_HINT, portraitDetailsState } from '../lib/detailsPanel'
+import { deselectsOnKey, PORTRAIT_DETAILS_HINT } from '../lib/detailsPanel'
 import { boundsOf, createRefitter, squeezedMinZoom } from '../lib/diagramFit'
 import type { RetrievalChunk } from '../lib/sse'
 
@@ -29,13 +29,19 @@ type ArchitecturePanelProps = {
   selectedNode?: NodeId | null
   answerText?: string | null
   onInspect: (id: NodeId) => void
+  /**
+   * Clears the selection: a click or tap on empty diagram space, Escape, and
+   * on phones the details panel's close chevron. An answer still streaming
+   * for the component keeps streaming into Chat; only the selection clears.
+   */
+  onDeselect?: () => void
   workerPods?: WorkerPod[]
   backlog?: number | null
   /** Smallest zoom fitView may pick (mobile: keep labels readable and pan instead of shrinking). */
   fitMinZoom?: number
   /**
    * Phone layout: the two-column portrait graph, and a details panel that is
-   * capped in height and can be collapsed so the diagram keeps the room.
+   * capped in height and open only while a component is selected.
    */
   portrait?: boolean
   /**
@@ -141,47 +147,54 @@ const defaultEdgeOptions = {
 // for, which made the Vector Search -> MySQL arrow loop back on itself.
 const portraitEdgeOptions = { ...defaultEdgeOptions, pathOptions: { offset: 8 } }
 
-function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, workerPods, backlog, fitMinZoom, portrait = false, landscape = false, onContinueInChat }: ArchitecturePanelProps) {
+function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, onDeselect, workerPods, backlog, fitMinZoom, portrait = false, landscape = false, onContinueInChat }: ArchitecturePanelProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeId | null>(null)
-  // Portrait only: the details panel starts collapsed (unless a component is
-  // already selected) so the diagram gets the room. With nothing selected the
-  // toggle is locked closed (lib/detailsPanel.ts).
-  const [detailsOpen, setDetailsOpen] = useState(() => selectedNode != null)
-  const portraitDetails = portraitDetailsState(selectedNode != null, detailsOpen)
+  // Portrait: the details panel is open exactly while a component is
+  // selected; otherwise the bar under the diagram is locked (lib/detailsPanel.ts).
+  const detailsOpen = selectedNode != null
   const detailsId = useId()
-  // Collapsing/expanding swaps one button for the other; keep keyboard focus
-  // on whichever control is now showing (a node tap leaves focus alone).
-  const expandButtonRef = useRef<HTMLButtonElement>(null)
-  const collapseButtonRef = useRef<HTMLButtonElement>(null)
-  const moveFocusOnToggleRef = useRef(false)
+  const detailsRef = useRef<HTMLDivElement>(null)
+  const lockedBarRef = useRef<HTMLButtonElement>(null)
+  // Deselecting unmounts the open panel. If it held keyboard focus (or its
+  // close chevron was used), focus moves to the locked bar that replaces it
+  // instead of falling to <body>. A tap on empty diagram space leaves focus alone.
+  const focusLockedBarRef = useRef(false)
+  const deselect = useCallback((fromPanel: boolean) => {
+    if (portrait && (fromPanel || detailsRef.current?.contains(document.activeElement))) focusLockedBarRef.current = true
+    // Drop a lingering focus/hover preview too, so the desktop inspector
+    // returns to its empty state.
+    setHoveredNode(null)
+    onDeselect?.()
+  }, [onDeselect, portrait])
   useEffect(() => {
-    if (!moveFocusOnToggleRef.current) return
-    moveFocusOnToggleRef.current = false
-    ;(detailsOpen ? collapseButtonRef : expandButtonRef).current?.focus()
-  }, [detailsOpen])
-  function toggleDetails(open: boolean) {
-    moveFocusOnToggleRef.current = true
-    setDetailsOpen(open)
-  }
+    if (selectedNode != null || !focusLockedBarRef.current) return
+    focusLockedBarRef.current = false
+    lockedBarRef.current?.focus()
+  }, [selectedNode])
+  // Escape deselects first. Capture phase, so it runs before the phone Diagram
+  // view's Escape-returns-to-Chat listener, which skips handled events: the
+  // first Escape deselects, the next one returns to Chat.
+  const hasSelection = selectedNode != null && onDeselect != null
+  useEffect(() => {
+    if (!hasSelection) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!deselectsOnKey(event, true)) return
+      event.preventDefault()
+      deselect(false)
+    }
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [hasSelection, deselect])
   const inspectorRef = useRef<HTMLDivElement>(null)
+  // Stable for the node data, so a parent re-render (every streamed token)
+  // does not rebuild the nodes.
   const inspectRef = useRef(onInspect)
-  const portraitStateRef = useRef({ portrait, selectedNode, detailsOpen })
   useEffect(() => {
     inspectRef.current = onInspect
-    portraitStateRef.current = { portrait, selectedNode, detailsOpen }
-  }, [onInspect, portrait, selectedNode, detailsOpen])
+  }, [onInspect])
+  const inspectNode = useCallback((id: NodeId) => inspectRef.current(id), [])
   const previewNode = useCallback((id: NodeId) => setHoveredNode(id), [])
   const leaveNode = useCallback(() => setHoveredNode(null), [])
-  const inspectNode = useCallback((id: NodeId) => {
-    const current = portraitStateRef.current
-    if (current.portrait) {
-      // Any tap opens the details. Re-tapping the selected component while
-      // they are collapsed only reopens its answer instead of asking again.
-      setDetailsOpen(true)
-      if (id === current.selectedNode && !current.detailsOpen) return
-    }
-    inspectRef.current(id)
-  }, [])
   const inspectedNode = hoveredNode ?? selectedNode
   const inspectedComponent = architectureNodes.find((node) => node.id === inspectedNode)
   const selectedComponent = architectureNodes.find((node) => node.id === selectedNode)
@@ -198,7 +211,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   // zoom floor just enough that the whole graph fits instead of clipping its
   // outer columns (the smallest landscape phone, 568x320). Wider phones
   // already fit at the normal floor, so nothing changes for them.
-  const squeezeToFit = portrait && landscape && portraitDetails === 'open'
+  const squeezeToFit = portrait && landscape && detailsOpen
   useEffect(() => {
     const box = flowBoxRef.current
     if (!box) return
@@ -322,6 +335,9 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           elementsSelectable={false}
           onNodeMouseEnter={(_event, node) => previewNode(node.id as NodeId)}
           onNodeMouseLeave={leaveNode}
+          // Empty space only: React Flow ignores clicks on nodes and edges
+          // here, and a drag that pans the diagram is not a click.
+          onPaneClick={hasSelection ? () => deselect(false) : undefined}
           zoomOnScroll={false}
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
@@ -331,54 +347,40 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         <div ref={inspectorRef} className="h-44 shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:px-7">
           {details}
         </div>
-      ) : portraitDetails === 'open' ? (
-        // Capped so the diagram keeps its room; the collapse button stays
+      ) : detailsOpen ? (
+        // Capped so the diagram keeps its room; the close button stays
         // pinned while the details scroll, and text keeps clear of it. A
         // phone held sideways has no height to spare, so there it opens
         // beside the diagram instead, at full height.
-        <div id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline phone-landscape:max-h-none! phone-landscape:w-[40vw] phone-landscape:border-t-0 phone-landscape:border-l" style={portraitPanelStyle}>
+        <div ref={detailsRef} id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline phone-landscape:max-h-none! phone-landscape:w-[40vw] phone-landscape:border-t-0 phone-landscape:border-l" style={portraitPanelStyle}>
           <div ref={inspectorRef} className="min-h-0 flex-1 overflow-y-auto py-4 pl-4 pr-14">
             {details}
           </div>
+          {/* Closing deselects the component (owner, 2026-10-01): the panel
+              goes back to the locked bar. Not a disclosure toggle any more
+              (nothing can reopen it but selecting a component), so no
+              aria-expanded; the name says what it does. */}
           <button
-            ref={collapseButtonRef}
             type="button"
-            aria-label="Collapse details"
-            aria-expanded="true"
-            aria-controls={detailsId}
-            onClick={() => toggleDetails(false)}
+            aria-label={selectedComponent ? `Close ${selectedComponent.data.label} details and deselect it` : 'Close details'}
+            onClick={() => deselect(true)}
             className="absolute right-1 top-1 flex size-11 items-center justify-center rounded-[3px] text-muted transition-colors hover:text-primary focus-visible:outline-1 focus-visible:outline-cyan"
           >
             <Chevron direction="down" />
           </button>
         </div>
-      ) : portraitDetails === 'locked' ? (
+      ) : (
         // No component selected: nothing to show yet (not the latest chat
         // answer). aria-disabled rather than disabled, so the button stays
         // focusable and screen-reader users still hear the hint when tabbing.
         <button
-          ref={expandButtonRef}
+          ref={lockedBarRef}
           type="button"
           aria-disabled="true"
           className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted phone-landscape:col-span-2"
         >
           <span className="min-w-0 truncate">{PORTRAIT_DETAILS_HINT}</span>
           <span className="flex shrink-0 items-center opacity-40">
-            <Chevron direction="up" />
-          </span>
-        </button>
-      ) : (
-        <button
-          ref={expandButtonRef}
-          type="button"
-          aria-expanded="false"
-          aria-controls={detailsId}
-          onClick={() => toggleDetails(true)}
-          className="flex min-h-11 w-full shrink-0 items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted transition-colors hover:text-primary phone-landscape:col-span-2"
-        >
-          <span className="min-w-0 truncate">{selectedComponent ? `${selectedComponent.data.label} details` : 'Details'}</span>
-          <span className="flex shrink-0 items-center gap-2 tabular-nums">
-            {retrievedChunks.length} {retrievedChunks.length === 1 ? 'chunk' : 'chunks'}
             <Chevron direction="up" />
           </span>
         </button>

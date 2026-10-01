@@ -97,6 +97,9 @@ function App() {
   // per streamed token.
   const savedSignatureRef = useRef<Partial<Record<Corpus, string | null>>>({})
   const requestInFlightRef = useRef(false)
+  // The question of the request in flight, so re-selecting its component does
+  // not queue the same question again.
+  const inFlightQuestionRef = useRef<string | null>(null)
   // The in-flight retry's reply: until it settles, the saved conversation keeps
   // the failure reply it replaces, so a reload mid-retry still offers Retry.
   const retryTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
@@ -342,6 +345,7 @@ function App() {
     setIsStreaming(false)
     setActiveNode(null)
     requestInFlightRef.current = false
+    inFlightQuestionRef.current = null
     abortControllerRef.current = null
     streamTargetRef.current = null
     retryTargetRef.current = null
@@ -353,6 +357,7 @@ function App() {
   function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true, retry }: { sendHistory?: boolean; retry?: RetryPlan } = {}) {
     if (requestInFlightRef.current) return
     requestInFlightRef.current = true
+    inFlightQuestionRef.current = question
     const controller = new AbortController()
     abortControllerRef.current = controller
     // Recent settled turns of this tab's conversation, read before the new
@@ -543,6 +548,16 @@ function App() {
     handleAsk(plan.question, corpus, { sendHistory: !COMPONENT_QUESTIONS.has(plan.question), retry: plan })
   }
 
+  // Empty diagram space, Escape, or (phones) the details panel's close
+  // chevron. Only the selection clears: an answer still streaming for the
+  // component keeps streaming into Chat and keeps lighting up its stages
+  // (activeNode is separate). A component question queued behind that answer
+  // is dropped, since the visitor just let go of it.
+  const handleDeselectComponent = useCallback(() => {
+    setSelectedNode(null)
+    pendingComponentRef.current = null
+  }, [])
+
   function handleNewChat() {
     if (requestInFlightRef.current) return
     setConversations((current) => ({ ...current, [corpus]: [] }))
@@ -555,7 +570,10 @@ function App() {
     setSelectedNode(id)
     setCorpus('system')
     if (requestInFlightRef.current) {
-      pendingComponentRef.current = id
+      // Re-selecting the component whose answer is still streaming (say,
+      // after deselecting it) shows that answer again instead of queueing
+      // the same question a second time.
+      pendingComponentRef.current = inFlightQuestionRef.current === questionForComponent(id) ? null : id
     } else {
       handleAsk(questionForComponent(id), 'system', { sendHistory: false })
     }
@@ -755,6 +773,7 @@ function App() {
                 answerText={selectedAnswer}
                 onContinueInChat={() => showMobileView('chat')}
                 onInspect={handleInspectComponent}
+                onDeselect={handleDeselectComponent}
                 workerPods={shownWorkerPods}
                 backlog={shownBacklog}
               />
@@ -779,7 +798,7 @@ function App() {
           portrait diagram above mounts only in the diagram view. Only one
           ArchitecturePanel ever exists at a time.
         */}
-        {isDesktop && <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
+        {isDesktop && <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} onDeselect={handleDeselectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
       </main>
 
       <Collapsible open={!focusMode}>

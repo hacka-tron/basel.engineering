@@ -1,20 +1,23 @@
-// Portrait (phone) Diagram view: the details panel under the diagram.
+// Diagram selection and the phone details panel.
 //
-// It belongs to the selected component. With nothing selected there is nothing
-// to show (the chunks and answer of the latest chat question read as unrelated
-// there), so the toggle bar is locked: closed, aria-disabled, and it says
-// "Select a component for details" instead of "Details / N chunks".
-
-export type PortraitDetailsState = 'open' | 'collapsed' | 'locked'
+// The details panel belongs to the selected component. With nothing selected
+// there is nothing to show (the chunks and answer of the latest chat question
+// read as unrelated there), so on phones the bar under the diagram is locked:
+// closed, aria-disabled, and it says "Select a component for details". The
+// panel is open exactly while a component is selected; its close chevron
+// deselects (owner, 2026-10-01), as do a tap on empty diagram space and Escape.
 
 export const PORTRAIT_DETAILS_HINT = 'Select a component for details'
 
+type KeyEventLike = { key: string; defaultPrevented: boolean; isComposing?: boolean }
+
 /**
- * `detailsOpen` is the visitor's last open/collapse choice; it only takes
- * effect while a component is selected, so clearing the selection (a typed
- * question, New chat) closes the panel without forgetting the choice.
+ * Escape clears the selection before it does anything else in the diagram:
+ * on phones the first Escape deselects and the next one returns to Chat
+ * (`diagramNav`, which skips events that were already handled). Nothing to
+ * deselect, a key another handler already used, or an Escape that ends an
+ * IME composition in the ask box leaves the event alone.
  */
-export function portraitDetailsState(selected: boolean, detailsOpen: boolean): PortraitDetailsState {
-  if (!selected) return 'locked'
-  return detailsOpen ? 'open' : 'collapsed'
+export function deselectsOnKey(event: KeyEventLike, hasSelection: boolean): boolean {
+  return hasSelection && event.key === 'Escape' && !event.defaultPrevented && !event.isComposing
 }
