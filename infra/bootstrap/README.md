@@ -8,15 +8,17 @@ trusts the protected `terraform-plan` environment), and `glassbox-ci-release`
 **Already applied to the real AWS account** (`404379474987`) — this is not a
 placeholder module.
 
-This root started with local state, because the bucket didn't exist until
-its first apply. Once PR #59 is merged and the one-time owner setup in
-`infra/CI.md` ("One-time owner setup") has been done, its state lives in S3
-and changes go through `.github/workflows/bootstrap.yml` (plan on PRs, apply
-after owner approval) instead of a manual local apply. Until then, and for
-that one-time setup, the local `terraform.tfstate` is the only record of what
-exists here: keep it and any backups private and outside Git, and always run
-`terraform plan` before changing anything, since a diff against stale local
-state can propose destroying real resources.
+This root's state is moving from a local `terraform.tfstate` to the bucket it
+created, under the key `bootstrap/terraform.tfstate` (see "Moving state to S3"
+below). Until the owner runs that one-time migration, the local file is still
+the only record of what exists here — keep it and any backups private and
+outside Git, and always run `terraform plan` before changing anything, since a
+diff against stale state can propose destroying real resources. After the
+migration the S3 object is the source of truth (the bucket is versioned,
+encrypted, and protected against deletion).
+Once the migration and the one-time owner setup in `infra/CI.md` ("One-time
+owner setup") are done, changes go through `.github/workflows/bootstrap.yml`
+(plan on PRs, apply after owner approval) instead of a manual local apply.
 
 ```sh
 terraform init
@@ -57,6 +59,73 @@ Future project IAM roles, policies, and instance profiles managed by CI must
 use the `glassbox-` name prefix to match the CI role's permissions scope. CI
 can only `iam:PassRole` matching roles to EC2, and its S3 access is limited
 to this one state bucket — it has no access to any application data bucket.
+
+## Moving state to S3 (one-time, owner only)
+
+`versions.tf` now has a `backend "s3"` block (same bucket, region, encryption
+and `use_lockfile = true` as `infra/envs/prod/backend.tf`, key
+`bootstrap/terraform.tfstate`). Only the `glassbox-bootstrap*` pipeline roles (PR #62) and the owner can
+read or write this key; the app CI roles are denied by the bucket policy. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
+
+Prerequisite: other pending bootstrap changes (PR #55's SSM permissions on
+branch `fix/zram-swap`, PR #62's runbook roles) must be **merged to `main`
+first** and never applied from their branches. Otherwise the post-migration
+plan would propose removing whatever a branch added. Run everything below
+from an up-to-date `main` checkout. Migration only copies the state; the plan
+in step 5 is the review point for everything still pending.
+
+1. `git checkout main && git pull`, then `cd infra/bootstrap`.
+2. Do not run `plan` yet. Terraform refuses to plan after a backend change
+   until it is re-initialized ("Backend initialization required").
+3. Back up the local state privately, before touching the backend:
+   `cp terraform.tfstate ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate && chmod 600 ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate`
+4. `terraform init -migrate-state`. Terraform sees the new backend and the
+   existing local `terraform.tfstate` and asks whether to copy it to S3.
+   Answer `yes`. It uploads the state to `bootstrap/terraform.tfstate`; it does
+   not change any AWS resource.
+5. `terraform plan`. It must show only the expected changes:
+   - `aws_s3_bucket_policy.state` will be created (TLS-only, DenyDeleteBucket,
+     CI roles denied on `bootstrap/*`);
+   - `aws_iam_role_policy.ci` and `aws_iam_role_policy.plan` will be updated
+     in place (state S3 access narrowed from the whole bucket to `envs/prod/*`,
+     `s3:ListBucket` restricted by prefix, plus #55's SSM document permissions);
+   - additions for anything else merged but not yet applied (#62: four
+     `glassbox-ops-*`/`glassbox-bootstrap*` roles and their policies).
+   Anything else, especially a destroy or replace, means stop and investigate.
+   `prevent_destroy` on the bucket and `random_id` adds no plan diff.
+6. `terraform apply`.
+7. Verify: `aws s3 ls s3://glassbox-tfstate-404379474987-ab88985b66efc96f/bootstrap/`
+   should list `terraform.tfstate`. Run `terraform plan` once more: no changes.
+8. Delete the local `terraform.tfstate` and `terraform.tfstate.backup` from the
+   repo directory (the private backup from step 3 is your copy; keep it until
+   you are comfortable). Never commit them.
+
+If the state or bucket is ever lost, recreate the bucket's contents from
+versions (the bucket is versioned) first. If the bucket itself is gone, recreate
+it, then re-import the resources into an empty state (`terraform init`, then):
+
+```sh
+B=glassbox-tfstate-404379474987-ab88985b66efc96f
+terraform import random_id.state_bucket q4iYW2bvyW8  # base64url of the 8-byte id; hex is ab88985b66efc96f
+terraform import aws_s3_bucket.state $B
+terraform import aws_s3_bucket_versioning.state $B
+terraform import aws_s3_bucket_server_side_encryption_configuration.state $B
+terraform import aws_s3_bucket_public_access_block.state $B
+terraform import aws_s3_bucket_policy.state $B
+terraform import aws_iam_openid_connect_provider.github arn:aws:iam::404379474987:oidc-provider/token.actions.githubusercontent.com
+terraform import aws_iam_role.ci glassbox-ci
+terraform import aws_iam_role_policy.ci glassbox-ci:glassbox-ci-deploy
+terraform import aws_iam_role.plan glassbox-ci-plan
+terraform import aws_iam_role_policy.plan glassbox-ci-plan:glassbox-ci-plan
+terraform import aws_iam_role.release glassbox-ci-release
+terraform import aws_iam_role_policy.release glassbox-ci-release:glassbox-ci-release
+```
+
+The `random_id` import takes the id in base64url form (derived from the bucket
+suffix), and `random_id.state_bucket.hex` must then equal `ab88985b66efc96f`.
+Finish with `terraform plan` until it shows no changes. To recover only the
+state file, restore the latest good version of
+`bootstrap/terraform.tfstate` from the bucket's version history.
 
 ## Runbook and bootstrap-pipeline roles
 
