@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <!-- iOS Safari zooms the page when a text field under 16px is focused. The ask
+         box matches the 13px message text, so on iOS only, cap the scale: iOS still
+         allows pinch-zoom (it ignores maximum-scale for user gestures), but no
+         longer zooms on focus. Not applied elsewhere, because Android browsers
+         would honour it and block pinch-zoom. -->
+    <script>
+      if (/iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        var viewport = document.querySelector('meta[name="viewport"]')
+        if (viewport) viewport.setAttribute('content', viewport.getAttribute('content') + ', maximum-scale=1')
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Basel Abdel-Rahman</title>
   </head>

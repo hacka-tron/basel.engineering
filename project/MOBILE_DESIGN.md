@@ -27,13 +27,13 @@ JetBrains Mono is wide (~0.6em per character), so everything wraps sooner than a
 
 | Role | Size | Notes |
 | --- | --- | --- |
-| Chat messages and answers | `text-sm` (14px) mobile → `md:text-[15px]`/`text-base` | Primary reading text. Never below 14px. |
-| Text inputs and textareas (chat ask box) | `text-base` (16px) at every width | iOS Safari zooms the page on focus for any input under 16px. |
-| Secondary UI (nav, buttons, suggested questions, Contact) | `text-xs` (12px) minimum | Only for short labels, not paragraphs. |
+| Chat messages and answers | `text-[13px] leading-[1.6]` at every width | Primary reading text. The owner chose smaller, Claude-like reading text on 2026-09-30, overriding the earlier 14-15px (and 16px body) rule. In JetBrains Mono 13px is about 7.8px per character, close to a 16px proportional font. Never below 13px. |
+| Text inputs and textareas (chat ask box) | `text-[13px] leading-[1.6]`, same as the messages | The owner wants the ask box the same size as the messages, always (2026-09-30). iOS Safari zooms the page on focus for inputs under 16px, so `index.html` adds `maximum-scale=1` to the viewport on iOS/iPadOS only: iOS ignores it for pinch-zoom (users can still zoom) but stops the focus zoom. It is not added on other platforms, where it would block pinch-zoom. Any new input must keep this in mind. |
+| Secondary UI (nav, buttons, suggested questions, Contact) | `text-xs` (12px) minimum | Only for short labels, not paragraphs. Suggested-question chips are 12px with `leading-normal`. |
 | Metadata (stats bar, diagram captions, tooltips) | 11px minimum | `text-[10px]` is not allowed — it's unreadable on a phone. |
 | Headings | `clamp()`, e.g. `text-[clamp(1rem,0.9rem+0.5vw,1.25rem)]` | Scale smoothly instead of jumping at `md`. |
 
-- Reading text gets `max-w-[65ch]` (≈45–75 characters per line) and `leading-relaxed`.
+- Reading text gets `max-w-[65ch]` (≈45–75 characters per line) and a 1.6 line-height (`leading-[1.6]`; chat bubbles) or `leading-relaxed`.
 - Streamed/model text and anything user-provided gets `break-words` (`overflow-wrap: anywhere` for URLs/code) so it can't overflow its bubble.
 - `whitespace-nowrap` only on things guaranteed short (the name, single-word buttons) — and verify at 375px.
 - Tap targets ≥ 44×44px on mobile (pad small buttons, don't enlarge the text).
