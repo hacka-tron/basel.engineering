@@ -64,27 +64,16 @@ and `use_lockfile = true` as `infra/envs/prod/backend.tf`, key
 `bootstrap/terraform.tfstate`). Bootstrap stays human-applied: CI cannot read
 or write this key. The bucket is `glassbox-tfstate-404379474987-ab88985b66efc96f`.
 
-This happens in two phases, because Terraform must be re-initialized as soon
-as the checkout contains the new `backend "s3"` block and refuses to plan
-until it is. The local-state check has to happen **before** this PR is on
-`main`.
+Prerequisite: other pending bootstrap changes (PR #55's SSM permissions on
+branch `fix/zram-swap`, PR #62's runbook roles) must be **merged to `main`
+first** and never applied from their branches. Otherwise the post-migration
+plan would propose removing whatever a branch added. Run everything below
+from an up-to-date `main` checkout. Migration only copies the state; the plan
+in step 5 is the review point for everything still pending.
 
-**Phase A: before this PR merges (local backend).** Pending bootstrap
-changes, such as PR #55's SSM permissions (branch `fix/zram-swap`), must be
-merged to `main` and applied from local state first. Do not apply #55 from its
-branch and then migrate from a `main` that lacks it; the next plan would
-remove those permissions.
-
-1. `git checkout main && git pull` (this PR not yet merged), then
-   `cd infra/bootstrap`. `terraform plan` (then `terraform apply` if it shows
-   the expected pending changes) must end with a plan showing **no changes**.
-   Any unexplained diff means the local state and `main` disagree; resolve it
-   first and do not migrate.
-
-**Phase B: after this PR merges (switch to S3).**
-
-2. `git pull` so the checkout has the `backend "s3"` block. Do not run
-   `plan` yet; it would fail with "Backend initialization required".
+1. `git checkout main && git pull`, then `cd infra/bootstrap`.
+2. Do not run `plan` yet. Terraform refuses to plan after a backend change
+   until it is re-initialized ("Backend initialization required").
 3. Back up the local state privately, before touching the backend:
    `cp terraform.tfstate ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate && chmod 600 ~/glassbox-bootstrap-state-backup-$(date +%F).tfstate`
 4. `terraform init -migrate-state`. Terraform sees the new backend and the
@@ -96,7 +85,9 @@ remove those permissions.
      CI roles denied on `bootstrap/*`);
    - `aws_iam_role_policy.ci` and `aws_iam_role_policy.plan` will be updated
      in place (state S3 access narrowed from the whole bucket to `envs/prod/*`,
-     `s3:ListBucket` restricted by prefix).
+     `s3:ListBucket` restricted by prefix, plus #55's SSM document permissions);
+   - additions for anything else merged but not yet applied (#62: four
+     `glassbox-ops-*`/`glassbox-bootstrap*` roles and their policies).
    Anything else, especially a destroy or replace, means stop and investigate.
    `prevent_destroy` on the bucket and `random_id` adds no plan diff.
 6. `terraform apply`.
