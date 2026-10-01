@@ -71,3 +71,4 @@ Pending (Codex gate). During verification: React Flow's `fitView` didn't refit w
 - Owner call on the "tight" footer tier copy (dropping "first token" on the narrowest phones).
 - "1 queries" pluralisation in the footer predates this change.
 - On-device check (iPhone SE, a Pixel) before merge if possible.
+- Follow-up (fix/stress-switches-diagram): on phones, a tap that starts a stress test (real or simulated, including cooldown clicks) always switches to the Diagram view via the same history path; long press does not.

@@ -183,7 +183,20 @@ function App() {
     if (!clusterViewRef.current) startVisualStressTest()
   }, [startVisualStressTest])
 
-  const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
+  // A started stress test (real or simulated, including cooldown clicks) always
+  // shows the diagram on mobile; a long press only shows details and never
+  // reaches these callbacks. Refs: the nav is created further down.
+  const isDesktopRef = useRef(false)
+  const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
+  const onStressVisual = useCallback(() => {
+    revealDiagramRef.current(isDesktopRef.current)
+    startVisualStressTest()
+  }, [startVisualStressTest])
+  const onStressReal = useCallback(() => {
+    revealDiagramRef.current(isDesktopRef.current)
+    startRealStressTest()
+  }, [startRealStressTest])
+  const stressTest = useStressTest(onStressVisual, onStressReal)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
     : Array.from({ length: simulatedPodCount }, (_, index) => ({ name: `demo-worker-${index}`, ready: true }))
@@ -485,6 +498,8 @@ function App() {
     focusDiagramToggle: () => diagramButtonRef.current?.focus(),
   }))
   const showMobileView = diagramNav.showView
+  isDesktopRef.current = isDesktop
+  revealDiagramRef.current = diagramNav.revealDiagram
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
       diagramNav.handlePopState(event.state)

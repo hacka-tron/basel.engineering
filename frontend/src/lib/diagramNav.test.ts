@@ -114,3 +114,16 @@ test('going back via history.back() does not set the view until popstate fires',
   assert.equal(t.view, 'diagram')
   assert.deepEqual(t.log, ['push', 'back'])
 })
+
+test('revealDiagram opens the diagram on mobile once, and does nothing on desktop', () => {
+  const t = setup()
+  t.nav.revealDiagram(true)
+  assert.equal(t.view, 'chat')
+  assert.deepEqual(t.log, [])
+  t.nav.revealDiagram(false)
+  t.nav.revealDiagram(false)
+  assert.equal(t.view, 'diagram')
+  assert.deepEqual(t.log, ['push'])
+  t.back()
+  assert.equal(t.view, 'chat')
+})
