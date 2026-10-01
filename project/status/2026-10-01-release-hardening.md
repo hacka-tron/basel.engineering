@@ -6,7 +6,7 @@
 ## TL;DR
 
 - A manual **Release** run on `main` that no longer builds `main`'s head (for example one that queued while a merge landed) is now refused by a check inside the workflow. Before, it got the highest `build-N` and Flux would have deployed it.
-- **That check only protects refs that contain it.** A manual run uses the `release.yml` of the branch or tag it was started on, so the 15 older branches on origin, and any tag, have no check. **Owner action (closes the old-ref hole): GitHub → Settings → Environments → `release` → Deployment branches and tags → Selected branches and tags → `main` only.** Until that is set, a manual run on an old branch can still deploy it.
+- **That check only protects refs that contain it.** A manual run uses the `release.yml` of the branch or tag it was started on, so the 15 older branches on origin, and any tag, have no check. **Owner action (closes the old-ref hole): GitHub → Settings → Environments → `release` → Deployment branches and tags → Selected branches and tags → `main` only.** Since 2026-10-01 the release role's trust also requires `refs/heads/main` (PR #98, applied via Bootstrap), so an old-ref run can't get AWS credentials even without that setting.
 - The **main → deploy sync** no longer loses a race with Flux. When Flux pushes a tag bump between the sync's fetch and push, the sync re-fetches, re-merges and pushes again (up to 5 attempts). It never force-pushes, so Flux's commit is never dropped.
 - Both behaviours live in small scripts with offline tests against local bare git repositories, run in CI.
 
