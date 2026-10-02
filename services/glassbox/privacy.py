@@ -23,6 +23,7 @@ import hashlib
 import logging
 import os
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -53,9 +54,11 @@ ALLOWED_URL_PREFIXES = (
 )
 
 # Separators allowed inside a phone number: space, dot, hyphen (and NBSP).
-_SEP = r"[ .\-\u00a0]"
-_NOT_BEFORE = r"(?<![\w+])(?<!\d[.\-])"
-_NOT_AFTER = r"(?!\w|[.\-]\d)"
+# Matching runs on _normalize(text): fullwidth digits and other compatibility
+# forms are folded by NFKC and every dash variant becomes "-" first.
+_SEP = r"[ .\-/\u00a0]"
+_NOT_BEFORE = r"(?<![\w+])(?<!\d[.\-/])"
+_NOT_AFTER = r"(?!\w|[.\-/]\d)"
 
 # North American numbers: +1 (614) 555-0100, 614.555.0100, 614 555 0100,
 # 6145550100. Area code and exchange start with 2-9 (NANP rules), which keeps
@@ -77,14 +80,15 @@ _NANP = re.compile(
 # International with a leading +: +44 20 7946 0958, +20 10 1234 5678,
 # +971-50-123-4567, (+49) 30 1234567. 8 to 15 digits (E.164 allows 15).
 _INTERNATIONAL = re.compile(
-    r"(?<![\w+])\+\(?\d{1,3}\)?(?:" + _SEP + r"?\(?\d{1,12}\)?){1,6}" + _NOT_AFTER
+    # An opening "(" right before the "+" belongs to the number: "(+49) 30 1234567".
+    r"(?<![\w+(])\(?\+\(?\d{1,3}\)?(?:" + _SEP + r"?\(?\d{1,12}\)?){1,6}" + _NOT_AFTER
 )
 # National numbers with a trunk 0: 020 7946 0958, 07700 900123, 010 1234 5678.
-_TRUNK_ZERO = re.compile(r"(?<![\w+.\-])0\d{1,4}(?:" + _SEP + r"\d{2,6}){1,3}" + _NOT_AFTER)
+_TRUNK_ZERO = re.compile(r"(?<![\w+.\-/])0\d{1,4}(?:" + _SEP + r"\d{2,6}){1,3}" + _NOT_AFTER)
 # A number right after a phone word: "call me at 555-0100", "tel: 46 70 123 45 67".
 _PHONE_WORD = re.compile(
     r"\b(?:phone|tel|telephone|mobile|cell|cellphone|call|text|whatsapp|fax)\b"
-    r"[^\n\d]{0,20}?(?P<value>\+?\(?\d[\d ().\-\u00a0]{5,22}\d)",
+    r"[^\n\d]{0,20}?(?P<value>\+?\(?\d[\d ().\-/\u00a0]{5,22}\d)",
     re.IGNORECASE,
 )
 _DATE_SHAPED = re.compile(
@@ -206,9 +210,33 @@ def _phone_candidate_ok(value: str, *, min_digits: int) -> bool:
     return min_digits <= len(_digits(value)) <= 15
 
 
+# Hyphen, non-breaking hyphen, figure dash, en dash, em dash, horizontal bar,
+# minus sign, small and fullwidth hyphen-minus.
+_DASHES = frozenset("\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe63\uff0d")
+
+
+def _normalize_char(character: str) -> str:
+    if character in _DASHES:
+        return "-"
+    folded = unicodedata.normalize("NFKC", character)
+    # Keep offsets stable: a character that folds to several is left as it is.
+    return folded if len(folded) == 1 else character
+
+
+def _normalize(text: str) -> str:
+    """Same length as ``text``: fullwidth digits, dash variants and the like folded."""
+    if text.isascii():
+        return text
+    return "".join(_normalize_char(character) for character in text)
+
+
 def find_pii(text: str, categories=CATEGORIES) -> list[Finding]:
-    """Non-overlapping findings in ``text`` for ``categories``, sorted by position."""
+    """Non-overlapping findings in ``text`` for ``categories``, sorted by position.
+
+    Patterns run on a same-length normalized copy, so offsets index ``text``.
+    """
     categories = set(categories)
+    text = _normalize(text)
     raw: list[Finding] = []
 
     def add(category: str, start: int, end: int) -> None:
@@ -325,7 +353,7 @@ def mask_answer(text: str) -> tuple[str, int]:
 
 # Characters a phone number or SSN is made of. Matches never span anything else,
 # so text before the trailing run of these characters is final.
-_NUMBERISH = frozenset("0123456789+()-. \t\u00a0")
+_NUMBERISH = frozenset("0123456789+()-./ \t\u00a0")
 _RUN_START = frozenset("0123456789+(")
 
 
@@ -356,11 +384,11 @@ class StreamMasker:
     def push(self, part: str) -> str:
         self._held += part
         cut = len(self._held)
-        while cut > 0 and self._held[cut - 1] in _NUMBERISH:
+        while cut > 0 and _normalize_char(self._held[cut - 1]) in _NUMBERISH:
             cut -= 1
         # Spaces and punctuation before the run's first digit, "+" or "(" can't
         # start a match, so they go out now ("Basel " is not held).
-        while cut < len(self._held) and self._held[cut] not in _RUN_START:
+        while cut < len(self._held) and _normalize_char(self._held[cut]) not in _RUN_START:
             cut += 1
         cut = max(cut, len(self._held) - self.HOLD_MAX)
         return self._release(cut)

@@ -121,10 +121,17 @@ jobs:
       - id: ecr-login
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      # Two mutually exclusive build steps rather than one with a computed
+      # cache-to: a GitHub expression like `cond && '' || 'x'` always yields
+      # 'x' (an empty string is falsy), which once nearly exported the private
+      # layer. Exactly one runs; services/tests/test_private_corpus.py checks
+      # the conditions and that the private build has no cache settings at all.
+      - name: Build and push (public corpus only)
+        if: steps.about_me.outputs.configured != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         env:
           # The build record is a run artifact, downloadable on this public
-          # repo's run page: keep it off so nothing about the context is published.
+          # repo's run page: keep it off.
           DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
@@ -132,12 +139,26 @@ jobs:
           platforms: linux/arm64
           push: true
           cache-from: type=gha
-          # No cache export when the private corpus is in the context: the
-          # GitHub Actions cache would hold the layer with the private files,
-          # and other workflow runs in this public repo can restore main's cache
-          # entries. Reading the older public-only cache is harmless; builds
-          # with the private corpus are slower (no fresh cache).
-          cache-to: ${{ steps.about_me.outputs.configured == 'true' && '' || 'type=gha,mode=max' }}
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.build_number }}
+            ${{ steps.ecr-login.outputs.registry }}/glassbox:latest
+      # With the private corpus in the context: no GitHub Actions cache in either
+      # direction (other runs in this public repo, fork PRs included, can restore
+      # main's cache entries, so the private layer must never be exported), no
+      # build record artifact and no job summary. Slower builds are the cost.
+      - name: Build and push (with the private About Basel corpus)
+        if: steps.about_me.outputs.configured == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
+          DOCKER_BUILD_SUMMARY: "false"
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.build_number }}

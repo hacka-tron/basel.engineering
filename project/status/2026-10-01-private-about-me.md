@@ -1,10 +1,10 @@
 # About Basel from a private repo, with a personal-data guard
 
-**Status:** PR open, not merged. Branch `feature/private-about-me`. Written 2026-10-01. Merging changes nothing visible until the owner adds the deploy key (steps below).
+**Status:** PR [#126](https://github.com/hacka-tron/basel.engineering/pull/126) open, review round 1 fixed. Branch `feature/private-about-me`. Written 2026-10-01. The owner has already added the deploy key, so the first release after the merge ingests the private repo.
 
 ## TL;DR
 
-About Basel content moves to the owner's private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under `about-me/`). Each release checks it out with a read-only deploy key, bakes it into the image (private ECR) and the ingest Job indexes it as About Basel. Without the key, the release skips that step and the site keeps serving the public `corpus/about-me/` files, which stay for now. Google Drive, the first plan, was dropped the same day; none of it ships.
+About Basel content moves to the owner's private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under `about-me/`). Each release checks it out with a read-only deploy key, bakes it into the image (private ECR) and the ingest Job indexes it as About Basel. Without the key a release skips that step and serves the public `corpus/about-me/` files, which stay in this repo until a follow-up PR deletes them. Google Drive, the first plan, was dropped the same day; none of it ships.
 
 The owner's rule, "don't leak my phone number or any of those details from my resume", is enforced in two layers by one detector, `services/glassbox/privacy.py`:
 
@@ -15,7 +15,7 @@ The owner's rule, "don't leak my phone number or any of those details from my re
 
 ## What changed for a visitor
 
-Nothing at merge. After the setup, About Basel answers come from the private repo's files, and a citation shows a `private/<file>` path. Edits in the private repo go live on the next release.
+From the first release after the merge, About Basel answers come from the private repo's files, and a citation shows a `private/<file>` path. Edits in the private repo go live on the next release.
 
 ## How it works
 
@@ -39,7 +39,7 @@ flowchart LR
   - `.gitignore` keeps `corpus/about-me-private/` out of this public repo.
   - `.dockerignore` lets only `about-me/**/*.md` into the image: never the private repo's `.git`, README or LICENSE.
   - `persist-credentials: false` drops the key after the checkout, and no step lists or prints files.
-  - **The cache-leak fix:** the build exports its layer cache to the GitHub Actions cache, and other workflow runs in this public repo can restore entries from `main`. With the private corpus in the build context that cache would hold the layer with the private files, so cache export is off whenever the checkout is present (reading the older public-only cache stays on). The build-record artifact, downloadable on the public run page, is off always. The cost is slower private builds; a cache in private ECR is a backlog idea.
+  - **The cache-leak fix:** the public build exports its layer cache to the GitHub Actions cache, and other workflow runs in this public repo (fork pull requests included) can restore entries from `main`. With the private corpus in the build context that cache would hold the layer with the private files. `release.yml` therefore has two build steps with mutually exclusive conditions: the cached one without the checkout, and one with no cache settings at all (no import, no export), no build record artifact and no job summary when the checkout is present. The build record (a downloadable run artifact) is off in both. The cost is slower private builds; a cache in private ECR is a backlog idea.
 - **A key that is set but fails, fails the release.** Shipping an image without the private corpus would be a silent regression. Removing the secret is how to build without it.
 - **No duplicates during the switch.** While both copies exist, the public file with a private twin of the same name is not ingested, and its old indexed document is deleted only after the twin was indexed without an error in the same run. At every moment the text is served from one of the two, never twice. The next step, deleting the public copies, then changes nothing in the index.
 - **The sweep can't wipe the private corpus.** A release without the checkout (secret removed) scans zero private files, which looks like every private file was deleted. The sweep refuses to delete `private/` documents then, and `--force-sweep` doesn't override it.
@@ -47,17 +47,23 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet. Two permission prompts during the work (the private checkout in `release.yml`, and the scanner's private source) were approved by the owner before they were made.
+Two permission prompts during the work (the private checkout in `release.yml`, and the scanner's private source) were approved by the owner before they were made.
+
+Round 1 (changes needed), all fixed:
+
+- **Critical, a real leak:** the first version disabled the cache with `cache-to: ${{ configured == 'true' && '' || 'type=gha,mode=max' }}`. In GitHub expressions an empty string is falsy, so that always evaluated to `type=gha,mode=max`: a private build would have exported the private layer to the Actions cache. The test only compared the string, so it passed while the bug existed. Fixed with the two mutually exclusive build steps above; the test now parses the workflow and evaluates both cases (exactly one build runs; the private one has no cache settings, no record, no summary). `DOCKER_BUILD_SUMMARY=false` added for private builds.
+- **Important:** a merge conflict with `main` kept CI from running (now merged); the docs said "planned" although the key is already set (now live from the first release after the merge).
+- **Minor:** phone numbers with en/em dashes, minus signs, slashes or fullwidth digits are now caught (text is NFKC-folded and dashes unified before matching, keeping offsets), and "(+49) 30 1234567" is redacted including its "("; a DD3 note to name private files neutrally; the degraded mode without the checkout is recorded in BACKLOG.
 
 ## Operational notes and risks
 
-- **Live effect at merge: none visible.** Release runs log "No ABOUT_ME_DEPLOY_KEY secret: building with the public corpus only." and keep the cache. One side effect: the first release re-embeds the five About Basel files once (the guard version is now part of their content hash), which refills the About Basel answer cache.
+- **Live effect at merge:** the merge triggers a release; with the key set it checks out the private repo and builds without the Actions cache (slower). Its ingest indexes the private files, removes the public twins' old documents, and re-embeds anything whose guard hash changed. About Basel answers then come from the private files, and the About Basel answer cache refills.
 - **Removing private content quickly:** deleting a file in the private repo removes it from answers only when the stale sweep runs in `apply` mode (production is `report`). Until then the next release keeps serving its last indexed version. For something urgent, ask for `--clear --corpus about_me` (followed by the ingest) or for the sweep to be switched to `apply`.
 - **Citation paths** show private file names (`private/bio.md`). Name the files with that in mind.
 - **The detector is not a classifier.** Names aren't detected, and addresses outside US/UK formats are best effort. It is a backstop, not permission to put private details in the repo.
-- **Not exercised:** a real release with the key (the step is skipped today), the `.dockerignore` patterns against a real Docker build (the local Docker daemon wasn't responding), and the MySQL/Redis integration tests (the local stack refused connections; they run in CI).
+- **Not exercised:** a real release with the key (the first one is the release after the merge), the `.dockerignore` patterns against a real Docker build (the local Docker daemon wasn't responding), and the MySQL/Redis integration tests (the local stack refused connections; they run in CI).
 
-## Owner setup (when you want the private repo live)
+## Owner setup (done: the key was added on 2026-10-01; kept for reference)
 
 1. **The repo:** `hacka-tron/basel.engineering-docs` already exists with `about-me/*.md`. Keep real Markdown headings (`#`, `##`); every `.md` under `about-me/` is ingested, nothing else.
 2. **Generate a key pair** on your machine: `ssh-keygen -t ed25519 -C "glassbox release read-only" -f about-me-deploy -N ""`. This makes `about-me-deploy` (private) and `about-me-deploy.pub` (public).

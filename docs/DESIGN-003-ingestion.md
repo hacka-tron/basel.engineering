@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Planned for Milestone 4, not built yet. Only §1.1 describes code that runs today. §1.2 (the private About Basel repo) is in the code but planned until the owner adds its deploy key. The Google Drive connector (§5) was dropped on 2026-10-01. |
+| **Status** | Planned for Milestone 4, not built yet. Two sections describe what runs: §1.1 (the ingest Job) and §1.2 (the private About Basel repo, live from the first release after PR #126; the owner added the deploy key on 2026-10-01). The Google Drive connector (§5) was dropped on 2026-10-01. |
 | **Owner** | Basel |
 | **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` ("DD1") and `DESIGN-002-followups.md` ("DD2") |
@@ -43,14 +43,15 @@ Everything else in this document describes the connector pipeline. The ingest Jo
 
 The connector design below (sections 8 and 11) replaces this with event-driven deletes and nightly reconciliation (its MySQL-to-Redis rows already run as the reconcile above).
 
-## 1.2 Private About Basel repo (planned: in the code, not active until the owner adds the deploy key)
+## 1.2 Private About Basel repo (live from the first release after PR #126)
 
-Owner decision, 2026-10-01: About Basel content moves to a private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under its `about-me/` folder). The Google Drive design (§5) is dropped. About This System stays in this repo. Until the owner adds the deploy key, nothing below runs and the site keeps serving the public `corpus/about-me/` files.
+Owner decision, 2026-10-01: About Basel content moves to a private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under its `about-me/` folder). The Google Drive design (§5) is dropped. About This System stays in this repo. The owner added the deploy key on 2026-10-01, so everything below runs from the first release after PR #126. A release without the key would simply serve the public `corpus/about-me/` files.
 
 - **Release-time checkout.** `release.yml` checks the private repo out into `corpus/about-me-private/` before the image build, with a read-only deploy key (`ABOUT_ME_DEPLOY_KEY`, a `release` environment secret), `persist-credentials: false` and `fetch-depth: 1`. Without the secret the step is skipped and the image carries the public corpus only. A key that is set but fails fails the release. The content is baked into the image, which lives in private ECR. A deploy key reads one repo and nothing else and belongs to no person; a fine-grained token would be tied to the owner's account, expire, and need a broader scope to reach a repo of another name.
 - **What reaches the image.** `.dockerignore` keeps only `corpus/about-me-private/about-me/**/*.md`, never the private repo's `.git`, README or LICENSE. `.gitignore` keeps the checkout out of this public repo. No workflow step lists or prints files, and the build record artifact is turned off.
-- **Cache leak, closed.** The build normally exports its layer cache to the GitHub Actions cache, which other workflow runs in this public repo can restore. With the private checkout present the cache export is off (the private layer would otherwise sit in that cache); reading the older public-only cache stays on. Builds with the private corpus are therefore slower.
-### 1.2.1 Ingest, the public copies and deletes (planned until the deploy key exists)
+- **No GitHub Actions cache for private builds.** The public build exports its layer cache to the GitHub Actions cache, which other workflow runs in this public repo (fork pull requests included) can restore. So `release.yml` has two build steps with mutually exclusive conditions: without the checkout, the cached build; with it, a build with no cache settings at all (no import, no export), no build record artifact and no job summary. Two steps rather than one computed `cache-to`, because a GitHub expression like `cond && '' || 'type=gha'` always yields the second value (an empty string is falsy); review caught exactly that before merge. A test evaluates both cases from the parsed workflow. Builds with the private corpus are slower.
+- **Citation paths show private file names** (`private/bio.md`): name files neutrally.
+### 1.2.1 Ingest, the public copies and deletes (live with §1.2)
 
 - **Ingest.** The scanner reads `about-me/**/*.md` from the checkout (hidden paths and symlinks skipped) as `about_me` documents with source path `private/<path under about-me/>`. They pass the secret scanner and the personal-data guard (DD1 §11) like every About Basel file. The content hash makes edits re-embed only the changed file.
 - **The public copies during the switch.** The owner keeps `corpus/about-me/*.md` until a release has ingested the private repo. A public file with a private twin of the same name (`corpus/about-me/bio.md` and `private/bio.md`) is not ingested while the checkout is present, and its earlier indexed document is deleted, but only after the twin was indexed without an error in the same run, so the text is always served from one of the two and never twice. Deleting the public copies afterwards is a follow-up (`project/BACKLOG.md`).

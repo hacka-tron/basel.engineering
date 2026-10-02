@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest.scanner import (
@@ -226,22 +227,71 @@ def test_the_checkout_is_ignored_by_git_and_only_about_me_markdown_enters_the_im
     )
 
 
+def _release_steps():
+    workflow = yaml.safe_load((REPO / ".github" / "workflows" / "release.yml").read_text())
+    return workflow["jobs"]["build-and-push"]["steps"]
+
+
+_CONDITIONS = {
+    "steps.about_me.outputs.configured == 'true'": lambda configured: configured,
+    "steps.about_me.outputs.configured != 'true'": lambda configured: not configured,
+}
+
+
+def _runs(step, configured: bool) -> bool:
+    condition = step.get("if")
+    if condition is None:
+        return True
+    # Only the two exact forms are allowed, so the evaluation below is the real one.
+    assert condition in _CONDITIONS, condition
+    return _CONDITIONS[condition](configured)
+
+
 def test_release_checks_out_the_private_repo_safely():
-    workflow = (REPO / ".github" / "workflows" / "release.yml").read_text()
-    step = workflow[workflow.index("- name: Check out the private About Basel repo") :]
-    step = step[: step.index("\n      - ", 1)]
-    assert "if: steps.about_me.outputs.configured == 'true'" in step
-    assert "repository: hacka-tron/basel.engineering-docs" in step
-    assert "ssh-key: ${{ secrets.ABOUT_ME_DEPLOY_KEY }}" in step
-    assert "persist-credentials: false" in step
-    assert "path: corpus/about-me-private" in step
+    steps = _release_steps()
+    checkout = [s for s in steps if s.get("name") == "Check out the private About Basel repo"]
+    assert len(checkout) == 1
+    step = checkout[0]
+    assert step["if"] == "steps.about_me.outputs.configured == 'true'"
+    assert step["with"] == {
+        "repository": "hacka-tron/basel.engineering-docs",
+        "ssh-key": "${{ secrets.ABOUT_ME_DEPLOY_KEY }}",
+        "persist-credentials": False,
+        "fetch-depth": 1,
+        "path": "corpus/about-me-private",
+    }
     assert "continue-on-error" not in step  # a configured key that fails fails the release
-    # No cache export and no build-record artifact while private files are in the context.
-    assert (
-        "cache-to: ${{ steps.about_me.outputs.configured == 'true' && '' || "
-        "'type=gha,mode=max' }}" in workflow
-    )
-    assert 'DOCKER_BUILD_RECORD_UPLOAD: "false"' in workflow
-    # No step lists or prints files.
-    runs = re.findall(r"run: \|?\n?((?:\s{10,}.*\n)+|.*)", workflow)
-    assert not any(re.search(r"\b(ls|cat|find|tree|head|tail)\b", run) for run in runs)
+    # The "configured?" step sees only whether the secret is set, never its value.
+    probe = next(s for s in steps if s.get("id") == "about_me")
+    assert probe["env"] == {"ABOUT_ME_CONFIGURED": "${{ secrets.ABOUT_ME_DEPLOY_KEY != '' }}"}
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_exactly_one_build_runs_and_the_private_one_never_touches_the_actions_cache(configured):
+    """Evaluates the step conditions for both cases, so an expression slip can't hide."""
+    steps = _release_steps()
+    builds = [s for s in steps if str(s.get("uses", "")).startswith("docker/build-push-action@")]
+    assert len(builds) == 2
+    running = [s for s in builds if _runs(s, configured)]
+    assert len(running) == 1
+    build = running[0]
+    env = build.get("env", {})
+    assert env.get("DOCKER_BUILD_RECORD_UPLOAD") == "false"
+    if configured:
+        assert "cache-to" not in build["with"] and "cache-from" not in build["with"]
+        assert env.get("DOCKER_BUILD_SUMMARY") == "false"
+    else:
+        assert build["with"]["cache-to"] == "type=gha,mode=max"
+    # No computed cache settings anywhere (the `x && '' || y` pitfall).
+    for step in builds:
+        for key in ("cache-to", "cache-from"):
+            assert "${{" not in str(step["with"].get(key, ""))
+    # The checkout runs exactly when the private build does.
+    checkout = next(s for s in steps if s.get("name") == "Check out the private About Basel repo")
+    assert _runs(checkout, configured) is configured
+
+
+def test_no_release_step_lists_or_prints_files():
+    for step in _release_steps():
+        run = step.get("run", "")
+        assert not re.search(r"\b(ls|cat|find|tree|head|tail|xxd|base64)\b", run), run

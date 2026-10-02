@@ -63,6 +63,14 @@ PHONES = [
     "020 7946 0958",
     "07700 900123",
     "010 1234 5678",
+    # Unicode and slash separators (folded before matching).
+    "614\u2013555\u20130100",
+    "614\u2014555\u20140100",
+    "614\u2212555\u22120100",
+    "614/555/0100",
+    "\uff16\uff11\uff14\uff15\uff15\uff15\uff10\uff11\uff10\uff10",
+    "\uff0b\uff11 (614) 555\uff0d0100",
+    "+44\u00a020\u00a07946\u00a00958",
 ]
 
 
@@ -74,8 +82,8 @@ def test_phone_numbers_are_detected_alone_and_in_prose(phone):
     assert counts == {PHONE: 1}
     assert redacted.startswith("You can reach him on ")
     assert redacted.endswith(", most days.")
-    # Nothing of the number survives (a leading "(" before "+49" may stay).
-    assert not any(char.isdigit() for char in redacted)
+    # Nothing of the number survives, not even a "(" before "+49".
+    assert redacted == f"You can reach him on {REDACTION}, most days."
 
 
 @pytest.mark.parametrize(
@@ -133,6 +141,12 @@ def test_phone_numbers_after_phone_words(text):
         "call it 3 times",
         "text 2015-2019 resume",
         "Text me in 2026-10-01 style dates",
+        "10/01/2026",
+        "2015/2016 season",
+        "1/2/3",
+        "2015\u20132019 and 2019\u20142023",
+        "\uff12\uff10\uff12\uff16-10-01",
+        "page 12/345",
     ],
 )
 def test_non_phone_numbers_are_not_flagged(text):
@@ -329,6 +343,8 @@ ANSWERS = [
     "Ends with a number 614-555-0100",
     "Ring (+49) 30 1234567 now, or (614) 555-0100.",
     "Version 1.2.3 shipped; call 07700 900123.",
+    "Dashes too: 614\u2013555\u20130100 and 614/555/0100, years 2015\u20132019.",
+    "Fullwidth \uff16\uff11\uff14\uff15\uff15\uff15\uff10\uff11\uff10\uff10 end",
     "",
 ]
 
