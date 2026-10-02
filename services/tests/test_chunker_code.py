@@ -89,10 +89,11 @@ def test_real_api_endpoints_include_their_decorators():
     path = Path(__file__).resolve().parents[1] / "glassbox/api/main.py"
     chunks = chunk_code(path.read_text(), str(path))
 
-    assert len(chunks) == 4
+    assert len(chunks) == 5
     assert chunks[1].text.startswith("@asynccontextmanager\nasync def lifespan(")
     assert chunks[2].text.startswith('@app.get("/healthz")\nasync def healthz(')
-    assert chunks[3].text.startswith('@app.get("/readyz")\nasync def readyz(')
+    assert chunks[3].text.startswith('@app.get("/api/version")\nasync def version(')
+    assert chunks[4].text.startswith('@app.get("/readyz")\nasync def readyz(')
 
 
 def test_comment_only_preamble_is_skipped():

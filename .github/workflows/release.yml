@@ -139,6 +139,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/arm64
           push: true
+          # Served by GET /api/version; the post-deploy stream check waits for it.
+          build-args: GLASSBOX_BUILD=${{ steps.tag.outputs.build_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
@@ -160,6 +162,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/arm64
           push: true
+          # Served by GET /api/version; the post-deploy stream check waits for it.
+          build-args: GLASSBOX_BUILD=${{ steps.tag.outputs.build_number }}
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.build_number }}
