@@ -156,7 +156,7 @@ Documented as known limitations directly in code (docstrings) — not yet fixed,
 
 - `services/glassbox/ingest/chunkers/terraform.py`: brace-depth counting doesn't strip string literals/comments first, so an unbalanced `{`/`}` inside a Terraform string or comment would throw off block boundaries. No real `.tf` files exist yet (Milestone 2).
 - `services/glassbox/ingest/chunkers/code.py`: decorator grouping only handles single-line decorators (a multi-line `@app.get(\n  "/x",\n)` would get orphaned); TypeScript matching doesn't cover typed arrow functions (`const f: Handler = (...) =>`) or generic type parameters. No real `.ts` files exist yet (frontend is a later phase).
-- `services/glassbox/ingest/scanner.py`'s secret heuristic doesn't recognize GitHub/Slack/other provider-specific token formats, only AWS keys, private-key headers, and generic high-entropy assignments.
+- `services/glassbox/ingest/scanner.py`'s secret heuristic now recognizes GitHub, Slack, Anthropic, OpenAI-style, Google API, Stripe live, JWT and `Bearer` tokens (tests: `services/tests/test_scanner_tokens.py`). Still not covered: Cloudflare API tokens (no distinguishing prefix; only the generic high-entropy assignment rule can catch them) and other providers' formats.
 
 ## Open decisions (owner-only, can't be delegated to an agent)
 
