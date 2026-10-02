@@ -314,6 +314,7 @@ async def test_unknown_report_is_returned_only_when_it_had_keys(mysql, capsys):
     assert [r.corpus for r in await rec.reconcile(None, redis, MODEL)] == [
         "about_me",
         "about_system",
+        "portfolio",
     ]
     redis.hset("chunk:50", {"model": TAG, "vector": VECTOR})
     reports = {r.corpus: r for r in await rec.reconcile(None, redis, MODEL)}
