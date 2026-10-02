@@ -215,7 +215,7 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 
 **What gets ingested.** The scanner (`services/glassbox/ingest/scanner.py`) builds two corpora:
 
-- **`about_me`**: every Markdown file under `corpus/about-me/`. Any leading `---` front matter is stripped before chunking.
+- **`about_me`**: every Markdown file under `about-me/` in the private About Basel repo (source path `private/...`). Any leading `---` front matter is stripped before chunking.
 - **`about_system`**: files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`. Frontend code and GitHub workflow files are outside these directories and are not part of the corpus.
 
 **Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval results for that corpus stop being read (answers check `content_sha` instead). A typical release therefore embeds only the documents that changed.
