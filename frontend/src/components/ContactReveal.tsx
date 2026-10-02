@@ -1,34 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-
-// Lives in the JS bundle only (never in the static HTML), so a naive scraper
-// of index.html doesn't see it.
-const EMAIL = 'baselmabdelrahman@gmail.com'
-
-type Status = 'idle' | 'copied' | 'shown'
-
-/** Legacy copy path for when the async Clipboard API is missing or denied. */
-function legacyCopy(text: string): boolean {
-  const previouslyFocused = document.activeElement as HTMLElement | null
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '0'
-  textarea.style.left = '0'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  textarea.setSelectionRange(0, text.length)
-  try {
-    return document.execCommand('copy')
-  } catch {
-    return false
-  } finally {
-    document.body.removeChild(textarea)
-    // Selecting the textarea stole focus; hand it back (keyboard users).
-    previouslyFocused?.focus?.()
-  }
-}
+import { useCopyEmail } from '../hooks/useCopyEmail'
 
 /** Sized like the GitHub mark beside it (24px, 28px from sm); the tight viewBox makes the envelope fill it optically. */
 function EnvelopeIcon() {
@@ -45,39 +15,20 @@ function EnvelopeIcon() {
  * GitHub icon, at every width. Click/tap copies the address and a toast under
  * the button says "Email copied" (announced via aria-live). If both the
  * Clipboard API and the execCommand fallback fail, the toast shows the address
- * itself for 5s so the visitor can still read it. Hover (on devices that can
- * hover) or keyboard focus shows a "Copy email" tooltip in the same place.
- * The bubble is out of flow, so the header row never changes width.
+ * itself for 5s so the visitor can still read it (lib/contact.ts). Hover (on
+ * devices that can hover) or keyboard focus shows a "Copy email" tooltip in
+ * the same place. The bubble is out of flow, so the header row never changes
+ * width.
  */
 function ContactReveal() {
-  const [status, setStatus] = useState<Status>('idle')
-  const timeoutRef = useRef<number | null>(null)
-
-  useEffect(() => () => {
-    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current)
-  }, [])
-
-  async function handleClick() {
-    let ok = false
-    try {
-      await navigator.clipboard.writeText(EMAIL)
-      ok = true
-    } catch {
-      ok = legacyCopy(EMAIL)
-    }
-    setStatus(ok ? 'copied' : 'shown')
-    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current)
-    timeoutRef.current = window.setTimeout(() => setStatus('idle'), ok ? 2000 : 5000)
-  }
-
-  const result = status === 'copied' ? 'Email copied' : status === 'shown' ? EMAIL : ''
+  const { result, copy } = useCopyEmail()
 
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={() => { void copy() }}
       aria-label="Copy email"
-      className={`group relative flex size-11 shrink-0 items-center justify-center transition-colors hover:text-primary md:size-auto ${status === 'idle' ? 'text-muted' : 'text-primary'}`}
+      className={`group relative flex size-11 shrink-0 items-center justify-center transition-colors hover:text-primary md:size-auto ${result ? 'text-primary' : 'text-muted'}`}
     >
       <EnvelopeIcon />
       {/* Tooltip while idle (hover/focus), the result after a click. */}
