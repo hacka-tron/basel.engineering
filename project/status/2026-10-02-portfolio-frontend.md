@@ -1,6 +1,6 @@
 # Portfolio topic (frontend)
 
-**Status:** In review, [#150](https://github.com/hacka-tron/basel.engineering/pull/150) (PR 3b of the portfolio feature, stacked on #148; merge after it). Not merged. Needs PR 2 (#149, merged and live on build-107).
+**Status:** Merged and live on build-110 ([#150](https://github.com/hacka-tron/basel.engineering/pull/150), PR 3b of the portfolio feature, merge commit 7c889f2; review round 1 changes needed, fixed, round 2 approved; Release and post-deploy Stream check passed). Built on #148 (build-109) and #149 (build-107). The Portfolio topic stays hidden until the first published project.
 
 ## TL;DR
 
@@ -76,5 +76,5 @@ Local, with the live API unreachable (`GLASSBOX_API_PROXY=http://127.0.0.1:9`), 
 ## Open items
 
 - Owner: add real projects (the topic appears on that release).
-- First release build is the Dockerfile's real test.
+- ~~First release build is the Dockerfile's real test~~ Passed: build-110 is the first release built with `corpus/portfolio` copied into the frontend stage.
 - Follow-ups in `project/BACKLOG.md` "Portfolio frontend follow-ups".
