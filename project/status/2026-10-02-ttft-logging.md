@@ -1,6 +1,6 @@
 # Time to first token in the query log (`queries.ttft_ms`)
 
-**Status:** PR open (review pending). Branch `feature/ttft-logging`.
+**Status:** PR [#137](https://github.com/hacka-tron/basel.engineering/pull/137) open (review pending). Branch `feature/ttft-logging`.
 
 ## TL;DR
 
