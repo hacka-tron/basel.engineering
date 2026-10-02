@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BUDGET_REPLIES, CANONICAL_BUDGET_REPLY, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
+import { BUDGET_REPLIES, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { planRetry } from './chatRetry.ts'
 import { historyForRequest, latestQuestionAnswered, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
 
@@ -113,32 +113,53 @@ test('a quirky "I don\'t know" reply is shown and saved, but history carries the
   })
 })
 
-test('a budget reply is shown and saved, but history carries the canonical sentence', () => {
+test('a budget reply is shown and saved, but its whole turn is left out of history', () => {
   const quirky = BUDGET_REPLIES[0]
   const convo: ChatMessage[] = [
+    { id: 'u0', role: 'user', content: 'Who is Basel?', createdAt: now },
+    { id: 'a0', role: 'assistant', content: 'An engineer.', state: 'done', createdAt: now },
     { id: 'u1', role: 'user', content: 'What did Basel build?', createdAt: now },
     { id: 'a1', role: 'assistant', content: quirky, state: 'retrieval_only', budget: true, sources: [{ source_path: 'a.md', title: 'A' }], createdAt: now },
     { id: 'u2', role: 'user', content: 'Tell me more', createdAt: now },
     { id: 'e2', role: 'assistant', content: BUDGET_REPLIES[1], state: 'error', budget: true, createdAt: now },
+    { id: 'u3', role: 'user', content: 'And his hobbies?', createdAt: now },
+    { id: 'a3', role: 'assistant', content: 'Climbing.', state: 'done', createdAt: now },
   ]
   const history = historyForRequest(convo)
+  // Neither the budget question nor the invented/joke reply is sent; alternation holds.
   assert.deepEqual(history, [
-    { role: 'user', content: 'What did Basel build?' },
-    { role: 'assistant', content: CANONICAL_BUDGET_REPLY },
+    { role: 'user', content: 'Who is Basel?' },
+    { role: 'assistant', content: 'An engineer.' },
+    { role: 'user', content: 'And his hobbies?' },
+    { role: 'assistant', content: 'Climbing.' },
   ])
-  for (const turn of history) assert.ok(!BUDGET_REPLIES.includes(turn.content))
+  history.forEach((turn, i) => assert.equal(turn.role, i % 2 === 0 ? 'user' : 'assistant'))
+  // What is shown and saved is unchanged.
   const serialized = serializeConversation(convo, now)!
   withStorage({ 'glassbox:conv:v1:about_me': serialized }, () => {
     const restored = loadConversation('about_me', now)
-    // The picked text is stored, so it stays the same after a reload.
-    assert.equal(restored[1].content, quirky)
-    assert.equal(restored[1].budget, true)
-    assert.equal(restored[3].content, BUDGET_REPLIES[1])
+    assert.equal(restored[3].content, quirky)
     assert.equal(restored[3].budget, true)
+    assert.equal(restored[3].state, 'retrieval_only')
+    assert.equal(restored[5].content, BUDGET_REPLIES[1])
+    assert.equal(restored[5].budget, true)
     assert.deepEqual(historyForRequest(restored), history)
-    assert.equal(planRetry(restored), null)
+    assert.equal(planRetry(restored.slice(0, 6)), null)
   })
 })
+
+test('a conversation whose only turn hit the budget sends no history', () => {
+  const convo: ChatMessage[] = [
+    { id: 'u1', role: 'user', content: 'Hi', createdAt: now },
+    { id: 'a1', role: 'assistant', content: BUDGET_REPLIES[2], state: 'retrieval_only', budget: true, createdAt: now },
+  ]
+  assert.deepEqual(historyForRequest(convo), [])
+  // A saved retrieval_only note without the flag (older saves) is left out too.
+  assert.deepEqual(historyForRequest([convo[0], { ...convo[1], budget: undefined }]), [])
+})
+
+// The sentence older versions showed (and sent as history) for a retrieval_only turn.
+const LEGACY_NOTE = "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
 
 test('the old fixed budget failure reply loads as a budget reply, so Retry stays off it', () => {
   const old = JSON.stringify({
@@ -147,16 +168,17 @@ test('the old fixed budget failure reply loads as a budget reply, so Retry stays
     messages: [
       { id: 'u', role: 'user', content: 'Hi', createdAt: now },
       { id: 'b', role: 'assistant', content: LEGACY_BUDGET_ERROR_REPLY, state: 'error', createdAt: now },
-      { id: 'r', role: 'assistant', content: CANONICAL_BUDGET_REPLY, state: 'retrieval_only', createdAt: now },
+      { id: 'r', role: 'assistant', content: LEGACY_NOTE, state: 'retrieval_only', createdAt: now },
     ],
   })
   withStorage({ 'glassbox:conv:v1:about_me': old }, () => {
     const restored = loadConversation('about_me', now)
     assert.equal(restored[1].budget, true)
     assert.equal(planRetry(restored.slice(0, 2)), null)
-    // An old retrieval_only note keeps its text, and history sends it unchanged.
+    // An old retrieval_only note keeps its text, and history leaves its turn out.
     assert.equal(restored[2].budget, undefined)
-    assert.equal(restored[2].content, CANONICAL_BUDGET_REPLY)
+    assert.equal(restored[2].content, LEGACY_NOTE)
+    assert.deepEqual(historyForRequest(restored), [])
   })
 })
 
