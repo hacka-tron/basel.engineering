@@ -93,6 +93,7 @@ Each frame is a real phone-width page, so media queries and the measured layouts
 
 One line per standing mobile/UI decision, so a session can check them at a glance. The sections above (and the code comments they point to) have the detail; record new decisions both there and here.
 
+- **Declined (owner, 2026-10-01): no visual stop-and-send cue and no "answer ready" cue in Diagram view.** Stop-and-send keeps the Send arrow look (only its accessible name changes), and answers to questions typed in Diagram view are read in Chat. Don't re-propose either.
 - **Text size:** 13px chat messages and a 13px ask box at every width; `maximum-scale=1` is added on iOS/iPadOS only, to stop focus zoom without blocking pinch-zoom elsewhere (2026-09-30, #77).
 - **Header name:** the full name shows whenever its measured natural width fits beside the other row items with at least 16px to spare; otherwise "Basel A-R". Returning to the full name needs 8px more room, so a width on the threshold can't flicker (`lib/headerName.ts`, `useFullNameFits`; #72).
 - **Diagram status text:** "Select a component" until a request runs (#76, #79).
