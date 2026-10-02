@@ -42,8 +42,11 @@ Rewrites go in MULTI transactions of 50 keys to keep Redis stalls short.
 ``force`` (``--reindex``) rewrites every key in scope from MySQL; it is idempotent.
 
 One ingest or reindex runs at a time: both hold the Redis lock ``ingest:lock``
-(``run.py``). Ingest writes a document's Redis keys just before its MySQL commit,
-so a reconcile alongside another ingest could see those keys as orphans.
+(``run.py``). Ingest deletes a changed document's old keys before its MySQL
+commit and writes the new ones after it (``write_document``), so a reconcile
+alongside another ingest could rewrite keys for rows about to be deleted. That
+same order means a crash mid-document leaves only missing keys, which this step
+repairs (no guard applies to repairs).
 """
 
 import logging
