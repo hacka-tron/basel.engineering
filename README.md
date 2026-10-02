@@ -32,7 +32,7 @@ The frontend is built with React, and the API is built with Python and FastAPI. 
 
 ## Take a look around
 
-- [The portfolio content](corpus/about-me/) is the source material for questions about my work.
+- The portfolio content that answers questions about my work lives in a separate private repository and is added to each release.
 - [The application](frontend/) and [backend](services/glassbox/) show how the conversation and live diagram work.
 - [The design notes](docs/DESIGN.md) explain the architecture and the choices behind it.
 

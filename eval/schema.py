@@ -58,6 +58,21 @@ def _fail(case_id: str, message: str) -> None:
     raise GoldenError(f"{case_id}: {message}")
 
 
+PRIVATE_PREFIX = "private/"
+
+
+def _source_file(root: Path, source: str) -> Path | None:
+    """The file behind an expected source, or None for a private file with no local checkout.
+
+    ``private/bio.md`` is ``corpus/about-me-private/about-me/bio.md`` in the git-ignored
+    release-time checkout; CI and fresh clones have none, so those snippets go unchecked.
+    """
+    if not source.startswith(PRIVATE_PREFIX):
+        return root / source
+    path = root / "corpus" / "about-me-private" / "about-me" / source.removeprefix(PRIVATE_PREFIX)
+    return path if path.is_file() else None
+
+
 def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
     case_id = case.get("id", "<missing id>")
     if not isinstance(case_id, str) or not _ID.match(case_id):
@@ -87,18 +102,23 @@ def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
 
     sources = case.get("expected_sources", [])
     for source in sources:
-        if not (root / source).is_file():
+        # About Basel files live in a private repo, so a `private/...` source can only be
+        # checked when a local checkout of it exists (see _source_file).
+        if not source.startswith(PRIVATE_PREFIX) and not (root / source).is_file():
             _fail(case_id, f"expected source {source} does not exist")
-        if (case["corpus"] == "about_me") != source.startswith("corpus/about-me/"):
+        if (case["corpus"] == "about_me") != source.startswith(PRIVATE_PREFIX):
             _fail(case_id, f"expected source {source} is outside corpus {case['corpus']}")
     snippets = case.get("gold_snippets", [])
     if snippets and not sources:
         _fail(case_id, "gold_snippets need expected_sources to check against")
-    contents = [(root / source).read_text(encoding="utf-8") for source in sources]
+    checkable = [_source_file(root, source) for source in sources]
+    contents = [path.read_text(encoding="utf-8") for path in checkable if path is not None]
+    # Every source is a private file with no local checkout: snippets can't be verified here.
+    verifiable = bool(contents) or not sources
     for snippet in snippets:
         if not isinstance(snippet, str) or not snippet.strip():
             _fail(case_id, "each gold snippet must be a non-empty string")
-        if not any(snippet_in(content, snippet) for content in contents):
+        if verifiable and not any(snippet_in(content, snippet) for content in contents):
             _fail(case_id, f"gold snippet not found in any expected source: {snippet!r}")
 
     if category in ANSWERABLE_CATEGORIES and not (sources and snippets):

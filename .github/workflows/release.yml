@@ -65,7 +65,8 @@ jobs:
       # about-me/ Markdown as about_me, behind the personal-data guard. Read with
       # a read-only deploy key (ABOUT_ME_DEPLOY_KEY, a `release` environment
       # secret) that can read that one repo and nothing else. Without the secret
-      # this is skipped and the image carries the public corpus only. Nothing
+      # this is skipped and the image carries no About Basel files (the public
+      # corpus/about-me copies were deleted on 2026-10-02). Nothing
       # here prints file names or contents (no ls/cat/debug steps; the build log
       # shows only Dockerfile steps). corpus/about-me-private/ is in .gitignore,
       # and .dockerignore lets only its about-me/**/*.md into the image.

@@ -1,10 +1,10 @@
 # About Basel from a private repo, with a personal-data guard
 
-**Status:** PR [#126](https://github.com/hacka-tron/basel.engineering/pull/126) open, review round 1 fixed. Branch `feature/private-about-me`. Written 2026-10-01. The owner has already added the deploy key, so the first release after the merge ingests the private repo.
+**Status:** PR [#126](https://github.com/hacka-tron/basel.engineering/pull/126) merged 2026-10-02; the first release (run 36963576115) checked out the private repo and a live About Basel answer cited `private/...` sources. The public copies were then deleted (see Update 2026-10-02 below). Written 2026-10-01.
 
 ## TL;DR
 
-About Basel content moves to the owner's private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under `about-me/`). Each release checks it out with a read-only deploy key, bakes it into the image (private ECR) and the ingest Job indexes it as About Basel. Without the key a release skips that step and serves the public `corpus/about-me/` files, which stay in this repo until a follow-up PR deletes them. Google Drive, the first plan, was dropped the same day; none of it ships.
+About Basel content moves to the owner's private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under `about-me/`). Each release checks it out with a read-only deploy key, bakes it into the image (private ECR) and the ingest Job indexes it as About Basel. Without the key a release skips that step and carries no About Basel files (the public `corpus/about-me/` copies were deleted on 2026-10-02). Google Drive, the first plan, was dropped the same day; none of it ships.
 
 The owner's rule, "don't leak my phone number or any of those details from my resume", is enforced in two layers by one detector, `services/glassbox/privacy.py`:
 
@@ -78,8 +78,16 @@ Round 1 (changes needed), all fixed:
 - `services/tests/test_answer_guard.py`: the real `/api/ask` path with a phone number split across LLM tokens (no SSE frame carries a digit; not cached), an SSN, ordinary numbers still cached, a cached answer masked on the way out, the cacheability backstop.
 - `services/tests/test_private_corpus.py`: only `about-me/**/*.md` is read (README, LICENSE, other folders, hidden paths and symlinks ignored), private files pass the secret scanner and the guard, shadowing skips the public twin, the public document is deleted only after the twin is indexed (not when the twin failed, not without the checkout), the sweep refuses to delete private documents from a release without the checkout even with force, and checks on `.gitignore`, `.dockerignore` and the `release.yml` step (conditional, `persist-credentials: false`, no cache export, no build record, no file-listing commands).
 
+## Update 2026-10-02: public copies deleted
+
+- **Verified:** the Release run of 2026-10-02 04:13 UTC had `ABOUT_ME_CONFIGURED: true` and its "Check out the private About Basel repo" step synced `hacka-tron/basel.engineering-docs` over SSH (deploy key, `persist-credentials: false`) into `corpus/about-me-private`; the run succeeded. The ingest Job log is in-cluster and was not read. One live question ("Where has Basel worked?", About Basel) returned a `retrieval` event whose sources were `private/google.md`, `private/microsoft.md`, `private/bio.md`, `private/projects.md` and `private/skills.md`, so the private ingest happened and the answer is served from it.
+- **Deleted:** the five `corpus/about-me/*.md` files. The index does not change (shadowing had already removed the public documents).
+- **Eval data:** `eval/golden.yaml` and `eval/questions.yaml` expected sources are now `private/<file>.md`. `eval/schema.py` accepts them and checks gold snippets only when a local checkout exists at `corpus/about-me-private/` (CI has none, so those snippets are unchecked there). The committed retrieval baselines still name the old paths; they are stale until the first eval run after the owner adds documents (evals are parked).
+- **Degraded mode, now stricter:** a release without the checkout has no About Basel files at all. The scanner skips a missing `corpus/about-me/` and the private directory, so the about_me scan finds zero files; `plan_sweep` then refuses ("scan found zero files"), and even a partial scan could not delete `private/` documents (the private-root guard, not overridable by `--force-sweep`). The last indexed documents keep serving; new private edits do not go live until a release with the checkout. No duplicates can appear any more, because there are no public twins to re-ingest.
+
 ## Open items
 
-- Owner: the setup above.
-- Follow-up PR: delete the public `corpus/about-me/*.md` copies after the first private release.
+- Owner: nothing; setup is done.
+- Done 2026-10-02: the public `corpus/about-me/*.md` copies were deleted (see Update 2026-10-02).
+- Tidy-up: the twin-shadowing code in the scanner and ingest is dead now; remove it with its tests.
 - Ideas: `repository_dispatch` from the private repo (needs a token); an ECR build cache for private builds.

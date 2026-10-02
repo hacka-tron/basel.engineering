@@ -134,10 +134,9 @@ def private_twin(public_path: str) -> str:
 def shadowed_public_paths(root: Path, private_sources=None) -> set[str]:
     """Public about-me paths that a private file of the same relative path replaces.
 
-    Transition aid while the public copies still exist (they stay until a
-    release has ingested the private repo): with the checkout present,
-    ``corpus/about-me/bio.md`` gives way to ``private/bio.md``. Without the
-    checkout nothing is shadowed.
+    Transition aid from before the public copies were deleted (2026-10-02): with
+    the checkout present, ``corpus/about-me/bio.md`` gives way to ``private/bio.md``.
+    With ``corpus/about-me/`` absent (the normal state now) nothing is shadowed.
     """
     root = root.resolve()
     if private_sources is None:
