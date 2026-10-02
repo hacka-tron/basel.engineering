@@ -11,6 +11,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 3. ~~**Stream check (#143)**~~ Done: post-release runs passed on build-104 and build-105.
 4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
 5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
+
 **Portfolio (spec `docs/superpowers/specs/2026-10-02-portfolio-design.md`):** PR 2, the backend corpus (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149), `feat/portfolio-backend`; report `project/status/2026-10-02-portfolio-backend.md`), is open and waiting for review. Next is **portfolio PR 3** (frontend panel, shared details sheet, "See portfolio →"), which needs PR 2 merged and deployed.
 
 **Open items** (not started unless noted):
@@ -109,6 +110,8 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 - ~~**No production path to run `--reindex` without kubectl.**~~ Fixed by the "Ops · Reindex" runbook (PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136), `project/status/2026-10-02-ops-reindex.md`; live once the Terraform workflow applies `glassbox-ops-reindex`). The reconcile in every ingest run covers Redis data loss, but a forced `--reindex` (after a MySQL restore, or to purge more than 30% orphan keys past the fraction guard) can only be run by exec-ing into a pod. Consider an "Ops · Reindex" runbook (owner-approved, like the other Ops workflows) that runs `python -m services.glassbox.ingest.run --reindex` as a one-off Job.
 
 - **Ops · Reindex follow-ups (minor, #136 round-2 review).** (1) A failed `job/ingest` (e.g. Bedrock down during embedding) makes the runbook refuse ("has not completed") until the next release, because Flux doesn't recreate a failed Job; `--reindex` doesn't need Bedrock, so accept Failed as well as Complete when the image matches. (2) SIGTERM edge cases in `run.py` `reindex`: a SIGTERM during the lock's `SET NX` round trip, or during a blocking MySQL call past the 30 s grace, leaves `ingest:lock` held for its TTL; `test_reindex_releases_the_lock_on_sigterm` sends a real SIGTERM to pytest, which would kill the run where the handler can't install.
+
+- **Open to work popover follow-ups (minor, #147 review rounds 1–2).** (1) `RotateScreen` stops Escape with `stopPropagation` on window capture, so the popover's window listener still sees Escape behind the rotate screen; harmless today, `stopImmediatePropagation` would make it airtight. (2) At 300–320px the open popover covers the ask input, so the first tap only closes the popover and focus mode needs a second tap. (3) `closesOnFocusOut` ignores the copy-fallback textarea, so if focus went from that textarea straight to an element outside the item the popover would stay open; unreachable today because `legacyCopy` adds, copies, removes and restores focus synchronously (Safari edge: Clipboard API rejected with the ask box focused leaves the popover open with focus in the ask box; an outside tap closes it).
 
 ## Feature work (priority)
 

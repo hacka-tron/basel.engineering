@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { lastStatsDetails, lastStatsParts } from './lastStats.ts'
+import { compactDuration, lastStatsDetails, lastStatsParts } from './lastStats.ts'
 
 test('before any answer the readout has no number', () => {
   assert.equal(lastStatsParts(null).timing, '—')
@@ -31,9 +31,9 @@ test('the visible text never says first token; the description does', () => {
   assert.match(lastStatsParts({ firstTokenMs: null, totalMs: 9, cacheStatus: 'miss' }).description, /total/i)
 })
 
-test('parts carry the timing and its description', () => {
-  assert.deepEqual(lastStatsParts({ firstTokenMs: 1234, totalMs: 1300, cacheStatus: 'hit' }), { timing: '1234ms', description: 'Time to first token' })
-  assert.deepEqual(lastStatsParts({ firstTokenMs: null, totalMs: 900, cacheStatus: 'hit' }), { timing: 'total 900ms', description: 'Total request time (no answer text was generated)' })
+test('parts carry the timing, the phone reading and the description', () => {
+  assert.deepEqual(lastStatsParts({ firstTokenMs: 1234, totalMs: 1300, cacheStatus: 'hit' }), { timing: '1234ms', short: '1.2s', description: 'Time to first token' })
+  assert.deepEqual(lastStatsParts({ firstTokenMs: null, totalMs: 900, cacheStatus: 'hit' }), { timing: 'total 900ms', short: '900ms', description: 'Total request time (no answer text was generated)' })
 })
 
 test('details explain the number in at most three short lines', () => {
@@ -43,4 +43,42 @@ test('details explain the number in at most three short lines', () => {
   assert.equal(hit[1], 'Served from the answer cache.')
   assert.match(lastStatsDetails({ firstTokenMs: null, totalMs: 812, cacheStatus: 'miss' })[0], /812ms/)
   assert.equal(lastStatsDetails(null).length, 1)
+})
+
+test('phone readings: ms under a second, tenths of a second up to 99.9s, whole seconds after', () => {
+  assert.equal(compactDuration(0), '0ms')
+  assert.equal(compactDuration(312), '312ms')
+  assert.equal(compactDuration(999), '999ms')
+  assert.equal(compactDuration(999.6), '1.0s')
+  assert.equal(compactDuration(1840), '1.8s')
+  assert.equal(compactDuration(9950), '10.0s')
+  assert.equal(compactDuration(12345), '12.3s')
+  assert.equal(compactDuration(99949), '99.9s')
+  assert.equal(compactDuration(99950), '100s')
+  assert.equal(compactDuration(999499), '999s')
+  assert.equal(compactDuration(999500), '999s+')
+})
+
+test('a phone reading is at most five characters for any value, so the footer fits at 280px', () => {
+  for (const ms of [0, 7, 999, 999.6, 1000, 1840, 9949, 9950, 12345, 99949, 99950, 999499, 999500, 1e9, Number.MAX_SAFE_INTEGER]) {
+    assert.ok(compactDuration(ms).length <= 5, `${ms} -> ${compactDuration(ms)}`)
+  }
+})
+
+test('a missing or broken number reads as a dash, never NaN', () => {
+  assert.equal(compactDuration(Number.NaN), '—')
+  assert.equal(compactDuration(-5), '—')
+  assert.equal(compactDuration(Number.POSITIVE_INFINITY), '—')
+})
+
+test('the phone reading drops the word total; the description and long reading keep it', () => {
+  const parts = lastStatsParts({ firstTokenMs: null, totalMs: 12345, cacheStatus: 'miss' })
+  assert.equal(parts.short, '12.3s')
+  assert.equal(parts.timing, 'total 12345ms')
+  assert.match(parts.description, /total/i)
+  assert.match(lastStatsDetails({ firstTokenMs: null, totalMs: 12345, cacheStatus: 'miss' })[0], /Total time: 12345ms/)
+})
+
+test('before any answer the phone reading is a dash too', () => {
+  assert.equal(lastStatsParts(null).short, '—')
 })
