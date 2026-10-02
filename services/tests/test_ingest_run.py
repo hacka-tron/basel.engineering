@@ -849,8 +849,8 @@ class _RecordingPipeline:
     async def __aexit__(self, *exc):
         return False
 
-    def delete(self, key):
-        self.ops.append(("delete", key, None))
+    def delete(self, *keys):
+        self.ops.extend(("delete", key, None) for key in keys)
 
     def hset(self, key, mapping):
         self.ops.append(("hset", key, mapping))
@@ -931,13 +931,22 @@ async def test_write_document_commits_mysql_with_no_redis_io_inside_the_transact
     await write(first, None, "h1", ["a", "b", "c"])
     old = indexed()
     assert old.content_hash == "h1" and len(old.chunk_ids) == 3 and old.models == {"m"}
-    # A new document has no old keys: one pipeline, one version bump.
+    # A new document has no old keys: one pipeline (each new id's chunktxt cache
+    # dropped with its write, for ids reused after a MySQL wipe), one version bump.
     assert first.calls == [
-        ("pipeline", [("hset", f"chunk:{chunk_id}") for chunk_id in old.chunk_ids]),
+        (
+            "pipeline",
+            [
+                op
+                for chunk_id in old.chunk_ids
+                for op in (("delete", f"chunktxt:{chunk_id}"), ("hset", f"chunk:{chunk_id}"))
+            ],
+        ),
         ("incr", "corpus:ver:about_me"),
     ]
 
     old_keys = [f"chunk:{chunk_id}" for chunk_id in old.chunk_ids]
+    old_text_keys = [f"chunktxt:{chunk_id}" for chunk_id in old.chunk_ids]
 
     def assert_committed(expected):
         assert indexed().content_hash == expected
@@ -953,12 +962,20 @@ async def test_write_document_commits_mysql_with_no_redis_io_inside_the_transact
     assert new.content_hash == "h2" and len(new.chunk_ids) == 2
     assert not set(new.chunk_ids) & set(old.chunk_ids)
     assert second.calls == [
-        ("delete", sorted(old_keys)),
+        ("delete", sorted(old_keys + old_text_keys)),
         ("incr", "corpus:ver:about_me"),
         (
             "pipeline",
-            [("delete", key) for key in old_keys]
-            + [("hset", f"chunk:{chunk_id}") for chunk_id in new.chunk_ids],
+            [
+                op
+                for chunk_id in old.chunk_ids
+                for op in (("delete", f"chunk:{chunk_id}"), ("delete", f"chunktxt:{chunk_id}"))
+            ]
+            + [
+                op
+                for chunk_id in new.chunk_ids
+                for op in (("delete", f"chunktxt:{chunk_id}"), ("hset", f"chunk:{chunk_id}"))
+            ],
         ),
         ("incr", "corpus:ver:about_me"),
     ]

@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import re
+import signal
 import struct
 import sys
 import uuid
@@ -19,6 +20,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
+from services.glassbox.cache.answer import drop_legacy_index
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document, IngestionRun
 from services.glassbox.db.session import create_db_engine
@@ -70,6 +72,8 @@ _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 INGEST_LOCK_KEY = "ingest:lock"
 # Longer than any ingest run so far; if a run outlives it, the lock just expires.
 INGEST_LOCK_TTL_MS = 30 * 60 * 1000
+# Exit status of ``--reindex`` when another run holds ``ingest:lock`` (EX_TEMPFAIL).
+REINDEX_LOCKED_OUT = 75
 _RELEASE_LOCK = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   return redis.call('DEL', KEYS[1])
@@ -78,15 +82,22 @@ return 0
 """
 
 
+_LOCKED_OUT_OUTCOME = {
+    "ingest": "it exits 0 so the Job doesn't fail; the next run catches up",
+    "reindex": f"it exits {REINDEX_LOCKED_OUT}; run the reindex again once the other run ends",
+    "clear": f"it exits {REINDEX_LOCKED_OUT}; run --clear again once the other run ends",
+}
+
+
 @asynccontextmanager
-async def ingest_lock(redis_client):
+async def ingest_lock(redis_client, mode: str = "ingest"):
     """Hold ``ingest:lock`` for one ingest or reindex; yields False if another holds it."""
     token = uuid.uuid4().hex
     acquired = await redis_client.set(INGEST_LOCK_KEY, token, nx=True, px=INGEST_LOCK_TTL_MS)
     if not acquired:
         message = (
-            f"!!! ANOTHER INGEST OR REINDEX HOLDS {INGEST_LOCK_KEY}; this run did nothing "
-            "(it exits 0 so the Job doesn't fail; the next run catches up) !!!"
+            f"!!! ANOTHER INGEST OR REINDEX HOLDS {INGEST_LOCK_KEY}; this {mode} did nothing "
+            f"({_LOCKED_OUT_OUTCOME[mode]}) !!!"
         )
         LOGGER.error(message)
         print(message)
@@ -126,7 +137,12 @@ def _title(content: str, path: Path) -> str:
 
 
 async def prepare_index(sessions, redis_client) -> None:
-    """Create or migrate ``idx:chunks`` and finish any pending model-tag backfill."""
+    """Create or migrate ``idx:chunks`` and finish any pending model-tag backfill.
+
+    Also drops the unused v1 answer index ``idx:answers`` (keeping its keys,
+    which expire by TTL) if it still exists; a no-op afterwards.
+    """
+    await drop_legacy_index(redis_client)
     index_changed = await ensure_index(redis_client)
     # Retry the backfill if an earlier run stopped after FT.ALTER but before
     # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
@@ -381,8 +397,9 @@ async def write_document(
     Order, like the stale sweep's (``sweep.py``): the worker raises when a KNN
     match has no MySQL row, so a Redis key must never name a deleted row.
 
-    1. Delete the old ``chunk:{id}`` keys and bump ``corpus:ver`` (retrieval-cache
-       entries holding the old ids would otherwise outlive the rows).
+    1. Delete the old ``chunk:{id}`` keys (and their ``chunktxt:{id}``) and bump
+       ``corpus:ver`` (retrieval-cache entries holding the old ids would
+       otherwise outlive the rows).
     2. One short MySQL transaction: upsert the document (new ``content_hash``),
        delete its old chunk rows, bulk-insert the new ones, read their ids back.
     3. Write the new keys and bump ``corpus:ver`` again (entries computed while
@@ -398,7 +415,12 @@ async def write_document(
     """
     corpus = source.corpus
     if known is not None and known.chunk_ids:
-        await redis_client.delete(*(f"chunk:{chunk_id}" for chunk_id in known.chunk_ids))
+        # With each key goes its chunktxt text cache (redis_index.py drops the
+        # new ids' cache too, for ids reused after a MySQL wipe).
+        await redis_client.delete(
+            *(f"chunk:{chunk_id}" for chunk_id in known.chunk_ids),
+            *(f"chunktxt:{chunk_id}" for chunk_id in known.chunk_ids),
+        )
         await redis_client.incr(f"corpus:ver:{corpus}")
     packed = [struct.pack(f"{len(vector)}f", *vector) for vector in vectors]
     with sessions.begin() as session:
@@ -465,6 +487,11 @@ async def reindex(
     embedding API (the vectors come from MySQL); idempotent. Orphan keys are
     removed under the zero-row guard (the fraction guard is lifted). Returns None,
     doing nothing, when another ingest or reindex holds ``ingest:lock``.
+
+    SIGTERM (Kubernetes stopping the Ops · Reindex Job at its deadline) cancels
+    the run, so the lock is released on the way out instead of blocking the next
+    release's ingest for up to its 30-minute TTL; ``asyncio.CancelledError``
+    then propagates to the caller.
     """
     model_id = get_embedding_provider().model_id
     own_engine = engine is None
@@ -472,13 +499,21 @@ async def reindex(
     engine = engine or create_db_engine()
     if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
+    loop = asyncio.get_running_loop()
     try:
-        async with ingest_lock(redis_client) as acquired:
+        loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
+        handles_sigterm = True
+    except (NotImplementedError, RuntimeError, ValueError):  # not the main thread
+        handles_sigterm = False
+    try:
+        async with ingest_lock(redis_client, "reindex") as acquired:
             if not acquired:
                 return None
             await prepare_index(sessionmaker(bind=engine), redis_client)
             return await reconcile(engine, redis_client, model_id, force=True)
     finally:
+        if handles_sigterm:
+            loop.remove_signal_handler(signal.SIGTERM)
         if own_redis:
             await redis_client.aclose()
         if own_engine:
@@ -535,7 +570,9 @@ async def clear(
     """Wipe one corpus/model scope's documents, chunks and Redis keys (incl. orphans).
 
     ``documents`` and ``orphan_chunk_ids`` limit the wipe to an already listed (and
-    confirmed) set. Redis is read even on a dry run, to count orphan keys.
+    confirmed) set. Redis is read even on a dry run, to count orphan keys. A real
+    wipe holds ``ingest:lock`` (a concurrent ingest would rewrite what it deletes);
+    it returns None, deleting nothing, when another ingest or reindex holds it.
     """
     model_id = model_id or get_embedding_provider().model_id
     own_engine = engine is None
@@ -544,15 +581,23 @@ async def clear(
     if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
     try:
-        return await clear_scope(
-            engine,
-            redis_client,
-            corpus,
-            model_id,
-            dry_run=dry_run,
-            documents=documents,
-            orphan_chunk_ids=orphan_chunk_ids,
-        )
+        if dry_run:
+            return await clear_scope(
+                engine, redis_client, corpus, model_id, dry_run=True, documents=documents,
+                orphan_chunk_ids=orphan_chunk_ids,
+            )  # fmt: skip
+        async with ingest_lock(redis_client, "clear") as acquired:
+            if not acquired:
+                return None
+            return await clear_scope(
+                engine,
+                redis_client,
+                corpus,
+                model_id,
+                dry_run=False,
+                documents=documents,
+                orphan_chunk_ids=orphan_chunk_ids,
+            )
     finally:
         if own_redis:
             await redis_client.aclose()
@@ -713,6 +758,9 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        if cleared is None:
+            print("clear did nothing: another ingest or reindex is running", file=sys.stderr)
+            return REINDEX_LOCKED_OUT
         print(
             f"cleared {len(cleared.documents)} {args.corpus} documents and "
             f"{len(cleared.orphan_chunk_ids)} orphan Redis chunk keys ({model_id})"
@@ -724,11 +772,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.reindex:
         try:
             reports = asyncio.run(reindex())
+        except asyncio.CancelledError:
+            print("reindex stopped by SIGTERM; ingest:lock released", file=sys.stderr)
+            return 143
         except Exception:
             LOGGER.exception("Reindex failed")
             return 1
-        if reports is not None:
-            _print_reconcile(reports)
+        if reports is None:
+            # Unlike the ingest Job's locked-out run (exit 0, the next release
+            # catches up), an operator asked for this reindex and it did nothing:
+            # fail, so the Ops · Reindex Job reports it.
+            print("reindex did nothing: another ingest or reindex is running", file=sys.stderr)
+            return REINDEX_LOCKED_OUT
+        _print_reconcile(reports)
         return 0
     if args.dry_run:
         try:

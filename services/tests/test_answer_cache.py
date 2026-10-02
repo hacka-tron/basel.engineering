@@ -18,9 +18,11 @@ from services.glassbox.cache import answer as answer_module
 from services.glassbox.cache.answer import (
     INDEX_NAME,
     KEY_PREFIX,
+    LEGACY_INDEX_NAME,
     RedisAnswerCache,
     _model_tag,
     chunk_content_sha,
+    drop_legacy_index,
 )
 from services.glassbox.cache.embedding import embedding_cache_key
 from services.glassbox.db.models import Query
@@ -73,6 +75,13 @@ class SearchRedis:
             return []
         if command == "FT.CREATE":
             self.indexes[args[0]] = args[args.index("PREFIX") + 2]
+            return b"OK"
+        if command == "FT.DROPINDEX":
+            assert args == (args[0],), "never DD: the hashes must stay"
+            if self.indexes.pop(args[0], None) is None:
+                from redis.exceptions import ResponseError
+
+                raise ResponseError("Unknown Index name")
             return b"OK"
         assert command == "FT.SEARCH"
         index, query = args[0], args[1]
@@ -386,6 +395,45 @@ def test_warm_up_still_hits_after_an_unrelated_reingest(monkeypatch):
     assert CountingLLM.calls == 2
 
 
+@pytest.mark.asyncio
+async def test_drop_legacy_index_keeps_the_keys_and_is_idempotent():
+    client = SearchRedis()
+    client.indexes[LEGACY_INDEX_NAME] = "ans:"
+    client.indexes[INDEX_NAME] = KEY_PREFIX
+    client.hashes["ans:about_system:v7:legacy"] = {"corpus": "about_system"}
+    assert await drop_legacy_index(client) is True
+    assert LEGACY_INDEX_NAME not in client.indexes
+    assert INDEX_NAME in client.indexes  # the live v2 index is untouched
+    assert "ans:about_system:v7:legacy" in client.hashes  # left to expire by TTL
+    assert await drop_legacy_index(client) is False
+
+
+@pytest.mark.asyncio
+async def test_drop_legacy_index_raises_other_errors():
+    from redis.exceptions import ResponseError
+
+    class Broken:
+        async def execute_command(self, *args):
+            raise ResponseError("LOADING Redis is loading the dataset in memory")
+
+    with pytest.raises(ResponseError):
+        await drop_legacy_index(Broken())
+
+
+@pytest.mark.asyncio
+async def test_new_chunk_keys_drop_their_cached_text():
+    """Ids restart after a MySQL wipe: a rewritten chunk:{id} must not keep old chunktxt."""
+    client = SearchRedis()
+    client.strings["chunktxt:1"] = b'{"text": "old text of a reused id"}'
+    client.strings["chunktxt:7"] = b'{"text": "a replaced chunk"}'
+    client.strings["chunktxt:9"] = b'{"text": "an unrelated chunk"}'
+    await _ingest_document(client, [7], [1], "docs/source.md", 10)
+    assert "chunktxt:1" not in client.strings
+    assert "chunktxt:7" not in client.strings and "chunk:7" not in client.hashes
+    assert "chunktxt:9" in client.strings
+    assert "chunk:1" in client.hashes
+
+
 async def _redis_or_skip():
     client = redis.from_url("redis://127.0.0.1:6379/0")
     try:
@@ -394,6 +442,27 @@ async def _redis_or_skip():
         await client.aclose()
         pytest.skip(f"local Redis Stack unavailable: {exc}")
     return client
+
+
+@pytest.mark.asyncio
+async def test_drop_legacy_index_against_redis_stack():
+    """FT.DROPINDEX without DD keeps the hashes; the missing-index error is recognised."""
+    client = await _redis_or_skip()
+    prefix = f"ans:droptest-{uuid4().hex}:"
+    key = f"{prefix}entry"
+    try:
+        await drop_legacy_index(client)  # a leftover dev index, if any
+        await client.execute_command(
+            "FT.CREATE", LEGACY_INDEX_NAME, "ON", "HASH", "PREFIX", "1", prefix,
+            "SCHEMA", "corpus", "TAG",
+        )  # fmt: skip
+        await client.hset(key, mapping={"corpus": "about_me"})
+        assert await drop_legacy_index(client) is True
+        assert await client.exists(key) == 1
+        assert await drop_legacy_index(client) is False
+    finally:
+        await client.delete(key)
+        await client.aclose()
 
 
 @pytest.mark.asyncio

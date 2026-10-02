@@ -30,15 +30,37 @@ from services.glassbox.cache.cacheability import uncacheable_reason
 LOGGER = logging.getLogger(__name__)
 
 # v2: source-validated entries. The v1 index (``idx:answers`` over ``ans:``) held
-# corpus-version-keyed entries without source checks; it is never read again and
-# its keys expire via their TTL.
+# corpus-version-keyed entries without source checks; it is never read again, its
+# keys expire via their TTL, and ingest drops the index itself
+# (``drop_legacy_index``).
 INDEX_NAME = "idx:answers:v2"
+LEGACY_INDEX_NAME = "idx:answers"
 KEY_PREFIX = "ans2:"
 ANSWER_TTL_S = 86400
 MIN_SIMILARITY = 0.95
 # Nearest entries checked per read: a stale nearest entry (deleted on sight) must
 # not hide a valid one written after it for the same question.
 _CANDIDATES = 3
+
+
+async def drop_legacy_index(client) -> bool:
+    """Drop the unused v1 answer index, keeping its hashes; True if it existed.
+
+    ``FT.DROPINDEX`` without ``DD``: only the index goes. Any ``ans:*`` hash left
+    is never read and expires on its own 24h TTL, whereas ``DD`` would delete
+    every hash under the prefix in one blocking call. Idempotent: a missing index
+    is a no-op. Called by every ingest and reindex (``ingest/run.py``), so it
+    happens on the first release after this code ships, with no manual step.
+    """
+    try:
+        await client.execute_command("FT.DROPINDEX", LEGACY_INDEX_NAME)
+    except ResponseError as exc:
+        message = str(exc).lower()
+        if "unknown index" in message or "no such index" in message:
+            return False
+        raise
+    LOGGER.warning("Dropped the unused answer index %s (its keys expire by TTL)", LEGACY_INDEX_NAME)
+    return True
 
 
 class AnswerCache(Protocol):

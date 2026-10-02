@@ -90,11 +90,15 @@ async def replace_document_vectors(
     """Remove former chunk keys and write new hashes in one Redis pipeline.
 
     Each chunk is ``(id, corpus, packed vector, source_path, document_id, text)``.
+    The ``chunktxt:{id}`` text cache of every old and new id is dropped too: ids
+    restart after a MySQL wipe or restore, and a new ``chunk:5`` must not be
+    served the old ``chunk:5``'s cached text for the rest of that cache's day.
     """
     async with client.pipeline(transaction=True) as pipeline:
         for chunk_id in old_ids:
-            pipeline.delete(f"chunk:{chunk_id}")
+            pipeline.delete(f"chunk:{chunk_id}", f"chunktxt:{chunk_id}")
         for chunk_id, corpus, vector, source_path, document_id, text in chunks:
+            pipeline.delete(f"chunktxt:{chunk_id}")
             pipeline.hset(
                 f"chunk:{chunk_id}",
                 mapping=chunk_fields(corpus, model_id, vector, source_path, document_id, text),

@@ -97,6 +97,13 @@ locals {
       }]
       timeout = 600
     }
+    reindex = {
+      description = "Run python -m services.glassbox.ingest.run --reindex once as a Job (the api's current image): rewrite every Redis chunk key from MySQL. Refuses mid-release."
+      script      = "reindex.sh"
+      fixed_args  = []
+      parameters  = []
+      timeout     = 1800
+    }
     cronjob-suspend = {
       description = "Suspend one known CronJob in the app namespace."
       script      = "cronjob-suspend-resume.sh"
