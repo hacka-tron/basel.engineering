@@ -4,13 +4,14 @@
 
 ## TL;DR
 
-The site gets a third chat topic, **Portfolio**. On desktop the right pane follows the topic: Portfolio shows a card grid of the projects in `corpus/portfolio/*.md`, the other topics show the diagram. On phones the switch above the ask box becomes **Chat | Diagram | Portfolio**. Picking a project opens the shared 80% details sheet (visuals gallery with a full-screen lightbox, stack and links, the write-up) and asks the chatbot "Tell me about <title>". The footer "Open to work" popover gains "See portfolio →". Today the corpus holds only the draft example, so visitors see the empty state: "Projects are on their way. Ask the chat in the meantime."
+The site gets a third chat topic, **Portfolio**. On desktop the right pane follows the topic: Portfolio shows a card grid of the projects in `corpus/portfolio/*.md`, the other topics show the diagram. On phones the switch above the ask box becomes **Chat | Diagram | Portfolio**. Picking a project opens the shared 80% details sheet (visuals gallery with a full-screen lightbox, stack and links, the write-up) and asks the chatbot "Tell me about <title>". The footer "Open to work" popover gains "See portfolio →". **Hidden until there is content (owner, 2026-10-02):** today the corpus holds only the draft example, so visitors see no change at all: no Portfolio topic, no Portfolio segment (the toggle stays Chat | Diagram), no "See portfolio →". Everything appears by itself on the first release with a published project.
 
 ## What changed for a visitor
 
+- Once there is a published project:
 - **Desktop:** header nav "About Basel | About This System | Portfolio". Portfolio swaps the diagram for "Portfolio · N projects" (2 columns, 3 from 1280px). A card opens the sheet over 80% of the pane, the card stays in the strip above it with a cyan outline, and the question and streamed answer appear in the chat column.
 - **Phones:** three chips ("Basel", "System", "Portfolio"; all fit at 280px) and a three-way view toggle (text from 360px, 44px icons below). The Portfolio view shows the grid (2 columns from 390px, single-column rows below); the sheet adds "Ask about this" with the streamed answer and "Continue in chat →".
-- **Sheet and lightbox:** visuals in a row at one height with each image's declared shape, dots and "1 / N" when there are two or more, prev/next on desktop; tapping one opens a modal lightbox (✕, arrows, Escape closes only it, focus returns to the thumbnail). Any tap in the strip above the sheet, the chevron or Escape closes it; Back closes it with the view.
+- **Sheet and lightbox:** visuals in a row at one height with each image's declared shape, dots and "1 / N" when there are two or more, prev/next on desktop; tapping one opens a modal lightbox (✕, arrows, Escape closes only it, focus returns to the thumbnail). On phones any tap in the strip above the sheet closes it; on desktop another card switches it. The chevron or Escape closes it (focus to the locked bar); opening from the keyboard moves focus to the chevron; Back closes it with the view.
 - **Footer:** "Open to work" → "See portfolio →" selects Portfolio (and the Portfolio view on phones) and focuses the first card or the empty-state text.
 
 ## How it works
@@ -35,15 +36,21 @@ flowchart LR
 - **The Dockerfile copies `corpus/portfolio/` into the frontend build stage**, and the loader fails if the directory is missing. Before this, the frontend stage copied only `frontend/`, so a naive loader would have shipped an empty portfolio while CI (full checkout) passed. Not verified with `docker build` locally (Docker Desktop is down); the release workflow's build is the first real check.
 - **Same rules as the backend.** The loader reads files the way `services/glassbox/portfolio.py` does: YAML 1.1 like PyYAML, only the literal `true`/`false` are booleans (`draft: yes` or `draft: True` is an error, not a draft), a repeated field is an error, floats are never whole numbers, drafts are validated (images unchecked) then dropped, files in subfolders and symlinks are errors, an image must be a real file with no symlink on its path. A 25-case parity run against `portfolio.py` agreed on every case. Stricter on purpose: a visual must be an image file with no hidden path segment, and body links must be https. The personal-data check stays in CI only.
 - **Unknown frontmatter fields are errors** (typo protection), as in the backend.
-- **Any tap in the strip closes the sheet**, cards don't switch, on desktop too: carried over from the phone diagram decision (#148), so an accidental tap never asks a new, rate-limited question. Open for the owner to confirm for the portfolio.
+- **Strip taps (owner, 2026-10-02):** on phones any tap in the strip closes the sheet (cards inert), as for the diagram (#148), so an accidental tap never asks a new, rate-limited question; on desktop another card switches the sheet.
 - **Native `<dialog>` for the lightbox** (`showModal()`): the page is inert and Tab can't reach it; the dialog is closed when its panel unmounts (Back, topic change), so the page never stays inert.
 - **Back closes the sheet by leaving the view** (no history entry for the sheet), as in PR 3a.
 - **No URL switches** (`?topic`, `?sel`, `?lightbox`...); screenshots are driven through the UI.
-- **The empty state ships.** Whether to hide the topic until there is content is open (spec §7, §10).
+- **Hidden until content (owner).** `HAS_PORTFOLIO` (`projects.length > 0`) gates the topic (`visibleTopics`), the phone segment (`views` in `createViewNav` and `PipelineStrip`) and the footer link; a history entry saved on the Portfolio view reads as Chat. The empty state stays in code but is unreachable. Corpus choice isn't persisted, so no saved topic can point at Portfolio.
 
 ## What review caught
 
-Not reviewed yet.
+Round 1 (Opus reviewer), changes needed, all fixed:
+- **Important:** choosing a card from the keyboard dropped focus to `<body>` (the card went inert), and Escape left it there. Now opening moves focus to the sheet's chevron, and Escape or the chevron always lands on the locked bar when focus was in the sheet, the cards or lost. "See portfolio →" with a desktop sheet open now closes the sheet first, so the first card takes focus.
+- Gallery "Next" in the wide desktop sheet jumped 1 / 3 → 3 / 3 when the last visuals fit; prev/next now hold the index they chose while the row scrolls.
+- Duplicate stack tags or visual paths gave duplicate React keys; keys are index-qualified.
+- A leading UTF-8 byte-order mark is now ignored on both sides (frontend loader and `portfolio.py`, with tests); the remaining fail-loud parity edge cases are documented in the loader.
+- Owner decisions: hidden until content; strip taps close on phones only.
+- Deferred to BACKLOG: selection surviving Portfolio → Diagram → Portfolio, the empty-state locked bar, bundle size.
 
 ## Operational notes and risks
 
@@ -63,11 +70,11 @@ Local, with the live API unreachable (`GLASSBOX_API_PROXY=http://127.0.0.1:9`), 
 - Lightbox: Back with it open → Chat, no `dialog[open]`, the ask box takes focus. Tab inside it cycles ✕ / prev / next and once per cycle the browser's own UI; it never reaches the page.
 - A strip tap closes the sheet without selecting another card or asking (1 request in the run). Requests sent: "Tell me about <title>", corpus `portfolio`, history 0. Desktop: one `.react-flow` after switching back to About This System.
 - Body HTML (`<b>raw HTML…</b>`) shows as text. Reduced motion and transparency: sheet animation `none`, scrim hidden. Rotate: `/?phone` at 667x375 shows the rotate screen; back at 375x667 the project sheet is still open.
-- Empty corpus (only `_example.md`): "Projects are on their way. Ask the chat in the meantime." on phones and desktop; no requests.
+- Empty corpus (only `_example.md`, the repo state) at 280, 320, 375 and 1280: topics About Basel and About This System only, toggle Chat | Diagram (text), no "See portfolio →", overflow 0; a reload on a history entry saved as Portfolio shows Chat.
+- Round 1 fixes (fixtures in a scratch copy of the tree, not the worktree): keyboard Enter on a card → focus "Close <title> details and deselect it"; Escape → "Select a project for details", also after focus was blurred to `<body>` (375 and 1280). Desktop: a click on another card while a sheet is open switches to it; gallery Next 1 / 3 → 2 / 3 → 3 / 3, Next disabled at the end, Prev → 2 / 3; "See portfolio →" with a sheet open closes it and focuses the first card. Phones: a strip tap closes without switching. No React key warnings with a duplicate stack tag. Full regression at all eight widths again: overflow 0, no missing selectors, same strips and focus targets.
 
 ## Open items
 
-- Owner: hide the Portfolio topic until there is content? Add real projects.
-- Owner: confirm "any tap in the strip closes" for the portfolio sheet (desktop included).
+- Owner: add real projects (the topic appears on that release).
 - First release build is the Dockerfile's real test.
 - Follow-ups in `project/BACKLOG.md` "Portfolio frontend follow-ups".
