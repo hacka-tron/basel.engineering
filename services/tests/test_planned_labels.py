@@ -342,6 +342,9 @@ LIVE_UNITS = [
     ("docs/DESIGN-002-followups.md", "- Built: the Cloudflare Cache Rule for `/api/*`"),
     ("docs/DESIGN-003-ingestion.md", "## 1.1 What runs today: the current ingest Job"),
     ("docs/DESIGN-003-ingestion.md", "- **On by default (report only):**"),
+    ("docs/DESIGN-003-ingestion.md", "## 1.2 Private About Basel repo"),
+    ("docs/DESIGN-003-ingestion.md", "- **The public copies during the switch.**"),
+    ("docs/DESIGN-003-ingestion.md", "- **No GitHub Actions cache for private builds.**"),
     ("docs/DESIGN-004-action-plan.md", "Milestones 0 to 2 are done and live"),
     ("docs/DESIGN-004-action-plan.md", "| 6 (done) | GitHub Actions building images to Amazon ECR"),
     ("docs/DESIGN-005-rag-quality.md", "| Stale files | After a full scan"),
@@ -482,6 +485,7 @@ PLANNED_UNITS = [
     ("docs/DESIGN-002-followups.md", "The scripted post-deploy streaming check"),
     ("docs/DESIGN-003-ingestion.md", "### 4.2 Why a raw zone at all (planned)"),
     ("docs/DESIGN-003-ingestion.md", "### 8.2 Processing one message (planned)"),
+    ("docs/DESIGN-003-ingestion.md", "## 5. Google Drive connector (dropped"),
     ("docs/DESIGN-004-action-plan.md", "| 7 (not started) |"),
     ("docs/DESIGN-004-action-plan.md", "post-deploy Cloudflare streaming check is not built"),
     ("docs/DESIGN-005-rag-quality.md", "| Retrieval, lexical leg (planned with hybrid search) |"),
@@ -528,19 +532,26 @@ def _rendered_source(path: str, text: str) -> str:
 
 
 def test_every_design_003_chunk_is_marked_in_the_prompt_except_what_runs_today():
-    # DD3 is unbuilt M4 design; only section 1.1 describes the running ingest Job
-    # and stale sweep. Since prompt v14 DD3 has no fixed whole-document label: every
-    # heading carries the planned wording, so each real chunk is marked in the
-    # rendered prompt (including chunks that start at a ### heading) and 1.1 is not.
+    # DD3 is unbuilt M4 design except sections 1.1 (the running ingest Job and
+    # stale sweep) and 1.2/1.2.1 (the private About Basel repo, live since the owner
+    # added the deploy key). Since prompt v14 DD3 has no fixed whole-document label:
+    # every other heading carries the planned wording, so each real chunk is marked
+    # in the rendered prompt (including chunks that start at a ### heading), while
+    # no line of 1.1, 1.2 or 1.2.1 is.
     path = "docs/DESIGN-003-ingestion.md"
+    source = (REPO / path).read_text()
+    live = source[source.index("## 1.1 What runs today") : source.index("## 2. Goals")]
+    # "---" separators also close planned sections, so they say nothing here.
+    live_lines = {line for line in live.split("\n") if line.strip() and line != "---"}
     chunks = _real_chunks(path)
-    assert len(chunks) == 13
+    assert len(chunks) == 14
     for text in chunks:
         rendered = _rendered_source(path, text)
         assert "PLANNED M4 DESIGN" not in rendered
-        if text.startswith("## 1.1 What runs today"):
-            assert PLANNED_MARK not in rendered
-        else:
+        for line in rendered.split("\n"):
+            if line.startswith(PLANNED_MARK):
+                assert line.removeprefix(PLANNED_MARK + " ") not in live_lines, line[:80]
+        if not text.startswith(("## 1.1 What runs today", "## 1.2 Private About Basel")):
             assert PLANNED_MARK in rendered, text[:80]
 
 

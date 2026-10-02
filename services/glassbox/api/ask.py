@@ -35,6 +35,7 @@ from services.glassbox.limits import (
     get_daily_budget,
     get_rate_limiter,
 )
+from services.glassbox.privacy import StreamMasker, mask_answer
 from services.glassbox.providers.base import (
     ABSTENTION_ANSWER,
     GROUNDING_RULES,
@@ -560,7 +561,12 @@ async def _stream(
         if answer_hit:
             chunks = [WorkerChunk.model_validate(item) for item in answer_hit["chunks"]]
             cache_status = "answer_hit"
-            answer = answer_hit["answer"]
+            # Defence in depth: a masked answer is never cached, but an entry written
+            # before the guard existed is masked on the way out all the same.
+            answer, masked = mask_answer(answer_hit["answer"])
+            if masked:
+                timings["answer_pii_masked"] = masked
+                LOGGER.warning("Cached answer for %s needed %d mask(s)", request_id, masked)
             yield frame(
                 "retrieval",
                 {"chunks": [_public_chunk(chunk) for chunk in chunks]},
@@ -708,6 +714,11 @@ async def _stream(
         # Providers that can report real token usage fill this dict in place.
         usage_kwargs = {"usage": llm_usage} if getattr(llm_provider, "reports_usage", False) else {}
         llm_started = time.monotonic()
+        # Answer-time personal-data guard (services/glassbox/privacy.py): holds back
+        # a trailing run of digits so a phone number split across tokens is masked
+        # before any of it is sent. Prose passes through with at most one token of
+        # delay. response_parts records what was sent, i.e. the masked text.
+        masker = StreamMasker()
         yield await stage("llm", "start")
         # aclosing: if the client leaves while this generator is suspended at a
         # yield, closing it closes the provider stream too (Bedrock's finally closes
@@ -718,13 +729,27 @@ async def _stream(
             )
         ) as parts:
             async for part in parts:
-                response_parts.append(part)
-                yield frame("token", {"text": part})
+                safe = masker.push(part)
+                if safe:
+                    response_parts.append(safe)
+                    yield frame("token", {"text": safe})
+        tail = masker.flush()
+        if tail:
+            response_parts.append(tail)
+            yield frame("token", {"text": tail})
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
         # Reaching here means generation completed (errors and client disconnects
         # leave the generator before this point). Refusals and empty answers are
         # never cached; the flags land in the query log's stage_timings_ms JSON.
         cache_skip = uncacheable_reason("".join(response_parts), chunks)
+        if masker.masked:
+            # Never cache an answer that needed masking: the model produced personal
+            # data once, and a cached copy would replay the (masked) answer for 24h.
+            timings["answer_pii_masked"] = masker.masked
+            cache_skip = cache_skip or "pii_masked"
+            LOGGER.warning(
+                "Answer for %s: masked %d personal-data span(s)", request_id, masker.masked
+            )
         if cache_skip == "abstention":
             timings["abstained"] = 1
         if cache_skip and not history:

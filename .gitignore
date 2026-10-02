@@ -39,3 +39,7 @@ dist/
 
 # Answer eval runs (eval/run_answers.py); committed baselines live in eval/baselines/
 eval/runs/
+
+# The owner's private About Basel repo, checked out here only by release.yml
+# (DESIGN-003 §1.2). Never commit it: this repo is public.
+corpus/about-me-private/
