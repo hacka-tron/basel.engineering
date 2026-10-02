@@ -298,25 +298,32 @@ def _rendered_source(path: str, text: str) -> str:
 
 def test_every_design_003_chunk_is_marked_in_the_prompt_except_what_runs_today():
     # DD3 is unbuilt M4 design except sections 1.1 (the running ingest Job and
-    # stale sweep) and 1.2/1.2.1 (the private About Basel repo, live since the owner
-    # added the deploy key). Since prompt v14 DD3 has no fixed whole-document label:
-    # every other heading carries the planned wording, so each real chunk is marked
-    # in the rendered prompt (including chunks that start at a ### heading), while
-    # no line of 1.1, 1.2 or 1.2.1 is.
+    # stale sweep), 1.2/1.2.1 (the private About Basel repo, live since the owner
+    # added the deploy key) and 1.3 (the portfolio corpus in the backend). Since prompt
+    # v14 DD3 has no fixed whole-document label: every other heading carries the planned
+    # wording, so each real chunk is marked in the rendered prompt (including chunks that
+    # start at a ### heading), while no line of 1.1, 1.2, 1.2.1 or 1.3 is.
     path = "docs/DESIGN-003-ingestion.md"
     source = (REPO / path).read_text()
     live = source[source.index("## 1.1 What runs today") : source.index("## 2. Goals")]
     # "---" separators also close planned sections, so they say nothing here.
     live_lines = {line for line in live.split("\n") if line.strip() and line != "---"}
     chunks = _real_chunks(path)
-    assert len(chunks) == 14
+    assert len(chunks) == 15
     for text in chunks:
         rendered = _rendered_source(path, text)
         assert "PLANNED M4 DESIGN" not in rendered
         for line in rendered.split("\n"):
             if line.startswith(PLANNED_MARK):
                 assert line.removeprefix(PLANNED_MARK + " ") not in live_lines, line[:80]
-        if not text.startswith(("## 1.1 What runs today", "## 1.2 Private About Basel")):
+        live_headings = (
+            "## 1.1 What runs today",
+            "## 1.2 Private About Basel",
+            # Its own chunk since 1.3 follows it (it used to merge into planned §2).
+            "### 1.2.1 Ingest and deletes",
+            "## 1.3 Portfolio corpus",
+        )
+        if not text.startswith(live_headings):
             assert PLANNED_MARK in rendered, text[:80]
 
 

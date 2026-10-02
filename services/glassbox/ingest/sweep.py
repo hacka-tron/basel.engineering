@@ -45,13 +45,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 from services.glassbox.cache.answer import _model_tag
+from services.glassbox.corpora import CORPORA
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
 from services.glassbox.ingest.scanner import PRIVATE_SOURCE_PREFIX
 
 LOGGER = logging.getLogger(__name__)
 
-CORPORA = ("about_me", "about_system")
 SWEEP_MODES = ("off", "report", "apply")
 DEFAULT_SWEEP_MODE = "report"
 DEFAULT_MAX_STALE_FRACTION = 0.30

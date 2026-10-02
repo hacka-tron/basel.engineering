@@ -77,6 +77,8 @@ jobs:
         run: pip install -r services/requirements-dev.txt
       - name: Apply database migrations
         run: alembic upgrade head
+      - name: Migration round trip (newest revision down, then up again)
+        run: alembic downgrade -1 && alembic upgrade head
       - name: Ruff
         run: ruff check services eval
       - name: Pytest

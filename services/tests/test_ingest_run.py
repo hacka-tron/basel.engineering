@@ -1170,3 +1170,69 @@ async def test_crash_between_mysql_commit_and_redis_write_is_repaired_by_next_ru
         if redis_keys:
             await client.delete(*redis_keys)
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_portfolio_projects_are_ingested_with_their_preface(tmp_path, integration_stack):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    slug = tmp_path.name.lower().replace("_", "-")
+    (tmp_path / "corpus" / "portfolio").mkdir(parents=True)
+    good = f"corpus/portfolio/{slug}.md"
+    bad = f"corpus/portfolio/{slug}-bad.md"
+    draft = f"corpus/portfolio/{slug}-draft.md"
+    (tmp_path / good).write_text(
+        "---\ntitle: Fixture Project\none_liner: A fixture.\nkind: personal\nyear: 2026\n"
+        "stack: [React, FastAPI]\n---\n\nBuilt for tests.\n"
+    )
+    (tmp_path / bad).write_text("---\ntitle: Missing fields\n---\n\nBody.\n")
+    (tmp_path / draft).write_text(
+        "---\ntitle: Draft\none_liner: Later.\nkind: personal\nyear: 2026\nstack: [Go]\n"
+        "draft: true\n---\n\nBody.\n"
+    )
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+    redis_keys = []
+    try:
+        first = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert first.docs_changed == 1
+        assert first.errors[bad].startswith("invalid portfolio file:")
+        assert draft not in first.errors
+        with Session(engine) as session:
+            document = session.scalar(
+                select(Document).where(Document.corpus == "portfolio", Document.source_path == good)
+            )
+            assert document is not None and document.title == "Fixture Project"
+            chunks = list(
+                session.scalars(select(DbChunk).where(DbChunk.document_id == document.id))
+            )
+            assert len(chunks) == 1
+            assert chunks[0].text.startswith("# Fixture Project\n\nA fixture.\n")
+            assert "- Stack: React, FastAPI" in chunks[0].text
+            assert "Built for tests." in chunks[0].text
+            redis_keys.append(f"chunk:{chunks[0].id}")
+            others = session.scalar(
+                select(func.count())
+                .select_from(Document)
+                .where(Document.source_path.in_([bad, draft]))
+            )
+            assert others == 0
+        assert await client.hget(redis_keys[0], "corpus") == b"portfolio"
+        second = await ingest(tmp_path, engine=engine, redis_client=client)
+        assert second.docs_changed == 0  # unchanged project skipped by its content hash
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                Document.__table__.delete().where(Document.source_path.in_([good, bad, draft]))
+            )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        if redis_keys:
+            await client.delete(*redis_keys)
+        await client.aclose()
