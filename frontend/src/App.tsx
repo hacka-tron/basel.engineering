@@ -5,7 +5,7 @@ import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import TopicChips from './components/TopicChips'
-import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
+import { createViewNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
@@ -633,34 +633,39 @@ function App() {
   // streaming answer, the conversation and the selection survive the turn.
   const showRotateScreen = useRotateScreen()
   const showDiagramView = !isDesktop && mobileView === 'diagram'
+  const showPortfolioView = !isDesktop && mobileView === 'portfolio'
+  const showOtherView = showDiagramView || showPortfolioView
   const focusMode = !isDesktop && askFocused
 
-  // The diagram view is a history entry, so the browser's Back button (and
+  // Each phone view is a history entry, so the browser's Back button (and
   // Escape, "Chat", or "Continue in chat") returns to the conversation.
   const diagramButtonRef = useRef<HTMLButtonElement | null>(null)
-  const [diagramNav] = useState(() => createDiagramNav({
+  const portfolioButtonRef = useRef<HTMLButtonElement | null>(null)
+  const mobileViewRef = useRef(mobileView)
+  mobileViewRef.current = mobileView
+  const [viewNav] = useState(() => createViewNav({
     history: window.history,
     setView: setMobileView,
     afterRender: (callback) => { requestAnimationFrame(callback) },
-    focusDiagramToggle: () => diagramButtonRef.current?.focus(),
-    // Back, Escape, Chat or "Continue in chat" close the phone details sheet.
+    focusViewToggle: (view) => (view === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current?.focus(),
+    // Leaving a view closes its details sheet (spec §5.5: Back closes the sheet).
     onReturnToChat: () => { setSelectedNode(null); setSelectedProject(null); pendingSelectionRef.current = null },
   }))
-  const showMobileView = diagramNav.showView
+  const showMobileView = viewNav.showView
   isDesktopRef.current = isDesktop
-  revealDiagramRef.current = diagramNav.revealDiagram
+  revealDiagramRef.current = viewNav.revealDiagram
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
-      diagramNav.handlePopState(event.state)
+      viewNav.handlePopState(event.state)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [diagramNav])
+  }, [viewNav])
   useEffect(() => {
-    if (!showDiagramView) return
-    document.addEventListener('keydown', diagramNav.handleKeyDown)
-    return () => document.removeEventListener('keydown', diagramNav.handleKeyDown)
-  }, [showDiagramView, diagramNav])
+    if (!showOtherView) return
+    document.addEventListener('keydown', viewNav.handleKeyDown)
+    return () => document.removeEventListener('keydown', viewNav.handleKeyDown)
+  }, [showOtherView, viewNav])
 
   // Leaving the ask box restores the header and footer. If a tap caused the
   // blur, wait until it is released: restoring mid-tap would slide the button
@@ -700,13 +705,14 @@ function App() {
   }, [])
 
   // Focus rescue when the chips unmount while holding focus: on a switch to
-  // Diagram view it goes to the Diagram toggle; when the window widens past md
+  // Diagram or Portfolio view it goes to that view's toggle segment (a ref:
+  // the chips call this from a commit, before any later view change); when the window widens past md
   // (chips replaced by the desktop topic nav) it goes to the nav button for the
   // current topic. Runs after the commit, so isDesktopRef and the nav are current.
   const rescueChipFocus = () => {
     const target = isDesktopRef.current
       ? navRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
-      : diagramButtonRef.current
+      : (mobileViewRef.current === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current
     target?.focus()
   }
 
@@ -833,33 +839,35 @@ function App() {
           onRetry={handleRetry}
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
-          replacement={showDiagramView ? (
+          replacement={showOtherView ? (
             <div className="flex min-h-0 flex-1 flex-col pt-[var(--chrome-top,0rem)] transition-[padding-top] duration-200 ease-out motion-reduce:transition-none [&>section]:flex-1">
-              <ArchitecturePanel
-                portrait
-                fitMinZoom={0.75}
-                activeNode={activeNode}
-                nodeCacheStatus={nodeCacheStatus}
-                retrievedChunks={retrievedChunks}
-                selectedNode={selectedNode}
-                answerText={selectedAnswer}
-                onContinueInChat={() => showMobileView('chat')}
-                onInspect={handleInspectComponent}
-                onDeselect={handleDeselectComponent}
-                workerPods={shownWorkerPods}
-                backlog={shownBacklog}
-              />
+              {showPortfolioView ? portfolioPanel(true) : (
+                <ArchitecturePanel
+                  portrait
+                  fitMinZoom={0.75}
+                  activeNode={activeNode}
+                  nodeCacheStatus={nodeCacheStatus}
+                  retrievedChunks={retrievedChunks}
+                  selectedNode={selectedNode}
+                  answerText={selectedAnswer}
+                  onContinueInChat={() => showMobileView('chat')}
+                  onInspect={handleInspectComponent}
+                  onDeselect={handleDeselectComponent}
+                  workerPods={shownWorkerPods}
+                  backlog={shownBacklog}
+                />
+              )}
             </div>
           ) : undefined}
-          inputTopic={isDesktop || showDiagramView ? undefined : (
+          inputTopic={isDesktop || showOtherView ? undefined : (
             <TopicChips value={corpus} options={TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
-              view={showDiagramView ? 'diagram' : 'chat'}
+              view={isDesktop ? 'chat' : mobileView}
               onViewChange={showMobileView}
               activeNode={activeNode}
-              diagramButtonRef={diagramButtonRef}
+              toggleRefs={{ diagram: diagramButtonRef, portfolio: portfolioButtonRef }}
             />
           }
         />
