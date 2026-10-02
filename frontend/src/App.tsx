@@ -743,10 +743,26 @@ function App() {
     <div
       inert={showRotateScreen}
       aria-hidden={showRotateScreen || undefined}
-      className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
+      // --chrome-top: below md, how much of the page's top the floating header
+      // covers (its 44px row plus py-2), so the message list and the diagram
+      // start below it. 0 in focus mode, when the header slides away; the
+      // paddings that use it animate with the slide.
+      className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary max-md:relative ${focusMode ? '' : 'max-md:[--chrome-top:3.75rem]'} ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
     >
-      <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
+      {/*
+        Below md the header floats over the page (owner, 2026-10-01): no
+        border, the messages scroll under it. The header itself is opaque in
+        the chat's colour and takes taps (nothing hidden under it can be
+        tapped or long-pressed); below it, the fade band is pass-through.
+      */}
+      <Collapsible
+        open={!focusMode}
+        className="max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-20"
+        // Outside the clipped wrapper, so the band rides on the closing edge
+        // while the header slides away instead of being cut off.
+        after={<div aria-hidden="true" className="header-fade pointer-events-none absolute inset-x-0 top-[calc(100%-0.5rem)] h-6 md:hidden" />}
+      >
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-hairline px-4 py-2 max-md:bg-panel md:gap-0 md:border-b md:px-8 md:py-0`}>
         {/*
           Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
           chips sit above the ask box in Chat view). The envelope sits directly
@@ -792,7 +808,7 @@ function App() {
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
           replacement={showDiagramView ? (
-            <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
+            <div className="flex min-h-0 flex-1 flex-col pt-[var(--chrome-top,0rem)] transition-[padding-top] duration-200 ease-out motion-reduce:transition-none [&>section]:flex-1">
               <ArchitecturePanel
                 portrait
                 fitMinZoom={0.75}
