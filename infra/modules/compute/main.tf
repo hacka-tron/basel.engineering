@@ -200,6 +200,13 @@ resource "aws_instance" "glassbox" {
     cpu_credits = "standard"
   }
 
+  # EC2's simplified automatic recovery, on by default for this instance
+  # type, written down so it can't silently change. The recover alarm in
+  # alarms.tf is the explicit, notifying version of the same protection.
+  maintenance_options {
+    auto_recovery = "default"
+  }
+
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"

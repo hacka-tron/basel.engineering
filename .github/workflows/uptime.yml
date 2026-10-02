@@ -1,0 +1,43 @@
+name: Uptime probe
+
+# Free external check that the site answers: every 15 minutes, GET
+# https://basel.engineering/readyz (edge, Traefik, API, MySQL and Redis) and
+# fail if it isn't HTTP 200 with "ready": true after three tries. A failed
+# scheduled run makes GitHub email the person who last changed the cron
+# line below (the owner). No secrets, no AWS, no checkout.
+#
+# GitHub disables scheduled workflows in a public repository after 60 days
+# with no repository activity; re-enable it in the Actions tab (or push any
+# commit) if that happens. Schedules can also start late under load.
+# Run workflow by hand to test it.
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: GET /readyz
+        env:
+          URL: https://basel.engineering/readyz
+        run: |
+          for attempt in 1 2 3; do
+            if body=$(curl -fsS --max-time 20 "$URL") && jq -e '.ready == true' >/dev/null <<<"$body"; then
+              echo "up (attempt $attempt): $body"
+              exit 0
+            fi
+            echo "attempt $attempt failed: ${body:-no response}"
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          echo "::error::$URL is not ready after 3 attempts"
+          exit 1
