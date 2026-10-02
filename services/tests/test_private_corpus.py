@@ -141,11 +141,17 @@ def test_a_file_deleted_from_the_private_repo_is_swept_normally():
     assert plan.refused is None
 
 
-def test_public_files_still_follow_the_ordinary_guards_with_the_checkout_present():
-    seen = {"corpus/about-me/bio.md", "private/notes.md", "private/roles/google.md"}
+def test_a_legacy_public_document_left_in_the_index_is_refused_by_the_directory_guard():
+    """corpus/about-me is no longer scanned, so a leftover indexed public doc looks dropped."""
+    seen = {"private/notes.md", "private/roles/google.md"}
     plan = plan_sweep("about_me", MODEL, _known(), seen)
-    assert [doc.source_path for doc in plan.stale] == ["corpus/about-me/skills.md"]
-    assert plan.refused is None
+    assert [doc.source_path for doc in plan.stale] == [
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md",
+    ]
+    assert plan.refused and "corpus" in plan.refused
+    forced = plan_sweep("about_me", MODEL, _known(), seen, force=True)
+    assert forced.refused is None
 
 
 # --- Nothing private can reach Git, the image's extras, or public caches -------------

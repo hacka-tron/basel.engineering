@@ -25,6 +25,11 @@ from services.glassbox.ingest.scanner import (
 from services.glassbox.providers.fake import FakeEmbeddingProvider
 
 
+def _disk(root, source_path):
+    """Where a ``private/<name>.md`` source path lives in a fixture checkout under ``root``."""
+    return root / "corpus" / "about-me-private" / "about-me" / source_path.removeprefix("private/")
+
+
 def test_front_matter_and_dispatch(tmp_path):
     body = "# Heading\n\nContent.\n"
     assert strip_front_matter("---\ntype: bio\n---\n" + body) == body
@@ -319,8 +324,8 @@ async def test_chunker_exception_quarantines_document_and_continues(
     about_me.mkdir(parents=True)
     bad_path = f"private/{tmp_path.name}-bad.md"
     good_path = f"private/{tmp_path.name}-good.md"
-    (tmp_path / bad_path).write_text("# Bad\n")
-    (tmp_path / good_path).write_text("# Good\n")
+    _disk(tmp_path, bad_path).write_text("# Bad\n")
+    _disk(tmp_path, good_path).write_text("# Good\n")
     original_chunker = ingest_run._CHUNKERS[".md"]
 
     def failing_chunker(content, source_path):
@@ -384,7 +389,7 @@ async def test_unchanged_document_is_reembedded_when_model_changes(
     about_me = tmp_path / "corpus" / "about-me-private" / "about-me"
     about_me.mkdir(parents=True)
     source_path = f"private/{tmp_path.name}.md"
-    (tmp_path / source_path).write_text("# Stable content\n\nThe content does not change.\n")
+    _disk(tmp_path, source_path).write_text("# Stable content\n\nThe content does not change.\n")
 
     class NewModel(FakeEmbeddingProvider):
         model_id = "test-embedding-v2"
@@ -456,8 +461,8 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
     about_me.mkdir(parents=True)
     keep_path = f"private/keep_{name}.md"
     gone_path = f"private/gone_{name}.md"
-    (tmp_path / keep_path).write_text(f"# Keep {name}\n\nStays indexed.\n")
-    (tmp_path / gone_path).write_text(f"# Gone {name}\n\nDeleted from disk later.\n")
+    _disk(tmp_path, keep_path).write_text(f"# Keep {name}\n\nStays indexed.\n")
+    _disk(tmp_path, gone_path).write_text(f"# Gone {name}\n\nDeleted from disk later.\n")
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
 
@@ -484,7 +489,7 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
         redis_keys = [f"chunk:{chunk_id}" for chunk_id in keep_ids + gone_ids]
         assert await client.exists(*redis_keys) == len(redis_keys)
 
-        (tmp_path / gone_path).unlink()
+        _disk(tmp_path, gone_path).unlink()
 
         # Read-only dry run: lists the stale file, deletes nothing.
         plans = {plan.corpus: plan for plan in dry_run_sweep(tmp_path, engine=engine)}
@@ -554,7 +559,7 @@ async def test_unchanged_ingest_rebuilds_lost_redis_keys_from_mysql(
     about_me = tmp_path / "corpus" / "about-me-private" / "about-me"
     about_me.mkdir(parents=True)
     source_path = f"private/reconcile_{name}.md"
-    (tmp_path / source_path).write_text(f"# Reconcile {name}\n\nSurvives a Redis flush.\n")
+    _disk(tmp_path, source_path).write_text(f"# Reconcile {name}\n\nSurvives a Redis flush.\n")
     orphan_key = f"chunk:{2**62 + abs(hash(name)) % 1000}"
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
@@ -666,7 +671,7 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
     paths = {role: f"private/{role}_{name}.md" for role in ("source", "other", "deleted")}
     (tmp_path / "corpus" / "about-me-private" / "about-me").mkdir(parents=True)
     for role, path in paths.items():
-        (tmp_path / path).write_text(f"# {role} {name}\n\nFirst version.\n")
+        _disk(tmp_path, path).write_text(f"# {role} {name}\n\nFirst version.\n")
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
 
@@ -703,19 +708,19 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
         await cache.put("about_me", model_id, v_deleted, from_deleted)
 
         version = int(await client.get("corpus:ver:about_me"))
-        (tmp_path / paths["other"]).write_text(f"# other {name}\n\nEdited.\n")
+        _disk(tmp_path, paths["other"]).write_text(f"# other {name}\n\nEdited.\n")
         changed = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         assert changed.docs_changed == 1
         assert int(await client.get("corpus:ver:about_me")) == version + 2
         assert served(await cache.get("about_me", model_id, v_source)) == from_source
         assert served(await cache.get("about_me", model_id, v_deleted)) == from_deleted
 
-        (tmp_path / paths["source"]).write_text(f"# source {name}\n\nEdited.\n")
+        _disk(tmp_path, paths["source"]).write_text(f"# source {name}\n\nEdited.\n")
         await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         assert await cache.get("about_me", model_id, v_source) is None
         assert served(await cache.get("about_me", model_id, v_deleted)) == from_deleted
 
-        (tmp_path / paths["deleted"]).unlink()
+        _disk(tmp_path, paths["deleted"]).unlink()
         swept = await ingest(tmp_path, engine=engine, redis_client=client, sweep="apply")
         assert swept.sweep[0].deleted
         assert await cache.get("about_me", model_id, v_deleted) is None
@@ -1022,7 +1027,7 @@ async def test_crash_between_mysql_commit_and_redis_write_is_repaired_by_next_ru
     name = tmp_path.name.replace("-", "_")
     (tmp_path / "corpus" / "about-me-private" / "about-me").mkdir(parents=True)
     source_path = f"private/crash_{name}.md"
-    (tmp_path / source_path).write_text(f"# Crash {name}\n\nFirst version.\n")
+    _disk(tmp_path, source_path).write_text(f"# Crash {name}\n\nFirst version.\n")
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
 
@@ -1042,7 +1047,7 @@ async def test_crash_between_mysql_commit_and_redis_write_is_repaired_by_next_ru
         redis_keys += [f"chunk:{chunk_id}" for chunk_id in old_ids]
         assert old_ids and await client.exists(*redis_keys) == len(old_ids)
 
-        (tmp_path / source_path).write_text(f"# Crash {name}\n\nSecond version.\n")
+        _disk(tmp_path, source_path).write_text(f"# Crash {name}\n\nSecond version.\n")
         original_write = ingest_run.replace_document_vectors
 
         async def crash(*args, **kwargs):

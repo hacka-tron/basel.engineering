@@ -17,6 +17,11 @@ from services.glassbox.providers.base import ABSTENTION_ANSWER
 from services.glassbox.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 
 
+def _disk(root, source_path):
+    """Where a ``private/<name>.md`` source path lives in a fixture checkout under ``root``."""
+    return root / "corpus" / "about-me-private" / "about-me" / source_path.removeprefix("private/")
+
+
 def test_committed_golden_set_is_valid():
     # load_golden checks ids, categories, regexes, history shape, and that every
     # gold snippet occurs in one of its expected source files in this repo.
@@ -335,7 +340,7 @@ async def test_run_answers_end_to_end_against_mysql_and_redis(tmp_path, monkeypa
     about_me = tmp_path / "corpus" / "about-me-private" / "about-me"
     about_me.mkdir(parents=True)
     source_path = f"private/{tmp_path.name}-golden.md"
-    (tmp_path / source_path).write_text("# Fixture\n\nBasel studied at Ohio State.\n")
+    _disk(tmp_path, source_path).write_text("# Fixture\n\nBasel studied at Ohio State.\n")
     try:
         await ingest(tmp_path, engine=engine, redis_client=client)
         cases = [case for case in load_golden() if case["corpus"] == "about_me"][:3]
