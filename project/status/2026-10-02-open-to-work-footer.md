@@ -1,6 +1,6 @@
 # Footer "Open to work" callout
 
-**Status:** PR open, [#147](https://github.com/hacka-tron/basel.engineering/pull/147). Not merged.
+**Status:** Merged and live on build-106 ([#147](https://github.com/hacka-tron/basel.engineering/pull/147); review round 1 changes needed, fixed, round 2 approved; Release and post-deploy Stream check passed).
 
 ## TL;DR
 
@@ -102,4 +102,4 @@ Every `problems` cell is empty; the script exits 0. The copy-failure checks run 
 
 ## Open items
 
-- "See portfolio →" in the popover (portfolio PR 3, spec §5.7).
+- ~~"See portfolio →" in the popover~~ Shipped with the Portfolio topic ([#150](https://github.com/hacka-tron/basel.engineering/pull/150), build-110); it shows only once a published project exists.
