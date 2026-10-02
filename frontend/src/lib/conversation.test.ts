@@ -38,11 +38,27 @@ test('a reply stopped before its first token survives a reload as stopped', () =
   })
 })
 
-test('an empty stopped reply is not sent as history, but partial stopped text is', () => {
+test('an empty stopped reply is not sent as history (nor its question), but partial stopped text is', () => {
   assert.deepEqual(historyForRequest(messages), [
     { role: 'user', content: 'What did Basel build?' },
     { role: 'assistant', content: 'A partial ans' },
-    { role: 'user', content: 'Stop this one early' },
+  ])
+})
+
+test('a stopped reply with empty or blank text drops its whole turn from history', () => {
+  const turn = (id: string, text: string): ChatMessage[] => [
+    { id: `u${id}`, role: 'user', content: `Question ${id}`, createdAt: now },
+    { id: `a${id}`, role: 'assistant', content: text, state: 'stopped', createdAt: now },
+  ]
+  const chat = [
+    ...turn('1', 'partial'),
+    ...turn('2', ''),
+    ...turn('3', '  \n '),
+    { id: 'u4', role: 'user', content: 'Question 4', createdAt: now } as ChatMessage,
+  ]
+  assert.deepEqual(historyForRequest(chat), [
+    { role: 'user', content: 'Question 1' },
+    { role: 'assistant', content: 'partial' },
   ])
 })
 

@@ -73,6 +73,13 @@ _IDLE_LINGER_S = 30.0
 _WATCH_RESTART_S = 1.0
 _WATCH_RETRY_BASE_S = 2.0
 _WATCH_RETRY_MAX_S = 30.0
+# Upper bound on how long aclose() waits for upstream tasks to finish closing
+# their clients: comfortably below uvicorn's --timeout-graceful-shutdown 25 and
+# the pod's 30 s grace, so a close that never returns cannot hang shutdown.
+_CLOSE_TIMEOUT_S = 10.0
+# Indirection so tests can intercept the watch restart/backoff pause without
+# patching asyncio.sleep globally.
+_sleep = asyncio.sleep
 # Ask the API server to end each watch after this long (a normal re-list
 # follows), and give up on a watch that sends nothing for longer than that
 # plus a margin: a half-open watch would otherwise freeze every viewer.
@@ -448,7 +455,7 @@ class ClusterHub:
                 delay = min(_WATCH_RETRY_MAX_S, _WATCH_RETRY_BASE_S * 2 ** (failures - 1))
             else:
                 delay = _WATCH_RESTART_S
-            await asyncio.sleep(delay)
+            await _sleep(delay)
 
     async def _poll_backlog(self) -> None:
         try:
@@ -480,9 +487,17 @@ class ClusterHub:
         # Wait for every cancelled upstream to finish closing its clients.
         # Already-cancelled ones are only awaited, not cancelled again, which
         # would cut their close short.
-        for task in stopping:
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
+        if stopping:
+            _, pending = await asyncio.wait(stopping, timeout=_CLOSE_TIMEOUT_S)
+            if pending:
+                LOGGER.warning(
+                    "%d cluster upstream task(s) still closing after %.0fs; abandoning them",
+                    len(pending),
+                    _CLOSE_TIMEOUT_S,
+                )
+            for task in stopping:
+                if task.done() and not task.cancelled():
+                    task.exception()  # mark retrieved; nothing to raise at shutdown
         self._linger = None
         self._upstream = None
 

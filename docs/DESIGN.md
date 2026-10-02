@@ -233,7 +233,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - Python/TypeScript: one chunk per top-level function or class.
   - Every chunk keeps `source_path`, `start_line`, `end_line`.
 - **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged (one query per run loads every document's hash and chunk models). A changed document's old Redis keys are deleted before its MySQL commit and the new ones written after it, never inside the transaction. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates the retrieval cache; cached answers are checked against their own source chunks instead, see 7.3).
-- **Stale documents:** after a complete scan, documents whose files are gone (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
+- **Stale documents:** after a complete scan, documents whose files are gone (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest (also removing orphan Redis chunk keys with no MySQL row). The sweep's outcome is stored in `ingestion_runs.notes`. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
 
 ### 6.5 Redis
 
@@ -293,7 +293,8 @@ CREATE TABLE ingestion_runs (
   finished_at    TIMESTAMP NULL,
   docs_changed   INT DEFAULT 0,
   chunks_written INT DEFAULT 0,
-  status         ENUM('running','succeeded','failed') NOT NULL
+  status         ENUM('running','succeeded','failed') NOT NULL,
+  notes          JSON NULL  -- stale sweep mode, planned/deleted counts, refusal reasons (0006)
 );
 
 CREATE TABLE queries (
@@ -316,7 +317,7 @@ CREATE TABLE queries (
 );
 ```
 
-The schema above is the result of Alembic revisions `0001` to `0005` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
+The schema above is the result of Alembic revisions `0001` to `0006` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
 
 Privacy: questions are logged without IP addresses. Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
 

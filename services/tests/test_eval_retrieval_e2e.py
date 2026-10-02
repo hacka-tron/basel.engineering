@@ -47,11 +47,11 @@ async def test_evaluate_scores_k8_chunk_level_and_noise_against_real_index(
     except Exception as exc:
         pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
     name = tmp_path.name.replace("-", "_")
-    about_me = tmp_path / "corpus" / "about-me"
+    about_me = tmp_path / "corpus" / "about-me-private" / "about-me"
     about_me.mkdir(parents=True)
     tests_dir = tmp_path / "services" / "tests"
     tests_dir.mkdir(parents=True)
-    doc_path = f"corpus/about-me/{name}.md"
+    doc_path = f"private/{name}.md"
     noise_path = f"services/tests/test_{name}.py"
     (about_me / f"{name}.md").write_text(f"# Fixture {name}\n\nGold phrase {name} here.\n")
     (tests_dir / f"test_{name}.py").write_text(f"def test_{name}():\n    return 'noise'\n")

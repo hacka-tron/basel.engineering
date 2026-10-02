@@ -1,4 +1,4 @@
-"""Incrementally ingest the public Glassbox corpora into MySQL and Redis."""
+"""Incrementally ingest the Glassbox corpora into MySQL and Redis."""
 
 import argparse
 import asyncio
@@ -35,10 +35,8 @@ from services.glassbox.ingest.redis_index import (
     replace_document_vectors,
 )
 from services.glassbox.ingest.scanner import (
-    private_twin,
     scan_file,
     scan_sources,
-    shadowed_public_paths,
     strip_front_matter,
 )
 from services.glassbox.ingest.sweep import (
@@ -46,13 +44,13 @@ from services.glassbox.ingest.sweep import (
     SWEEP_MODES,
     SweepPlan,
     clear_scope,
-    delete_documents,
     load_scope_documents,
     log_plan,
     max_fraction_from_env,
     plan_sweep,
     run_sweep,
     sweep_mode_from_env,
+    sweep_notes,
 )
 from services.glassbox.privacy import guard_document, guarded_content_hash, quarantine_categories
 from services.glassbox.providers.factory import get_embedding_provider
@@ -87,6 +85,7 @@ return 0
 _LOCKED_OUT_OUTCOME = {
     "ingest": "it exits 0 so the Job doesn't fail; the next run catches up",
     "reindex": f"it exits {REINDEX_LOCKED_OUT}; run the reindex again once the other run ends",
+    "clear": f"it exits {REINDEX_LOCKED_OUT}; run --clear again once the other run ends",
 }
 
 
@@ -122,8 +121,6 @@ class RunResult:
     locked_out: bool = False
     # Personal-data guard: per about_me document, the categories it redacted.
     pii_redacted: dict[str, Counter] = field(default_factory=dict)
-    # Public corpus/about-me documents removed because their private twin replaced them.
-    shadow_removed: list[str] = field(default_factory=list)
 
 
 def chunker_for_path(path: Path):
@@ -164,8 +161,6 @@ def seen_source_paths(root: Path) -> dict[str, set[str]]:
     seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
     for source in scan_sources(root):
         seen[source.corpus].add(source.source_path)
-    # A public file replaced by its private twin still exists: never stale.
-    seen["about_me"] |= shadowed_public_paths(root)
     return seen
 
 
@@ -297,9 +292,6 @@ async def _ingest(
             )
             result.docs_changed += 1
             result.chunks_written += len(chunks)
-        result.shadow_removed = await remove_shadowed(
-            root, engine, redis_client, provider.model_id, seen, result.errors
-        )
         # Reached only when the scan walked every file without raising.
         result.sweep = await run_sweep(
             engine,
@@ -319,14 +311,15 @@ async def _ingest(
             run.finished_at = _now()
             run.docs_changed = result.docs_changed
             run.chunks_written = result.chunks_written
+            run.notes = sweep_notes(sweep, result.sweep)
         return result
     except Exception:
         if run_id is not None:
-            _mark_run_failed(sessions, run_id, result)
+            _mark_run_failed(sessions, run_id, result, sweep)
         raise
 
 
-def _mark_run_failed(sessions, run_id: int, result: RunResult) -> None:
+def _mark_run_failed(sessions, run_id: int, result: RunResult, sweep: str) -> None:
     """Record ``status='failed'`` in a fresh session, never masking the original error.
 
     If the run failed because MySQL went away, this write fails too: it is logged
@@ -340,6 +333,7 @@ def _mark_run_failed(sessions, run_id: int, result: RunResult) -> None:
             run.finished_at = _now()
             run.docs_changed = result.docs_changed
             run.chunks_written = result.chunks_written
+            run.notes = sweep_notes(sweep, result.sweep)
     except Exception:
         LOGGER.exception(
             "Could not mark ingestion run %s failed; re-raising the error that ended the run",
@@ -484,39 +478,6 @@ async def write_document(
     await redis_client.incr(f"corpus:ver:{corpus}")
 
 
-async def remove_shadowed(
-    root: Path, engine: Engine, redis_client, model_id: str, seen, errors
-) -> list[str]:
-    """Delete indexed public about-me documents whose private twin was indexed this run.
-
-    While the public ``corpus/about-me/`` copies still exist next to the private
-    checkout, the scanner skips a public file with a private twin. Its earlier
-    document is deleted here (Redis keys, version bump, MySQL rows: the sweep's
-    delete path), but only once the twin was scanned in this run without an
-    error, so the text keeps being served from one of the two at every moment.
-    The shadowed paths are added to ``seen`` so the stale sweep never reports them.
-    """
-    shadowed = shadowed_public_paths(root)
-    seen["about_me"] |= shadowed
-    replaced = {
-        path
-        for path in shadowed
-        if private_twin(path) in seen["about_me"] and private_twin(path) not in errors
-    }
-    if not replaced:
-        return []
-    documents = [
-        document
-        for document in load_scope_documents(engine, "about_me", model_id)
-        if document.source_path in replaced
-    ]
-    await delete_documents(engine, redis_client, "about_me", model_id, documents)
-    removed = sorted(document.source_path for document in documents)
-    for path in removed:
-        LOGGER.warning("Removed %s: replaced by %s", path, private_twin(path))
-    return removed
-
-
 async def reindex(
     *, engine: Engine | None = None, redis_client=None
 ) -> list[ReconcileReport] | None:
@@ -604,21 +565,39 @@ async def clear(
     engine: Engine | None = None,
     redis_client=None,
     documents=None,
+    orphan_chunk_ids=None,
 ):
-    """Wipe one corpus/model scope's documents, chunks and Redis keys.
+    """Wipe one corpus/model scope's documents, chunks and Redis keys (incl. orphans).
 
-    ``documents`` limits the wipe to an already listed (and confirmed) set.
+    ``documents`` and ``orphan_chunk_ids`` limit the wipe to an already listed (and
+    confirmed) set. Redis is read even on a dry run, to count orphan keys. A real
+    wipe holds ``ingest:lock`` (a concurrent ingest would rewrite what it deletes);
+    it returns None, deleting nothing, when another ingest or reindex holds it.
     """
     model_id = model_id or get_embedding_provider().model_id
     own_engine = engine is None
-    own_redis = redis_client is None and not dry_run
+    own_redis = redis_client is None
     engine = engine or create_db_engine()
-    if redis_client is None and not dry_run:
+    if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
     try:
-        return await clear_scope(
-            engine, redis_client, corpus, model_id, dry_run=dry_run, documents=documents
-        )
+        if dry_run:
+            return await clear_scope(
+                engine, redis_client, corpus, model_id, dry_run=True, documents=documents,
+                orphan_chunk_ids=orphan_chunk_ids,
+            )  # fmt: skip
+        async with ingest_lock(redis_client, "clear") as acquired:
+            if not acquired:
+                return None
+            return await clear_scope(
+                engine,
+                redis_client,
+                corpus,
+                model_id,
+                dry_run=False,
+                documents=documents,
+                orphan_chunk_ids=orphan_chunk_ids,
+            )
     finally:
         if own_redis:
             await redis_client.aclose()
@@ -670,12 +649,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _confirm_clear(corpus: str, model_id: str, count: int) -> bool:
+def _confirm_clear(corpus: str, model_id: str, count: int, orphans: int = 0) -> bool:
     if not sys.stdin.isatty():
         print("--clear needs --yes when not run interactively", file=sys.stderr)
         return False
     answer = input(
-        f"Delete {count} {corpus} documents and their {model_id} chunks and Redis keys? "
+        f"Delete {count} {corpus} documents and their {model_id} chunks and Redis keys "
+        f"(plus {orphans} orphan Redis chunk keys)? "
         f"Type the corpus name to confirm: "
     )
     return answer.strip() == corpus
@@ -701,7 +681,7 @@ def _print_reconcile(reports: list[ReconcileReport]) -> None:
 def _print_refusals(plans: list[SweepPlan]) -> None:
     """Make a refused sweep impossible to miss in the Job log (stdout and stderr).
 
-    There is no column on ``ingestion_runs`` for it, and a refusal deliberately
+    The refusal is also stored in ``ingestion_runs.notes``, but a refusal deliberately
     doesn't fail the run (a retry would refuse again and skip the warm-up).
     """
     for plan in plans:
@@ -741,20 +721,33 @@ def main(argv: list[str] | None = None) -> int:
         try:
             model_id = args.model or get_embedding_provider().model_id
             planned = asyncio.run(clear(args.corpus, model_id=model_id, dry_run=True))
+            orphans = len(planned.orphan_chunk_ids)
         except Exception:
             LOGGER.exception("Clear dry run failed")
             return 1
         if args.dry_run:
-            print(f"dry run: would clear {len(planned)} {args.corpus} documents ({model_id})")
+            print(
+                f"dry run: would clear {len(planned.documents)} {args.corpus} documents "
+                f"and {orphans} orphan Redis chunk keys ({model_id})"
+            )
             return 0
-        if not planned:
+        if not planned.documents and not orphans:
             print(f"nothing to clear for {args.corpus} ({model_id})")
             return 0
-        if not args.yes and not _confirm_clear(args.corpus, model_id, len(planned)):
+        if not args.yes and not _confirm_clear(
+            args.corpus, model_id, len(planned.documents), orphans
+        ):
             print("clear cancelled", file=sys.stderr)
             return 2
         try:
-            cleared = asyncio.run(clear(args.corpus, model_id=model_id, documents=planned))
+            cleared = asyncio.run(
+                clear(
+                    args.corpus,
+                    model_id=model_id,
+                    documents=planned.documents,
+                    orphan_chunk_ids=planned.orphan_chunk_ids,
+                )
+            )
         except Exception:
             LOGGER.exception("Clear failed")
             print(
@@ -765,7 +758,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"cleared {len(cleared)} {args.corpus} documents ({model_id})")
+        if cleared is None:
+            print("clear did nothing: another ingest or reindex is running", file=sys.stderr)
+            return REINDEX_LOCKED_OUT
+        print(
+            f"cleared {len(cleared.documents)} {args.corpus} documents and "
+            f"{len(cleared.orphan_chunk_ids)} orphan Redis chunk keys ({model_id})"
+        )
         return 0
     if args.corpus:
         print("--corpus is only used with --clear", file=sys.stderr)
@@ -815,8 +814,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     for source_path, reason in result.errors.items():
         print(f"skipped {source_path}: {reason}")
-    for source_path in result.shadow_removed:
-        print(f"replaced by its private twin: {source_path}")
     for source_path, counts in result.pii_redacted.items():
         # Categories and counts only: never the redacted values.
         summary = ", ".join(f"{category}={count}" for category, count in sorted(counts.items()))

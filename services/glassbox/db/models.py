@@ -52,6 +52,9 @@ class IngestionRun(Base):
     docs_changed: Mapped[int | None] = mapped_column(Integer, server_default=text("0"))
     chunks_written: Mapped[int | None] = mapped_column(Integer, server_default=text("0"))
     status: Mapped[str] = mapped_column(ENUM("running", "succeeded", "failed"), nullable=False)
+    # Run details that have no column of their own: the stale sweep's mode, planned and
+    # deleted counts and any refusal reason (see ingest/sweep.py ``sweep_notes``).
+    notes: Mapped[dict | None] = mapped_column(JSON)
 
 
 class Query(Base):

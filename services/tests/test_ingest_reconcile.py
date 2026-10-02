@@ -548,3 +548,33 @@ def test_cli_reindex_exits_143_when_stopped(monkeypatch, capsys):
     monkeypatch.setattr(ingest_run, "reindex", stopped)
     assert ingest_run.main(["--reindex"]) == 143
     assert "ingest:lock released" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_clear_takes_the_ingest_lock(monkeypatch, capsys):
+    """--clear holds ingest:lock; locked out it deletes nothing. A dry run needs no lock."""
+    calls = []
+
+    async def fake_clear_scope(engine, client, corpus, model_id, *, dry_run, **kwargs):
+        calls.append(dry_run)
+        return "result"
+
+    monkeypatch.setattr(ingest_run, "clear_scope", fake_clear_scope)
+    held = _LockRedis(holder="other-run")
+    assert (
+        await ingest_run.clear("about_me", model_id="m", engine=object(), redis_client=held) is None
+    )
+    assert calls == [] and held.value == "other-run"
+    assert "this clear did nothing (it exits 75" in capsys.readouterr().err
+    assert (
+        await ingest_run.clear(
+            "about_me", model_id="m", dry_run=True, engine=object(), redis_client=held
+        )
+        == "result"
+    )
+    free = _LockRedis()
+    assert (
+        await ingest_run.clear("about_me", model_id="m", engine=object(), redis_client=free)
+        == "result"
+    )
+    assert calls == [True, False] and free.value is None
