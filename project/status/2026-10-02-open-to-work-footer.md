@@ -1,6 +1,6 @@
 # Footer "Open to work" callout
 
-**Status:** PR open, [#<n>](https://github.com/hacka-tron/basel.engineering/pull/<n>). Not merged.
+**Status:** PR open, [#147](https://github.com/hacka-tron/basel.engineering/pull/147). Not merged.
 
 ## TL;DR
 
