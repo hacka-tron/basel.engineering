@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import type { Corpus } from '../App'
 import type { ChatMessage } from '../lib/conversation'
+import type { Corpus } from '../lib/topics'
 import { DESKTOP_QUERY } from '../lib/layout'
 import { askButtonMode, lastSentQuestion, shouldRecallQuestion } from '../lib/askInput'
 import { planRetry, retryableReplyId, retryWaitSeconds } from '../lib/chatRetry'
@@ -12,6 +12,7 @@ import suggestedQuestions from '../suggested-questions.json'
 const questions: Record<Corpus, string[]> = {
   basel: suggestedQuestions.about_me,
   system: suggestedQuestions.about_system,
+  portfolio: suggestedQuestions.portfolio,
 }
 
 type ChatProps = {

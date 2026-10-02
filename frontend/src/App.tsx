@@ -4,7 +4,7 @@ import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePane
 import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
-import TopicChips, { type TopicChip } from './components/TopicChips'
+import TopicChips from './components/TopicChips'
 import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
@@ -31,25 +31,12 @@ import {
   serializeConversation,
   storageKey,
   writeConversation,
-  type ApiCorpus,
   type ChatMessage,
   type MessageSource,
 } from './lib/conversation'
+import { apiCorpus, CORPORA, idkCorpus, topicLabel, TOPICS, type Corpus } from './lib/topics'
 
 const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight'
-
-export type Corpus = 'basel' | 'system'
-
-const CORPORA: Corpus[] = ['basel', 'system']
-
-const TOPIC_CHIPS: TopicChip<Corpus>[] = [
-  { value: 'basel', label: 'About Basel', short: 'Basel' },
-  { value: 'system', label: 'About This System', short: 'System' },
-]
-
-function apiCorpus(corpus: Corpus): ApiCorpus {
-  return corpus === 'basel' ? 'about_me' : 'about_system'
-}
 
 // Component questions are sent without history (they stay answer-cache
 // eligible); Retry recognises them by their exact wording.
@@ -84,6 +71,7 @@ function App() {
   const [conversations, setConversations] = useState<Record<Corpus, ChatMessage[]>>(() => ({
     basel: loadConversation('about_me'),
     system: loadConversation('about_system'),
+    portfolio: loadConversation('portfolio'),
   }))
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
@@ -447,7 +435,7 @@ function App() {
           if (event.abstained && event.mode === 'full') {
             const savedIdk = conversationsRef.current[targetCorpus]
               .findLast((message) => message.role === 'assistant' && message.idk)?.content
-            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, targetCorpus)
+            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, idkCorpus(targetCorpus))
             lastIdkReplyRef.current = idkReply
           }
           // Budget reached or LLM switched off: the sources still came back, and
@@ -709,10 +697,11 @@ function App() {
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
-  // One handler for the desktop nav and the mobile topic chips.
+  // One handler for the desktop nav and the mobile topic chips. Leaving About
+  // This System drops the diagram selection (only it belongs to that topic).
   const selectTopic = (next: Corpus) => {
-    if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
-    else setCorpus('system')
+    setCorpus(next)
+    if (next !== 'system') { setSelectedNode(null); pendingComponentRef.current = null }
   }
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
@@ -720,23 +709,19 @@ function App() {
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
-        <button
-          type="button"
-          aria-pressed={corpus === 'basel'}
-          onClick={() => selectTopic('basel')}
-          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About Basel
-        </button>
-        <span aria-hidden="true" className="text-hairline">|</span>
-        <button
-          type="button"
-          aria-pressed={corpus === 'system'}
-          onClick={() => selectTopic('system')}
-          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About This System
-        </button>
+        {TOPICS.map((topic, index) => (
+          <span key={topic.value} className="contents">
+            {index > 0 && <span aria-hidden="true" className="text-hairline">|</span>}
+            <button
+              type="button"
+              aria-pressed={corpus === topic.value}
+              onClick={() => selectTopic(topic.value)}
+              className={`inline-flex items-center whitespace-nowrap rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === topic.value ? 'text-cyan' : 'text-muted'}`}
+            >
+              {topic.label}
+            </button>
+          </span>
+        ))}
       </nav>
   )
 
@@ -828,7 +813,7 @@ function App() {
             </div>
           ) : undefined}
           inputTopic={isDesktop || showDiagramView ? undefined : (
-            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
+            <TopicChips value={corpus} options={TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
@@ -862,7 +847,7 @@ function App() {
         {...(isDesktop ? {} : {
           onNewChat: handleNewChat,
           newChatDisabled: isStreaming || messages.length === 0,
-          topicLabel: corpus === 'basel' ? 'About Basel' : 'About This System',
+          topicLabel: topicLabel(corpus),
         })}
       />
       </Collapsible>

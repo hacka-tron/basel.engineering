@@ -5,7 +5,7 @@
 import { LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { CANONICAL_IDK } from './idkReplies.ts'
 
-export type ApiCorpus = 'about_me' | 'about_system'
+export type ApiCorpus = 'about_me' | 'about_system' | 'portfolio'
 
 export type MessageSource = { source_path: string; title: string; url?: string }
 

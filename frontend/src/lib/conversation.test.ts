@@ -262,3 +262,12 @@ test('latestQuestionAnswered: a settled answer to the latest question means re-s
   assert.equal(latestQuestionAnswered([], q), false)
   assert.equal(latestQuestionAnswered(turn('done'), 'A different question'), false)
 })
+
+test('the Portfolio conversation is saved and restored like the others', () => {
+  const serialized = serializeConversation(messages.slice(0, 2), now)
+  assert.ok(serialized)
+  withStorage({ 'glassbox:conv:v1:portfolio': serialized }, () => {
+    assert.deepEqual(loadConversation('portfolio', now).map((message) => message.id), ['u1', 'a1'])
+    assert.deepEqual(loadConversation('about_me', now), [])
+  })
+})
