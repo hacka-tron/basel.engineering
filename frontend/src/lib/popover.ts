@@ -18,10 +18,16 @@ export function closesOnPointerDown(target: unknown, item: ContainerLike): boole
  * popover; on phones, the ask box taking focus starts focus mode, which
  * slides the footer away). Focus going nowhere (`relatedTarget` null: a
  * click on the popover's plain text, or the window losing focus) keeps it
- * open; an outside tap is handled by `closesOnPointerDown`.
+ * open; an outside tap is handled by `closesOnPointerDown`. The copy
+ * fallback's temporary textarea does not count as leaving.
  */
 export function closesOnFocusOut(next: unknown, item: ContainerLike): boolean {
-  return next !== null && next !== undefined && !inside(next, item)
+  if (next === null || next === undefined) return false
+  // The execCommand copy fallback (lib/contact.ts) briefly focuses a
+  // temporary textarea marked data-copy-fallback; that is not the visitor
+  // leaving, and closing here would hide the copy result.
+  if ((next as { dataset?: { copyFallback?: string } }).dataset?.copyFallback !== undefined) return false
+  return !inside(next, item)
 }
 
 /**

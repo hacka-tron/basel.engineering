@@ -46,6 +46,8 @@ function legacyCopy(text: string): boolean {
   const textarea = document.createElement('textarea')
   textarea.value = text
   textarea.setAttribute('readonly', '')
+  // Focus-out rules (lib/popover.ts) ignore this temporary element.
+  textarea.setAttribute('data-copy-fallback', '')
   textarea.style.position = 'fixed'
   textarea.style.top = '0'
   textarea.style.left = '0'

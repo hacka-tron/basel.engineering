@@ -36,59 +36,59 @@ The address and copy logic moved out of the header envelope into `lib/contact.ts
 
 ## What review caught
 
-(Filled in after each review round: reviewer, round, verdict, findings and fixes.)
+Round 1 (Opus): changes needed. The execCommand copy fallback focused a temporary textarea outside the item, which closed the popover before the result showed (address never visible on double failure). Fixed: the textarea is marked `data-copy-fallback` and the focus-out rule ignores it (`lib/popover.ts`, unit-tested). The e2e fallback check was vacuous (hidden popover); rewritten. Minor: `aria-haspopup`, unmount guard in `useCopyEmail`.
 
 ## Measurements
 
 Headless Chrome against the phone preview server, footer numbers set to realistic and worst-case values: typical `1.8s` / `1840ms` with 128 queries, worst `999s+` / `total 12345ms` with 128 queries.
 
 ```
-┌─────────┬────────────┬─────────────┬──────────┬──────────────┬────────────────┬───────────┬────────────────┬──────────────┬────────────────────┬──────────┬────────┬─────────┬───────────┬────────────────┐
-│ (index) │ viewport   │ reading     │ state    │ pageOverflow │ footerOverflow │ rightmost │ smallestTarget │ triggerShown │ popover            │ problems │ escape │ outside │ secondTap │ fallbackInside │
-├─────────┼────────────┼─────────────┼──────────┼──────────────┼────────────────┼───────────┼────────────────┼──────────────┼────────────────────┼──────────┼────────┼─────────┼───────────┼────────────────┤
-│ 0       │ '280x653'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                │
-│ 1       │ '280x653'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                │
-│ 2       │ '280x653'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                │
-│ 3       │ '280x653'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                │
-│ 4       │ '320x568'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 314       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 5       │ '320x568'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 314       │ 44             │ true         │ '16-304 top 333'   │ ''       │        │         │           │                │
-│ 6       │ '320x568'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 314       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 7       │ '320x568'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 314       │ 44             │ true         │ '16-304 top 333'   │ ''       │        │         │           │                │
-│ 8       │ '320x568'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 9       │ '360x780'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 354       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 10      │ '360x780'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 354       │ 44             │ true         │ '56-344 top 545'   │ ''       │        │         │           │                │
-│ 11      │ '360x780'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 354       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 12      │ '360x780'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 354       │ 44             │ true         │ '56-344 top 545'   │ ''       │        │         │           │                │
-│ 13      │ '360x780'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 14      │ '375x667'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 369       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 15      │ '375x667'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 369       │ 44             │ true         │ '71-359 top 432'   │ ''       │        │         │           │                │
-│ 16      │ '375x667'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 369       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 17      │ '375x667'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 369       │ 44             │ true         │ '71-359 top 432'   │ ''       │        │         │           │                │
-│ 18      │ '375x667'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 19      │ '393x852'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 387       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 20      │ '393x852'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 387       │ 44             │ true         │ '89-377 top 617'   │ ''       │        │         │           │                │
-│ 21      │ '393x852'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 387       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 22      │ '393x852'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 387       │ 44             │ true         │ '89-377 top 617'   │ ''       │        │         │           │                │
-│ 23      │ '393x852'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 24      │ '640x900'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 624       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 25      │ '640x900'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 624       │ 44             │ true         │ '336-624 top 665'  │ ''       │        │         │           │                │
-│ 26      │ '640x900'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 624       │ 44             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 27      │ '640x900'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 624       │ 44             │ true         │ '336-624 top 665'  │ ''       │        │         │           │                │
-│ 28      │ '640x900'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 29      │ '1024x768' │ 'typical'   │ 'closed' │ 0            │ 0              │ 992       │ 16             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 30      │ '1024x768' │ 'typical'   │ 'open'   │ 0            │ 0              │ 992       │ 16             │ true         │ '704-992 top 547'  │ ''       │        │         │           │                │
-│ 31      │ '1024x768' │ 'worst'     │ 'closed' │ 0            │ 0              │ 992       │ 16             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 32      │ '1024x768' │ 'worst'     │ 'open'   │ 0            │ 0              │ 992       │ 16             │ true         │ '704-992 top 547'  │ ''       │        │         │           │                │
-│ 33      │ '1024x768' │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-│ 34      │ '1280x800' │ 'typical'   │ 'closed' │ 0            │ 0              │ 1248      │ 16             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 35      │ '1280x800' │ 'typical'   │ 'open'   │ 0            │ 0              │ 1248      │ 16             │ true         │ '960-1248 top 579' │ ''       │        │         │           │                │
-│ 36      │ '1280x800' │ 'worst'     │ 'closed' │ 0            │ 0              │ 1248      │ 16             │ true         │ ''                 │ ''       │        │         │           │                │
-│ 37      │ '1280x800' │ 'worst'     │ 'open'   │ 0            │ 0              │ 1248      │ 16             │ true         │ '960-1248 top 579' │ ''       │        │         │           │                │
-│ 38      │ '1280x800' │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true           │
-└─────────┴────────────┴─────────────┴──────────┴──────────────┴────────────────┴───────────┴────────────────┴──────────────┴────────────────────┴──────────┴────────┴─────────┴───────────┴────────────────┘
+┌─────────┬────────────┬─────────────┬──────────┬──────────────┬────────────────┬───────────┬────────────────┬──────────────┬────────────────────┬──────────┬────────┬─────────┬───────────┬────────────────────┬────────────────────┐
+│ (index) │ viewport   │ reading     │ state    │ pageOverflow │ footerOverflow │ rightmost │ smallestTarget │ triggerShown │ popover            │ problems │ escape │ outside │ secondTap │ fallbackDoubleOpen │ fallbackLegacyOpen │
+├─────────┼────────────┼─────────────┼──────────┼──────────────┼────────────────┼───────────┼────────────────┼──────────────┼────────────────────┼──────────┼────────┼─────────┼───────────┼────────────────────┼────────────────────┤
+│ 0       │ '280x653'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                    │                    │
+│ 1       │ '280x653'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                    │                    │
+│ 2       │ '280x653'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                    │                    │
+│ 3       │ '280x653'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 274       │ 44             │ false        │ ''                 │ ''       │        │         │           │                    │                    │
+│ 4       │ '320x568'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 314       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 5       │ '320x568'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 314       │ 44             │ true         │ '16-304 top 333'   │ ''       │        │         │           │                    │                    │
+│ 6       │ '320x568'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 314       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 7       │ '320x568'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 314       │ 44             │ true         │ '16-304 top 333'   │ ''       │        │         │           │                    │                    │
+│ 8       │ '320x568'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 9       │ '360x780'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 354       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 10      │ '360x780'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 354       │ 44             │ true         │ '56-344 top 545'   │ ''       │        │         │           │                    │                    │
+│ 11      │ '360x780'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 354       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 12      │ '360x780'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 354       │ 44             │ true         │ '56-344 top 545'   │ ''       │        │         │           │                    │                    │
+│ 13      │ '360x780'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 14      │ '375x667'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 369       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 15      │ '375x667'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 369       │ 44             │ true         │ '71-359 top 432'   │ ''       │        │         │           │                    │                    │
+│ 16      │ '375x667'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 369       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 17      │ '375x667'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 369       │ 44             │ true         │ '71-359 top 432'   │ ''       │        │         │           │                    │                    │
+│ 18      │ '375x667'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 19      │ '393x852'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 387       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 20      │ '393x852'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 387       │ 44             │ true         │ '89-377 top 617'   │ ''       │        │         │           │                    │                    │
+│ 21      │ '393x852'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 387       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 22      │ '393x852'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 387       │ 44             │ true         │ '89-377 top 617'   │ ''       │        │         │           │                    │                    │
+│ 23      │ '393x852'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 24      │ '640x900'  │ 'typical'   │ 'closed' │ 0            │ 0              │ 624       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 25      │ '640x900'  │ 'typical'   │ 'open'   │ 0            │ 0              │ 624       │ 44             │ true         │ '336-624 top 665'  │ ''       │        │         │           │                    │                    │
+│ 26      │ '640x900'  │ 'worst'     │ 'closed' │ 0            │ 0              │ 624       │ 44             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 27      │ '640x900'  │ 'worst'     │ 'open'   │ 0            │ 0              │ 624       │ 44             │ true         │ '336-624 top 665'  │ ''       │        │         │           │                    │                    │
+│ 28      │ '640x900'  │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 29      │ '1024x768' │ 'typical'   │ 'closed' │ 0            │ 0              │ 992       │ 16             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 30      │ '1024x768' │ 'typical'   │ 'open'   │ 0            │ 0              │ 992       │ 16             │ true         │ '704-992 top 547'  │ ''       │        │         │           │                    │                    │
+│ 31      │ '1024x768' │ 'worst'     │ 'closed' │ 0            │ 0              │ 992       │ 16             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 32      │ '1024x768' │ 'worst'     │ 'open'   │ 0            │ 0              │ 992       │ 16             │ true         │ '704-992 top 547'  │ ''       │        │         │           │                    │                    │
+│ 33      │ '1024x768' │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+│ 34      │ '1280x800' │ 'typical'   │ 'closed' │ 0            │ 0              │ 1248      │ 16             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 35      │ '1280x800' │ 'typical'   │ 'open'   │ 0            │ 0              │ 1248      │ 16             │ true         │ '960-1248 top 579' │ ''       │        │         │           │                    │                    │
+│ 36      │ '1280x800' │ 'worst'     │ 'closed' │ 0            │ 0              │ 1248      │ 16             │ true         │ ''                 │ ''       │        │         │           │                    │                    │
+│ 37      │ '1280x800' │ 'worst'     │ 'open'   │ 0            │ 0              │ 1248      │ 16             │ true         │ '960-1248 top 579' │ ''       │        │         │           │                    │                    │
+│ 38      │ '1280x800' │ 'behaviour' │ ''       │              │                │           │                │              │                    │ ''       │ true   │ true    │ true      │ true               │ true               │
+└─────────┴────────────┴─────────────┴──────────┴──────────────┴────────────────┴───────────┴────────────────┴──────────────┴────────────────────┴──────────┴────────┴─────────┴───────────┴────────────────────┴────────────────────┘
 ```
 
-Every `problems` cell is empty; the script exits 0. The 1024 and 1280 "smallestTarget 16" is a desktop (md+) control, where the 44px rule does not apply.
+Every `problems` cell is empty; the script exits 0. The copy-failure checks run in two modes (Clipboard API missing plus execCommand failing, which must show the address; Clipboard API rejecting plus execCommand working, which must say "Email copied") and assert the popover stays open with a non-zero on-screen rectangle and focus inside the item. Round-1 review found the earlier version of this check was vacuous (it measured a hidden popover); with focus emulation on and the fix removed, the new check fails at every width from 320px. The 1024 and 1280 "smallestTarget 16" is a desktop (md+) control, where the 44px rule does not apply.
 
 ## Operational notes and risks
 

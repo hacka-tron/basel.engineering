@@ -39,3 +39,10 @@ test('Escape belongs to the open popover unless another handler used it or an IM
   assert.equal(takesEscape({ ...escape, keyCode: 229 }), false)
   assert.equal(takesEscape({ key: 'Enter', defaultPrevented: false }), false)
 })
+
+test('the copy fallback textarea taking focus briefly does not close it', () => {
+  const fallbackTextarea = { name: 'textarea', dataset: { copyFallback: '' } }
+  assert.equal(closesOnFocusOut(fallbackTextarea, item), false)
+  // An ordinary outside element with a dataset still closes it.
+  assert.equal(closesOnFocusOut({ name: 'other', dataset: {} }, item), true)
+})
