@@ -522,7 +522,7 @@ def test_completed_answer_is_logged_once_as_full(harness):
     assert harness["cache"].puts == 1
 
 
-# --- MySQL: the stopped mode is storable (migration 0004) ---------------------------
+# --- MySQL: the stopped mode (0004) and ttft_ms (0005) are storable ----------------
 
 
 def test_stopped_query_row_is_stored(monkeypatch):
@@ -538,14 +538,17 @@ def test_stopped_query_row_is_stored(monkeypatch):
     try:
         with engine.connect() as connection:
             mode = connection.exec_driver_sql("SHOW COLUMNS FROM queries LIKE 'mode'").one()[1]
+            has_ttft = bool(
+                connection.exec_driver_sql("SHOW COLUMNS FROM queries LIKE 'ttft_ms'").all()
+            )
     except Exception as error:  # pragma: no cover - depends on local services
         engine.dispose()
         get_session_factory.cache_clear()
         pytest.skip(f"MySQL unavailable: {error}")
-    if "stopped" not in str(mode):
+    if "stopped" not in str(mode) or not has_ttft:
         engine.dispose()
         get_session_factory.cache_clear()
-        message = "MySQL queries.mode not migrated to 0004 (missing 'stopped')"
+        message = "MySQL queries not migrated to 0005 (missing mode 'stopped' or ttft_ms)"
         if os.environ.get("CI"):
             pytest.fail(message)
         pytest.skip(message)
@@ -564,6 +567,7 @@ def test_stopped_query_row_is_stored(monkeypatch):
             tokens_out=4,
             turn_index=0,
             rewritten_query=None,
+            ttft_ms=321,
             mode="stopped",
         )
         with get_session_factory()() as session:
@@ -571,6 +575,7 @@ def test_stopped_query_row_is_stored(monkeypatch):
             assert row is not None
             assert row.mode == "stopped"
             assert row.tokens_out == 4
+            assert row.ttft_ms == 321
     finally:
         with get_session_factory()() as session:
             session.execute(delete(Query).where(Query.request_id == request_id))
@@ -601,3 +606,188 @@ def test_completed_answer_logs_provider_reported_usage(harness):
     done = stream[-1][1]
     assert (done["tokens_in"], done["tokens_out"]) == (1234, 56)
     assert (harness["saved"][0]["tokens_in"], harness["saved"][0]["tokens_out"]) == (1234, 56)
+
+
+# --- Time to first token (DESIGN-002 §7.5, §9.3; migration 0005) -------------------
+
+
+@pytest.fixture
+def fake_clock(monkeypatch):
+    """Replaces ask.elapsed_ms: every request-relative time reads clock["now"]."""
+    from services.glassbox.api import ask
+
+    clock = {"now": 10}
+    monkeypatch.setattr(ask, "elapsed_ms", lambda request_start_ts: clock["now"])
+    return clock
+
+
+class ClockedLLM:
+    """Advances the fake clock before each part, so TTFT is known exactly."""
+
+    model_id = "clocked-llm"
+
+    def __init__(self, clock, parts):
+        self.clock = clock
+        self.parts = parts
+
+    async def generate(self, prompt, *, max_tokens, system=None):
+        for at_ms, text in self.parts:
+            self.clock["now"] = at_ms
+            yield text
+
+
+def _run_stream(*, stop_after_tokens=None):
+    from services.glassbox.api import ask
+
+    async def scenario():
+        stream = ask._stream(ask.AskRequest(**BODY), "01TESTREQUEST0000000000000", 0, "hash")
+        tokens = 0
+        async for item in stream:
+            if item.startswith("event: token"):
+                tokens += 1
+                if tokens == stop_after_tokens:
+                    break
+        await stream.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_ttft_is_the_first_non_empty_token_not_the_whole_answer(harness, fake_clock):
+    # An empty part sends no frame; the first answer text goes out at 740 ms.
+    harness["llm"] = ClockedLLM(fake_clock, [(500, ""), (740, "Basel"), (900, " builds")])
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["mode"] == "full"
+    assert saved["ttft_ms"] == 740
+    assert saved["total_ms"] == 900
+
+
+def test_ttft_is_recorded_for_an_answer_stopped_after_its_first_token(harness, fake_clock):
+    harness["llm"] = ClockedLLM(fake_clock, [(610, "Basel"), (800, " builds"), (950, " x")])
+    _run_stream(stop_after_tokens=1)
+    [saved] = harness["saved"]
+    assert saved["mode"] == "stopped"
+    assert saved["ttft_ms"] == 610
+
+
+def test_ttft_is_null_when_stopped_before_any_token(harness):
+    harness["redis"].delay = 1.0
+
+    asyncio.run(
+        _asgi_ask(
+            json.dumps(BODY).encode(),
+            disconnect_when=lambda sent: '"node":"queue","status":"end"' in sent,
+        )()
+    )
+    [saved] = harness["saved"]
+    assert saved["mode"] == "stopped"
+    assert saved["ttft_ms"] is None
+
+
+def test_ttft_is_null_for_retrieval_only(harness, fake_clock):
+    class NoBudget:
+        async def reserve(self, *, units=4):
+            return False
+
+    harness["budget"] = NoBudget()
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["mode"] == "retrieval_only"
+    assert saved["ttft_ms"] is None
+
+
+def test_ttft_is_measured_for_an_answer_cache_hit(harness, fake_clock):
+    class HitCache(RecordingAnswerCache):
+        async def get(self, *args):
+            fake_clock["now"] = 140
+            return {
+                "answer": "Cached answer.",
+                "chunks": [
+                    {
+                        "n": 1,
+                        "chunk_id": 42,
+                        "text": "source text",
+                        "source_path": "docs/DESIGN.md",
+                        "title": "Design",
+                        "score": 0.9,
+                    }
+                ],
+            }
+
+    harness["cache"] = HitCache()
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["cache_status"] == "answer_hit"
+    assert saved["ttft_ms"] == 140
+
+
+def test_ttft_ignores_an_empty_token_frame(harness, fake_clock):
+    """An empty `token` event (here a cached empty answer) shows no text: no TTFT."""
+
+    class EmptyHitCache(RecordingAnswerCache):
+        async def get(self, *args):
+            fake_clock["now"] = 140
+            return {
+                "answer": "",
+                "chunks": [
+                    {
+                        "n": 1,
+                        "chunk_id": 42,
+                        "text": "source text",
+                        "source_path": "docs/DESIGN.md",
+                        "title": "Design",
+                        "score": 0.9,
+                    }
+                ],
+            }
+
+    harness["cache"] = EmptyHitCache()
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["cache_status"] == "answer_hit"
+    assert saved["ttft_ms"] is None
+
+
+def test_ttft_is_measured_for_the_no_sources_abstention(harness, fake_clock):
+    harness["redis"].outcome = "empty"
+    fake_clock["now"] = 230
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["mode"] == "full"
+    assert saved["timings"]["abstained"] == 1
+    assert saved["ttft_ms"] == 230
+
+
+def test_ttft_is_written_to_the_query_row(monkeypatch):
+    """_save_query passes ttft_ms through to the ORM row (no database needed)."""
+    from services.glassbox.api import ask
+
+    added = []
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def add(self, row):
+            added.append(row)
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr(ask, "get_session_factory", lambda: lambda: Session())
+    common = dict(
+        request=ask.AskRequest(**BODY),
+        chunks=[],
+        timings={},
+        total_ms=900,
+        tokens_in=1,
+        tokens_out=1,
+        turn_index=0,
+        rewritten_query=None,
+    )
+    ORIGINAL_SAVE_QUERY(request_id="01A", ttft_ms=740, **common)
+    ORIGINAL_SAVE_QUERY(request_id="01B", mode="retrieval_only", **common)
+    assert [row.ttft_ms for row in added] == [740, None]

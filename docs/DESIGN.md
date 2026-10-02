@@ -305,6 +305,7 @@ CREATE TABLE queries (
   mode             ENUM('full','retrieval_only','stopped') NOT NULL,  -- 'stopped': 0004
   turn_index       TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0003; 0 = first question
   rewritten_query  VARCHAR(1000) NULL,                   -- 0003; the query retrieval used
+  ttft_ms          INT NULL,  -- 0005; ms to the first streamed answer token (DD2 §7.7)
   chunk_ids        JSON,
   stage_timings_ms JSON,
   total_ms         INT,
@@ -315,7 +316,7 @@ CREATE TABLE queries (
 );
 ```
 
-The schema above is the result of Alembic revisions `0001` to `0004` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
+The schema above is the result of Alembic revisions `0001` to `0005` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
 
 Privacy: questions are logged without IP addresses. Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
 
