@@ -4,10 +4,12 @@
 #
 #   glassbox-ops-read        ops-read environment (main only): run the
 #                            read-only glassbox-ops-diagnose document, read
-#                            results.
+#                            results, list snapshots, alarms and restore
+#                            tasks.
 #   glassbox-ops             ops environment (owner approval): run the
 #                            glassbox-ops-* and glassbox-zram-swap documents,
-#                            reboot the glassbox instance.
+#                            reboot the glassbox instance, replace its root
+#                            volume from one of its daily snapshots.
 #   glassbox-bootstrap-plan  bootstrap-plan environment: read-only plan of
 #                            this root.
 #   glassbox-bootstrap       bootstrap environment (owner approval, main
@@ -42,6 +44,24 @@ locals {
     Name    = "glassbox"
     project = "glassbox"
   }
+
+  # Tags the daily DLM policy puts on every snapshot it takes
+  # (infra/modules/compute/snapshots.tf, tags_to_add). The restore runbook
+  # may only use snapshots that carry both.
+  glassbox_snapshot_tags = {
+    project         = "glassbox"
+    glassbox-backup = "daily-root"
+  }
+
+  # Read-only listing for diagnose and list-snapshots: the daily snapshots,
+  # root volume replacement tasks and the glassbox-* alarms. None of these
+  # calls has resource-level permissions except DescribeAlarms, which is
+  # kept region-wide for the same reason as in glassbox-ci (main.tf).
+  backup_read_actions = [
+    "cloudwatch:DescribeAlarms",
+    "ec2:DescribeReplaceRootVolumeTasks",
+    "ec2:DescribeSnapshots",
+  ]
 
   bootstrap_state_key = "bootstrap/terraform.tfstate"
 }
@@ -129,6 +149,19 @@ data "aws_iam_policy_document" "ops_read" {
       values   = [var.aws_region]
     }
   }
+
+  statement {
+    sid       = "ListSnapshotsAlarmsAndRestoreTasks"
+    effect    = "Allow"
+    actions   = local.backup_read_actions
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "ops_read" {
@@ -198,6 +231,79 @@ data "aws_iam_policy_document" "ops" {
     }
   }
 
+  # restore-snapshot: EC2 "replace root volume" (CreateReplaceRootVolumeTask).
+  # IAM authorizes it against the instance, the source snapshot, and the
+  # volume and task it creates. Instance: only the tagged glassbox node.
+  # Snapshot: only one the daily DLM policy took (its tags). The new volume
+  # and the task are created by the call itself, so they can't carry tags
+  # yet; the runbook passes no TagSpecifications, so no ec2:CreateTags is
+  # needed. No DeleteVolume/DeleteSnapshot: with old_volume=delete, EC2
+  # deletes the replaced root volume as part of the task.
+  statement {
+    sid       = "ReplaceGlassboxRootVolume"
+    effect    = "Allow"
+    actions   = ["ec2:CreateReplaceRootVolumeTask"]
+    resources = [local.ec2_instances_arn]
+
+    dynamic "condition" {
+      for_each = local.glassbox_instance_tags
+      content {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/${condition.key}"
+        values   = [condition.value]
+      }
+    }
+  }
+
+  statement {
+    sid       = "ReplaceRootFromDailySnapshotsOnly"
+    effect    = "Allow"
+    actions   = ["ec2:CreateReplaceRootVolumeTask"]
+    resources = ["arn:aws:ec2:${var.aws_region}::snapshot/*"]
+
+    dynamic "condition" {
+      for_each = local.glassbox_snapshot_tags
+      content {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/${condition.key}"
+        values   = [condition.value]
+      }
+    }
+  }
+
+  statement {
+    sid     = "ReplaceRootCreatesVolumeAndTask"
+    effect  = "Allow"
+    actions = ["ec2:CreateReplaceRootVolumeTask"]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:volume/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:replace-root-volume-task/*",
+    ]
+  }
+
+  # The root volume is encrypted. With the AWS managed aws/ebs key its key
+  # policy already lets EC2 use it on the caller's behalf; this covers a
+  # customer managed default key too. Only through EC2 in this region.
+  statement {
+    sid    = "UseEbsKeyThroughEc2"
+    effect = "Allow"
+    actions = [
+      "kms:CreateGrant",
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:GenerateDataKeyWithoutPlaintext",
+      "kms:ReEncryptFrom",
+      "kms:ReEncryptTo",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ec2.${var.aws_region}.amazonaws.com"]
+    }
+  }
+
   statement {
     sid    = "ReadCommandResultsAndInstanceState"
     effect = "Allow"
@@ -208,6 +314,19 @@ data "aws_iam_policy_document" "ops" {
       "ssm:GetCommandInvocation",
       "ssm:ListCommandInvocations",
     ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  statement {
+    sid       = "ListSnapshotsAlarmsAndRestoreTasks"
+    effect    = "Allow"
+    actions   = local.backup_read_actions
     resources = ["*"]
 
     condition {
