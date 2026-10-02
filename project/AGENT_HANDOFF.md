@@ -13,7 +13,7 @@ Short and current: who is coordinating, what state things are in, what is open, 
 
 **Waiting on the owner (approval clicks, not commands)**
 - **Alarms and snapshots (#124, merged):** run Bootstrap, approve the Terraform apply, confirm the SNS email. Until then the alarms, DLM snapshots and restore runbook aren't live (the uptime probe already runs). See `project/status/2026-10-01-alarms-snapshots.md`.
-- **KEDA back on:** allowed from 2026-10-02 if Ops · Diagnose shows headroom; sequence in `project/BACKLOG.md` "> RESUME HERE".
+- **KEDA:** on hold by owner decision 2026-10-02 (memory too tight: ~274 MiB available). See BACKLOG.
 
 **Parked by the owner**
 - RAG quality plan is merged (`docs/DESIGN-005-rag-quality.md`, `docs/superpowers/plans/2026-10-01-rag-quality.md`), but **no evaluations (free or paid) until the owner adds more documents**.
