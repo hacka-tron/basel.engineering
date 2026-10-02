@@ -2,7 +2,7 @@
 // stateless: the browser keeps each corpus's conversation, persists it in
 // localStorage, and sends recent turns as `history` with each question.
 
-import { CANONICAL_BUDGET_REPLY, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
+import { LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { CANONICAL_IDK } from './idkReplies.ts'
 
 export type ApiCorpus = 'about_me' | 'about_system'
@@ -25,7 +25,7 @@ export type ChatMessage = {
   idk?: boolean
   // The shown text is a playful daily-budget reply (lib/budgetReplies.ts): on a
   // retrieval_only answer, or a `budget_exhausted` failure (which Retry skips).
-  // History sends the canonical sentence instead. Optional, as for `idk`.
+  // History leaves the whole turn out (isHistoryTurn). Optional, as for `idk`.
   budget?: boolean
   // Live-only: shows what a follow-up searched for. Not persisted (§5.5 shape).
   rewrittenQuery?: string
@@ -63,6 +63,9 @@ const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 // and would otherwise dodge the expiry indefinitely.
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 const SETTLED_STATES: ReadonlySet<string> = new Set(['done', 'stopped', 'retrieval_only'])
+// What history may carry: a retrieval_only (budget-exhausted) turn is left out,
+// question and all, because the server never said anything for it.
+const HISTORY_STATES: ReadonlySet<string> = new Set(['done', 'stopped'])
 // Saved to storage: settled answers plus failure replies.
 const STORED_STATES: ReadonlySet<string> = new Set([...SETTLED_STATES, 'error'])
 
@@ -86,14 +89,16 @@ function isStorable(message: ChatMessage): boolean {
 
 /**
  * A turn the server may see as history: never an error reply or empty text,
- * and a question only if its reply settled (done, stopped or retrieval_only).
- * A question that failed, or has no reply yet, is left out, so re-sending it
- * (Retry, or Up-arrow and Enter) never puts the same question in twice.
+ * and a question only if its reply settled (done or stopped). A question that
+ * failed, or has no reply yet, is left out, so re-sending it (Retry, or
+ * Up-arrow and Enter) never puts the same question in twice. A retrieval_only
+ * (budget-exhausted) turn is left out whole, question and reply: the server said
+ * nothing for it, and dropping both avoids adding a lone user turn.
  */
 function isHistoryTurn(message: ChatMessage, next: ChatMessage | undefined): boolean {
   if (!message.content) return false
-  if (message.role === 'user') return next?.role === 'assistant' && next.state !== undefined && SETTLED_STATES.has(next.state)
-  return message.state !== undefined && SETTLED_STATES.has(message.state)
+  if (message.role === 'user') return next?.role === 'assistant' && next.state !== undefined && HISTORY_STATES.has(next.state)
+  return message.state !== undefined && HISTORY_STATES.has(message.state)
 }
 
 function isSource(value: unknown): value is MessageSource {
@@ -198,7 +203,6 @@ export function writeConversation(corpus: ApiCorpus, serialized: string | null):
 
 function canonicalContent(message: ChatMessage): string {
   if (message.idk) return CANONICAL_IDK
-  if (message.budget) return CANONICAL_BUDGET_REPLY
   return message.content
 }
 

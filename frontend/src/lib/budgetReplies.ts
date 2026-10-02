@@ -3,15 +3,12 @@
 // The chat shows one of these playful replies above those sources instead,
 // picked at random (never the last one shown or saved) and stored with the
 // message as `budget: true`, so it stays the same across re-renders and
-// reloads. History sends the canonical sentence below for such a turn, never
-// the joke. The lines are written for the daily budget (the common cause); a
+// reloads. History leaves such a turn out entirely (lib/conversation.ts), so the
+// server never sees the joke or any invented sentence. The lines are written for the daily budget (the common cause); a
 // few joke about money even when the rare kill switch is the cause. None
 // promises a precise reset time or names an amount, and none makes a firm
 // promise of when answers return. Kept free of imports so it can be unit tested with Node's
 // test runner.
-
-/** What history carries for a retrieval_only turn (the reply the chat used to show). */
-export const CANONICAL_BUDGET_REPLY = "I can't write a full answer right now, but the sources I found for this are below — they should point you the right way."
 
 /** The fixed reply older saves carry for a `budget_exhausted` error; recognized only when loading them. */
 export const LEGACY_BUDGET_ERROR_REPLY = "The site has hit its answer limit for today, so I'm taking a breather. Check back tomorrow and I'll be ready to chat."

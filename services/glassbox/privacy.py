@@ -3,7 +3,7 @@
 Two layers use the same detector:
 
 * **Ingest time** (``guard_document``): every ``about_me`` document, from
-  ``corpus/about-me/`` or the owner's private About Basel repo (``private/...``),
+  the owner's private About Basel repo (``private/...``),
   is scanned before chunking. Detected spans are replaced
   with ``[redacted]``, so neither the stored chunk text, the embeddings, the
   title nor the public retrieval snippets ever hold them. Categories listed in
@@ -44,7 +44,7 @@ CATEGORIES = (PHONE, EMAIL, ADDRESS, DOB, GOV_ID)
 # about and that matter most if leaked (owner decision, 2026-10-01).
 ANSWER_CATEGORIES = frozenset({PHONE, GOV_ID})
 
-# Public contact details already on the site (corpus/about-me/bio.md and the
+# Public contact details already on the site (the private bio and the
 # frontend's ContactReveal); extend with GLASSBOX_PII_ALLOWED_EMAILS (comma list).
 ALLOWED_EMAILS = frozenset({"baselmabdelrahman@gmail.com"})
 ALLOWED_URL_PREFIXES = (

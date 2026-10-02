@@ -249,13 +249,18 @@ def test_links_already_on_the_site_are_allowed():
     assert find_pii(text) == []
 
 
-# --- The existing repo corpus --------------------------------------------------
+# --- A local private checkout --------------------------------------------------
 
 
-def test_the_repo_about_me_corpus_passes_the_guard_unchanged():
-    """corpus/about-me mirrors the resume: it must already be clean (owner rule)."""
-    files = sorted((REPO / "corpus" / "about-me").glob("*.md"))
-    assert len(files) >= 5
+def test_a_local_private_about_me_checkout_passes_the_guard_unchanged():
+    """The About Basel files now live in the private repo; check a local checkout if present.
+
+    CI and fresh clones have no checkout (it is git-ignored), so this skips there. The
+    ingest-time guard still redacts on every release regardless.
+    """
+    files = sorted((REPO / "corpus" / "about-me-private" / "about-me").glob("*.md"))
+    if not files:
+        pytest.skip("no local private About Basel checkout")
     for path in files:
         body = strip_front_matter(path.read_text())
         assert find_pii(body) == [], path.name

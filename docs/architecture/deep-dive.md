@@ -215,7 +215,7 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 
 **What gets ingested.** The scanner (`services/glassbox/ingest/scanner.py`) builds two corpora:
 
-- **`about_me`**: every Markdown file under `corpus/about-me/`. Any leading `---` front matter is stripped before chunking.
+- **`about_me`**: every Markdown file under `about-me/` in the private About Basel repo (source path `private/...`). Any leading `---` front matter is stripped before chunking.
 - **`about_system`**: files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`. Frontend code and GitHub workflow files are outside these directories and are not part of the corpus.
 
 **Incremental re-embedding.** For each file, ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. In one MySQL transaction, ingestion replaces the document's chunk rows. In one Redis transaction pipeline, it deletes the old `chunk:{id}` hashes and writes new ones tagged with corpus and model. It then increments `corpus:ver:{corpus}` so retrieval results for that corpus stop being read (answers check `content_sha` instead). A typical release therefore embeds only the documents that changed.
@@ -239,8 +239,9 @@ The About This System corpus is the Glassbox repository itself, and its chunks a
 **Content secret heuristics.** Each file is scanned line by line and quarantined (skipped and reported, never embedded) if a line contains:
 
 - an AWS access key ID pattern (`AKIA` or `ASIA` followed by 16 characters),
-- a PEM private key header, or
-- an assignment (`name = value` or `name: value`) whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character. The report reason is "possible high-entropy assigned value".
+- a PEM private key header,
+- a provider token format: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), Slack (`xox[abcdeprs]-`, `xapp-`, `hooks.slack.com/services/` webhooks), Anthropic (`sk-ant-`), OpenAI-style (`sk-`, `sk-proj-`), Google API keys (`AIza`), Stripe live keys (`sk_live_`, `rk_live_`), JWTs (three dot-separated segments) or `Bearer` followed by a long token. The OpenAI-style and `Bearer` patterns also require the token to mix letters and digits, so kebab-case names and placeholders like `Bearer <token>` pass. The report reason names the format, for example "possible GitHub token". Placeholders long enough to look like a real token are quarantined too, which fails safe, or
+- an assignment (`name = value` or `name: value`) whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character. The report reason is "possible high-entropy assigned value". Cloudflare API tokens have no distinguishing prefix, so only this last rule can catch them.
 
 A quarantined file does not stop the run. Other files continue, and the skipped path and reason are printed. Symlinks and non-UTF-8 files are skipped as well. Secrets such as the MySQL password, the IP-hash salt and the Cloudflare API token never live in the repository: they sit in SSM Parameter Store, Kubernetes Secrets or GitHub environment secrets.
 
