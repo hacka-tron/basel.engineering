@@ -9,7 +9,8 @@
 #   glassbox-ops             ops environment (owner approval): run the
 #                            glassbox-ops-* and glassbox-zram-swap documents,
 #                            reboot the glassbox instance, replace its root
-#                            volume from one of its daily snapshots.
+#                            volume (restore-snapshot; see the residual-risk
+#                            note at ReplaceGlassboxRootVolume).
 #   glassbox-bootstrap-plan  bootstrap-plan environment: read-only plan of
 #                            this root.
 #   glassbox-bootstrap       bootstrap environment (owner approval, main
@@ -54,13 +55,15 @@ locals {
   }
 
   # Read-only listing for diagnose and list-snapshots: the daily snapshots,
-  # root volume replacement tasks and the glassbox-* alarms. None of these
+  # root volume replacement tasks, detached volumes (old root volumes kept by
+  # restores) and the glassbox-* alarms. None of these
   # calls has resource-level permissions except DescribeAlarms, which is
   # kept region-wide for the same reason as in glassbox-ci (main.tf).
   backup_read_actions = [
     "cloudwatch:DescribeAlarms",
     "ec2:DescribeReplaceRootVolumeTasks",
     "ec2:DescribeSnapshots",
+    "ec2:DescribeVolumes",
   ]
 
   bootstrap_state_key = "bootstrap/terraform.tfstate"
@@ -232,13 +235,25 @@ data "aws_iam_policy_document" "ops" {
   }
 
   # restore-snapshot: EC2 "replace root volume" (CreateReplaceRootVolumeTask).
-  # IAM authorizes it against the instance, the source snapshot, and the
-  # volume and task it creates. Instance: only the tagged glassbox node.
-  # Snapshot: only one the daily DLM policy took (its tags). The new volume
-  # and the task are created by the call itself, so they can't carry tags
-  # yet; the runbook passes no TagSpecifications, so no ec2:CreateTags is
-  # needed. No DeleteVolume/DeleteSnapshot: with old_volume=delete, EC2
-  # deletes the replaced root volume as part of the task.
+  # IAM authorizes it against the instance, the source snapshot (if one is
+  # named), and the volume and task involved. Instance: only the tagged
+  # glassbox node. Snapshot: when the request names one, only a snapshot the
+  # daily DLM policy took (its tags). The runbook passes no TagSpecifications,
+  # so no ec2:CreateTags is needed. No DeleteVolume/DeleteSnapshot: with
+  # old_volume=delete, EC2 deletes the replaced root volume as part of the
+  # task.
+  #
+  # Residual risk (not enforced by IAM): the snapshot statement only applies
+  # when a snapshot is named. A launch-state replacement (no snapshot: back to
+  # the AMI's original disk) or a replacement with an existing detached
+  # volume (--volume-id, authorized by the unconditioned volume/* statement;
+  # volumes have no aws:ResourceTag key for this action) would likely pass.
+  # No condition key cleanly tells those modes apart: ec2:SnapshotID exists
+  # only on the snapshot resource, so a Null-condition Deny would also deny
+  # the instance and task resources of every legitimate request. Those modes
+  # are blocked only by the reviewed script (it always passes a validated
+  # daily snapshot) plus the owner's ops approval, i.e. the same trust as
+  # every other action of this role.
   statement {
     sid       = "ReplaceGlassboxRootVolume"
     effect    = "Allow"
@@ -271,6 +286,19 @@ data "aws_iam_policy_document" "ops" {
     }
   }
 
+  # A restore reboots the node, and a slow boot must not trip the reboot
+  # alarm into a second reboot mid-restore: the runbook disables that alarm's
+  # actions for the duration and re-enables them on every exit path. Only
+  # that one alarm.
+  statement {
+    sid     = "PauseRebootAlarmDuringRestore"
+    effect  = "Allow"
+    actions = ["cloudwatch:DisableAlarmActions", "cloudwatch:EnableAlarmActions"]
+    resources = [
+      "arn:aws:cloudwatch:${var.aws_region}:${var.aws_account_id}:alarm:glassbox-node-reboot",
+    ]
+  }
+
   statement {
     sid     = "ReplaceRootCreatesVolumeAndTask"
     effect  = "Allow"
@@ -283,12 +311,31 @@ data "aws_iam_policy_document" "ops" {
 
   # The root volume is encrypted. With the AWS managed aws/ebs key its key
   # policy already lets EC2 use it on the caller's behalf; this covers a
-  # customer managed default key too. Only through EC2 in this region.
+  # customer managed default key too. Only through EC2 in this region, and
+  # grants only for AWS resources (the new volume).
+  statement {
+    sid       = "GrantEbsKeyToEc2Volumes"
+    effect    = "Allow"
+    actions   = ["kms:CreateGrant"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ec2.${var.aws_region}.amazonaws.com"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "kms:GrantIsForAWSResource"
+      values   = ["true"]
+    }
+  }
+
   statement {
     sid    = "UseEbsKeyThroughEc2"
     effect = "Allow"
     actions = [
-      "kms:CreateGrant",
       "kms:Decrypt",
       "kms:DescribeKey",
       "kms:GenerateDataKeyWithoutPlaintext",
