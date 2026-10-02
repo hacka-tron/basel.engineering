@@ -1,6 +1,6 @@
 # Alarms, uptime probe, daily snapshots and a one-click restore
 
-**Status:** PR open (branch `infra/alarms-snapshots`). Nothing is live until the owner runs Bootstrap, approves the Terraform apply and confirms the SNS email (steps under "How to see it"). The uptime probe starts running at merge.
+**Status:** PR open ([#124](https://github.com/hacka-tron/basel.engineering/pull/124), branch `infra/alarms-snapshots`). Nothing is live until the owner runs Bootstrap, approves the Terraform apply and confirms the SNS email (steps under "How to see it"). The uptime probe starts running at merge.
 **Date:** 2026-10-01
 
 ## TL;DR
