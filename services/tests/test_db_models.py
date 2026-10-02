@@ -118,6 +118,7 @@ def test_schema_columns_and_constraints():
         "created_at",
         "turn_index",
         "rewritten_query",
+        "ttft_ms",
     ]
     assert isinstance(queries.c.id.type, BigInteger)
     assert queries.c.id.primary_key and queries.c.id.autoincrement
@@ -151,6 +152,8 @@ def test_schema_columns_and_constraints():
     assert str(queries.c.turn_index.server_default.arg) == "0"
     assert queries.c.rewritten_query.nullable
     assert queries.c.rewritten_query.type.length == 1000
+    assert isinstance(queries.c.ttft_ms.type, Integer)
+    assert queries.c.ttft_ms.nullable and queries.c.ttft_ms.server_default is None
     assert not queries.foreign_keys
     assert len(queries.indexes) == 1
     index = next(iter(queries.indexes))
@@ -212,6 +215,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
     # DESIGN-002 §9.3 conversational columns.
     assert "turn_index TINYINT UNSIGNED NOT NULL DEFAULT 0" in ddl["queries"]
     assert "rewritten_query VARCHAR(1000)," in ddl["queries"]
+    assert "ttft_ms INTEGER," in ddl["queries"]
     index = next(iter(Query.__table__.indexes))
     assert str(CreateIndex(index).compile(dialect=mysql_dialect())) == (
         "CREATE INDEX idx_created ON queries (created_at)"
@@ -261,3 +265,19 @@ def test_stopped_mode_migration_follows_conversation_columns():
     assert migration.down_revision == "0003_query_turn_columns"
     assert migration.revision == "0004_query_mode_stopped"
     assert len(migration.revision) <= 32
+
+
+def test_ttft_migration_follows_stopped_mode_and_is_additive():
+    import importlib
+    import inspect
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0005_query_ttft_ms"
+    )
+    assert migration.down_revision == "0004_query_mode_stopped"
+    assert migration.revision == "0005_query_ttft_ms"
+    assert len(migration.revision) <= 32
+    # Safe during a rolling release: one nullable column added, nothing altered.
+    upgrade = inspect.getsource(migration.upgrade)
+    assert "add_column" in upgrade and "nullable=True" in upgrade
+    assert "alter_column" not in upgrade and "drop_column" not in upgrade

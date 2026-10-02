@@ -362,6 +362,7 @@ def _save_query(
     tokens_out: int,
     turn_index: int,
     rewritten_query: str | None,
+    ttft_ms: int | None = None,
     cache_status: str = "miss",
     mode: str = "full",
 ) -> None:
@@ -384,6 +385,7 @@ def _save_query(
                     tokens_out=tokens_out,
                     turn_index=turn_index,
                     rewritten_query=rewritten_query,
+                    ttft_ms=ttft_ms,
                 )
             )
             session.commit()
@@ -425,6 +427,16 @@ async def _stream(
     llm_prompt: str | None = None
     response_parts: list[str] = []
     llm_usage: dict = {}
+    # Time to first token (DESIGN-002 §7.5, §9.3): ms from request receipt
+    # (request_start_ts, the same origin as total_ms) to the first non-empty
+    # `token` frame this generator yields. Stays None when no answer text was sent.
+    ttft_ms: int | None = None
+
+    def token_frame(text: str) -> str:
+        nonlocal ttft_ms
+        if ttft_ms is None and text:
+            ttft_ms = elapsed_ms(request_start_ts)
+        return frame("token", {"text": text})
 
     async def save(
         *,
@@ -441,6 +453,7 @@ async def _stream(
             request=request,
             turn_index=turn_index,
             rewritten_query=rewritten_query,
+            ttft_ms=ttft_ms,
             chunks=chunks or [],
             timings=timings,
             total_ms=elapsed_ms(request_start_ts) if total_ms is None else total_ms,
@@ -571,7 +584,7 @@ async def _stream(
                 "retrieval",
                 {"chunks": [_public_chunk(chunk) for chunk in chunks]},
             )
-            yield frame("token", {"text": answer})
+            yield token_frame(answer)
             total_ms = elapsed_ms(request_start_ts)
             await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
             yield frame(
@@ -660,7 +673,7 @@ async def _stream(
             timings["abstained"] = 1
             if not history:
                 timings["answer_cache_skipped"] = 1
-            yield frame("token", {"text": answer})
+            yield token_frame(answer)
             total_ms = elapsed_ms(request_start_ts)
             await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
             yield frame(
@@ -732,11 +745,11 @@ async def _stream(
                 safe = masker.push(part)
                 if safe:
                     response_parts.append(safe)
-                    yield frame("token", {"text": safe})
+                    yield token_frame(safe)
         tail = masker.flush()
         if tail:
             response_parts.append(tail)
-            yield frame("token", {"text": tail})
+            yield token_frame(tail)
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))
         # Reaching here means generation completed (errors and client disconnects
         # leave the generator before this point). Refusals and empty answers are

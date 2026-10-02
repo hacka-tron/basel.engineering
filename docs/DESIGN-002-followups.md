@@ -17,8 +17,8 @@ This document adds five features to the base design:
 2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).
 3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups (live).
 4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll (live, with stop-and-send, Up-arrow recall and Retry).
-5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production. Heartbeats and server-side Stop are live.
-   The scripted post-deploy streaming check and time-to-first-token logging are not built yet.
+5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production. Heartbeats, server-side Stop and server-side time-to-first-token logging (`queries.ttft_ms`) are live.
+   The scripted post-deploy streaming check is not built yet.
 
 Plus one small network change: a free **S3 gateway endpoint** (not built yet).
 
@@ -421,16 +421,23 @@ Any layer that buffers or compresses the response delays tokens until the buffer
 
 The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is open. Browsers ignore comment lines, but they keep the connection active through proxies during slow stages, such as a cold Bedrock call.
 
-### 7.5 Verification (not built yet)
+### 7.5 Verification
 
-- **Scripted check:** `curl -N` against `https://basel.engineering/api/ask` (through Cloudflare), recording the arrival time of each event. Tokens must arrive spread over time, not in one burst at the end.
-- **Metric:** time to first token (TTFT), measured in the browser and logged. Target: production TTFT within 300 ms of local TTFT.
-- Run the check in CI after every deploy (Phase 6) so a Cloudflare setting change can't silently break streaming.
+- **Scripted check (not built yet):** `curl -N` against `https://basel.engineering/api/ask` (through Cloudflare), recording the arrival time of each event. Tokens must arrive spread over time, not in one burst at the end.
+- **Metric:** time to first token (TTFT). Target: production TTFT within 300 ms of local TTFT. The browser measures it for the footer latency readout (DD1 §6.1), and the API logs its own server-side TTFT in `queries.ttft_ms` (§7.7).
+- Running the scripted check in CI after every deploy (Phase 6) is not built yet; it would stop a Cloudflare setting change from silently breaking streaming.
 
 ### 7.6 Implementation notes (feature/chat-stream-resilience)
 
 - **Heartbeat.** `services/glassbox/api/sse.py` `with_heartbeat()` wraps the `/api/ask` event generator. It awaits the next event in its own task and races it against a timer, sending `: ping` whenever nothing has been sent for 15 s. This covers the worker wait, rewrite/LLM cold starts, and slow tokens. Events are never reordered or dropped, and no ping is sent while events flow. Cleanup after a disconnect runs in a separate task so its own awaits (query-log write, lock release, Redis close) are not re-cancelled by the response's cancel scope.
 - **Client idle watchdog.** `askQuestion` aborts after 45 s without a single received byte (pings count), including the wait for response headers, and reports "Connection lost — try again." A network failure (a `TypeError` from `fetch`/`read`) gets the same message. This releases the chat instead of leaving it locked on a half-open stream. The timer logic is a pure module (`frontend/src/lib/idleWatchdog.ts`) unit-tested with Node's built-in runner (`npm test`); no extra test dependency.
+
+### 7.7 Implementation notes (TTFT logging)
+
+- **What is measured.** `queries.ttft_ms` (Alembic `0005_query_ttft_ms`) is the milliseconds from the moment the API received the request (the same `request_start_ts` origin as `total_ms` and every trace `t_ms`) to the moment `/api/ask` yields its first `token` event with non-empty text. It is server-side: it includes rate limiting, the follow-up rewrite, embedding, the answer-cache lookup, the worker queue, retrieval and the LLM's first output, but not the network to the visitor or Cloudflare. A token held back by the personal-data masker counts when it is actually sent.
+- **When it is NULL.** No answer text was streamed: `retrieval_only` (kill switch or budget), errors (which write no row anyway), and a Stop before the first token. A Stop after the first token keeps its TTFT, since the visitor saw text.
+- **Answer-cache hits are measured too.** The cached answer is sent as one `token` event, and that is when the visitor first sees text, so the number is comparable with the browser's own TTFT. Hits are much faster than generated answers, so analysis should split on `cache_status` (and `stage_timings_ms.abstained` for the no-sources reply, which is also a streamed answer).
+- **Rolling releases.** The column is nullable with no default, so MySQL 8 adds it in place, and the previous API version (which never names it) keeps writing rows while `migrate` runs. The SSE contract is unchanged.
 
 ---
 
@@ -464,7 +471,7 @@ type AskRequest = {
 
 ### 9.3 MySQL
 
-Built: `mode` `stopped` (Alembic `0004`), `turn_index` and `rewritten_query` (`0003`). Not built yet: `documents.metadata` (§4.4) and `ttft_ms` (§7.5).
+Built: `mode` `stopped` (Alembic `0004`), `turn_index` and `rewritten_query` (`0003`), `ttft_ms` (`0005`, §7.7). Not built yet: `documents.metadata` (§4.4).
 
 ```sql
 ALTER TABLE documents ADD COLUMN metadata JSON NULL;  -- not built yet
@@ -473,7 +480,7 @@ ALTER TABLE queries
   MODIFY COLUMN mode ENUM('full','retrieval_only','stopped') NOT NULL,
   ADD COLUMN turn_index      TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0 = first question
   ADD COLUMN rewritten_query VARCHAR(1000) NULL,
-  ADD COLUMN ttft_ms         INT NULL;  -- not built yet
+  ADD COLUMN ttft_ms         INT NULL;  -- ms to the first streamed answer token
 ```
 
 ### 9.4 Redis
