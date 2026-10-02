@@ -331,7 +331,8 @@ LIVE_UNITS = [
     ("docs/DESIGN.md", "- On every pull request and push to `main` (`ci.yml`"),
     ("docs/DESIGN.md", "**Operations runbooks.** Node operations are push-button too"),
     ("docs/DESIGN.md", "- **Logs:** plain-text application logs"),
-    ("docs/DESIGN.md", "- **Alerts:** AWS Budgets (cost)."),
+    ("docs/DESIGN.md", "- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms"),
+    ("docs/DESIGN.md", "- **Backups:** daily snapshots of the node's root volume"),
     ("docs/DESIGN.md", "- AWS Budgets: `Glassbox-Monthly`"),
     ("docs/DESIGN.md", "Phases 0 to 6 are done and live."),
     ("docs/DESIGN.md", "Built: the answer is plain prose without citation markers"),
@@ -364,7 +365,7 @@ LIVE_UNITS = [
     # The self-healing plan's "what is lost today" section states live facts.
     (
         "docs/superpowers/plans/2026-10-01-self-healing-node.md",
-        "There is no second volume, no snapshot policy and no backup",
+        "There is no second volume. When this plan was scoped there was no snapshot",
     ),
     # DD2 §3a: the node as it runs today, outside the planned Feature 1 headings.
     ("docs/DESIGN-002-followups.md", "## 3a. Where the node's state lives today"),
@@ -377,6 +378,21 @@ LIVE_UNITS = [
         "docs/superpowers/plans/2026-10-01-self-healing-node.md",
         "DD1 §6.5 describes a `reindex` Job",
     ),
+    # 2026-10-01 owner decision: alarms, daily snapshots and the restore runbook are
+    # merged (live once applied), so they must not read as planned work.
+    ("docs/DESIGN-002-followups.md", "## 3b. Alarms, uptime probe and daily snapshots"),
+    ("docs/DESIGN-002-followups.md", "- **Daily snapshots of the whole disk.**"),
+    ("docs/DESIGN-002-followups.md", "- **One-click restore.**"),
+    ("docs/DESIGN-002-followups.md", "Section 3b adds alarms, daily snapshots"),
+    (
+        "docs/superpowers/plans/2026-10-01-self-healing-node.md",
+        "- **Daily drive snapshots.** A Data Lifecycle Manager policy",
+    ),
+    (
+        "docs/superpowers/plans/2026-10-01-self-healing-node.md",
+        '- **One-click restore.** "Ops · Restore from snapshot"',
+    ),
+    ("docs/architecture/deep-dive.md", "## Alarms, uptime probe and daily snapshots"),
 ]
 
 # (path, text inside a unit that describes work not built yet)
@@ -412,7 +428,11 @@ PLANNED_UNITS = [
     ("docs/DESIGN-002-followups.md", "- **Phase 4:** a launch template"),
     (
         "docs/superpowers/plans/2026-10-01-self-healing-node.md",
-        "### Phase 4a (planned): launch templates",
+        "**Phases 2, 3, 4 and 5 below are deferred**",
+    ),
+    (
+        "docs/superpowers/plans/2026-10-01-self-healing-node.md",
+        "### Phase 4a (deferred 2026-10-01, planned): launch templates",
     ),
     ("docs/superpowers/plans/2026-10-01-self-healing-node.md", "**F1, no write key on the node.**"),
     (
@@ -430,7 +450,7 @@ PLANNED_UNITS = [
     ),
     (
         "docs/superpowers/plans/2026-10-01-self-healing-node.md",
-        "### Phase 4b (planned): cutover",
+        "### Phase 4b (deferred 2026-10-01, planned): cutover",
     ),
     ("docs/DESIGN-004-action-plan.md", "## 8. Milestone 4: DD3 production ingestion pipeline"),
     ("docs/DESIGN-004-action-plan.md", "| M4 | DD3 |"),
@@ -444,7 +464,6 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "- Not built yet: a nightly ingest CronJob."),
     ("docs/DESIGN.md", "A nightly CronJob is not built yet"),
     ("docs/DESIGN.md", "- **Metrics (not built yet):**"),
-    ("docs/DESIGN.md", "- Not built yet: a CloudWatch alarm"),
     ("docs/DESIGN.md", "- Not built yet: a free, lexical-only variant"),
     ("docs/DESIGN.md", "Not built yet: `tflint` and a misconfiguration scanner."),
     ("docs/DESIGN.md", "**Phase 7: Polish (not started)**"),
