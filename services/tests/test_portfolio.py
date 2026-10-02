@@ -164,6 +164,47 @@ def test_yaml_type_gotchas_are_errors():
     assert "draft must be true or false (got 'false')" in message
 
 
+RAW = (
+    "---\ntitle: JobPilot\none_liner: Copilot.\nkind: personal\nyear: 2026\n"
+    "stack: [React]\n{extra}---\n\nBody.\n"
+)
+
+
+@pytest.mark.parametrize("value", ["yes", "on", "On", "no", "off", "True", "FALSE"])
+def test_only_literal_true_and_false_are_booleans(value):
+    # YAML 1.1 (PyYAML's default) reads yes/on/On as true; the frontend's YAML 1.2
+    # parser reads them as text. Both must agree, so only true/false are booleans.
+    text = RAW.format(extra=f"draft: {value}\n")
+    assert f"draft must be true or false (got '{value}')" in errors_for(text)
+    assert not is_draft(text)
+
+
+def test_literal_true_and_false_still_work():
+    assert parse_project(RAW.format(extra="draft: true\n"), "jobpilot").draft is True
+    assert parse_project(RAW.format(extra="draft: false\n"), "jobpilot").draft is False
+
+
+@pytest.mark.parametrize(
+    ("extra", "name"),
+    [
+        ("draft: true\ndraft: false\n", "draft"),
+        ("links:\n  live: https://a.example.com\n  live: https://b.example.com\n", "live"),
+    ],
+)
+def test_a_repeated_field_is_an_error_not_last_one_wins(extra, name):
+    text = RAW.format(extra=extra)
+    assert f"front matter has the field '{name}' more than once" in errors_for(text)
+    assert not is_draft(text)
+
+
+def test_an_unquoted_aspect_gets_a_quoting_hint():
+    visual = "visuals:\n  - src: jobpilot/a.png\n    alt: A\n    aspect: {aspect}\n"
+    message = errors_for(RAW.format(extra=visual.format(aspect="16:10")))
+    assert 'got 970); put it in quotes, like aspect: "16/10"' in message
+    message = errors_for(RAW.format(extra=visual.format(aspect="21/9")))
+    assert "(got '21/9')" in message and "put it in quotes" not in message
+
+
 def test_every_problem_is_listed_at_once():
     message = errors_for(doc({"title": "Only a title"}))
     assert message.count("missing required field") == 4
@@ -257,6 +298,38 @@ def test_missing_screenshot_fails_published_projects_only(tmp_path):
     }
     _tree(tmp_path, {"frontend/public/portfolio/jobpilot/board.png": "png bytes"})
     assert validate_tree(tmp_path) == {}
+
+
+def test_symlinked_screenshots_are_rejected(tmp_path):
+    # Same rule as the scanner: symlinks are never read, files or folders.
+    visual = {
+        "visuals": [
+            {"src": "jobpilot/linked.png", "alt": "A", "aspect": "16/10"},
+            {"src": "linkdir/b.png", "alt": "B", "aspect": "16/10"},
+        ]
+    }
+    _tree(tmp_path, {"outside/b.png": "png", "outside/linked.png": "png"})
+    # The second visual's folder must start with the slug, so use a second project.
+    _tree(
+        tmp_path,
+        {
+            "corpus/portfolio/jobpilot.md": doc({**BASE, "visuals": visual["visuals"][:1]}),
+            "corpus/portfolio/linkdir.md": doc({**BASE, "visuals": visual["visuals"][1:]}),
+        },
+    )
+    public = tmp_path / "frontend/public/portfolio"
+    (public / "jobpilot").mkdir(parents=True)
+    (public / "jobpilot/linked.png").symlink_to(tmp_path / "outside/linked.png")
+    (public / "linkdir").symlink_to(tmp_path / "outside")
+    assert validate_tree(tmp_path) == {
+        "corpus/portfolio/jobpilot.md": [
+            "visual jobpilot/linked.png is a symlink; commit the image itself "
+            "(symlinks are never read)"
+        ],
+        "corpus/portfolio/linkdir.md": [
+            "visual linkdir/b.png is a symlink; commit the image itself (symlinks are never read)"
+        ],
+    }
 
 
 def test_personal_data_in_a_write_up_fails_the_check(tmp_path):

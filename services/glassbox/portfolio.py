@@ -19,9 +19,11 @@ of text). Optional: ``order`` (whole number; grid order, ascending), ``links``
 ``alt``, ``aspect`` and an optional ``caption``; ``src`` is a path under
 ``frontend/public/portfolio/`` starting with the file's slug; ``aspect`` is ``16/10``,
 ``4/3`` or ``9/19.5``) and ``draft`` (``true`` or ``false``). Any other field is an
-error, so a typo can't pass silently. The slug is the file name without ``.md``:
-lowercase letters, digits and hyphens, after at most one leading underscore. The CI
-check also fails a file the personal-data guard would redact, because the site shows
+error, so a typo can't pass silently, and so is a repeated field. Only the literal
+words ``true`` and ``false`` are booleans (YAML 1.2 rules: ``yes``/``on`` are text).
+The slug is the file name without ``.md``: lowercase letters, digits and hyphens,
+after at most one leading underscore. Screenshots must be real files, not symlinks.
+The CI check also fails a file the personal-data guard would redact, because the site shows
 these files as written.
 """
 
@@ -81,6 +83,43 @@ class Project:
     draft: bool = False
 
 
+class _DuplicateField(yaml.YAMLError):
+    def __init__(self, name):
+        super().__init__(name)
+        self.name = name
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """PyYAML's safe loader, made as strict as a YAML 1.2 parser on two points.
+
+    Only the literal words ``true`` and ``false`` are booleans (YAML 1.1 also reads
+    ``yes``, ``on``, ``On``... as true; the frontend's YAML 1.2 parser reads them as
+    text), and a repeated field is an error instead of the last one silently winning.
+    Without this, CI and the frontend could disagree on whether a project is a draft.
+    """
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            try:
+                duplicate = key in seen
+            except TypeError:  # an unhashable key; construct_mapping reports it
+                continue
+            if duplicate:
+                raise _DuplicateField(key)
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+_BOOL_TAG = "tag:yaml.org,2002:bool"
+_StrictLoader.yaml_implicit_resolvers = {
+    first: [resolver for resolver in resolvers if resolver[0] != _BOOL_TAG]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_StrictLoader.add_implicit_resolver(_BOOL_TAG, re.compile(r"^(?:true|false)$"), list("tf"))
+
+
 def split_front_matter(text: str) -> tuple[dict, str]:
     """The YAML front matter as a dict, and the body after it."""
     lines = text.splitlines(keepends=True)
@@ -90,7 +129,11 @@ def split_front_matter(text: str) -> tuple[dict, str]:
     if end is None:
         raise PortfolioError("front matter is not closed by a second '---' line")
     try:
-        data = yaml.safe_load("".join(lines[1:end]))
+        data = yaml.load("".join(lines[1:end]), Loader=_StrictLoader)  # a SafeLoader subclass
+    except _DuplicateField as exc:
+        raise PortfolioError(
+            f"front matter has the field '{exc.name}' more than once; keep one"
+        ) from None
     except yaml.YAMLError as exc:
         raise PortfolioError(f"front matter is not valid YAML: {exc}") from None
     if not isinstance(data, dict):
@@ -138,7 +181,11 @@ def _visual(index: int, item, slug: str, errors: list[str]) -> Visual | None:
     if not _text(alt):
         errors.append(f"{where}.alt is missing (describe the image for screen readers)")
     if aspect not in ASPECTS:
-        errors.append(f"{where}.aspect must be one of {', '.join(ASPECTS)} (got {aspect!r})")
+        hint = ""
+        if aspect is not None and not isinstance(aspect, str):
+            # aspect: 16:10 unquoted is read by YAML as the number 970.
+            hint = '; put it in quotes, like aspect: "16/10"'
+        errors.append(f"{where}.aspect must be one of {', '.join(ASPECTS)} (got {aspect!r}){hint}")
     if caption is not None and not isinstance(caption, str):
         errors.append(f"{where}.caption must be text")
     if len(errors) > before:
@@ -245,12 +292,28 @@ def portfolio_files(root: Path) -> list[Path]:
     ]
 
 
+def _symlinked(public_root: Path, src: str) -> bool:
+    """True if the image or any folder between it and public_root is a symlink."""
+    path = public_root
+    for part in PurePosixPath(src).parts:
+        path = path / part
+        if path.is_symlink():
+            return True
+    return False
+
+
 def missing_visual_files(project: Project, public_root: Path) -> list[str]:
-    return [
-        f"visual {visual.src} is not in frontend/public/portfolio/"
-        for visual in project.visuals
-        if not (public_root / visual.src).is_file()
-    ]
+    """Screenshots that aren't committed as real files (symlinks are never read)."""
+    problems = []
+    for visual in project.visuals:
+        if _symlinked(public_root, visual.src):
+            problems.append(
+                f"visual {visual.src} is a symlink; commit the image itself "
+                "(symlinks are never read)"
+            )
+        elif not (public_root / visual.src).is_file():
+            problems.append(f"visual {visual.src} is not in frontend/public/portfolio/")
+    return problems
 
 
 def personal_data_problems(text: str) -> list[str]:

@@ -1,6 +1,6 @@
 # Portfolio corpus in the backend (portfolio spec PR 2)
 
-**Status:** PR open (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149)); review pending. Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
+**Status:** PR open (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149)); review round 1 APPROVED, minors fixed. Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
 
 ## TL;DR
 `portfolio` is now a third corpus end to end in the backend: a content format with a CI check, the ingest scanner, the stale sweep, retrieval, `POST /api/ask`, MySQL (Alembic `0007`) and the answer warm-up all know it. The repo ships one draft example project, so nothing is indexed yet. Visitors see no change until the frontend PR (spec PR 3) adds the Portfolio topic.
@@ -37,7 +37,13 @@ flowchart LR
 - **No prompt, model or eval change** (`_PROMPT_VERSION` stays `v14`). The golden-set coverage test skips `portfolio` (no golden additions until real projects exist).
 
 ## What review caught
-Pending.
+Round 1 (Opus reviewer): **APPROVED**, no Critical or Important findings. The reviewer re-ran the suite, read the CI log (migration round trip and the MySQL/Redis portfolio tests ran), and reproduced the YAML gotchas, invalid files, symlinks and the personal-data guard end to end. Minors fixed in this PR:
+- **YAML 1.1 laxness:** PyYAML read `draft: yes`/`on`/`On` as true and let a repeated field silently win, so CI and PR 3's YAML 1.2 TypeScript parser could disagree on whether a project is published. The parser now accepts only literal `true`/`false` as booleans and rejects a repeated field with a clear message.
+- **Rate-limit headroom:** a test keeps the number of warm-up questions at or below the per-IP bucket (`RATE_CAPACITY`, 10).
+- **`aspect: 16:10`:** the error ("got 970") now says to put it in quotes.
+- **Symlinked screenshots:** an image (or its folder) under `frontend/public/portfolio/` that is a symlink now fails the check, matching "symlinks are never read".
+
+To BACKLOG: the old-worker skew during a rollout (one CronJob run can exit 1) and the downgrade's delete path being executed only on empty tables in CI.
 
 ## Operational notes and risks
 - **Migration `0007`** appends `portfolio` to `documents.corpus` and `queries.corpus`. Appending an ENUM member at the end is metadata-only in MySQL 8.0 and both tables are small. The migrate Job applies it on deploy; the owner does nothing. CI now also runs a round trip (newest revision down, then up) before the tests.

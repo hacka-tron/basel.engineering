@@ -27,6 +27,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 - **Portfolio eval and golden cases:** `eval/run_eval.py` and `eval/schema.py` know two corpora; add `portfolio` and golden cases for its suggested questions once the owner has added real projects (owner rule: not before).
 - **Decide at PR 3:** hide the Portfolio topic until there is content (spec §7, §10).
 - **Stale portfolio projects in report mode:** a deleted or drafted project stays searchable until the sweep is applied or `--clear --corpus portfolio` runs (DD3 §1.3).
+- **Portfolio backend follow-ups (minor, #149 review).** (a) Mid-rollout skew: a new api can enqueue a `portfolio` job that an old retrieval worker picks up; it raises `unknown corpus`, the ask ends with `error internal` (no LLM spend, slot refunded), and that `warm-answers` CronJob run exits 1. Transient and harmless, but not covered by a test or the status report's skew note (which covers only new CronJob → old api, HTTP 422). (b) The `0007` downgrade's delete-then-narrow path is executed in CI only on empty tables (the round trip runs before the tests insert rows); its correctness rests on reading the code (only FK is chunks → documents with CASCADE; strict mode would fail the MODIFY loudly on a leftover row).
 
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 

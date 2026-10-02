@@ -47,6 +47,16 @@ def test_suggested_questions_file_is_the_frontend_source():
     assert not re.search(r"'What did Basel work on at YouTube\?'", chat)
 
 
+def test_warm_up_fits_in_one_rate_limit_bucket():
+    # One warm-up run asks every suggested question (all corpora) back to back from one
+    # pod, so one client-IP rate-limit bucket. A full bucket holds RATE_CAPACITY asks;
+    # with more questions the run relies on refill during the run, or stops early on
+    # rate_limited (exit 0) and quietly leaves the last answers uncached.
+    from services.glassbox.limits import RATE_CAPACITY
+
+    assert len(warm.load_questions(warm.DEFAULT_QUESTIONS)) <= RATE_CAPACITY
+
+
 def test_load_questions_rejects_unknown_corpus(tmp_path):
     path = tmp_path / "q.json"
     path.write_text(json.dumps({"about_me": ["Hi?"], "about_you": ["No?"]}))
