@@ -50,6 +50,29 @@
 }
 
 /*
+ * Below md the header floats over the page (App.tsx, owner 2026-10-01): this
+ * layer sits behind its row and reaches 16px below it. It is the panel colour,
+ * opaque behind the name and icons, and fades to transparent over the last
+ * 24px, so messages scrolling up under the header fade out instead of being
+ * cut by a line. With reduced transparency it ends in a hard edge at the
+ * header's bottom instead.
+ */
+.header-fade {
+  background-image: linear-gradient(
+    to bottom,
+    var(--color-panel) calc(100% - 1.5rem),
+    color-mix(in srgb, var(--color-panel) 55%, transparent) calc(100% - 0.75rem),
+    transparent
+  );
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .header-fade {
+    background-image: linear-gradient(to bottom, var(--color-panel) calc(100% - 1rem), transparent calc(100% - 1rem));
+  }
+}
+
+/*
  * The rotate screen's phone icon (components/RotateScreen.tsx): it starts
  * sideways, turns upright, holds, and repeats. Reduced motion: it stays upright.
  */

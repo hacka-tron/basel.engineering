@@ -743,10 +743,21 @@ function App() {
     <div
       inert={showRotateScreen}
       aria-hidden={showRotateScreen || undefined}
-      className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
+      // --chrome-top: below md, how much of the page's top the floating header
+      // covers (its 44px row plus py-2), so the message list and the diagram
+      // start below it. 0 in focus mode, when the header slides away; the
+      // paddings that use it animate with the slide.
+      className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary max-md:relative ${focusMode ? '' : 'max-md:[--chrome-top:3.75rem]'} ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
     >
-      <Collapsible open={!focusMode}>
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-b border-hairline px-4 py-2 md:gap-0 md:px-8 md:py-0`}>
+      {/*
+        Below md the header floats over the page (owner, 2026-10-01): no bar,
+        no border, the messages scroll under it and fade out beneath it. Only
+        its buttons take taps; everything else passes through to the page.
+      */}
+      <Collapsible open={!focusMode} className="max-md:pointer-events-none max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-20">
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-hairline px-4 py-2 md:gap-0 md:border-b md:px-8 md:py-0`}>
+        {/* The fade: page colour behind the row, then transparent 16px below it. */}
+        <div aria-hidden="true" className="header-fade pointer-events-none absolute inset-x-0 top-0 -bottom-4 -z-10 md:hidden" />
         {/*
           Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
           chips sit above the ask box in Chat view). The envelope sits directly
@@ -764,7 +775,7 @@ function App() {
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
           {isDesktop && topicNav}
 
-        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
+        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:pointer-events-auto max-md:shrink-0 md:order-3 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"
@@ -792,7 +803,7 @@ function App() {
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
           replacement={showDiagramView ? (
-            <div className="flex min-h-0 flex-1 flex-col [&>section]:flex-1">
+            <div className="flex min-h-0 flex-1 flex-col pt-[var(--chrome-top,0rem)] transition-[padding-top] duration-200 ease-out motion-reduce:transition-none [&>section]:flex-1">
               <ArchitecturePanel
                 portrait
                 fitMinZoom={0.75}

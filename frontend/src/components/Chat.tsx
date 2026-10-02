@@ -180,7 +180,9 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
       <div aria-live="polite" className="sr-only">{announcement}</div>
       {replacement}
       <div className={`relative min-h-0 flex-1 flex-col ${replacement ? 'hidden' : 'flex'}`}>
-        <div ref={messagesRef} onScroll={handleScroll} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-7 md:py-6">
+        {/* Below md the floating header covers the top --chrome-top of this list
+            (App.tsx), so the top padding starts the first message below it. */}
+        <div ref={messagesRef} onScroll={handleScroll} aria-label="Messages" aria-live="off" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-[calc(var(--chrome-top,0rem)+1rem)] transition-[padding-top] duration-200 ease-out motion-reduce:transition-none md:px-7 md:py-6">
           <div className="flex shrink-0 flex-col gap-4">
             {messages.map((message) => {
               const pending = message.state === 'pending'
