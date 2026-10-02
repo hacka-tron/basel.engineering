@@ -636,7 +636,7 @@ def _print_reconcile(reports: list[ReconcileReport]) -> None:
 def _print_refusals(plans: list[SweepPlan]) -> None:
     """Make a refused sweep impossible to miss in the Job log (stdout and stderr).
 
-    There is no column on ``ingestion_runs`` for it, and a refusal deliberately
+    The refusal is also stored in ``ingestion_runs.notes``, but a refusal deliberately
     doesn't fail the run (a retry would refuse again and skip the warm-up).
     """
     for plan in plans:

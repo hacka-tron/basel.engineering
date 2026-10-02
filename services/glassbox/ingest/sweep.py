@@ -217,7 +217,7 @@ async def find_orphan_chunk_ids(
     candidates: list[int] = []
     async for key in redis_client.scan_iter(match="chunk:*", count=SCAN_BATCH):
         suffix = (key.decode() if isinstance(key, bytes) else key).removeprefix("chunk:")
-        if suffix.isdigit() and int(suffix) not in known:
+        if suffix.isascii() and suffix.isdigit() and int(suffix) not in known:
             candidates.append(int(suffix))
     orphans = []
     for start in range(0, len(candidates), SCAN_BATCH):
@@ -234,6 +234,16 @@ async def find_orphan_chunk_ids(
             if found_corpus == corpus and found_model == tag:
                 orphans.append(chunk_id)
     return sorted(orphans)
+
+
+def existing_chunk_ids(engine: Engine, chunk_ids: list[int]) -> set[int]:
+    """Which of these ids have a ``chunks`` row now, in any corpus."""
+    found: set[int] = set()
+    with sessionmaker(bind=engine)() as session:
+        for start in range(0, len(chunk_ids), SCAN_BATCH):
+            batch = chunk_ids[start : start + SCAN_BATCH]
+            found.update(session.scalars(select(DbChunk.id).where(DbChunk.id.in_(batch))))
+    return found
 
 
 async def delete_documents(
@@ -303,7 +313,11 @@ def log_plan(plan: SweepPlan, mode: str) -> None:
 
 
 def sweep_notes(mode: str, plans: list[SweepPlan]) -> dict:
-    """The ``ingestion_runs.notes`` payload: sweep mode, planned/deleted counts, refusals."""
+    """The ``ingestion_runs.notes`` payload: sweep mode, planned/deleted counts, refusals.
+
+    A run that fails inside ``run_sweep`` (or before it) has no plans yet, so it
+    records ``corpora: []``.
+    """
     return {
         "sweep": {
             "mode": mode,
@@ -385,6 +399,12 @@ async def clear_scope(
             model_id,
             (chunk_id for document in documents for chunk_id in document.chunk_ids),
         )
+    if orphan_chunk_ids:
+        # A key written by an ingest running since the SCAN, or one whose id belongs to
+        # a row in another corpus, is not an orphan: re-check against MySQL right before
+        # deleting. (--clear still doesn't take ingest:lock; see BACKLOG.)
+        present = existing_chunk_ids(engine, orphan_chunk_ids)
+        orphan_chunk_ids = [chunk_id for chunk_id in orphan_chunk_ids if chunk_id not in present]
     verb = "would clear" if dry_run else "clearing"
     for document in documents:
         LOGGER.warning(

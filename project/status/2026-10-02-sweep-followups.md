@@ -1,7 +1,7 @@
 # Stale sweep follow-ups: orphan Redis keys and run notes
 
 ## TL;DR
-Two small gaps in the stale sweep (PR #101) are closed. `--clear` now also finds and removes orphan `chunk:*` hashes (no MySQL row) for the chosen corpus and model, and every ingest run records its sweep outcome in a new `ingestion_runs.notes` JSON column. Stacked on PR #141 (merge after it).
+Two small gaps in the stale sweep (PR #101) are closed. `--clear` now also finds and removes orphan `chunk:*` hashes (no MySQL row) for the chosen corpus and model, and every ingest run records its sweep outcome in a new `ingestion_runs.notes` JSON column.
 
 ## What changed
 - `--clear` runs a batched `SCAN chunk:*` (COUNT 500, non-transactional HMGET pipelines) and matches hashes whose `corpus` field equals the corpus and `model` field equals the model tag, excluding ids MySQL still holds. Matches are deleted with their `chunktxt:{id}` text caches, then `corpus:ver` is bumped. Every removed chunk id (not just orphans) now also drops its `chunktxt:{id}`.
@@ -18,7 +18,8 @@ flowchart LR
 ```
 
 ## Decisions
-- Orphans are matched on the hash's own `corpus`/`model` fields, so other corpora and models are never touched. Hashes missing those fields are left alone (the reconcile handles those).
+- Orphans are matched on the hash's own `corpus`/`model` fields, so other corpora and models are never touched. Hashes missing the `model` field are left alone; the reconcile removes keys with a model tag but no corpus. Just before deleting, candidate ids are re-checked against `chunks.id` in any corpus, so a key a concurrent ingest just wrote (or one belonging to another corpus's row) survives. `--clear` still doesn't take `ingest:lock`.
+- A run that fails inside the sweep records `corpora: []` in its notes.
 - `clear` now opens Redis even for a dry run (read-only), to count orphans.
 - Notes are only written by ingest runs; `--clear` leaves no run row.
 

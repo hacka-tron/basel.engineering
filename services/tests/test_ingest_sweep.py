@@ -492,6 +492,7 @@ async def test_clear_removes_orphans_and_chunk_text_without_documents(monkeypatc
     monkeypatch.setattr(sweep, "sessionmaker", _FakeSessionmaker(events))
     redis = _ScanRedis({"chunk:9": _hash("about_me", "titan")})
     monkeypatch.setattr(sweep, "load_scope_documents", lambda *a: [])
+    monkeypatch.setattr(sweep, "existing_chunk_ids", lambda engine, ids: set())
     result = await sweep.clear_scope(None, redis, "about_me", "titan", dry_run=False)
     assert result.documents == [] and result.orphan_chunk_ids == [9]
     assert redis.deleted == [("chunk:9", "chunktxt:9")]
@@ -505,6 +506,7 @@ async def test_clear_dry_run_counts_orphans_and_deletes_nothing(monkeypatch):
         {"chunk:91": _hash("about_me", "titan"), "chunk:92": _hash("about_me", "titan")}
     )
     monkeypatch.setattr(sweep, "load_scope_documents", lambda *a: _docs("a.md"))
+    monkeypatch.setattr(sweep, "existing_chunk_ids", lambda engine, ids: set())
     result = await sweep.clear_scope(None, redis, "about_me", "titan", dry_run=True)
     assert result.orphan_chunk_ids == [91, 92] and len(result.documents) == 1
     assert redis.deleted == [] and redis.versions == {}
@@ -541,3 +543,58 @@ def test_sweep_notes_records_mode_counts_and_refusals():
         }
     }
     assert sweep.sweep_notes("off", []) == {"sweep": {"mode": "off", "corpora": []}}
+
+
+@pytest.mark.asyncio
+async def test_clear_keeps_orphan_candidates_that_now_have_a_mysql_row(monkeypatch):
+    # 91 was written by a concurrent ingest (or belongs to another corpus's row).
+    redis = _ScanRedis({f"chunk:{i}": _hash("about_me", "titan") for i in (91, 92)})
+    monkeypatch.setattr(sweep, "load_scope_documents", lambda *a: [])
+    monkeypatch.setattr(sweep, "existing_chunk_ids", lambda engine, ids: {91} & set(ids))
+    result = await sweep.clear_scope(None, redis, "about_me", "titan", dry_run=False)
+    assert result.orphan_chunk_ids == [92]
+    assert redis.deleted == [("chunk:92", "chunktxt:92")]
+
+
+def test_existing_chunk_ids_queries_chunks_by_id_in_any_corpus(monkeypatch):
+    seen = []
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def scalars(self, statement):
+            seen.append(str(statement))
+            return iter([91])
+
+    monkeypatch.setattr(sweep, "sessionmaker", lambda bind: lambda: Session())
+    assert sweep.existing_chunk_ids(None, [91, 92]) == {91}
+    assert "chunks.id IN" in seen[0] and "corpus" not in seen[0]
+
+
+def test_mark_run_failed_records_notes_even_with_no_plans():
+    class Run:
+        notes = None
+
+    run = Run()
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def get(self, model, run_id):
+            return run
+
+    class Sessions:
+        def begin(self):
+            return Session()
+
+    ingest_run._mark_run_failed(Sessions(), 1, ingest_run.RunResult(), "apply")
+    assert run.status == "failed"
+    assert run.notes == {"sweep": {"mode": "apply", "corpora": []}}
