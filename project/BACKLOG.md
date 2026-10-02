@@ -4,12 +4,13 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**As of 2026-10-02 (Claude).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Live state: `project/SNAPSHOT.md` "Live state"; current handoff: `project/AGENT_HANDOFF.md`. Everything from the 2026-10-01 list (#91, #113, #117, #119 to #125) is merged. Next actions, in order:
+**As of 2026-10-02 morning (Claude, overnight session).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Overnight summary: `project/status/2026-10-02-overnight-session.md` (13 PRs merged, #130–#135 and #137–#143). Live state: `project/SNAPSHOT.md`; handoff: `project/AGENT_HANDOFF.md`. Next actions, in order:
 
-1. ~~Private About Basel repo (#126)~~ merged and verified; public copies removed (item 6).
-2. **Alarms and snapshots (#124, merged) waiting on owner clicks:** **Bootstrap** run + approve, then approve the **Terraform** apply, then the SNS confirmation email, then **Ops · List snapshots** and **Ops · Diagnose**. Steps and follow-ups under "Security" below and in `project/status/2026-10-01-alarms-snapshots.md`.
-3. **KEDA stays off.** **On hold by owner decision (2026-10-02, reconfirmed the same day).** Ops · Diagnose on 2026-10-02 04:04 UTC showed only ~274 MiB available, active swap-in, about 4% memory PSI and 304 MiB in swap, below the 512 MiB burst gate. The owner chose to keep KEDA off. Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month). The stress test keeps working in simulated mode.
-4. **RAG quality plan: merged, evaluations parked.** `docs/superpowers/plans/2026-10-01-rag-quality.md`, design `docs/DESIGN-005-rag-quality.md`. **Owner (2026-10-01): no evaluations (free or paid) until the owner has added more documents; tooling may be merged.**
+1. **PR #136 Ops · Reindex: waiting for the owner's go-ahead.** Approved in round 2 and CI green; merging leads to a Terraform apply creating SSM document `glassbox-ops-reindex` (no IAM change). Before merging, `gh pr update-branch 136` and rerun the full suite. After the merge: the owner approves the apply; the next release drops `idx:answers` (no `DD`). Report `project/status/2026-10-02-ops-reindex.md`.
+2. **Alarms and snapshots (#124):** Bootstrap and the Terraform apply both succeeded (2026-10-02 ~04:20 UTC). Remaining: the owner confirms the SNS email, then **Ops · List snapshots** (alarms `OK`) and **Ops · Diagnose**; the next day, the first snapshot. Follow-ups in `project/status/2026-10-01-alarms-snapshots.md`.
+3. **Stream check (#143):** confirm the first post-release run of the **Stream check** workflow passed (it waits for `/api/version` to report that release's build).
+4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
+5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
 
 **Open items** (not started unless noted):
 

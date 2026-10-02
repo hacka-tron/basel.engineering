@@ -2,25 +2,18 @@
 
 Short and current: who is coordinating, what state things are in, what is open, and where to look. Rewrite it (don't append) at each session end or coordinator switch. Older checkpoints: `project/archive/AGENT_HANDOFF-2026-09-29-to-10-01.md`.
 
-## Current — Claude, 2026-10-02
+## Current — Claude, 2026-10-02 (end of overnight session)
 
-**Active coordinator:** Claude (Opus orchestrating parallel worktree subagents). **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`; Codex optional when it has usage; Gemini legacy. Process: `project/orchestration/README.md`.
+**Active coordinator:** none running. The last coordinator was Claude (Opus orchestrating worktree subagents). **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`. Process: `project/orchestration/README.md`.
 
-**State:** the site is live and every merge to `main` deploys hands-off (release → ECR `build-N` → Flux). zram is on. KEDA is installed but **suspended** (scaled to 0) since the 2026-09-30 incident. `warm-answers` is running. Full live state: `project/SNAPSHOT.md` "Live state".
+**State:** the site is live and every merge to `main` deploys hands-off. 13 PRs merged overnight (#130–#135, #137–#143); summary in `project/status/2026-10-02-overnight-session.md`. zram is on. KEDA is suspended (owner hold). `warm-answers` is running. The alarms and snapshots Terraform apply is done.
 
 **Open PRs**
-- None. [#126](https://github.com/hacka-tron/basel.engineering/pull/126) (About Basel from the private repo `hacka-tron/basel.engineering-docs`, with a personal-data guard) merged 2026-10-02; its release checked out the private repo successfully.
+- **#136 Ops · Reindex** (`feature/ops-reindex`, worktree `.worktrees/ops-reindex`): round 2 APPROVED, merged with main at 81fdd3b, CI green. **Waiting for the owner's go-ahead** (new privileged SSM document via the Terraform apply). Re-sync with main before merging.
 
-**Done 2026-10-02:** a live About Basel answer cited `private/...` sources, and the public `corpus/about-me/*.md` copies were deleted (BACKLOG item 6; branch `chore/remove-public-about-me`).
+**Waiting on the owner:** the #136 go-ahead and the apply approval; the SNS confirmation email; **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
 
-**Waiting on the owner (approval clicks, not commands)**
-- **Alarms and snapshots (#124, merged):** run Bootstrap, approve the Terraform apply, confirm the SNS email. Until then the alarms, DLM snapshots and restore runbook aren't live (the uptime probe already runs). See `project/status/2026-10-01-alarms-snapshots.md`.
-- **KEDA:** on hold by owner decision 2026-10-02 (memory too tight: ~274 MiB available). See BACKLOG.
-
-**Parked by the owner**
-- RAG quality plan is merged (`docs/DESIGN-005-rag-quality.md`, `docs/superpowers/plans/2026-10-01-rag-quality.md`), but **no evaluations (free or paid) until the owner adds more documents**.
-- The About Basel files (private repo `hacka-tron/basel.engineering-docs`) mirror the owner's resume and describe the owner's skills, not this project; its RDS line is intentional (owner, 2026-10-02). Don't edit them for architecture facts.
-- Done by the owner 2026-10-02: Cloudflare "Always Use HTTPS" (HTTP now 301s).
+**Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
 
 **Where to look**
 - Next actions: `project/BACKLOG.md` "> RESUME HERE"; owner-only decisions: its "Open decisions".
