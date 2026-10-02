@@ -332,9 +332,9 @@ async def test_run_answers_end_to_end_against_mysql_and_redis(tmp_path, monkeypa
         await client.aclose()
         pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
     Base.metadata.create_all(engine)
-    about_me = tmp_path / "corpus" / "about-me"
+    about_me = tmp_path / "corpus" / "about-me-private" / "about-me"
     about_me.mkdir(parents=True)
-    source_path = f"corpus/about-me/{tmp_path.name}-golden.md"
+    source_path = f"private/{tmp_path.name}-golden.md"
     (tmp_path / source_path).write_text("# Fixture\n\nBasel studied at Ohio State.\n")
     try:
         await ingest(tmp_path, engine=engine, redis_client=client)

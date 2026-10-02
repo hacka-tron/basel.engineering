@@ -68,12 +68,12 @@ def test_plan_refuses_when_a_whole_source_directory_disappears():
     assert forced.refused is None
 
 
-def test_directory_guard_names_every_missing_directory_and_about_me():
+def test_directory_guard_names_every_missing_directory():
     known = _docs("k8s/a.yaml", "docs/b.md", "services/c.py")
     plan = plan_sweep("about_system", "m", known, {"services/c.py"})
     assert "docs, k8s" in plan.refused
-    about_me = plan_sweep("about_me", "m", _docs("corpus/about-me/a.md"), {"corpus/x.md"})
-    assert "corpus/about-me" in about_me.refused
+    about_me = plan_sweep("about_me", "m", _docs("private/a.md"), {"corpus/x.md"})
+    assert "private About Basel checkout" in about_me.refused
 
 
 def test_a_file_missing_from_a_directory_that_still_has_files_is_not_a_directory_drop():
@@ -83,7 +83,7 @@ def test_a_file_missing_from_a_directory_that_still_has_files_is_not_a_directory
 
 
 def test_source_root():
-    assert sweep.source_root("corpus/about-me/bio.md") == "corpus/about-me"
+    assert sweep.source_root("private/bio.md") == "private"
     assert sweep.source_root("infra/modules/x/main.tf") == "infra"
 
 

@@ -90,5 +90,5 @@ Round 1 (changes needed), all fixed:
 
 - Owner: nothing; setup is done.
 - Done 2026-10-02: the public `corpus/about-me/*.md` copies were deleted (see Update 2026-10-02).
-- Tidy-up: the twin-shadowing code in the scanner and ingest is dead now; remove it with its tests.
+- Done 2026-10-02: the dead twin-shadowing code (`shadowed_public_paths`, `private_twin`, `remove_shadowed`) and the public `corpus/about-me` scan and sweep root were removed; a reappearing public directory is ignored.
 - Ideas: `repository_dispatch` from the private repo (needs a token); an ECR build cache for private builds.
