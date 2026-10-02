@@ -1,0 +1,56 @@
+name: Stream check
+
+# Post-deploy streaming check through Cloudflare (docs/DESIGN-002-followups.md
+# §7.5): after every successful Release, wait until the new build-N is live
+# (GET /api/version, which Flux rolls out a few minutes after the image lands
+# in ECR), then verify end to end that SSE streams unbuffered through the
+# edge: events arrive incrementally, heartbeats arrive, the stream has the
+# right headers and no compression, http:// 301s to https://, and the
+# security headers are present. Once a day as well, to catch a Cloudflare
+# setting changed by hand. Details: .github/scripts/stream-check.py.
+#
+# Read-only and free: it streams /api/cluster/stream, never /api/ask (each
+# real question spends a slot of the daily LLM budget). No secrets, no AWS.
+# A failure is a failed run (GitHub emails it like the uptime probe); it
+# never blocks, gates or rolls back anything.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer release supersedes a check still waiting for an older build;
+  # the daily run has its own group, so it never cancels a post-release check.
+  group: stream-check-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Only releases that pushed an image from main.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check streaming through Cloudflare
+        env:
+          # The Release run's number is the build-N it pushed (release.yml).
+          EXPECT_BUILD: ${{ github.event_name == 'workflow_run' && format('build-{0}', github.event.workflow_run.run_number) || '' }}
+        run: |
+          args=()
+          if [ -n "$EXPECT_BUILD" ]; then
+            args+=(--expect-build "$EXPECT_BUILD" --wait-timeout 1800)
+          fi
+          python3 .github/scripts/stream-check.py "${args[@]}"

@@ -154,6 +154,39 @@ Terraform workflow's validate job (`.github/scripts/tests/`). The sync test
 uses a `git` shim that pushes a competing "Flux" commit just before the
 script's push, so the retry path sees a real non-fast-forward rejection.
 
+## Post-deploy stream check
+
+`.github/workflows/stream-check.yml` checks that streaming still works end to
+end through Cloudflare (`docs/DESIGN-002-followups.md` §7.5, §7.8). It runs
+when a Release run on `main` succeeds (`workflow_run`), daily at 05:41 UTC,
+and by hand (Actions → Stream check → Run workflow). No secrets, no AWS,
+`contents: read` only, `ubuntu-24.04`.
+
+- **Waiting for the release.** The image carries its own tag: `release.yml`
+  passes `GLASSBOX_BUILD=build-N` as a Docker build argument and
+  `GET /api/version` returns it. After a release, the check polls that
+  endpoint every 20 s until it reports the Release run's `build-N` (or a
+  newer one) on 3 reads in a row, for up to 30 minutes, then runs the checks.
+  "Not live after 30 minutes" fails the run with exit 2: look at Flux (Ops ·
+  Diagnose) for a stuck image automation, migration or rollout.
+- **What it checks** (`.github/scripts/stream-check.py`): `http://` 301s to
+  `https://`; the page and the stream carry the app's security headers;
+  `/api/cluster/stream` answers 200 with `text/event-stream`, no
+  `Content-Encoding` (the request offers gzip, br and zstd), `no-cache`, and
+  `cf-cache-status` `DYNAMIC` or `BYPASS`; over 50 s the first event arrives
+  within 5 s, at least one `: ping` arrives, and no gap exceeds 20 s. The
+  arrival table is in the run's job summary.
+- **Why not `/api/ask`.** Every real question spends a slot of the daily LLM
+  budget and an embedding call, so the check streams the free cluster
+  stream, which shares the `/api/*` cache rule, the Traefik route and the
+  heartbeat wrapper.
+- **A failure** is only a failed run, emailed like the uptime probe's. It
+  never blocks, gates or rolls back a deploy. A newer release cancels a check
+  still waiting for an older one (concurrency group per trigger). Like every
+  scheduled workflow in a public repository, the daily run is disabled after
+  60 days without repository activity.
+- Offline tests: `services/tests/test_stream_check.py` (CI's backend tests).
+
 ## Runbooks (push-button operations)
 
 Every routine production operation is a button: **Actions → "Ops · ..."**

@@ -365,6 +365,10 @@ The root Kustomization must not use `wait: true` or health checks on these objec
 
 To follow a release, `flux get kustomizations` should show `flux-system`, then `app-ready`, then `ingest` Ready at the same revision. If a rollout never becomes Ready, `app-ready` times out and ingestion does not run for that revision.
 
+## Post-deploy streaming check through Cloudflare
+
+After every successful release, and once a day, `.github/workflows/stream-check.yml` checks streaming end to end through Cloudflare. It polls `GET /api/version`, which reports the image's `build-N` (baked in at build time), until the new release answers on three reads in a row, then streams `/api/cluster/stream` for 50 seconds. The first event must arrive within 5 seconds, `: ping` heartbeats must arrive, and no gap may exceed the 15-second heartbeat by more than 5 seconds; a buffering layer would deliver everything in one late burst. It also checks `text/event-stream`, no compression, no Cloudflare caching, the HTTP-to-HTTPS 301 and the security headers. It never calls `/api/ask`, because every real question spends a slot of the daily LLM budget. A failure fails the run and emails the owner; it never blocks or rolls back a deploy.
+
 ## AWS infrastructure with Terraform and the Cloudflare edge
 
 All Glassbox cloud resources are defined in Terraform under `infra/` and live in `us-east-1`, chosen for Bedrock model availability. Every resource is tagged `project = glassbox`.
@@ -459,7 +463,6 @@ Everything in this section is planned or proposed design. None of it is implemen
 
 - **Google Drive and S3/SQS content pipeline (Milestone 4, `docs/DESIGN-003-ingestion.md`).** Not built. The design would author "About Me" content in Google Docs, sync it through a Drive connector and a Git connector into an S3 raw zone, send one SQS message per change, and process those messages with a KEDA ScaledJob ingestion worker. It would include a dead-letter queue, nightly reconciliation between stages, and blue-green re-embedding. Today, ingestion reads files baked into the container image, as described in the ingestion pipeline section.
 - **Self-healing node recovery (Milestone 3, DD2).** Not built, and deferred on 2026-10-01 in favour of status-check alarms and daily snapshots (see "Alarms, uptime probe and daily snapshots"). The design replaces the standalone EC2 instance with a launch template and an Auto Scaling Group of exactly one instance across two public subnets, whose boot script re-attaches the Elastic IP. A terminated instance still needs a manual rebuild.
-- **Streaming checks (DD2).** Not built: a scripted production check that heartbeats survive Cloudflare.
 - **Nightly ingestion CronJob.** Not built. Ingestion runs once per release, after the rollout.
 - **Deleting stale documents automatically.** Not switched on. The ingest Job only reports documents whose files are gone (see "Stale documents"); deleting them waits on the owner setting `GLASSBOX_INGEST_SWEEP` to `apply`.
 - **Metrics and tracing.** Not built. There is no Prometheus `/metrics` endpoint, no Grafana Cloud export, no OpenTelemetry tracing and no CloudWatch metrics beyond EC2's own. Logs are plain text rather than structured JSON.

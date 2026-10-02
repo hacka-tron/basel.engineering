@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | Milestones 0 to 2 are done and live (apart from Phase 7 polish, which is partly done). Milestone 3 is partly shipped. Milestone 4 is deferred. |
 | **Owner** | Basel |
-| **Last updated** | 2026-10-01 |
+| **Last updated** | 2026-10-02 |
 | **Builds on** | `DESIGN.md` ("DD1"), `DESIGN-002-followups.md` ("DD2"), `DESIGN-003-ingestion.md` ("DD3") |
 
 ---
@@ -28,8 +28,8 @@ DD1, DD2 and DD3 specify the system. This document is the execution plan: what g
 | M0 | — (new) | Accounts, tooling, and repo ready to build |
 | M1 | DD1 Phases 0–3 | Full system running locally via Docker Compose: chat, RAG, streaming, live architecture panel, mock and real data |
 | M2 | DD1 Phases 4–7 (edge adjusted) | Live at `basel.engineering` on AWS: k3s on EC2, in-cluster MySQL (not RDS), Redis, Bedrock, KEDA autoscaling (installed, suspended since 2026-09-30), CI/CD, push-button ops runbooks. Phase 7 polish is partly done: the README has screenshots, while footer stats and load test numbers are not started. |
-| M3 (shipped part) | DD2 | Conversational memory, chat UX polish, streaming heartbeats and server-side Stop |
-| M3 (not built yet) | DD2 | Self-healing (ASG), post-deploy streaming check in CI |
+| M3 (shipped part) | DD2 | Conversational memory, chat UX polish, streaming heartbeats and server-side Stop, post-deploy streaming check in CI |
+| M3 (not built yet) | DD2 | Self-healing (ASG) |
 | M4 | DD3 | Production content pipeline: author "About Basel" in Google Docs, S3/SQS event pipeline, reconciliation, blue-green re-embedding |
 
 Each milestone ends with something real: M1 ends with a working demo on your laptop; M2 ends with a public URL a recruiter can visit; M3 and M4 are hardening and workflow improvements layered onto a system that's already live.
@@ -79,7 +79,7 @@ Unchanged from DD1 §17 Phases 0–3, run entirely with Docker Compose (MySQL, R
 |---|---|---|
 | 4 (done) | Terraform: `network` (VPC, no NAT), `compute` (EC2 t4g.small + k3s user_data), `secrets` (SSM), `registry` (ECR), and an `edge` module after all (Cloudflare DNS record → Elastic IP, `/api/*` cache rule). MySQL runs in-cluster instead of a `database` (RDS) module; the AWS Budgets alert was set up outside Terraform instead of a `budgets` module. Security group scoped to Cloudflare's IP ranges. Traefik routes the site and `/api/*` to the API, which serves the frontend. K8s base manifests, RBAC, NetworkPolicies, manual first deploy | `https://basel.engineering` serves the site and answers questions |
 | 5 (done) | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI. KEDA has been suspended since the 2026-09-30 memory incident, so the stress test plays its simulation for now | Stress test visibly scales workers 1→3 and back |
-| 6 (done) | GitHub Actions building images to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation onto a `deploy` branch, the frontend build baked into the API image, Terraform plan-on-PR with approval-gated apply, the bootstrap pipeline and the "Ops · ..." runbooks. The post-deploy Cloudflare streaming check is not built yet | Merging to `main` deploys without touching the server |
+| 6 (done) | GitHub Actions building images to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation onto a `deploy` branch, the frontend build baked into the API image, Terraform plan-on-PR with approval-gated apply, the bootstrap pipeline and the "Ops · ..." runbooks. The post-deploy Cloudflare streaming check was added in M3 (DD2 §7.8) | Merging to `main` deploys without touching the server |
 | 7 (partly done) | README with screenshots (done 2026-10-02). Footer stats and load test numbers recorded are not started | Polish complete |
 
 Frontend delivery (decided in Phase 6): the static build is baked into the API image and FastAPI serves it at `/`; there is no separate static-file container.
@@ -93,7 +93,7 @@ Local dev stays exactly as in M1 for the whole project — nothing in M2 changes
 Once M2 is live and usable, layer in, in this order:
 
 1. **Self-healing (DD2 §3)** — not built yet. Launch Template + Auto Scaling Group, boot script, health-check timer. High value early since it's the difference between "recruiter hits a dead site" and "site heals itself." The Elastic IP reassociation logic is unchanged by the Cloudflare swap — Cloudflare still just points at a stable IP.
-2. **Streaming hardening formalized (DD2 §7)** — the post-deploy CI check is not built yet. Plan: codify the Cloudflare-specific checks from section 3.3 above into the post-deploy CI check.
+2. **Streaming hardening formalized (DD2 §7)** — built. The Cloudflare-specific checks from section 3 (no buffering or caching on `/api/*`, HTTPS redirect, headers) run in CI after every release and daily (DD2 §7.8).
 3. **Corpus authoring guide + validation (DD2 §4)** — not built yet; only relevant if still hand-authoring Markdown files in-repo at this point (i.e., before M4).
 4. **Conversational chat + live chat UX (DD2 §5, §6)** — shipped: multi-turn memory, follow-up rewriting, Stop button, localStorage persistence, accessibility, typing while an answer streams, Up-arrow recall and Retry on failure replies. DD2 §7's stream heartbeats and server-side Stop have shipped too.
 

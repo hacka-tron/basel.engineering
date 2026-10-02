@@ -202,7 +202,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - `GET /api/demo/capacity` reports whether a real stress-test burst fits (§9.4)
   - `POST /api/demo/load` triggers the stress test
   - `GET /api/cluster/stream` returns SSE of worker pod events and the queue backlog, from one shared Kubernetes watch per api process, with caps on concurrent streams (section 9.5)
-  - `GET /healthz`, `GET /readyz`
+  - `GET /healthz`, `GET /readyz`, `GET /api/version` (the image's `build-N`, for the post-deploy stream check)
   - Not built yet: `GET /api/stats` for server-side footer numbers. The footer counts this browser session's queries and shows the last answer's latency.
 - **Responsibilities:** rate limiting, answer cache, enqueue, trace forwarding, prompt building, LLM streaming, budget enforcement, query logging.
 - **Providers behind interfaces:** `EmbeddingProvider` and `LLMProvider` with a Bedrock implementation and a deterministic fake for tests and offline dev.
@@ -739,6 +739,7 @@ It is a plain ASGI middleware that adds headers to the response start and passes
 - Not built yet: running the retrieval eval in CI (section 15); it runs by hand today.
 - On merge to `main` (`release.yml`, when a path the Dockerfile copies changed): a native arm64 runner builds the single multi-stage image and pushes it to Amazon ECR, tagged `build-N`, the short commit SHA and `latest`. Its Node stage builds the frontend and its Python stage includes the resulting `frontend/dist` alongside the API, migrations, and ingestion corpus; no separate frontend sync or CDN invalidation is needed. The workflow never writes to Git. A manual run must build `main`'s current head (`.github/scripts/release-provenance.sh`), and the release role trusts only `refs/heads/main`.
 - `sync-deploy-branch.yml` merges `main` into the unprotected `deploy` branch that Flux reads and commits image-tag bumps to. A push that loses a race with Flux re-fetches, re-merges and retries up to 5 times, never forced.
+- After each successful release, and daily, `stream-check.yml` waits until `/api/version` reports the new `build-N`, then checks streaming end to end through Cloudflare on the free `/api/cluster/stream` (DD2 §7.8). A failure fails the run; it never blocks or rolls back a deploy.
 - Third-party actions are pinned by full commit SHA; Dependabot opens one grouped `ci:` pull request a month to update them.
 
 The Terraform workflow (`terraform.yml`) runs `terraform fmt -check` and
@@ -775,7 +776,7 @@ Keep it light; the node has little memory to spare.
 - Not built yet: structured JSON logs with `request_id`, and aggregating the stage timings into server-side footer stats (the footer is per browser session, §6.2).
 - **Node health:** "Ops · Diagnose" reports memory, swap and zram, pressure (PSI), pods, Flux and KEDA status, warning events and k3s errors, with no approval needed (§12).
 - **Metrics (not built yet):** a Prometheus `/metrics` endpoint on the API (request latency histogram, cache hit counters, queue lag, LLM tokens), optionally shipped to Grafana Cloud's free tier with Grafana Alloy rather than running Prometheus in-cluster.
-- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms (EC2 recover and reboot actions) that email the owner, and a GitHub Actions uptime probe on `/readyz` every 15 minutes (added 2026-10-01; the alarms take effect once applied, see DD2 §3b).
+- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms (EC2 recover and reboot actions) that email the owner; a GitHub Actions uptime probe on `/readyz` every 15 minutes (added 2026-10-01; the alarms take effect once applied, see DD2 §3b); and a GitHub Actions streaming check through Cloudflare after each release and daily (DD2 §7.8).
 - **Backups:** daily snapshots of the node's root volume, 7 kept, with a one-click "Ops · Restore from snapshot" (added 2026-10-01, takes effect once applied, DD2 §3b).
 
 ---

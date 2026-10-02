@@ -18,7 +18,7 @@ This document adds five features to the base design:
 3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups (live).
 4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll (live, with stop-and-send, Up-arrow recall and Retry).
 5. **Streaming delivery hardening** so token-by-token output survives Cloudflare and proxies in production. Heartbeats, server-side Stop and server-side time-to-first-token logging (`queries.ttft_ms`) are live.
-   The scripted post-deploy streaming check is not built yet.
+   A scripted post-deploy streaming check through Cloudflare runs after every release and once a day (§7.5).
 
 Plus one small network change: a free **S3 gateway endpoint** (not built yet).
 
@@ -423,9 +423,9 @@ The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is 
 
 ### 7.5 Verification
 
-- **Scripted check (not built yet):** `curl -N` against `https://basel.engineering/api/ask` (through Cloudflare), recording the arrival time of each event. Tokens must arrive spread over time, not in one burst at the end.
+- **Scripted check (built, §7.8):** a stream through `https://basel.engineering` (Cloudflare), recording the arrival time of each event. Events must arrive spread over time, not in one burst at the end. It streams `/api/cluster/stream` rather than `/api/ask`: both share the Cloudflare `/api/*` cache rule, the Traefik route and the `with_heartbeat` wrapper, but a real question can spend a slot of the daily LLM budget and an embedding call (a cached answer is free only while both its embedding and its answer stay cached, which the check cannot guarantee), so an automated check on every deploy must not ask one. Token-level spacing of a real answer is therefore not checked automatically; the browser's TTFT readout and `queries.ttft_ms` cover that.
 - **Metric:** time to first token (TTFT). Target: production TTFT within 300 ms of local TTFT. The browser measures it for the footer latency readout (DD1 §6.1), and the API logs its own server-side TTFT in `queries.ttft_ms` (§7.7).
-- Running the scripted check in CI after every deploy (Phase 6) is not built yet; it would stop a Cloudflare setting change from silently breaking streaming.
+- The check runs in CI after every deploy (Phase 6) and once a day, so a Cloudflare setting change cannot silently break streaming.
 
 ### 7.6 Implementation notes (feature/chat-stream-resilience)
 
@@ -438,6 +438,13 @@ The API sends an SSE comment line (`: ping`) every 15 seconds while a stream is 
 - **When it is NULL.** No answer text was streamed: `retrieval_only` (kill switch or budget), errors (which write no row anyway), and a Stop before the first token. A Stop after the first token keeps its TTFT, since the visitor saw text.
 - **Answer-cache hits are measured too.** The cached answer is sent as one `token` event, and that is when the visitor first sees text, so the number is comparable with the browser's own TTFT. Hits are much faster than generated answers, so analysis should split on `cache_status` (and `stage_timings_ms.abstained` for the no-sources reply, which is also a streamed answer).
 - **Rolling releases.** The column is nullable with no default, so MySQL 8 adds it in place, and the previous API version (which never names it) keeps writing rows while `migrate` runs. The SSE contract is unchanged.
+
+### 7.8 Implementation notes (post-deploy stream check)
+
+- **When.** `.github/workflows/stream-check.yml` runs when a Release run on `main` succeeds (`workflow_run`), daily at 05:41 UTC, and by hand. No secrets, no AWS, `contents: read` only. A failure is a failed run that GitHub emails like the uptime probe; it never blocks, gates or rolls back a deploy.
+- **Knowing the release is live.** The image now knows its tag: `release.yml` passes `GLASSBOX_BUILD=build-N` as a build argument, and `GET /api/version` returns `{"build": "build-N"}` (`"dev"` locally; `Cache-Control: no-store`). After a release, the check polls it every 20 s until it reports that build, or a newer one, on 3 reads in a row (a rolling update can still answer from the old pod), for up to 30 minutes. Not live by then fails the run with exit 2, which also surfaces a stuck rollout.
+- **What it checks** (`.github/scripts/stream-check.py`, standard library only): `http://` answers 301 to `https://`; the page and the stream carry all of the app's security headers; the stream answers 200 with `text/event-stream`, no `Content-Encoding` although the client offers gzip, br and zstd, `no-cache`, and a `cf-cache-status` of `DYNAMIC` or `BYPASS`. It then reads the stream for 50 s: the first event (the pod snapshot) must arrive within 5 s, at least one `: ping` must arrive, and no gap (from the request to the first arrival, between arrivals, or from the last arrival to the end of the window) may exceed the 15 s heartbeat plus 5 s. A buffering layer fails the first and last of these. A per-IP or global stream cap (429/503) is waited out up to twice. The arrival table goes to the job summary.
+- **Tests.** `services/tests/test_stream_check.py` runs the script against a local fake site scaled down in time (buffered burst, no pings, early close, gzip, cached, missing header, busy retry, build waiting), and keeps its header list equal to `SECURITY_HEADERS`. `X-Accel-Buffering` is not checked at the edge: Cloudflare does not forward it.
 
 ---
 
@@ -506,7 +513,7 @@ ALTER TABLE queries
 | Phase 3: Frontend | Message states, Stop, auto-scroll, input behavior, accessibility (6); localStorage persistence and New chat (5.5): built |
 | Phase 4: AWS + Kubernetes | Cloudflare Cache Rule bypassing `/api/*` (7.3): built. Launch template + ASG, boot script, health timer, S3 endpoint (3, 8): not built yet |
 | Phase 5: Autoscaling demo | No change |
-| Phase 6: CI/CD | Post-deploy streaming check (7.5), not built yet |
+| Phase 6: CI/CD | Post-deploy streaming check (7.5, 7.8): built |
 | Phase 7: Polish | Game day recovery test with measured time in README (3.7), not built yet |
 
 ---

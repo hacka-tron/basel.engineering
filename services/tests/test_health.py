@@ -81,3 +81,16 @@ async def test_ping_redis_returns_false_when_from_url_raises(monkeypatch):
         side_effect=OSError("connection refused"),
     ):
         assert await ping_redis() is False
+
+
+def test_version_reports_the_baked_in_build_tag(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_BUILD", "build-123")
+    response = client.get("/api/version")
+    assert response.status_code == 200
+    assert response.json() == {"build": "build-123"}
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_version_defaults_to_dev(monkeypatch):
+    monkeypatch.delenv("GLASSBOX_BUILD", raising=False)
+    assert client.get("/api/version").json() == {"build": "dev"}
