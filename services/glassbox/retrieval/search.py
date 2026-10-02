@@ -3,6 +3,7 @@
 import struct
 
 from services.glassbox.cache.answer import _model_tag
+from services.glassbox.corpora import CORPORA
 from services.glassbox.ingest.redis_index import INDEX_NAME
 
 VECTOR_DIMENSIONS = 512
@@ -16,7 +17,7 @@ async def search_chunks(
         raise ValueError(f"embedding must have {VECTOR_DIMENSIONS} float32 values")
     if top_k < 1:
         raise ValueError("top_k must be positive")
-    if corpus not in ("about_me", "about_system"):
+    if corpus not in CORPORA:
         raise ValueError("unknown corpus")
 
     vector = struct.pack(f"{VECTOR_DIMENSIONS}f", *embedding)
