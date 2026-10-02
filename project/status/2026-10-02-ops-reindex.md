@@ -1,6 +1,6 @@
 # Ops · Reindex runbook, old answer index dropped, chunk text cache fix
 
-**Status:** PR open, review pending. **Live:** the index drop and the cache fix ship with the first release after merge; the runbook works once the Terraform workflow applies the new SSM document (one owner approval click, as for every new runbook).
+**Status:** PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136) open, review pending. **Live:** the index drop and the cache fix ship with the first release after merge; the runbook works once the Terraform workflow applies the new SSM document (one owner approval click, as for every new runbook).
 
 ## TL;DR
 
