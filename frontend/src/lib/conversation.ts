@@ -91,14 +91,21 @@ function isStorable(message: ChatMessage): boolean {
  * A turn the server may see as history: never an error reply or empty text,
  * and a question only if its reply settled (done or stopped). A question that
  * failed, or has no reply yet, is left out, so re-sending it (Retry, or
- * Up-arrow and Enter) never puts the same question in twice. A retrieval_only
+ * Up-arrow and Enter) never puts the same question in twice. A stopped reply
+ * with no text (after trim) is left out whole, like a failed turn. A retrieval_only
  * (budget-exhausted) turn is left out whole, question and reply: the server said
  * nothing for it, and dropping both avoids adding a lone user turn.
  */
 function isHistoryTurn(message: ChatMessage, next: ChatMessage | undefined): boolean {
   if (!message.content) return false
-  if (message.role === 'user') return next?.role === 'assistant' && next.state !== undefined && HISTORY_STATES.has(next.state)
+  if (message.role === 'user') {
+    // A stopped reply with no text (blank after trim) leaves the question out too,
+    // like a failed turn, so no lone user turn lands in history.
+    return next?.role === 'assistant' && next.state !== undefined && HISTORY_STATES.has(next.state)
+      && !(next.state === 'stopped' && !next.content.trim())
+  }
   return message.state !== undefined && HISTORY_STATES.has(message.state)
+    && !(message.state === 'stopped' && !message.content.trim())
 }
 
 function isSource(value: unknown): value is MessageSource {
