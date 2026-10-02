@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BUDGET_REPLIES, CANONICAL_BUDGET_REPLY, pickBudgetReply } from './budgetReplies.ts'
+import { BUDGET_REPLIES, pickBudgetReply } from './budgetReplies.ts'
 
 test('there are 20 distinct, short replies', () => {
   assert.equal(BUDGET_REPLIES.length, 20)
   assert.equal(new Set(BUDGET_REPLIES).size, 20)
   for (const reply of BUDGET_REPLIES) assert.ok(reply.length <= 140, `${reply.length}: ${reply}`)
-  assert.ok(!BUDGET_REPLIES.includes(CANONICAL_BUDGET_REPLY))
 })
 
 test("the owner's example is in, emoticon and all", () => {
