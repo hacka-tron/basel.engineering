@@ -2,16 +2,17 @@
 
 Short and current: who is coordinating, what state things are in, what is open, and where to look. Rewrite it (don't append) at each session end or coordinator switch. Older checkpoints: `project/archive/AGENT_HANDOFF-2026-09-29-to-10-01.md`.
 
-## Current — Claude, 2026-10-02 ~10:00 UTC (session end)
+## Current — Claude, 2026-10-02 (portfolio planning done; owner cleared the session)
 
-**Active coordinator:** none running. The last coordinator was Claude (Opus orchestrating worktree subagents). **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`. Process: `project/orchestration/README.md`.
+**Active coordinator:** none running; the next session coordinates. **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`.
 
-**State:** the site is live and every merge to `main` deploys hands-off. 13 PRs merged overnight (#130–#135, #137–#143); summary in `project/status/2026-10-02-overnight-session.md`. zram is on. KEDA is suspended (owner hold). `warm-answers` is running. The alarms and snapshots Terraform apply is done.
+**Next action:** run the portfolio feature (BACKLOG "RESUME HERE" item 0). First merge the docs PR for branch `docs/portfolio-spec` (spec, three plans, this handoff; full CI because `docs/**` is corpus). Then dispatch PR 1 (`2026-10-02-open-to-work-footer.md`) and PR 2 (`2026-10-02-portfolio-corpus-backend.md`) in parallel worktrees; then PR 3a and, after PR 2 is deployed, PR 3b (`2026-10-02-portfolio-frontend.md`, split after its Task 3).
 
-**Open PRs**
-- None. Everything from the overnight session is merged, including #136 Ops · Reindex (the owner approved its Terraform apply; live on build-105). No worktrees left.
+**Owner decisions in this round** (all in the spec §2): Portfolio is a third chat topic; desktop right pane follows the topic (no tabs); phones get Chat | Diagram | Portfolio; card grid; pull-up sheets at 80% for projects and for phone diagram components; 15–16px sheet text; footer "● Open to work" → "Open to full-time work and freelancing" + Copy email; "See portfolio" link only after the portfolio ships; Back from Diagram/Portfolio clears the selection.
 
-**Waiting on the owner:** the SNS confirmation email (if not done yet); **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
+**References (throwaway, never merge):** `mock/portfolio` (worktree `.claude/worktrees/agent-a01263ebcbb683826`) and `mock/hire-banner` (worktree `.claude/worktrees/agent-a8129ac02153a1001`). Remove both worktrees once PR 3b merges.
+
+**Open PRs:** only the docs PR for `docs/portfolio-spec`, if opened.
 
 **Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
 

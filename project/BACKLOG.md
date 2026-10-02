@@ -6,13 +6,14 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 **As of 2026-10-02 ~10:00 UTC (Claude).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Overnight summary: `project/status/2026-10-02-overnight-session.md` (13 PRs merged, #130–#135 and #137–#143). Live state: `project/SNAPSHOT.md`; handoff: `project/AGENT_HANDOFF.md`. Next actions, in order:
 
+0. **Portfolio + "Open to work" footer (owner-approved 2026-10-02).** Spec `docs/superpowers/specs/2026-10-02-portfolio-design.md`; plans in `docs/superpowers/plans/2026-10-02-{open-to-work-footer,portfolio-corpus-backend,portfolio-frontend}.md` (branch `docs/portfolio-spec` until its docs PR merges). Run order: **PR 1 footer and PR 2 backend in parallel**, then **PR 3a** (shared DetailsSheet, phone diagram), then **PR 3b** (portfolio) after PR 2 is deployed. Each: worktree subagent implements, Opus review gate, merge on approval + green CI, status report. The owner approved the plans and the Back change (Back from Diagram/Portfolio clears the selection). Visual references (do not merge): branches `mock/portfolio` and `mock/hire-banner`.
 1. ~~**PR #136 Ops · Reindex**~~ **Done 2026-10-02:** merged with the owner's go-ahead; the owner approved the Terraform apply (SSM document `glassbox-ops-reindex` created); live on build-105. Use **Actions → Ops · Reindex** after a MySQL restore or when Diagnose shows a partial chunk index. The release's ingest drops `idx:answers` (no `DD`); confirm in the next **Ops · Diagnose** (no `idx:answers` in the Redis index list).
 2. **Alarms and snapshots (#124):** Bootstrap and the Terraform apply both succeeded (2026-10-02 ~04:20 UTC). Remaining: the owner confirms the SNS email, then **Ops · List snapshots** (alarms `OK`) and **Ops · Diagnose**; the next day, the first snapshot. Follow-ups in `project/status/2026-10-01-alarms-snapshots.md`.
 3. ~~**Stream check (#143)**~~ Done: post-release runs passed on build-104 and build-105.
 4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
 5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
 
-**Portfolio (spec `docs/superpowers/specs/2026-10-02-portfolio-design.md`):** PR 2, the backend corpus (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149), `feat/portfolio-backend`; report `project/status/2026-10-02-portfolio-backend.md`), is open and waiting for review. Next is **portfolio PR 3** (frontend panel, shared details sheet, "See portfolio →"), which needs PR 2 merged and deployed.
+**Portfolio status (2026-10-02, end of day):** PR 1 footer [#147] merged; PR 2 backend corpus [#149] merged and live on build-107 (report `project/status/2026-10-02-portfolio-backend.md`); PR 3a phone details sheet [#148] in review round 2 (owner decision: any strip tap closes the open sheet); PR 3b Portfolio topic in progress on `feat/portfolio-topic`, stacked on #148.
 
 **Open items** (not started unless noted):
 
