@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Partly built. Features 3 and 4 (conversational chat, live chat UX) and the heartbeat and Stop parts of feature 5 are live. Each unbuilt section says so in its heading. |
+| **Status** | Partly built. Features 3 and 4 (conversational chat, live chat UX) and the heartbeat and Stop parts of feature 5 are live. Section 3b (alarms, daily snapshots, restore runbook) is merged and takes effect once applied. Each unbuilt section says so in its heading. |
 | **Owner** | Basel |
 | **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` (referred to below as "DD1") |
@@ -13,7 +13,7 @@
 
 This document adds five features to the base design:
 
-1. **Self-healing node recovery** with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies.
+1. **Self-healing node recovery** with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies. Deferred on 2026-10-01 in favour of the smaller protections in section 3b.
 2. **Corpus authoring guide and ingest validation**, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).
 3. **Conversational chat**: multi-turn memory, follow-up question rewriting, and correct cache behavior for follow-ups (live).
 4. **Live chat UX**: conversations saved in the browser's localStorage, typing states, a stop button that actually stops generation server-side, and smart auto-scroll (live, with stop-and-send, Up-arrow recall and Retry).
@@ -112,16 +112,16 @@ Recorded here as the production answer, with trade-offs:
 
 No change. Auto Scaling groups and launch templates are free; there is still one instance.
 
-### 3.9 Revised plan: backups first, then the Auto Scaling group (planned, not built yet)
+### 3.9 Revised plan: backups first, then the Auto Scaling group (planned, deferred 2026-10-01)
 
-The scoped plan is `docs/superpowers/plans/2026-10-01-self-healing-node.md`; this is its summary. Why the original 3.1 to 3.8 had to change is in the next section, which describes the node as it runs today.
+The scoped plan is `docs/superpowers/plans/2026-10-01-self-healing-node.md`; this is its summary. Why the original 3.1 to 3.8 had to change is in section 3a, which describes the node as it runs today. On 2026-10-01 the owner chose alarms and daily drive snapshots (section 3b) instead of phases 2 to 4, which are deferred.
 
-- **Phase 1:** CloudWatch recover and reboot alarms with an email topic, and a free uptime probe. About $0.20 a month, no downtime. The alarms cover the standalone instance only and are replaced by the group's health checks and notifications at the cutover.
+- **Phase 1:** superseded by section 3b.
 - **Phase 2:** nightly `mysqldump` to a private S3 bucket (30-day retention), plus "Ops" runbooks to back up now, check a restore in a scratch database, and restore. Under $0.05 a month, no downtime.
 - **Phase 3:** a two-way reindex/reconcile between MySQL and Redis (separate PR), pinned k3s and Flux versions, and an idempotent boot script that enforces the order MySQL, restore, Flux, migrate, app, ingest, then the Elastic IP last. It also includes a tag-targeted zram association and a Flux credential decision (preferably no write key on the node), plus a branch ruleset that limits deploy keys to `deploy`.
 - **Phase 4:** a launch template and a size-1 group at capacity 0, then a rehearsal on an isolated group with its own template and role, no Elastic IP, read-only Flux and its CronJobs suspended. Then a cutover: the old node is retagged, the new node takes the Elastic IP once its local `/readyz` passes (seconds of downtime), and the old node is stopped. A prepared rollback restarts the old node and moves the address back.
-- **Not chosen first:** a persistent data volume (best recovery point, but more failure modes and a maintenance window to move the data); daily EBS snapshots as an optional extra safety net.
-- **Owner decisions:** cost ceiling, acceptable downtime, whether the question log matters (nightly versus hourly dumps, or a persistent volume), the Flux credential, the alert address, and the go-ahead for the cutover.
+- **Not chosen first:** a persistent data volume (best recovery point, but more failure modes and a maintenance window to move the data).
+- **Owner decisions still open for the deferred phases:** acceptable downtime for a replacement, whether the question log needs more than daily protection, the Flux credential, and the go-ahead for the cutover.
 
 
 ---
@@ -136,6 +136,21 @@ Note for section 3, as of 2026-10-01: this section describes the running system,
 - The zram association's target, which is the instance ID.
 
 Documents and chunks would be rebuilt from the corpus baked into the image by the `migrate` and `ingest` Jobs, for a few cents of embeddings; the `queries` log is lost unless the volume is moved or backed up first. Ingest skips documents whose content hash is unchanged, so a Redis index lost on its own is not rebuilt from MySQL today. The EC2 default of simplified automatic recovery moves the instance to new hardware on a failed system status check and keeps its disk and address.
+
+Section 3b adds alarms, daily snapshots of the whole disk and a one-click restore, which take effect once applied.
+
+---
+
+## 3b. Alarms, uptime probe and daily snapshots (owner's choice, 2026-10-01)
+
+This is what the owner chose on 2026-10-01 to protect the single node. It is merged code that takes effect once the owner runs the Bootstrap workflow (IAM) and approves the Terraform apply; the uptime probe runs from the merge on. Details and runbooks: `infra/CI.md` "Alarms, uptime probe and daily snapshots".
+
+- **Two status-check alarms.** `glassbox-node-recover` fires when the host-side check (`StatusCheckFailed_System`) fails for 2 minutes in a row and asks EC2 to recover the instance onto healthy hardware, keeping its ID, Elastic IP and disk. `glassbox-node-reboot` fires when the instance check (`StatusCheckFailed_Instance`) fails for 3 minutes in a row and reboots it, the same as "Ops · Reboot node". Both email the owner through the SNS topic `glassbox-alerts`, when they fire and when they clear.
+- **Uptime probe.** A GitHub Actions workflow requests `https://basel.engineering/readyz` every 15 minutes and fails, which makes GitHub email the owner, if the site is not ready after three tries. It uses no secrets and no AWS access.
+- **Daily snapshots of the whole disk.** The node has one EBS volume, the 20 GB root volume, holding the k3s datastore and both data volumes (MySQL and Redis). An AWS Data Lifecycle Manager policy snapshots it every day around 04:00 UTC and keeps the last 7. The snapshots are crash-consistent: restoring one is like the disk after a power cut at that moment, which InnoDB and SQLite recover from on start.
+- **One-click restore.** "Ops · Restore from snapshot" (owner approval) puts the disk back to a chosen snapshot, or the newest, with EC2's replace-root-volume operation. The instance keeps its ID and Elastic IP and reboots onto the restored disk. Everything written since that snapshot, including questions asked, is lost. "Ops · List snapshots" and every "Ops · Diagnose" print the snapshot IDs and dates.
+- **Cost:** about $0.40 to $0.80 a month, almost all of it snapshot storage. Two alarms are $0.20 a month, or free within CloudWatch's 10 free alarms; SNS email and the probe are free.
+- **Not covered:** losing the instance itself (terminated) or its Availability Zone. The snapshots survive that, but turning one into a new node is a manual rebuild.
 
 ---
 

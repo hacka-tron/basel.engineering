@@ -765,8 +765,8 @@ Keep it light; the node has little memory to spare.
 - Not built yet: structured JSON logs with `request_id`, and aggregating the stage timings into server-side footer stats (the footer is per browser session, §6.2).
 - **Node health:** "Ops · Diagnose" reports memory, swap and zram, pressure (PSI), pods, Flux and KEDA status, warning events and k3s errors, with no approval needed (§12).
 - **Metrics (not built yet):** a Prometheus `/metrics` endpoint on the API (request latency histogram, cache hit counters, queue lag, LLM tokens), optionally shipped to Grafana Cloud's free tier with Grafana Alloy rather than running Prometheus in-cluster.
-- **Alerts:** AWS Budgets (cost).
-- Not built yet: a CloudWatch alarm on EC2 status checks and an external uptime ping.
+- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms (EC2 recover and reboot actions) that email the owner, and a GitHub Actions uptime probe on `/readyz` every 15 minutes (added 2026-10-01; the alarms take effect once applied, see DD2 §3b).
+- **Backups:** daily snapshots of the node's root volume, 7 kept, with a one-click "Ops · Restore from snapshot" (added 2026-10-01, takes effect once applied, DD2 §3b).
 
 ---
 

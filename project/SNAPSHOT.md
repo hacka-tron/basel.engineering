@@ -46,14 +46,15 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 ### Infrastructure (`infra/`, Terraform)
 
-- `infra/envs/prod` (S3 backend, native lockfile): modules `network`, `compute` (t4g.small, EIP, IAM, `ignore_changes = [ami]`, zram SSM document + association in `zram.tf`), `secrets`, `registry` (ECR), `ops` (nine `glassbox-ops-*` SSM documents), `edge` (Cloudflare A record + `/api/*` cache bypass).
+- `infra/envs/prod` (S3 backend, native lockfile): modules `network`, `compute` (t4g.small, EIP, IAM, `ignore_changes = [ami]`, zram SSM document + association in `zram.tf`; `alarms.tf`: `glassbox-alerts` SNS email topic and the `glassbox-node-recover`/`-reboot` status-check alarms; `snapshots.tf`: `glassbox-dlm` role and a DLM policy, daily snapshot of the instance's one root volume at ~04:00 UTC, 7 kept — both merged 2026-10-01, live once the owner runs Bootstrap and approves Terraform), `secrets`, `registry` (ECR), `ops` (nine `glassbox-ops-*` SSM documents), `edge` (Cloudflare A record + `/api/*` cache bypass).
 - `infra/bootstrap`: state bucket (versioned, encrypted, TLS-only policy, `prevent_destroy`), GitHub OIDC provider, roles `glassbox-ci`, `glassbox-ci-plan`, `glassbox-ci-release`, `glassbox-ops-read`, `glassbox-ops`, `glassbox-bootstrap-plan`, `glassbox-bootstrap`. Its state is in S3 at `bootstrap/terraform.tfstate` (migrated by the owner); CI's Terraform roles are limited to `envs/prod/*`.
 
 ### CI/CD and operations (`.github/workflows/`)
 
 - `ci.yml` (backend tests with MySQL/Redis services, frontend lint/test/build; required on `main`), `release.yml` (native arm64 build → ECR, `build-N` tags; a manual run must build `main`'s current head, `.github/scripts/release-provenance.sh`), `sync-deploy-branch.yml` (`main` → `deploy`, re-fetch/re-merge/retry up to 5 times on a rejected push, never forced, `.github/scripts/sync-deploy-branch.sh`), `terraform.yml` (plan on PR, `terraform-prod`-gated apply).
 - `bootstrap.yml`: plan on PRs (`bootstrap-plan`), approval-gated apply from `main` (`bootstrap`) only if the re-plan's SHA-256 fingerprint matches the reviewed plan. First live use applied the zram IAM fixes (#64, #66).
-- Ops runbooks: eight "Ops · ..." wrappers (Diagnose, Reboot node, Restart deployment, Flux suspend or resume, Flux reconcile, KEDA on or off, Warm-up CronJob suspend or resume, Apply zram) calling reusable `ops.yml`. Diagnose: `ops-read`, no approval, redacted output. Everything else: owner approves `ops`, diagnose before and after. Reboot proves itself by boot-ID change. Runbook table: `infra/CI.md` "Runbooks"; incident playbook: `k8s/README.md` "Incidents".
+- Ops runbooks: ten "Ops · ..." wrappers (Diagnose, Reboot node, Restart deployment, Flux suspend or resume, Flux reconcile, KEDA on or off, Warm-up CronJob suspend or resume, Apply zram, List snapshots, Restore from snapshot) calling reusable `ops.yml`. Diagnose and List snapshots: `ops-read`, no approval, redacted output; Diagnose also lists alarms, snapshots and restore tasks from the AWS API. Restore from snapshot is EC2 replace root volume (same instance and EIP), fails closed on bad input. Everything else: owner approves `ops`, diagnose before and after. Reboot proves itself by boot-ID change. Runbook table: `infra/CI.md` "Runbooks"; incident playbook: `k8s/README.md` "Incidents".
+- `uptime.yml`: GET `/readyz` every 15 minutes, no secrets/AWS; GitHub emails failures (and disables the schedule after 60 days without repo activity).
 - GitHub environments: `terraform-plan`, `terraform-prod`, `release`, `ops-read`, `ops`, `bootstrap-plan`, `bootstrap`.
 
 ### Process
@@ -73,7 +74,7 @@ Browser → Cloudflare (TLS/proxy) → Traefik on one EC2 `t4g.small` (k3s) → 
 | M0 — accounts/tooling | Done, except Anthropic Haiku streaming (blocked by the first-time-use form; Nova Lite used instead). |
 | M1 — DD1 Phases 0–3, local system | Done. |
 | M2 — DD1 Phases 4–7, live on AWS | Phases 4–6 done and live (Terraform, k3s, CI/CD, Flux GitOps, KEDA stress test with capacity gate; KEDA currently suspended). Phase 7 polish (load-test numbers, README screenshots) not started. |
-| M3 — DD2: self-healing, conversational memory, chat UX | Conversational chat, stream resilience (heartbeat, Stop, watchdog, auto-scroll) and the live chat UX leftovers (typing while streaming, Up-arrow recall, Retry) done. Remaining: ASG-based node recovery, Cloudflare streaming check, TTFT logging. |
+| M3 — DD2: self-healing, conversational memory, chat UX | Conversational chat, stream resilience (heartbeat, Stop, watchdog, auto-scroll) and the live chat UX leftovers (typing while streaming, Up-arrow recall, Retry) done. Node protection: status-check alarms, uptime probe, daily snapshots and a restore runbook merged 2026-10-01 (owner's choice; live once applied). Remaining: ASG-based node recovery (deferred), Cloudflare streaming check, TTFT logging. |
 | M4 — DD3: production ingestion pipeline (Google Drive/S3/SQS) | Not started. |
 
 ## Update this file when
