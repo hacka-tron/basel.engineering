@@ -30,10 +30,18 @@ def done(**fields) -> str:
 
 
 def test_suggested_questions_file_is_the_frontend_source():
+    from services.glassbox.corpora import CORPORA
+
     pairs = warm.load_questions(warm.DEFAULT_QUESTIONS)
     assert warm.DEFAULT_QUESTIONS == REPO / "frontend/src/suggested-questions.json"
-    assert {corpus for corpus, _ in pairs} == {"about_me", "about_system"}
+    assert warm.CORPORA is CORPORA
+    assert {corpus for corpus, _ in pairs} == set(CORPORA)
     assert 1 <= len(pairs) <= 10  # under the per-client rate limit of 10 per 10 minutes
+    assert [q for corpus, q in pairs if corpus == "portfolio"] == [
+        "What can Basel build for me?",
+        "Which project is most like a SaaS app?",
+        "Is Basel available for freelance work?",
+    ]
     chat = (REPO / "frontend/src/components/Chat.tsx").read_text()
     assert "suggested-questions.json" in chat
     assert not re.search(r"'What did Basel work on at YouTube\?'", chat)
@@ -297,6 +305,30 @@ def test_daily_cap_is_shared_across_runs_and_hits_are_refunded():
     assert calls == []
     assert "daily warm-up cap" in stopped
     assert sum(client.values.values()) == 2
+
+
+def test_an_api_without_portfolio_fails_only_those_questions_and_spends_nothing():
+    # Review Focus 5: during a rollout the CronJob's new image may meet the old api,
+    # which answers corpus "portfolio" with HTTP 422.
+    client = FakeRedis()
+
+    def ask_fn(api_url, corpus, question):
+        if corpus == "portfolio":
+            return warm.Outcome(corpus, question, "failed", detail="HTTP 422", llm_attempted=False)
+        return warm.Outcome(corpus, question, "cached", llm_attempted=False)
+
+    questions = warm.load_questions(warm.DEFAULT_QUESTIONS)
+    outcomes, stopped = warm.warm(
+        "http://api",
+        questions,
+        max_llm_calls=len(questions),
+        daily_cap=FakeCap(10, client),
+        ask_fn=ask_fn,
+    )
+    assert stopped is None
+    assert len(outcomes) == len(questions)
+    assert [o.result for o in outcomes if o.corpus == "portfolio"] == ["failed"] * 3
+    assert sum(client.values.values()) == 0  # every reserved slot was handed back
 
 
 def test_limit_stop_refunds_the_reserved_slot():
