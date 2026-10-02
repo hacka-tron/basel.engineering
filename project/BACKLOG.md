@@ -13,7 +13,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
 5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
 
-**Portfolio (spec `docs/superpowers/specs/2026-10-02-portfolio-design.md`):** PR 2, the backend corpus (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149), `feat/portfolio-backend`; report `project/status/2026-10-02-portfolio-backend.md`), is open and waiting for review. Next is **portfolio PR 3** (frontend panel, shared details sheet, "See portfolio →"), which needs PR 2 merged and deployed.
+**Portfolio status (2026-10-02, end of day):** PR 1 footer [#147] merged; PR 2 backend corpus [#149] merged and live on build-107 (report `project/status/2026-10-02-portfolio-backend.md`); PR 3a phone details sheet [#148] in review round 2 (owner decision: any strip tap closes the open sheet); PR 3b Portfolio topic in progress on `feat/portfolio-topic`, stacked on #148.
 
 **Open items** (not started unless noted):
 
