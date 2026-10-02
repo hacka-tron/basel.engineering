@@ -17,3 +17,11 @@ output "ecr_repository_url" {
 output "ops_document_names" {
   value = module.ops.document_names
 }
+
+output "alerts_topic_arn" {
+  value = module.compute.alerts_topic_arn
+}
+
+output "snapshot_policy_id" {
+  value = module.compute.snapshot_policy_id
+}

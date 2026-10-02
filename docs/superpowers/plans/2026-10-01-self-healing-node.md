@@ -1,16 +1,31 @@
-# Self-healing node: design and staged plan (planned, not built yet)
+# Node recovery: design, staged plan and the 2026-10-01 owner decision
 
 **Milestone:** M3 (DD2) remainder, "self-healing node (ASG + Elastic IP reassociation)" in `project/BACKLOG.md`.
 **Design it revises:** `docs/DESIGN-002-followups.md` §3, whose premise ("all durable state is outside the node, RDS for data") stopped being true when MySQL moved in-cluster (`docs/DESIGN.md` §10.5). The short version of this plan is in DESIGN-002 §3.9.
-**Scope of this document:** design and plan only. Nothing here is built, and no infrastructure code changes in the PR that adds it.
+**Scope of this document:** the design and staged plan for a self-healing node (planned, not built yet), and the smaller option the owner chose instead on 2026-10-01, which is the only part that was built.
 
 Hard rules for every phase below, restated for every implementer and reviewer dispatch: never read, open or copy any `terraform.tfstate` or plan file; no `terraform plan`/`apply` against real backends and no AWS CLI, SSM or kubectl calls from agents; no workflow triggers. Production changes go through the Terraform, Bootstrap and "Ops · ..." workflows with the owner's approval click. Never run `git stash`.
 
 ---
 
+## Owner decision, 2026-10-01: alarms and daily drive snapshots
+
+The owner chose a smaller option instead of phases 2 to 4 below. It was built in the `infra/alarms-snapshots` PR (status report `project/status/2026-10-01-alarms-snapshots.md`) and takes effect once the owner runs the Bootstrap workflow and approves the Terraform apply:
+
+- **Alarms.** `glassbox-node-recover` (`StatusCheckFailed_System`, 2 of 2 minutes, EC2 recover action) and `glassbox-node-reboot` (`StatusCheckFailed_Instance`, 3 of 3 minutes, EC2 reboot action), both emailing the `glassbox-alerts` SNS topic (`infra/modules/compute/alarms.tf`). The address is a plain Terraform value, because it is already public on the site. The owner has to click the AWS confirmation email once.
+- **Uptime probe.** `.github/workflows/uptime.yml` checks `https://basel.engineering/readyz` every 15 minutes, with no secrets and no AWS access; a failed run emails the owner through GitHub.
+- **Daily drive snapshots.** A Data Lifecycle Manager policy snapshots the node's only EBS volume (the root volume, holding k3s, MySQL and Redis) every day around 04:00 UTC and keeps 7 (`infra/modules/compute/snapshots.tf`). This is option (e) from section 2.1, made one-click by the next item.
+- **One-click restore.** "Ops · Restore from snapshot" uses EC2 replace root volume: same instance, same Elastic IP, the disk put back to the chosen day. "Ops · List snapshots" (and every Diagnose) shows the snapshot IDs and dates.
+
+What this covers: hardware and kernel failures (alarms), a broken disk state, bad migration or lost data (restore, losing up to a day), and being down without anyone knowing (probe). What it does not cover: the instance being terminated or its Availability Zone failing. Snapshots outlive the instance, but turning one into a new node is still a manual rebuild.
+
+**Phases 2, 3, 4 and 5 below are deferred**, not cancelled; the rest of this document is kept as the design to come back to. Phase 1 below is superseded by the list above, which differs from it in three ways: a plain (not sensitive) address variable, the DLM snapshots and restore runbook, and listing in Diagnose from the runner.
+
+---
+
 ## 1. What is lost today if the node dies or is replaced
 
-Everything runs on one `t4g.small` (`aws_instance.glassbox` in `infra/modules/compute/main.tf`) with a single 20 GB gp3 root volume. There is no second volume, no snapshot policy and no backup of the MySQL volume today. The table says what happens to each piece of state if that instance is terminated, or replaced by `terraform apply -replace` (a stop/start or reboot keeps the root volume, so it keeps everything).
+Everything runs on one `t4g.small` (`aws_instance.glassbox` in `infra/modules/compute/main.tf`) with a single 20 GB gp3 root volume. There is no second volume. When this plan was scoped there was no snapshot policy and no backup of the MySQL volume; the daily snapshots from the owner decision above take effect once applied. The table says what happens to each piece of state if that instance is terminated, or replaced by `terraform apply -replace` (a stop/start or reboot keeps the root volume, so it keeps everything).
 
 | State | Where it lives (evidence) | Lost on replace? | Rebuilt automatically? |
 |---|---|---|---|
@@ -28,7 +43,7 @@ Everything runs on one `t4g.small` (`aws_instance.glassbox` in `infra/modules/co
 
 **Summary.** A replacement node today comes up as a bare k3s server with no workloads. Getting the site back is the manual "Manual apply / disaster recovery" sequence in `k8s/README.md`, run over an SSM session, plus a Flux re-bootstrap with a new GitHub credential and a Terraform apply for the EIP and zram. Content is rebuilt from Git for cents. The visitor question log is gone for good.
 
-What protects the node today: EC2 simplified automatic recovery is on by default for supported instance types (no alarm, no notification), which moves the instance to new hardware on a failed **system** status check and keeps the instance ID, EIP and EBS volume. Nothing reacts to a failed **instance** status check or to a hung k3s; the 2026-09-30 memory incident needed the "Ops · Reboot node" runbook.
+What protects the node today: EC2 simplified automatic recovery is on by default for supported instance types (no alarm, no notification), which moves the instance to new hardware on a failed **system** status check and keeps the instance ID, EIP and EBS volume. When this plan was scoped, nothing reacted to a failed **instance** status check or to a hung k3s; the 2026-09-30 memory incident needed the "Ops · Reboot node" runbook. The reboot alarm from the owner decision above covers the failed instance check once applied; a hung k3s that still passes status checks is only caught by the uptime probe's email.
 
 ---
 
@@ -78,6 +93,8 @@ Quick wins come first: alarms, backups and a restore runbook protect the live no
 
 ### Phase 1 (planned): recovery alarms and an uptime probe
 
+Superseded by the owner decision at the top of this document, which records what was built.
+
 **Files**
 - `infra/modules/compute/alarms.tf` (new): `aws_sns_topic.alerts` (`glassbox-alerts`) and an email subscription. The owner's address is a Terraform variable marked `sensitive = true`, supplied from the `terraform-prod` environment and never committed. `aws_cloudwatch_metric_alarm.recover` watches `StatusCheckFailed_System` (Maximum, 60 s, 2 of 2, `treat_missing_data = "missing"`) with the actions `arn:aws:automate:us-east-1:ec2:recover` and the topic. `aws_cloudwatch_metric_alarm.reboot` watches `StatusCheckFailed_Instance` (60 s, 3 of 3) with `arn:aws:automate:us-east-1:ec2:reboot` and the topic. The evaluation periods differ, per AWS guidance, so the two never race.
 - `infra/modules/compute/main.tf`: `maintenance_options { auto_recovery = "default" }` on the instance. This records today's default and is an in-place update.
@@ -91,7 +108,7 @@ Quick wins come first: alarms, backups and a restore runbook protect the live no
 
 **Lifetime:** these two alarms protect the standalone instance only. CloudWatch's recover action is not supported for instances in an Auto Scaling group, and an alarm's dimension is a fixed instance ID, so neither can follow the node into the group. Phase 4b deletes them. After that, the group's EC2 health checks replace an impaired instance, and the group's notifications (`aws_autoscaling_notification` for launch, terminate and their failures, sent to the same topic) plus the uptime probe tell the owner.
 
-### Phase 2 (planned): MySQL backups to S3 and a restore runbook
+### Phase 2 (deferred 2026-10-01, planned): MySQL backups to S3 and a restore runbook
 
 **Files**
 - `infra/modules/backup/` (new module, wired in `infra/envs/prod/main.tf`): `aws_s3_bucket.backups` (`glassbox-backups-<random suffix>`) with versioning, SSE-S3, a public access block, a TLS-only bucket policy, and a lifecycle that expires objects after 30 days and noncurrent versions after 7.
@@ -110,7 +127,7 @@ Quick wins come first: alarms, backups and a restore runbook protect the live no
 
 **Rollback:** delete the CronJob in Git. The bucket is kept (`prevent_destroy`) until the owner decides. **Test without risk:** "Ops · Backup MySQL now", then "Ops · Restore MySQL" in `check` mode. That touches only the scratch database, and it becomes the monthly drill. The `apply` mode is first exercised in the phase 4a rehearsal, never first on production.
 
-### Phase 3 (planned): reconcile, pinned versions, boot script and the Flux credential
+### Phase 3 (deferred 2026-10-01, planned): reconcile, pinned versions, boot script and the Flux credential
 
 **Files**
 - **Reindex:** the reindex/reconcile fix (separate PR). Its required behaviour, so restores and replacements rely on it: reconcile both ways between MySQL and Redis for the current embedding model. That means writing missing `chunk:*` hashes from the stored embeddings, deleting `chunk:*` keys that have no MySQL row, rewriting keys whose row or text changed, and bumping `corpus:ver:<corpus>` whenever it changed anything. It makes no Bedrock calls. The restore runbook's index drop is the blunt version of the same thing.
@@ -135,7 +152,7 @@ Quick wins come first: alarms, backups and a restore runbook protect the live no
 
 **Rollback:** revert. **Test without risk:** the reconcile PR's unit and integration tests; `shellcheck` plus an offline test of `bootstrap.sh` with stubbed `aws`, `kubectl` and `flux` that asserts the step order (same pattern as `infra/modules/ops/tests`). The script runs for real only in the phase 4a rehearsal.
 
-### Phase 4a (planned): launch templates, ASG at zero, and an isolated rehearsal
+### Phase 4a (deferred 2026-10-01, planned): launch templates, ASG at zero, and an isolated rehearsal
 
 **Files**
 - `infra/modules/compute/asg.tf` (new): `aws_launch_template.glassbox`. It uses the same AMI parameter, `t4g.small`, a 20 GB encrypted gp3 volume, `credit_specification standard`, IMDSv2 with hop limit 2, the existing instance profile and security group, and `user_data = bootstrap.sh` with the prod EIP allocation ID. `network_interfaces { associate_public_ip_address = true }` lets the instance reach SSM, ECR, S3 and EC2 before it has the EIP; AWS releases the auto-assigned address when the EIP is associated. `aws_autoscaling_group.glassbox` starts at `min = max = desired = 0`, in the one public subnet, with `health_check_type = "EC2"` and `health_check_grace_period = 1800`. The grace period covers a full boot, because the EIP now moves last. Tags `Name = glassbox` and `project = glassbox` use `propagate_at_launch` (the ops roles and `ops-run.sh` find the node by exactly these tags).
@@ -162,7 +179,7 @@ Quick wins come first: alarms, backups and a restore runbook protect the live no
 
 Record the times in the status report. Cost: about two cents of instance time.
 
-### Phase 4b (planned): cutover
+### Phase 4b (deferred 2026-10-01, planned): cutover
 
 Both nodes run at once for a few minutes, so the old one is retagged first. Otherwise `ops-run.sh`'s tag lookup (it matches `Name` and `project` tags, including stopped instances) would find two instances and refuse every runbook.
 
@@ -185,11 +202,11 @@ Both nodes run at once for a few minutes, so the old one is retagged first. Othe
 
 Applying it starts the old node and moves the address back. Questions logged on the new node meanwhile are lost.
 
-### Phase 4c (planned): retire the old instance
+### Phase 4c (deferred 2026-10-01, planned): retire the old instance
 
 After a week of normal operation and one successful nightly backup from the new node, remove `aws_instance.glassbox`, its state resource and its zram association target. Update `docs/DESIGN.md` §10.4 (no more `ignore_changes = [ami]` replacement warning), `docs/architecture/deep-dive.md`, SNAPSHOT and the deep dive's planned section.
 
-### Phase 5 (planned, optional): application health and a replace runbook
+### Phase 5 (deferred 2026-10-01, planned, optional): application health and a replace runbook
 
 The systemd timer from DD2 §3.4, changed to reboot first and to call `autoscaling:SetInstanceHealth` only if the node is still unhealthy 15 minutes after a reboot. Add "Ops · Replace node" (`autoscaling:TerminateInstanceInAutoScalingGroup` without decrementing capacity) to `glassbox-ops` through Bootstrap. Only after the owner has seen one real replacement go well.
 

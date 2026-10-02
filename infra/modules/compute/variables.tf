@@ -24,3 +24,8 @@ variable "ecr_repository_arn" {
   description = "ARN of the glassbox ECR repository, so the node can pull the application image."
   type        = string
 }
+
+variable "alert_email" {
+  description = "Address the glassbox-alerts topic emails (status-check alarms). Already public on the site, so not a secret. AWS sends a confirmation link first; nothing is delivered until it is clicked."
+  type        = string
+}

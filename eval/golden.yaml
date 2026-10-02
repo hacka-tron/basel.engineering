@@ -438,7 +438,7 @@ cases:
     question: Does the EC2 node self-heal with an Auto Scaling Group today?
     expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN-004-action-plan.md]
     gold_snippets:
-      - Today there is a single EC2 instance, and a node failure needs a manual rebuild.
+      - A terminated instance still needs a manual rebuild.
       - Self-healing (DD2 §3)** — not built yet.
     must_include: ['manual|single']
   - id: planned-metrics

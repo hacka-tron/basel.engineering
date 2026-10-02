@@ -16,6 +16,8 @@ module "compute" {
   vpc_id             = module.network.vpc_id
   public_subnet_id   = module.network.public_subnet_id
   ecr_repository_arn = module.registry.repository_arn
+  # Status-check alarm emails (alarms.tf). Public on the site already.
+  alert_email = "baselmabdelrahman@gmail.com"
 
   depends_on = [module.network, module.registry]
 }

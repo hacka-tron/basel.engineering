@@ -6,14 +6,18 @@ name: Ops · reusable core (not run directly)
 # "Ops · ..."):
 #   ops-diagnose.yml, ops-reboot-node.yml, ops-restart-deployment.yml,
 #   ops-flux-suspend-resume.yml, ops-flux-reconcile.yml, ops-keda.yml,
-#   ops-cronjob-suspend-resume.yml, ops-apply-zram.yml
+#   ops-cronjob-suspend-resume.yml, ops-apply-zram.yml,
+#   ops-list-snapshots.yml, ops-restore-snapshot.yml
 # (GitHub can't show inputs conditionally, hence one wrapper per runbook.)
 # There is no free-form command input on purpose: every action runs a
-# Terraform-managed SSM document (infra/modules/ops) or one fixed EC2 call.
+# Terraform-managed SSM document (infra/modules/ops) or one fixed EC2 call
+# (reboot, replace root volume from a daily snapshot).
 # What each action does and when to use it: infra/CI.md "Runbooks".
 #
 #   diagnose        read-only; runs straight away (ops-read environment,
 #                   glassbox-ops-read role, no approval)
+#   list-snapshots  read-only, same: alarms, daily snapshots and restore
+#                   tasks from the AWS API (diagnose prints them too)
 #   everything else first runs diagnose (the "before"), then waits for owner
 #                   approval in the ops environment, acts with the
 #                   glassbox-ops role, and runs diagnose again (the "after")
@@ -45,6 +49,14 @@ on:
         description: cronjob-suspend / cronjob-resume only
         type: string
         default: warm-answers
+      snapshot:
+        description: restore-snapshot only ("latest" or a snap- ID; checked by ops-run.sh)
+        type: string
+        default: ""
+      old_volume:
+        description: restore-snapshot only (keep or delete the replaced root volume)
+        type: string
+        default: keep
       reason:
         description: Why (optional; shown in the public run summary)
         type: string
@@ -66,6 +78,8 @@ env:
   FLUX_TARGET: ${{ inputs.flux_target }}
   KEDA_REPLICAS: ${{ inputs.keda_replicas }}
   CRONJOB: ${{ inputs.cronjob }}
+  SNAPSHOT: ${{ inputs.snapshot }}
+  OLD_VOLUME: ${{ inputs.old_volume }}
   REASON: ${{ inputs.reason }}
 
 jobs:
@@ -95,6 +109,11 @@ jobs:
               flux-suspend|flux-resume) echo "- Flux target: \`$FLUX_TARGET\`" ;;
               scale-keda) echo "- KEDA replicas: \`$KEDA_REPLICAS\`" ;;
               cronjob-suspend|cronjob-resume) echo "- CronJob: \`$CRONJOB\`" ;;
+              restore-snapshot)
+                # Free text until ops-run.sh validates it, so redacted here.
+                printf -- '- Snapshot: %s\n' "$(printf '%s' "$SNAPSHOT" | .github/scripts/ops-run.sh redact)"
+                printf -- '- Replaced root volume: %s\n' "$(printf '%s' "$OLD_VOLUME" | .github/scripts/ops-run.sh redact)"
+                ;;
             esac
             if [ -n "$REASON" ]; then
               # REASON arrives via env (never interpolated here) and is redacted.
@@ -109,16 +128,20 @@ jobs:
           role-to-assume: arn:aws:iam::404379474987:role/glassbox-ops-read
           role-session-name: ops-diagnose-${{ github.run_id }}
       - name: Diagnose
+        if: inputs.action != 'list-snapshots'
         env:
           TITLE: ${{ inputs.action == 'diagnose' && 'diagnose' || 'diagnose (before)' }}
         run: .github/scripts/ops-run.sh diagnose "$TITLE"
+      - name: List alarms, snapshots and restores
+        if: inputs.action == 'list-snapshots'
+        run: .github/scripts/ops-run.sh snapshots
 
   act:
     name: ${{ inputs.action }} (needs approval)
     needs: diagnose
     # Runs even when the "before" diagnose failed: a hung node is exactly
-    # when reboot-node is needed.
-    if: ${{ !cancelled() && inputs.action != 'diagnose' && github.ref == 'refs/heads/main' }}
+    # when reboot-node (or restore-snapshot) is needed.
+    if: ${{ !cancelled() && inputs.action != 'diagnose' && inputs.action != 'list-snapshots' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     environment: ops
     timeout-minutes: 60

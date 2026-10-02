@@ -99,12 +99,19 @@ else waits for the owner's approval and prints a diagnose before and after.
 | `api` Running but not serving (stuck streams, readiness flapping) | **Ops · Restart deployment** `api`. This causes a few seconds of downtime. |
 | A merged fix should deploy now, or a release is stuck behind Flux's interval | **Ops · Flux reconcile**. |
 | Need to stop all deploys while investigating | **Ops · Flux suspend or resume** `flux-system` (suspend), and later resume. |
+| Email from `glassbox-alerts`: `glassbox-node-reboot` or `glassbox-node-recover` in ALARM | AWS is already acting (reboot, or recover onto new hardware; same instance, IP and disk). Wait for the OK email, then **Ops · Diagnose**. If no OK comes within about 15 minutes, **Ops · Reboot node**. |
+| GitHub email "Uptime probe" failed (`/readyz` not ready from outside) | **Ops · Diagnose**, then the matching row above. One failed run followed by green ones is usually a blip. |
+| Disk state is bad and a day's loss is acceptable (broken migration or upgrade, corrupted MySQL/k3s data, lost data) | **Ops · List snapshots**, pick a snapshot ID from before the problem (or use `latest`), then **Ops · Restore from snapshot** with `old_volume` `keep`. The node reboots onto the restored disk (same instance and IP, a few minutes down); everything written since that snapshot, including questions asked, is lost. Check the after-diagnose. |
 
 Anything not on this list still needs an SSM session (see below). If it
 keeps coming up, add it as a new `glassbox-ops-*` document in
 `infra/modules/ops` rather than repeating it by hand.
 
 ## Manual apply / disaster recovery
+
+If the instance still exists and a day-old disk is acceptable, use
+**Ops · Restore from snapshot** instead (see the table above): it puts back
+k3s, MySQL and Redis in one step.
 
 The node has no SSH and no public Kubernetes API — access is AWS SSM Session
 Manager only. Use this sequence to rebuild the cluster from scratch or
