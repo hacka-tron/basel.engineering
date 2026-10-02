@@ -1,10 +1,12 @@
 import { getViewportForBounds, Handle, MarkerType, Position, ReactFlow, type Node, type NodeHandle, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import '@xyflow/react/dist/style.css'
 import { architectureEdges, architectureNodes, portraitEdges, portraitNodes, type ArchitectureEdge, type NodeId } from '../architecture'
 import { deselectsOnKey, PORTRAIT_DETAILS_HINT } from '../lib/detailsPanel'
 import { boundsOf, createRefitter } from '../lib/diagramFit'
+import { panIntoStrip } from '../lib/detailsSheet'
 import type { RetrievalChunk } from '../lib/sse'
+import { ContinueInChat, DetailsSheet, LockedBar, SheetSection, SHEET_BODY, SHEET_TITLE } from './DetailsSheet'
 
 export type WorkerPod = { name: string; ready: boolean }
 
@@ -40,27 +42,11 @@ type ArchitecturePanelProps = {
   /** Smallest zoom fitView may pick (mobile: keep labels readable and pan instead of shrinking). */
   fitMinZoom?: number
   /**
-   * Phone layout: the two-column portrait graph, and a details panel that is
-   * capped in height and open only while a component is selected.
+   * Phone layout: the two-column portrait graph, and a pull-up details sheet (80% of the region) open only while a component is selected.
    */
   portrait?: boolean
   /** Portrait: leave the diagram for the conversation. */
   onContinueInChat?: () => void
-}
-
-// The diagram keeps at least this much height when the details panel is open;
-// otherwise the panel may take up to 40% of the region.
-const PORTRAIT_DIAGRAM_MIN_PX = 280
-const portraitPanelStyle: CSSProperties = {
-  maxHeight: `max(5rem, min(40%, calc(100% - ${PORTRAIT_DIAGRAM_MIN_PX}px)))`,
-}
-
-function Chevron({ direction }: { direction: 'up' | 'down' }) {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={direction === 'down' ? 'M4 6l4 4 4-4' : 'M4 10l4-4 4 4'} />
-    </svg>
-  )
 }
 
 const handleStyle: CSSProperties = {
@@ -141,7 +127,6 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   // Portrait: the details panel is open exactly while a component is
   // selected; otherwise the bar under the diagram is locked (lib/detailsPanel.ts).
   const detailsOpen = selectedNode != null
-  const detailsId = useId()
   const detailsRef = useRef<HTMLDivElement>(null)
   const lockedBarRef = useRef<HTMLButtonElement>(null)
   // Deselecting unmounts the open panel. If it held keyboard focus (or its
@@ -196,12 +181,28 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
   // chosen while the window was narrow stuck after widening it again.
   const flowRef = useRef<ReactFlowInstance<LiveNode, ArchitectureEdge> | null>(null)
   const flowBoxRef = useRef<HTMLDivElement>(null)
+  // Phones: the sheet covers the bottom 80%, so the selected node is panned
+  // into the strip left above it (same zoom as the fit); deselecting returns
+  // to the plain fit. Desktop always uses the plain fit.
+  const selectedRef = useRef(selectedNode)
+  useEffect(() => { selectedRef.current = selectedNode })
+  const viewportFor = useCallback((width: number, height: number) => {
+    const fit = getViewportForBounds(portrait ? portraitBounds : desktopBounds, width, height, fitMinZoom ?? 0.5, 1, portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING)
+    const node = portrait ? portraitNodes.find((candidate) => candidate.id === selectedRef.current) : undefined
+    // The flow box starts at the region's top, so its y is the region's y.
+    const region = flowBoxRef.current?.parentElement
+    if (!node || !region) return fit
+    return panIntoStrip(fit, node.position.y + nodeHeight / 2, region.clientHeight)
+  }, [portrait, fitMinZoom])
+  useEffect(() => {
+    const box = flowBoxRef.current
+    if (!portrait || !box || !flowRef.current) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    void flowRef.current.setViewport(viewportFor(box.clientWidth, box.clientHeight), { duration: reduceMotion ? 0 : 260 })
+  }, [portrait, selectedNode, viewportFor])
   useEffect(() => {
     const box = flowBoxRef.current
     if (!box) return
-    const bounds = portrait ? portraitBounds : desktopBounds
-    const padding = portrait ? PORTRAIT_FIT_PADDING : DESKTOP_FIT_PADDING
-    const floor = fitMinZoom ?? 0.5
     // Next frame, after React Flow has recorded the new size. Sets the
     // viewport directly: fitView is deferred by React Flow while node data
     // is changing (as it is when a tap starts a request), so it can miss.
@@ -209,7 +210,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
     const refitter = createRefitter(
       () => ({ width: box.clientWidth, height: box.clientHeight }),
       ({ width, height }) => {
-        void flowRef.current?.setViewport(getViewportForBounds(bounds, width, height, floor, 1, padding))
+        void flowRef.current?.setViewport(viewportFor(width, height))
       },
       { request: (callback) => requestAnimationFrame(callback), cancel: (handle) => cancelAnimationFrame(handle) },
     )
@@ -219,7 +220,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       observer.disconnect()
       refitter.cancel()
     }
-  }, [portrait, fitMinZoom])
+  }, [viewportFor])
   const nodes = useMemo<LiveNode[]>(() => (portrait ? portraitNodes : architectureNodes).map((node) => ({
     ...node,
     // Known dimensions and handle positions keep nodes and arrows visible during updates.
@@ -299,11 +300,33 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
     </>
   )
 
+  const chunkList = retrievedChunks.length === 0 ? (
+    <p className="text-[13px] text-muted">No query yet.</p>
+  ) : (
+    <ol className="space-y-3">
+      {retrievedChunks.map((chunk) => (
+        <li key={chunk.chunk_id} className="min-w-0 text-[13px] leading-[1.5]">
+          <p className="break-words text-primary">
+            {chunk.url ? (
+              <a href={chunk.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 transition-colors hover:text-cyan">{chunk.title}</a>
+            ) : chunk.title}
+          </p>
+          <p className="break-words text-muted">{chunk.source_path} · {chunk.score.toFixed(2)}</p>
+        </li>
+      ))}
+    </ol>
+  )
+
   return (
-    <section aria-label="Architecture" className="flex min-h-0 min-w-0 flex-col bg-panel">
+    <section aria-label="Architecture" className={`flex min-h-0 min-w-0 flex-col bg-panel ${portrait ? 'relative overflow-hidden' : ''}`}>
       <div ref={flowBoxRef} className="min-h-0 flex-1">
         <ReactFlow
-          onInit={(instance) => { flowRef.current = instance }}
+          onInit={(instance) => {
+            flowRef.current = instance
+            // A component already selected when the diagram mounts (say, after Portfolio -> Diagram).
+            const box = flowBoxRef.current
+            if (portrait && selectedRef.current && box) void instance.setViewport(viewportFor(box.clientWidth, box.clientHeight))
+          }}
           aria-label="System architecture diagram"
           nodes={nodes}
           edges={portrait ? portraitEdges : architectureEdges}
@@ -330,41 +353,34 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         <div ref={inspectorRef} className="h-44 shrink-0 overflow-y-auto border-t border-hairline px-4 py-4 md:px-7">
           {details}
         </div>
-      ) : detailsOpen ? (
-        // Capped so the diagram keeps its room; the close button stays
-        // pinned while the details scroll, and text keeps clear of it.
-        <div ref={detailsRef} id={detailsId} className="relative flex shrink-0 flex-col border-t border-hairline" style={portraitPanelStyle}>
-          <div ref={inspectorRef} className="min-h-0 flex-1 overflow-y-auto py-4 pl-4 pr-14">
-            {details}
-          </div>
-          {/* Closing deselects the component (owner, 2026-10-01): the panel
-              goes back to the locked bar. Not a disclosure toggle any more
-              (nothing can reopen it but selecting a component), so no
-              aria-expanded; the name says what it does. */}
-          <button
-            type="button"
-            aria-label={selectedComponent ? `Close ${selectedComponent.data.label} details and deselect it` : 'Close details'}
-            onClick={() => deselect(true)}
-            className="absolute right-1 top-1 flex size-11 items-center justify-center rounded-[3px] text-muted transition-colors hover:text-primary focus-visible:outline-1 focus-visible:outline-cyan"
-          >
-            <Chevron direction="down" />
-          </button>
-        </div>
       ) : (
-        // No component selected: nothing to show yet (not the latest chat
-        // answer). aria-disabled rather than disabled, so the button stays
-        // focusable and screen-reader users still hear the hint when tabbing.
-        <button
-          ref={lockedBarRef}
-          type="button"
-          aria-disabled="true"
-          className="flex min-h-11 w-full shrink-0 cursor-not-allowed items-center justify-between gap-3 border-t border-hairline px-4 text-left text-xs text-muted"
-        >
-          <span className="min-w-0 truncate">{PORTRAIT_DETAILS_HINT}</span>
-          <span className="flex shrink-0 items-center opacity-40">
-            <Chevron direction="up" />
-          </span>
-        </button>
+        <>
+          <LockedBar hint={PORTRAIT_DETAILS_HINT} barRef={lockedBarRef} covered={detailsOpen} />
+          {selectedComponent && (
+            <DetailsSheet
+              label={`${selectedComponent.data.label} details`}
+              closeLabel={`Close ${selectedComponent.data.label} details and deselect it`}
+              onClose={() => deselect(true)}
+              sheetRef={detailsRef}
+              scrollRef={inspectorRef}
+            >
+              <header>
+                <h2 className={SHEET_TITLE}>{selectedComponent.data.label}</h2>
+                <p className={`mt-2 ${SHEET_BODY} text-cyan`}>{selectedComponent.data.implementation}</p>
+              </header>
+              <SheetSection heading="What it does">
+                <p className={`${SHEET_BODY} break-words text-primary/90`}>{selectedComponent.data.description}</p>
+              </SheetSection>
+              <SheetSection heading="About This System answer">
+                <div className="max-w-[70ch] rounded-[3px] border border-hairline bg-canvas px-4 py-3">
+                  <p aria-live="polite" className={`whitespace-pre-wrap break-words ${SHEET_BODY} text-primary`}>{answerText || 'Working…'}</p>
+                </div>
+                {onContinueInChat && answerText && <ContinueInChat onClick={onContinueInChat} />}
+              </SheetSection>
+              <SheetSection heading="Retrieved chunks">{chunkList}</SheetSection>
+            </DetailsSheet>
+          )}
+        </>
       )}
     </section>
   )
