@@ -4,6 +4,8 @@ Fixtures are assembled by concatenation so this file itself contains no
 token-shaped literal (the repo's own pre-commit and the ingest scanner stay quiet).
 """
 
+import time
+
 import pytest
 
 from services.glassbox.ingest.scanner import secret_reason
@@ -26,7 +28,7 @@ POSITIVE = {
     "openai": "k: " + "sk-" + A40 + "ABCD",
     "openai-proj": "k: " + "sk-" + "proj-" + A40,
     "google": "key=" + "AI" + "za" + A36[:35],
-    "stripe-secret": "k: " + "sk" + "_live_" + A36[:24],  # pragma: allowlist secret
+    "stripe-live": "k: " + "sk" + "_live_" + A36[:24],
     "stripe-restricted": "k: " + "rk" + "_live_" + A36[:24],
     "jwt": "t "
     + "eyJ"
@@ -35,6 +37,10 @@ POSITIVE = {
     + "zdWIiOiIxMjM0NTY3ODkwIn0"
     + ".sig"
     + A36[:20],
+    "slack-cookie": "x " + "xox" + "c-" + "1234567890-0987654321",
+    "slack-d": "x " + "xox" + "d-" + "1234567890-0987654321",
+    "slack-e": "x " + "xox" + "e-" + "1234567890-0987654321",
+    "bearer-lower": "authorization: " + "bearer " + A36,
     "bearer": "Authorization: " + "Bearer " + A36,
 }
 
@@ -60,11 +66,46 @@ NEGATIVE = {
 }
 
 
+LABELS = {
+    "github": "GitHub token",
+    "slack-webhook": "Slack webhook URL",
+    "slack-app": "Slack app token",
+    "slack": "Slack token",
+    "anthropic": "Anthropic API key",
+    "openai": "OpenAI-style API key",
+    "google": "Google API key",
+    "stripe": "Stripe live key",
+    "jwt": "JWT",
+    "bearer": "Bearer token",
+}
+
+
+def _expected_label(name):
+    # Longest matching prefix key wins (slack-webhook before slack).
+    return LABELS[max((k for k in LABELS if name.startswith(k)), key=len)]
+
+
 @pytest.mark.parametrize("name", POSITIVE)
-def test_provider_token_is_flagged(name):
+def test_provider_token_is_flagged_with_its_label(name):
     reason = secret_reason("line one\n" + POSITIVE[name] + "\n")
-    assert reason is not None
-    assert "at line 2" in reason
+    assert reason == f"possible {_expected_label(name)} at line 2"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "eyJ-" * 250_000,
+        "a1" * 100_000,
+        "a1 = " + "b" * 200_000,
+        "sk-" * 100_000,
+        "Bearer " * 50_000,
+        "xoxb-" * 100_000,
+    ],
+)
+def test_pathological_lines_scan_in_bounded_time(line):
+    start = time.perf_counter()
+    secret_reason(line)
+    assert time.perf_counter() - start < 2
 
 
 @pytest.mark.parametrize("name", NEGATIVE)

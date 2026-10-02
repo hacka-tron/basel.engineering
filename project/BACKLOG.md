@@ -156,7 +156,8 @@ Documented as known limitations directly in code (docstrings) — not yet fixed,
 
 - `services/glassbox/ingest/chunkers/terraform.py`: brace-depth counting doesn't strip string literals/comments first, so an unbalanced `{`/`}` inside a Terraform string or comment would throw off block boundaries. No real `.tf` files exist yet (Milestone 2).
 - `services/glassbox/ingest/chunkers/code.py`: decorator grouping only handles single-line decorators (a multi-line `@app.get(\n  "/x",\n)` would get orphaned); TypeScript matching doesn't cover typed arrow functions (`const f: Handler = (...) =>`) or generic type parameters. No real `.ts` files exist yet (frontend is a later phase).
-- `services/glassbox/ingest/scanner.py`'s secret heuristic now recognizes GitHub, Slack, Anthropic, OpenAI-style, Google API, Stripe live, JWT and `Bearer` tokens (tests: `services/tests/test_scanner_tokens.py`). Still not covered: Cloudflare API tokens (no distinguishing prefix; only the generic high-entropy assignment rule can catch them) and other providers' formats.
+- `services/glassbox/ingest/scanner.py`'s secret heuristic now recognizes GitHub, Slack, Anthropic, OpenAI-style, Google API, Stripe live, JWT and `Bearer` tokens (tests: `services/tests/test_scanner_tokens.py`). Still not covered: other providers' formats (Cloudflare API tokens have no distinguishing prefix; only the generic high-entropy assignment rule can catch them).
+- Scanner regex performance: the `_ASSIGNMENT` regex was quadratic on long word-character runs (58 s at 80k chars) and the JWT pattern on repeated `eyJ-`; both now start only after a non-word character (tests in `test_scanner_tokens.py` bound 200k-char lines; corpus quarantine set verified identical). Only difference: a name glued to a preceding digit or letter run (`9abc=...`) is no longer treated as a separate assignment.
 
 ## Open decisions (owner-only, can't be delegated to an agent)
 

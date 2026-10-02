@@ -7,6 +7,9 @@ assigned values. Known limitations: Cloudflare API tokens have no distinguishing
 prefix (40 plain characters), so they are only caught by the generic
 high-entropy assignment rule; other providers' formats are not recognized; and
 this is a line-by-line heuristic, not a replacement for ``detect-secrets``.
+Placeholder examples that are long enough to look like real tokens (a Slack
+bot-token prefix followed by a descriptive word, an Anthropic prefix then
+filler) are quarantined too; that fails safe, so reword the doc.
 """
 
 import hashlib
@@ -30,11 +33,13 @@ PUBLIC_ABOUT_ME_PREFIX = "corpus/about-me/"
 _AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----")
 # Provider token formats: (label, pattern). Prefixes plus minimum lengths keep
-# prose like "sk-learn" or "ghp_" in a sentence from matching.
+# prose like "sk-learn" or "ghp_" in a sentence from matching. Patterns over
+# character classes that include "-" start after a non-class character
+# (``(?<![A-Za-z0-9_-])``) so a long run of repeated prefixes stays linear.
 _PROVIDER_TOKENS = (
     ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
     ("GitHub token", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{50,}")),
-    ("Slack token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("Slack token", re.compile(r"\bxox[abcdeprs]-[A-Za-z0-9-]{10,}")),
     ("Slack app token", re.compile(r"\bxapp-\d-[A-Za-z0-9-]{10,}")),
     (
         "Slack webhook URL",
@@ -45,15 +50,19 @@ _PROVIDER_TOKENS = (
     ("Stripe live key", re.compile(r"\b[sr]k_live_[0-9A-Za-z]{16,}")),
     (
         "JWT",
-        re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+        ),
     ),
 )
 # Kebab-case identifiers ("sk-some-long-name") also fit the OpenAI shape, so the
 # body must mix letters and digits.
 _OPENAI_KEY = re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}")
-_BEARER = re.compile(r"\bBearer\s+([A-Za-z0-9._~+/=-]{20,})")
+_BEARER = re.compile(r"\bBearer\s+([A-Za-z0-9._~+/=-]{20,})", re.IGNORECASE)
+# The lookbehind makes each name start at the beginning of a word run; without
+# it a long run of word characters is rescanned from every position (quadratic).
 _ASSIGNMENT = re.compile(
-    r"""['"]?[A-Za-z_][A-Za-z0-9_]*['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
+    r"""(?<![A-Za-z0-9_])['"]?[A-Za-z_][A-Za-z0-9_]*['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
 )
 
 
