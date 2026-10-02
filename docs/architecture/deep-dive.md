@@ -170,14 +170,14 @@ The API itself, not Cloudflare, adds security headers to its responses (all but 
 
 ## Data stores: MySQL tables and what they hold
 
-MySQL 8.0 is the Glassbox source of truth. It runs in the Kubernetes cluster as the `mysql` StatefulSet in the `data` namespace, with a 4 GiB persistent volume on the node's `local-path` storage. It is not Amazon RDS. Alembic migrations in `services/glassbox/db/migrations` define the schema (revisions `0001_initial_schema`, `0002_add_queries_table`, `0003_query_turn_columns` and `0004_query_mode_stopped`), and SQLAlchemy models live in `services/glassbox/db/models.py`.
+MySQL 8.0 is the Glassbox source of truth. It runs in the Kubernetes cluster as the `mysql` StatefulSet in the `data` namespace, with a 4 GiB persistent volume on the node's `local-path` storage. It is not Amazon RDS. Alembic migrations in `services/glassbox/db/migrations` define the schema (revisions `0001_initial_schema`, `0002_add_queries_table`, `0003_query_turn_columns`, `0004_query_mode_stopped` and `0005_query_ttft_ms`), and SQLAlchemy models live in `services/glassbox/db/models.py`.
 
 MySQL tables:
 
 - **`documents`**: one row per ingested file, unique on (`corpus`, `source_path`). It stores the corpus (`about_me` or `about_system`), the source path, a title taken from the first Markdown heading (or the file name), a SHA-256 `content_hash` of the file, and `updated_at`.
 - **`chunks`**: one row per chunk, unique on (`document_id`, `ordinal`), and deleted with its document. It stores the chunk text, `start_line` and `end_line`, a word-based `token_count`, the embedding as a BLOB of packed float32 values, and `embedding_model`, the ID of the model that produced the vector. Storing the model ID per chunk is what lets ingestion re-embed when the model changes.
 - **`ingestion_runs`**: one row per ingest run with start and finish times, `docs_changed`, `chunks_written` and a status of `running`, `succeeded` or `failed`.
-- **`queries`**: the query log, one row per `/api/ask` request. It records the request ID, corpus, question, `cache_status` (`answer_hit` or `miss`), `mode` (`full`, `retrieval_only` or `stopped`), the retrieved chunk IDs, per-stage timings in milliseconds (JSON, including `abstained` and `answer_cache_skipped` flags), total milliseconds, tokens in and out (measured for completed Bedrock answers, estimated otherwise), `turn_index`, `rewritten_query` and `created_at`. It stores no IP addresses. Writing the query log is best-effort: a failed insert is logged and dropped, so it never turns a generated answer into an error.
+- **`queries`**: the query log, one row per `/api/ask` request. It records the request ID, corpus, question, `cache_status` (`answer_hit` or `miss`), `mode` (`full`, `retrieval_only` or `stopped`), the retrieved chunk IDs, per-stage timings in milliseconds (JSON, including `abstained` and `answer_cache_skipped` flags), total milliseconds, tokens in and out (measured for completed Bedrock answers, estimated otherwise), `turn_index`, `rewritten_query`, `ttft_ms` and `created_at`. `ttft_ms` is the server-side time to first token: milliseconds from request receipt to the first streamed answer text, including answer-cache hits, and empty when no answer text was sent (`retrieval_only`, or stopped before the first token). It stores no IP addresses. Writing the query log is best-effort: a failed insert is logged and dropped, so it never turns a generated answer into an error.
 
 Vector search does not happen in MySQL. MySQL keeps the embeddings so the data is complete and auditable, while similarity search runs in Redis. `documents` and `chunks` are a derived index of content checked into the Git repository, so losing the MySQL volume means re-running ingestion rather than losing data. The `queries` table is the only data that cannot be rebuilt, and it is statistics rather than core functionality.
 
@@ -239,8 +239,9 @@ The About This System corpus is the Glassbox repository itself, and its chunks a
 **Content secret heuristics.** Each file is scanned line by line and quarantined (skipped and reported, never embedded) if a line contains:
 
 - an AWS access key ID pattern (`AKIA` or `ASIA` followed by 16 characters),
-- a PEM private key header, or
-- an assignment (`name = value` or `name: value`) whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character. The report reason is "possible high-entropy assigned value".
+- a PEM private key header,
+- a provider token format: GitHub (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), Slack (`xox[abcdeprs]-`, `xapp-`, `hooks.slack.com/services/` webhooks), Anthropic (`sk-ant-`), OpenAI-style (`sk-`, `sk-proj-`), Google API keys (`AIza`), Stripe live keys (`sk_live_`, `rk_live_`), JWTs (three dot-separated segments) or `Bearer` followed by a long token. The OpenAI-style and `Bearer` patterns also require the token to mix letters and digits, so kebab-case names and placeholders like `Bearer <token>` pass. The report reason names the format, for example "possible GitHub token". Placeholders long enough to look like a real token are quarantined too, which fails safe, or
+- an assignment (`name = value` or `name: value`) whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character. The report reason is "possible high-entropy assigned value". Cloudflare API tokens have no distinguishing prefix, so only this last rule can catch them.
 
 A quarantined file does not stop the run. Other files continue, and the skipped path and reason are printed. Symlinks and non-UTF-8 files are skipped as well. Secrets such as the MySQL password, the IP-hash salt and the Cloudflare API token never live in the repository: they sit in SSM Parameter Store, Kubernetes Secrets or GitHub environment secrets.
 
@@ -401,7 +402,7 @@ Glassbox keeps observability light because the 2 GiB node has little memory to s
 
 **The trace as observability.** The live architecture diagram is the main observability feature. Every `/api/ask` request streams per-stage timings (`duration_ms`) and cache hit or miss results for each node, and the stats bar shows the last request's latency to first token, answer-cache status and output tokens.
 
-**Query log.** Each request writes a row to MySQL's `queries` table with per-stage timings in milliseconds, total time, cache status, mode (`full`, `retrieval_only` or `stopped`), the retrieved chunk IDs, tokens in and out, the conversation turn index, and the rewritten follow-up query. This table supports offline analysis of latency, cache effectiveness and retrieval quality. It stores no IP addresses.
+**Query log.** Each request writes a row to MySQL's `queries` table with per-stage timings in milliseconds, total time, cache status, mode (`full`, `retrieval_only` or `stopped`), the retrieved chunk IDs, tokens in and out, the conversation turn index, the rewritten follow-up query, and the server-side time to first token (`ttft_ms`). This table supports offline analysis of latency, cache effectiveness and retrieval quality. It stores no IP addresses.
 
 **Ingestion bookkeeping.** Each ingest run writes an `ingestion_runs` row (status, documents changed, chunks written) and prints every skipped file with its reason to the Job's logs.
 
@@ -458,7 +459,7 @@ Everything in this section is planned or proposed design. None of it is implemen
 
 - **Google Drive and S3/SQS content pipeline (Milestone 4, `docs/DESIGN-003-ingestion.md`).** Not built. The design would author "About Me" content in Google Docs, sync it through a Drive connector and a Git connector into an S3 raw zone, send one SQS message per change, and process those messages with a KEDA ScaledJob ingestion worker. It would include a dead-letter queue, nightly reconciliation between stages, and blue-green re-embedding. Today, ingestion reads files baked into the container image, as described in the ingestion pipeline section.
 - **Self-healing node recovery (Milestone 3, DD2).** Not built, and deferred on 2026-10-01 in favour of status-check alarms and daily snapshots (see "Alarms, uptime probe and daily snapshots"). The design replaces the standalone EC2 instance with a launch template and an Auto Scaling Group of exactly one instance across two public subnets, whose boot script re-attaches the Elastic IP. A terminated instance still needs a manual rebuild.
-- **Streaming checks (DD2).** Not built: a scripted production check that heartbeats survive Cloudflare, and time-to-first-token logging.
+- **Streaming checks (DD2).** Not built: a scripted production check that heartbeats survive Cloudflare.
 - **Nightly ingestion CronJob.** Not built. Ingestion runs once per release, after the rollout.
 - **Deleting stale documents automatically.** Not switched on. The ingest Job only reports documents whose files are gone (see "Stale documents"); deleting them waits on the owner setting `GLASSBOX_INGEST_SWEEP` to `apply`.
 - **Metrics and tracing.** Not built. There is no Prometheus `/metrics` endpoint, no Grafana Cloud export, no OpenTelemetry tracing and no CloudWatch metrics beyond EC2's own. Logs are plain text rather than structured JSON.

@@ -37,11 +37,13 @@ This is the same order the stale sweep and `--clear` already use (`sweep.py`).
 
 ## What review caught
 
-Pending.
+Opus review round 1: approved, no Critical or Important findings. Minors fixed before merge: the unit test now checks each new key's `content_sha` is its own row's text (a mutation pairing ids with the wrong chunks passed before); this report gained the visitor-window risk below and the note on `_mark_run_failed`.
 
 ## Operational notes and risks
 
 - The first release after merge behaves like any other: unchanged files are skipped, the reconcile runs as before.
+- **Short visitor window per changed document.** Between deleting the old keys (step 1) and writing the new ones (step 3), a vector search can't find that document, and an answer generated in that moment can go into the answer cache (up to 24 h) without it. The window is milliseconds plus one MySQL transaction, and ingest runs right after a rollout, when traffic is low. Before this change the reverse race existed: Redis briefly had keys for rows MySQL hadn't committed yet, which made the worker raise.
+- `_mark_run_failed` already used a fresh session before; the fix is the try/except around it.
 - `ingestion_runs` rows can stay `running` if MySQL is unreachable when the run fails; the log line `Could not mark ingestion run N failed` says so, followed by the real traceback.
 
 ## How to verify

@@ -1,4 +1,16 @@
-"""Discover corpus files and quarantine likely secrets before ingestion."""
+"""Discover corpus files and quarantine likely secrets before ingestion.
+
+The secret heuristic (``secret_reason``) recognizes AWS access keys, private-key
+headers, provider token formats (GitHub, Slack, Anthropic, OpenAI-style, Google
+API keys, Stripe live keys, JWTs, ``Bearer`` tokens) and long high-entropy
+assigned values. Known limitations: Cloudflare API tokens have no distinguishing
+prefix (40 plain characters), so they are only caught by the generic
+high-entropy assignment rule; other providers' formats are not recognized; and
+this is a line-by-line heuristic, not a replacement for ``detect-secrets``.
+Placeholder examples that are long enough to look like real tokens (a Slack
+bot-token prefix followed by a descriptive word, an Anthropic prefix then
+filler) are quarantined too; that fails safe, so reword the doc.
+"""
 
 import hashlib
 import math
@@ -20,8 +32,39 @@ PRIVATE_SOURCE_PREFIX = "private/"
 PUBLIC_ABOUT_ME_PREFIX = "corpus/about-me/"
 _AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----")
+# Provider token formats: (label, pattern). Prefixes plus minimum lengths keep
+# prose like "sk-learn" or "ghp_" in a sentence from matching. The JWT pattern
+# starts after a non-class character (``(?<![A-Za-z0-9_-])``) so a long run of
+# repeated ``eyJ-`` stays linear; the others are anchored by ``\b`` plus a
+# fixed prefix or a bounded length, which keeps them linear too.
+_PROVIDER_TOKENS = (
+    ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
+    ("GitHub token", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{50,}")),
+    ("Slack token", re.compile(r"\bxox[abcdeprs]-[A-Za-z0-9-]{10,}")),
+    ("Slack app token", re.compile(r"\bxapp-\d-[A-Za-z0-9-]{10,}")),
+    (
+        "Slack webhook URL",
+        re.compile(r"hooks\.slack\.com/services/T[A-Z0-9]{6,}/B[A-Z0-9]{6,}/[A-Za-z0-9]{16,}"),
+    ),
+    ("Anthropic API key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}")),
+    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])")),
+    ("Stripe live key", re.compile(r"\b[sr]k_live_[0-9A-Za-z]{16,}")),
+    (
+        "JWT",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+        ),
+    ),
+)
+# Kebab-case identifiers ("sk-some-long-name") also fit the OpenAI shape, so the
+# body must mix letters and digits.
+_OPENAI_KEY = re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}")
+_BEARER = re.compile(r"\bBearer\s+([A-Za-z0-9._~+/=-]{20,})", re.IGNORECASE)
+# The lookbehind makes each name start at the beginning of a word run; without
+# it a long run of word characters is rescanned from every position (quadratic).
+# Names may start with a digit ("2fa_secret: ...").
 _ASSIGNMENT = re.compile(
-    r"""['"]?[A-Za-z_][A-Za-z0-9_]*['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
+    r"""(?<![A-Za-z0-9_])['"]?[A-Za-z0-9_]+['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
 )
 
 
@@ -60,13 +103,31 @@ def _high_entropy(value: str) -> bool:
     )
 
 
+def _mixed(value: str) -> bool:
+    """True when ``value`` has both letters and digits (not a plain word or number)."""
+    return any(c.isdigit() for c in value) and any(c.isalpha() for c in value)
+
+
+def _provider_token(line: str) -> str | None:
+    for label, pattern in _PROVIDER_TOKENS:
+        if pattern.search(line):
+            return label
+    if any(_mixed(match.group(0)) for match in _OPENAI_KEY.finditer(line)):
+        return "OpenAI-style API key"
+    if any(_mixed(match.group(1)) for match in _BEARER.finditer(line)):
+        return "Bearer token"
+    return None
+
+
 def secret_reason(content: str) -> str | None:
-    """Flag common key formats and long high-entropy assignment values."""
+    """Flag common key formats, provider tokens and long high-entropy assignment values."""
     for number, line in enumerate(content.splitlines(), 1):
         if _AWS_KEY.search(line):
             return f"possible AWS access key at line {number}"
         if _PRIVATE_KEY.search(line):
             return f"private key header at line {number}"
+        if label := _provider_token(line):
+            return f"possible {label} at line {number}"
         if any(_high_entropy(match.group(1)) for match in _ASSIGNMENT.finditer(line)):
             return f"possible high-entropy assigned value at line {number}"
     return None

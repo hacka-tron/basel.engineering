@@ -911,6 +911,18 @@ async def test_write_document_commits_mysql_with_no_redis_io_inside_the_transact
         ("incr", "corpus:ver:about_me"),
     ]
     assert sorted(second.keys) == sorted(f"chunk:{chunk_id}" for chunk_id in new.chunk_ids)
+    # Each key describes its own row: content_sha of that id's MySQL text.
+    from sqlalchemy import text as sql_text
+
+    from services.glassbox.cache.answer import chunk_content_sha
+
+    with sqlite_sessions() as session:
+        stored = dict(session.execute(sql_text("SELECT id, text FROM chunks")).all())
+    assert len(set(stored.values())) == len(stored)
+    for chunk_id in new.chunk_ids:
+        mapping = second.keys[f"chunk:{chunk_id}"]
+        assert mapping["content_sha"] == chunk_content_sha(stored[chunk_id])
+        assert mapping["document_id"] == new.document_id
 
     # Crash after the commit, before the new keys: MySQL has the new version and
     # Redis has no key for any of its rows (and none for deleted rows).
