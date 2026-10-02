@@ -1,4 +1,6 @@
-# Gemini reviewer dispatch template (fallback)
+# Gemini reviewer dispatch template (legacy)
+
+> **Legacy (archived 2026-10-02).** Gemini via `agy` is no longer a reviewer on this project; its quota was exhausted for days at a time. The review gate is an Opus subagent (Codex optional) using `project/orchestration/reviewer-brief.md`. Kept for history only.
 
 Fallback reviewer only — use when Codex (`codex-reviewer.md`) is unavailable. If both are unavailable, use a Claude subagent with the same brief; never skip review.
 

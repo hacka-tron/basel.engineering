@@ -1,6 +1,6 @@
-# Codex reviewer dispatch template
+# Reviewer brief (dispatch template)
 
-Codex is the review-and-validation gate every change passes before check-in (see `README.md`). One pass covers spec compliance, code quality, and hands-on validation. Fill in the bracketed sections, save to a prompt file in the scratchpad, and run the command below.
+The prompt every review-gate run gets, whoever the reviewer is: by default an **Opus subagent** (`Agent` tool, `model: "opus"`); **Codex** only when it has usage (command below). One pass covers spec compliance, code quality and hands-on validation. Fill in the bracketed sections, save the prompt to a uniquely named scratchpad file (`pr<n>-review-r<round>-prompt.md`), and dispatch. See `README.md` for the gate, the round cap and the merge sequence.
 
 ```
 You are the review gate for a change in this repository. Review the
@@ -13,12 +13,14 @@ Read project/orchestration/reviewer-primer.md first: system map, hard
 rules, known traps by area, per-area checklist. Never read or open any
 terraform.tfstate file.
 
-You have full permissions (network, docker, ports). Use them to
-validate, NOT to change anything:
+You may use the network, docker and local ports to validate, but NOT to
+change anything:
 - Do NOT edit, create, or delete tracked files. Do NOT commit, push,
-  rebase, or open/modify PRs.
+  rebase, merge, or open/modify PRs.
 - Do NOT touch live AWS or Kubernetes (no aws/ssm/kubectl against a
-  real cluster, no terraform apply).
+  real cluster, no terraform apply). NEVER read, open or copy any
+  terraform.tfstate, *.tfvars or plan file.
+- Never run `git stash`.
 - You MAY run tests, linters, builds, `kubectl kustomize`, docker
   compose, local dev servers, and throwaway scripts outside the repo.
   Clean up anything you start. [If other agents share the machine:
@@ -33,7 +35,7 @@ implementation spec.]
 ## Prior rounds
 
 [Round 1: write "none". Later rounds: path to the previous result file
-(e.g. <scratchpad>/codex-review-<branch>-result.md), plus a list of
+(e.g. <scratchpad>/pr<n>-review-r1-result.md), plus a list of
 what was fixed since. Verify each earlier finding is actually fixed, then
 look for regressions the fixes introduced.]
 
@@ -68,21 +70,22 @@ Report in exactly this format:
   concrete failure scenario
 ```
 
-## Command
+## Dispatching
 
-```bash
-codex exec -m gpt-6-sol --dangerously-bypass-approvals-and-sandbox \
-  -C <worktree> -o <scratchpad>/codex-review-<branch>-result.md \
-  "$(cat <scratchpad>/codex-review-prompt.md)" < /dev/null
-```
+- **Opus subagent (default):** `Agent` with `model: "opus"` and the filled prompt; run in the background and read its final report. Dispatch reviews for independent PRs in parallel (about 3 at once at most).
+- **Codex (optional, only when it has usage):**
 
-**`< /dev/null` is required.** A backgrounded `codex exec` without it hangs waiting on stdin and never starts the review.
+  ```bash
+  codex exec -m gpt-6-sol --dangerously-bypass-approvals-and-sandbox \
+    -C <worktree> -o <scratchpad>/pr<n>-review-r<round>-result.md \
+    "$(cat <scratchpad>/pr<n>-review-r<round>-prompt.md)" < /dev/null
+  ```
 
-Run it from Bash with `run_in_background: true` (reviews of integration-heavy diffs take 5–10+ minutes), then read the `-o` file when it finishes. Run at most about 3 reviews at once; disk is tight, so tell Codex to clean up `node_modules`/`dist`.
+  Run it from Bash with `run_in_background: true` and read the `-o` file. **`< /dev/null` is required**: without it a backgrounded `codex exec` waits on stdin forever. A usage limit ends the run with an error in its log and no result file; switch to an Opus subagent instead of waiting. `-m gpt-6-sol` (`gpt-5.6-sol` stalls asking for approval headless; `gpt-6-luna` is weaker). Full permissions are deliberate (the `workspace-write` sandbox has no network, not even loopback); the prompt's rules are the guardrail.
+- **Gemini (`agy`) is legacy**; see `project/archive/gemini-reviewer.md`. Never imply a reviewer approved when it didn't run.
 
 ## Known constraints
 
-- **Model:** `-m gpt-6-sol`. `gpt-5.6-sol` stalls asking for approval in headless `exec` mode; `gpt-6-luna` is weaker — only fall back to it if `sol` is unavailable (test with a trivial prompt first).
-- **Full permissions are deliberate** (owner decision, 2026-09-30): the old `workspace-write` sandbox had no network at all, not even loopback, so Codex couldn't validate anything that needed a DB, Redis, or a dev server. The prompt's "do not modify / do not touch live infra" rules are the guardrail — keep them in every dispatch.
 - **Review-by-reading misses integration bugs.** Always ask for at least one concrete end-to-end check in step 4, and still do your own verification before merge.
-- **Not every finding needs a fix round.** Fix Critical/Important; a Minor finding about content that doesn't exist yet can be recorded as a known limitation in the code (docstring/comment), not just chat.
+- **Not every finding needs a fix round.** Fix Critical/Important; a Minor finding about content that doesn't exist yet can be recorded as a known limitation in the code (docstring/comment) and BACKLOG, not just chat. After round 2, only blocking findings get another round (`README.md`).
+- **Infra changes:** the hard rules in the prompt are not optional; keep them even for a docs-only infra change.
