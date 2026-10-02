@@ -1,6 +1,6 @@
 # Post-deploy streaming check through Cloudflare
 
-**Status:** PR open ([#143](https://github.com/hacka-tron/basel.engineering/pull/143), branch `feature/post-deploy-stream-check`). Review: pending.
+**Status:** Merged 2026-10-02 (PR [#143](https://github.com/hacka-tron/basel.engineering/pull/143)); Opus review round 1 APPROVED, minors fixed. Live: the first post-release run passed every check on build-104, and again on build-105.
 **Design:** `docs/DESIGN-002-followups.md` §7.5 and §7.8; DESIGN-004 §7 item 2.
 
 ## TL;DR

@@ -1,6 +1,6 @@
 # Time to first token in the query log (`queries.ttft_ms`)
 
-**Status:** PR [#137](https://github.com/hacka-tron/basel.engineering/pull/137) open (review pending). Branch `feature/ttft-logging`.
+**Status:** Merged 2026-10-02 (PR [#137](https://github.com/hacka-tron/basel.engineering/pull/137)); Opus review round 1 APPROVED, test gaps fixed. Live (migration 0005 applied by the release).
 
 ## TL;DR
 

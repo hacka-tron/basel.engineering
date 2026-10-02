@@ -2,16 +2,16 @@
 
 Short and current: who is coordinating, what state things are in, what is open, and where to look. Rewrite it (don't append) at each session end or coordinator switch. Older checkpoints: `project/archive/AGENT_HANDOFF-2026-09-29-to-10-01.md`.
 
-## Current — Claude, 2026-10-02 (end of overnight session)
+## Current — Claude, 2026-10-02 ~10:00 UTC (session end)
 
 **Active coordinator:** none running. The last coordinator was Claude (Opus orchestrating worktree subagents). **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`. Process: `project/orchestration/README.md`.
 
 **State:** the site is live and every merge to `main` deploys hands-off. 13 PRs merged overnight (#130–#135, #137–#143); summary in `project/status/2026-10-02-overnight-session.md`. zram is on. KEDA is suspended (owner hold). `warm-answers` is running. The alarms and snapshots Terraform apply is done.
 
 **Open PRs**
-- None. #136 Ops · Reindex merged with the owner's go-ahead (2026-10-02).
+- None. Everything from the overnight session is merged, including #136 Ops · Reindex (the owner approved its Terraform apply; live on build-105). No worktrees left.
 
-**Waiting on the owner:** the Terraform apply approval for #136 (SSM document `glassbox-ops-reindex`); the SNS confirmation email; **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
+**Waiting on the owner:** the SNS confirmation email (if not done yet); **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
 
 **Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
 

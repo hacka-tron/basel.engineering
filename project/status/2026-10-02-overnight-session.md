@@ -26,7 +26,7 @@ While you slept, 13 PRs merged (#130 to #135, #137 to #143). Each went through t
 
 ## Waiting on you
 
-1. **#136 Ops · Reindex: say "go" to merge.** After the merge, approve the Terraform apply, which creates SSM document `glassbox-ops-reindex` (no IAM change). The same PR makes the next release drop the unused `idx:answers` index (without `DD`) and makes `--clear` take the ingest lock. Report: `2026-10-02-ops-reindex.md`.
+1. ~~**#136 Ops · Reindex**~~ **Done (2026-10-02 morning):** the owner said go; merged, Terraform apply approved and succeeded (SSM document `glassbox-ops-reindex`), live on build-105, Stream check passed.
 2. **Alarms and snapshots (#124):** the Bootstrap run and the Terraform apply both succeeded about 04:20 UTC. Still to do: confirm the AWS SNS email, then run **Ops · List snapshots** and **Ops · Diagnose**. Tomorrow, check that the first daily snapshot exists.
 3. **Terraform apply prompts for #143 and others:** merges that touch `.github/` or `infra/` start a Terraform run that may wait for your approval with a no-op plan. Approve it or let it lapse.
 4. Owner decisions in BACKLOG "Open decisions" are unchanged (AWS Free vs Paid, warm-answers, About This System fallback, chat bubble tightening).
