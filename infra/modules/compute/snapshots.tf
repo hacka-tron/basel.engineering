@@ -31,6 +31,20 @@ data "aws_iam_policy_document" "dlm_trust" {
       type        = "Service"
       identifiers = ["dlm.amazonaws.com"]
     }
+    # Confused-deputy guard, as the EBS user guide recommends for custom DLM
+    # roles ("IAM service roles for Amazon Data Lifecycle Manager"): only DLM
+    # acting for a lifecycle policy of this account and region. The policy ID
+    # is generated, so the ARN uses the wildcard form that page allows.
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [var.aws_account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:dlm:${var.aws_region}:${var.aws_account_id}:policy/*"]
+    }
   }
 }
 

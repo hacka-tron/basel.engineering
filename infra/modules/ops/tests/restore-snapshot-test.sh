@@ -33,7 +33,12 @@ case "$*" in
     [ -n "${STUB_SNAPS_FAIL:-}" ] && exit 254
     cat "$STUB_SNAPS" ;;
   *create-replace-root-volume-task*) echo replacevol-0123456789abcdef0 ;;
-  *describe-alarms*) echo "glassbox-node-reboot OK 2026-10-01T00:00:00Z" ;;
+  *describe-alarms*) echo "glassbox-node-reboot OK 2026-10-01T00:00:00Z True" ;;
+  *disable-alarm-actions*) [ -z "${STUB_DISABLE_FAIL:-}" ] || exit 254 ;;
+  *enable-alarm-actions*) [ -z "${STUB_ENABLE_FAIL:-}" ] || exit 254 ;;
+  *describe-volumes*)
+    [ -n "${STUB_VOLS_FAIL:-}" ] && exit 254
+    echo '{"Volumes": [{"VolumeId": "vol-0bbbbbbbbbbbbbbbb", "CreateTime": "2026-09-01T00:00:00Z", "Size": 20, "VolumeType": "gp3"}]}' ;;
   *send-command*) echo cmd-1 ;;
   *get-command-invocation*) cat "$STUB_INVOCATION" ;;
 esac
@@ -71,6 +76,13 @@ run() { # run <env assignments...>: restore with a clean log; output in $out, st
 }
 aws_calls() { [ -s "$STUB_LOG" ] && echo 1 || echo 0; } # 0 = none
 created() { grep -q create-replace-root-volume-task "$STUB_LOG"; }
+# order_ok <first> <second>: both logged, first before second.
+order_ok() {
+  local a b
+  a=$(grep -n -- "$1" "$STUB_LOG" | head -1 | cut -d: -f1)
+  b=$(grep -n -- "$2" "$STUB_LOG" | tail -1 | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
+}
 refused() { # refused <label> <expected message>
   [ "$rc" -ne 0 ]
   check "$1: exits non-zero" $?
@@ -78,6 +90,8 @@ refused() { # refused <label> <expected message>
   check "$1: no replacement requested" $?
   grep -qF "$2" <<<"$out"
   check "$1: says why" $?
+  ! grep -q alarm-actions "$STUB_LOG"
+  check "$1: reboot alarm never paused" $?
 }
 
 # 1. Input validation happens before any AWS call.
@@ -122,6 +136,10 @@ check "latest: on the glassbox instance" $?
 check "keep: old root volume not deleted" $?
 grep -qF 'kept, detached' "$GITHUB_STEP_SUMMARY"
 check "keep: summary says the old volume is kept" $?
+order_ok 'disable-alarm-actions --region us-east-1 --alarm-names glassbox-node-reboot' create-replace-root-volume-task
+check "reboot alarm paused before the replacement" $?
+order_ok create-replace-root-volume-task 'enable-alarm-actions --region us-east-1 --alarm-names glassbox-node-reboot'
+check "reboot alarm re-enabled after the replacement" $?
 
 # 4. An explicit ID, with the old volume deleted.
 run SNAPSHOT=snap-0000000000000000a OLD_VOLUME=delete
@@ -133,9 +151,21 @@ check "delete: passes --delete-replaced-root-volume" $?
 run SNAPSHOT=latest OLD_VOLUME=keep STUB_TASK_STATE=failed
 [ "$rc" -ne 0 ] && grep -qF 'kept the original root volume' <<<"$out"
 check "failed task: exits non-zero and says the original volume stayed" $?
+order_ok disable-alarm-actions enable-alarm-actions
+check "failed task: reboot alarm re-enabled on the way out" $?
 run SNAPSHOT=latest OLD_VOLUME=keep STUB_TASK_STATE=failed-detached
 [ "$rc" -ne 0 ] && grep -qF 'NO root volume' <<<"$out"
 check "failed-detached task: exits non-zero and warns" $?
+
+# 5b. Alarm pause problems: can't pause -> restore anyway; can't re-enable ->
+# the run fails and says the alarm is still paused.
+run SNAPSHOT=latest OLD_VOLUME=keep STUB_DISABLE_FAIL=1
+check "pause fails: restore still succeeds" "$rc"
+! grep -q enable-alarm-actions <(grep -v disable-alarm-actions "$STUB_LOG")
+check "pause fails: nothing to re-enable" $?
+run SNAPSHOT=latest OLD_VOLUME=keep STUB_ENABLE_FAIL=1
+[ "$rc" -ne 0 ] && grep -qF 'still paused' <<<"$out"
+check "re-enable fails: exits non-zero and says the alarm is still paused" $?
 
 # 6. list-snapshots: IDs and dates of this instance's snapshots only; fails
 # soft (a note, exit 0) while the role can't list them yet.
@@ -149,10 +179,12 @@ check "list: shows id, date and state" $?
 check "list: hides other instances' snapshots" $?
 grep -qF 'glassbox-node-reboot OK' "$GITHUB_STEP_SUMMARY"
 check "list: alarm states in the summary" $?
-out=$(STUB_SNAPS_FAIL=1 bash "$script" snapshots 2>&1)
+grep -qF "vol-0bbbbbbbbbbbbbbbb  2026-09-01T00:00:00Z  20 GiB gp3  about \$1.6/month" <<<"$out"
+check "list: shows detached volumes with a cost hint" $?
+out=$(STUB_SNAPS_FAIL=1 STUB_VOLS_FAIL=1 bash "$script" snapshots 2>&1)
 rc=$?
 check "list without permission: still exits 0" "$rc"
-grep -qF 'could not list snapshots' <<<"$out"
+grep -qF 'could not list snapshots' <<<"$out" && grep -qF 'could not list volumes' <<<"$out"
 check "list without permission: says so" $?
 
 exit "$fail"

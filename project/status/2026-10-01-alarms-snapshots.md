@@ -52,7 +52,7 @@ flowchart LR
 - **Replace root volume, not a new instance.** It is in place: same instance ID, Elastic IP, Cloudflare record, alarms and zram association. Nothing in Terraform has to change. EC2 accepts only snapshots of this instance's current or previous root volumes, which is exactly what the policy takes.
 - **The old volume is kept by default.** `old_volume=keep` leaves the pre-restore disk detached as evidence and as a way back. It costs about $1.60 a month until deleted, and the ops roles can't delete volumes, so a cleanup path is a backlog item. `delete` makes EC2 remove it once the restore succeeds.
 - **IAM scoping** (separate commit, needs Bootstrap first):
-  - `glassbox-ops` may replace the root volume only of the tagged instance, and only from a snapshot carrying the DLM tags. It may use the EBS KMS key only through EC2. It has no snapshot or volume deletion.
+  - `glassbox-ops` may replace the root volume only of the tagged instance, and when a snapshot is named, only one carrying the DLM tags. IAM can't force a snapshot to be named, so a launch-state or `--volume-id` replacement is stopped only by the reviewed script and your `ops` approval (details in "Operational notes"). It may use the EBS KMS key only through EC2, and pause and resume only the reboot alarm's actions. It has no snapshot or volume deletion.
   - `glassbox-ops-read` gains read-only listing of snapshots, restore tasks and alarms.
   - `glassbox-ci` gains alarm writes on `glassbox-*`, `sns:*` on `glassbox-*` topics, DLM policy management in the region, the CloudWatch Events service-linked role, and `iam:PassRole` for `glassbox-dlm` to DLM only.
   - `glassbox-ci-plan` gains the matching reads.
@@ -60,7 +60,16 @@ flowchart LR
 
 ## What review caught
 
-Not reviewed yet. During implementation the offline test caught a fail-open: an unreadable restore-task list was treated as "no restore in flight". It now refuses. Mutation checks confirmed the test fails if the "completed only" or "in flight" guards are removed.
+During implementation, the offline test caught a fail-open: an unreadable restore-task list was treated as "no restore in flight". It now refuses. Mutation checks confirmed the test fails if the "completed only" or "in flight" guards are removed.
+
+Review round 1 (Opus reviewer) judged the change safe to apply: the prod plan is 7 to add, 1 to change, 0 to destroy, with no instance replacement. It asked for these fixes, all made:
+
+- **Important: "only from a daily snapshot" was not enforced by IAM.** The snapshot tag condition applies only when a snapshot is named. A launch-state replacement, or one from an existing detached volume, would likely pass. No valid condition key separates those modes (`ec2:SnapshotID` exists only on the snapshot resource), so no Deny was added. The comments and `infra/CI.md` now state the residual risk: those modes are blocked by the reviewed script plus your approval.
+- **Timing.** The task poll went from 30 to 20 minutes and the SSM wait from 15 to 10, so the restore plus the after-diagnose fit the 60-minute job and the one-hour credentials.
+- **Reboot alarm during a restore.** Its actions are now paused just before the replacement and re-enabled on every exit path. A failed re-enable fails the run, and the listing shows whether alarm actions are enabled.
+- **Trust and KMS conditions.** The `glassbox-dlm` trust gained `aws:SourceAccount` and `aws:SourceArn` (as the EBS guide recommends), and `kms:CreateGrant` gained `GrantIsForAWSResource`.
+- **Kept volumes.** List snapshots and Diagnose now list detached volumes with a monthly cost estimate.
+- The offline test grew to 104 checks, and a mutation check covers the alarm re-enable trap.
 
 ## Operational notes and risks
 
@@ -68,7 +77,8 @@ Not reviewed yet. During implementation the offline test caught a fail-open: an 
 - **SNS confirmation:** you must click the AWS email, or no alarm email is delivered. Terraform can't delete a subscription that is still pending; it expires after about 3 days.
 - **Alarm tests:** don't force an alarm state. The action would really reboot or recover the node.
 - **A restore loses everything since the snapshot:** questions asked, cache entries, budget counters (the day's LLM budget may be spent again), and Flux's progress. Flux re-applies `deploy` after the boot.
-- **The reboot alarm during a restore:** a restore reboots the node. The reboot alarm needs 3 straight minutes of failed checks, which a normal reboot doesn't reach, but a very slow boot could get a second reboot.
+- **The reboot alarm during a restore:** the runbook pauses the reboot alarm's actions for the restore and re-enables them on every exit path. Only a hard-killed runner could leave them paused, and the listing then shows `False` for that alarm.
+- **IAM doesn't force "from a daily snapshot".** The `ops` role could, in principle, also do a launch-state replacement or one from an existing volume. Only the reviewed script and your approval stop that.
 - **Untested live paths:** the IAM tag conditions for `CreateReplaceRootVolumeTask` (snapshot tags) can only be proven on a real call. If AWS evaluates them differently, the restore fails with AccessDenied before anything changes (fail closed). A first restore is only possible on the live node, so it waits for your go-ahead or a real incident.
 - **Terraform after a restore:** the next plan may show an in-place tag update on the new root volume. It is harmless.
 - **Uptime probe:** GitHub disables scheduled workflows after 60 days without repository activity, and schedules can start late. Failure emails go to whoever last changed the cron line, and this repository's commits use a local author email, so confirm the first failure email actually arrives.
@@ -78,7 +88,7 @@ Not reviewed yet. During implementation the offline test caught a fail-open: an 
 
 1. Merge.
 2. **Actions → Bootstrap → Run workflow** on `main`, then approve. The plan should show only in-place updates to four role policies (`glassbox-ci`, `glassbox-ci-plan`, `glassbox-ops-read`, `glassbox-ops`).
-3. Approve the pending **Terraform** run on `main`. It adds the topic, subscription, two alarms, the `glassbox-dlm` role and policy attachment, and the DLM policy. The instance shows no change or an in-place `maintenance_options` update.
+3. Approve the pending **Terraform** run on `main`. It adds the topic, subscription, two alarms, the `glassbox-dlm` role and policy attachment, and the DLM policy. That is 7 to add, and the instance shows no change. The plan's 1 in-place change is `module.ops.aws_ssm_document.ops["diagnose"]`, from the earlier merged Diagnose changes (#116, #121); that is expected.
 4. Click the **AWS Notification - Subscription Confirmation** email.
 5. Run **Ops · List snapshots** (both alarms `OK`, "no snapshots yet"), then **Ops · Diagnose**.
 6. The next day, **Ops · List snapshots** shows the first snapshot.
@@ -87,6 +97,6 @@ Not reviewed yet. During implementation the offline test caught a fail-open: an 
 
 ## Open items
 
-- A way to delete root volumes kept by a restore (`old_volume=keep`) without the console.
+- A way to delete root volumes kept by a restore (`old_volume=keep`) without the console. They now show up, with a cost estimate, in List snapshots and Diagnose.
 - A restore rehearsal, on your go-ahead.
 - Deferred: the self-healing plan's phases 2 to 4 (`docs/superpowers/plans/2026-10-01-self-healing-node.md`).

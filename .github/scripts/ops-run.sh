@@ -168,8 +168,9 @@ aws_overview() {
   instance=$(instance_id)
   out=$(
     echo "== status-check alarms (glassbox-node-*) =="
+    echo "(name, state, since, actions enabled: False means paused, e.g. by an interrupted restore)"
     aws cloudwatch describe-alarms --region "$REGION" --alarm-name-prefix glassbox-node- \
-      --query 'MetricAlarms[].[AlarmName,StateValue,StateUpdatedTimestamp]' --output text 2>/dev/null ||
+      --query 'MetricAlarms[].[AlarmName,StateValue,StateUpdatedTimestamp,ActionsEnabled]' --output text 2>/dev/null ||
       echo "(could not read alarms: not applied yet, or the role lacks cloudwatch:DescribeAlarms)"
     echo
     echo "== daily snapshots of $instance (newest last; restore with 'Ops · Restore from snapshot') =="
@@ -188,6 +189,19 @@ aws_overview() {
       --filters "Name=instance-id,Values=$instance" \
       --query 'ReplaceRootVolumeTasks[].[ReplaceRootVolumeTaskId,TaskState,StartTime,CompleteTime]' \
       --output text 2>/dev/null || echo "(could not list restore tasks)"
+    echo
+    echo "== detached volumes (e.g. old root volumes kept by restores; they cost money until deleted) =="
+    if vols=$(aws ec2 describe-volumes --region "$REGION" --filters Name=status,Values=available \
+      --output json 2>/dev/null); then
+      if jq -e '.Volumes | length > 0' >/dev/null <<<"$vols"; then
+        jq -r '.Volumes[] | "\(.VolumeId)  \(.CreateTime)  \(.Size) GiB \(.VolumeType)  about $\(.Size * 0.08 * 100 | round / 100)/month"' <<<"$vols"
+        echo "(delete them in the EC2 console once you no longer need them; the ops roles can't)"
+      else
+        echo "(none)"
+      fi
+    else
+      echo "(could not list volumes: the role lacks ec2:DescribeVolumes until the Bootstrap run)"
+    fi
   )
   out=$(redact "$REDACT_WIDTH" <<<"$out")
   echo "::group::alarms, snapshots and restores"
@@ -304,6 +318,23 @@ apply_zram() {
 # Fails closed: the inputs are checked before any AWS call, the instance must
 # be running, no other replacement may be in flight, and the snapshot must be
 # a completed daily snapshot of this instance. Only then is the task created.
+# The reboot alarm's actions are paused while a restore reboots the node (a
+# slow boot must not trigger a second reboot mid-restore) and resumed on every
+# exit path. An alarm left paused shows "False" in the listing above.
+REBOOT_ALARM=glassbox-node-reboot
+REBOOT_ALARM_PAUSED=0
+resume_reboot_alarm() {
+  [ "$REBOOT_ALARM_PAUSED" = 1 ] || return 0
+  if aws cloudwatch enable-alarm-actions --region "$REGION" --alarm-names "$REBOOT_ALARM"; then
+    REBOOT_ALARM_PAUSED=0
+    log "re-enabled the actions of $REBOOT_ALARM"
+  else
+    echo "::error::could not re-enable the actions of $REBOOT_ALARM; it stays paused until re-enabled (run Ops · Restore from snapshot again or fix it in the console)"
+    echo "**Error:** the reboot alarm $REBOOT_ALARM is still paused." >>"$SUMMARY"
+    return 1
+  fi
+}
+
 restore_snapshot() {
   local snapshot=${SNAPSHOT:-} old_volume=${OLD_VOLUME:-} instance state snaps chosen
   local delete_args=() task_id deadline task_state last_state='' root_before tasks in_flight fate
@@ -352,6 +383,18 @@ restore_snapshot() {
     echo
   } >>"$SUMMARY"
 
+  # Last step before the change: pause the reboot alarm. If that fails (not
+  # applied yet), go on without it: the alarm needs 3 straight minutes of
+  # failed checks, which a normal reboot doesn't reach.
+  trap 'exit 143' TERM INT
+  trap resume_reboot_alarm EXIT
+  if aws cloudwatch disable-alarm-actions --region "$REGION" --alarm-names "$REBOOT_ALARM"; then
+    REBOOT_ALARM_PAUSED=1
+    log "paused the actions of $REBOOT_ALARM for the restore"
+  else
+    echo "::warning::could not pause $REBOOT_ALARM; restoring anyway"
+  fi
+
   task_id=$(aws ec2 create-replace-root-volume-task --region "$REGION" \
     --instance-id "$instance" --snapshot-id "$snapshot" ${delete_args[@]+"${delete_args[@]}"} \
     --client-token "gh-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}" \
@@ -359,7 +402,9 @@ restore_snapshot() {
     die "EC2 refused the root volume replacement (nothing was changed)"
   log "replacement task $task_id created; EC2 now creates the volume and reboots the instance"
 
-  deadline=$((SECONDS + 1800))
+  # 20 + 10 minutes of waiting, plus the after-diagnose, fit the act job's
+  # 60-minute limit and the one-hour OIDC session.
+  deadline=$((SECONDS + 1200))
   while [ "$SECONDS" -lt "$deadline" ]; do
     sleep 15
     task_state=$(aws ec2 describe-replace-root-volume-tasks --region "$REGION" \
@@ -374,22 +419,23 @@ restore_snapshot() {
     esac
   done
   [ "$last_state" = succeeded ] ||
-    die "task $task_id still '${last_state:-unknown}' after 30 minutes; it keeps running in EC2, check it with Ops · List snapshots"
+    die "task $task_id still '${last_state:-unknown}' after 20 minutes; it keeps running in EC2, check it with Ops · List snapshots"
   echo "Replacement task \`$task_id\` succeeded." >>"$SUMMARY"
 
   # Wait for the node to answer through SSM again, then give k3s time to
   # start MySQL, Redis and the app before the after-diagnose.
-  deadline=$((SECONDS + 900))
+  deadline=$((SECONDS + 600))
   while [ "$SECONDS" -lt "$deadline" ]; do
     if [ -n "$(boot_info 60)" ]; then
       log "node answers again; giving k3s 90s before the after-diagnose"
       sleep 90
+      resume_reboot_alarm || die "restore done, but the reboot alarm is still paused"
       return 0
     fi
     log "waiting for the node to answer (SSM agent)"
     sleep 20
   done
-  die "the root volume was replaced, but the node did not answer through SSM within 15 minutes; see the after-diagnose and the EC2 console"
+  die "the root volume was replaced, but the node did not answer through SSM within 10 minutes; see the after-diagnose and the EC2 console"
 }
 
 act() {

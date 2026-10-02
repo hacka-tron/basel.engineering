@@ -225,8 +225,8 @@ same `redact` over everything SSM returns (stdout, stderr) and over the
 | `flux-reconcile` | Refreshes the `deploy` branch source, reconciles the root `flux-system` Kustomization (waiting up to 7 minutes), then requests a reconcile of every other non-suspended Kustomization and HelmRelease. Refuses if `flux-system` is suspended. | Deploy now instead of waiting for Flux's interval, for example after merging a fix or resuming. | `ops` |
 | `scale-keda` (`keda_replicas`: `0`, `1`) | Scales every Deployment in the `keda` namespace. At 1 it waits for the rollouts. | 0 frees roughly 150 MiB under memory pressure; the worker then stays at its current count. Suspend `helmrelease-keda` too, or a Helm upgrade brings KEDA back. Use 1 to restore it. | `ops` |
 | `cronjob-suspend` / `cronjob-resume` (`cronjob`: `warm-answers`) | Sets `spec.suspend` on the CronJob. A Job that is already running finishes. | Stop the 2-hourly answer warm-up from adding load or LLM calls during an incident, then turn it back on. | `ops` |
-| `list-snapshots` | Read-only, from the AWS API (works with the node down): the two status-check alarms and their states, the node's daily snapshots (ID, start time, state, size; oldest first), and its root volume replacement tasks. Every `diagnose` prints the same section after the node's own output. Missing permissions or resources (before the Bootstrap run or the Terraform apply) print a note instead of failing. | To pick a snapshot for a restore, check the alarms, or see whether a restore finished. | None (`ops-read`) |
-| `restore-snapshot` (`snapshot`: `latest` or `snap-...`; `old_volume`: `keep`, `delete`) | EC2 replace root volume (`CreateReplaceRootVolumeTask`) from one of the node's daily snapshots: EC2 creates a new root volume from it, reboots the instance onto it, and keeps the instance ID, Elastic IP, private IP and network interface. Before asking EC2 for anything it refuses (fails closed): a `snapshot` that isn't `latest` or a well-formed snapshot ID, an `old_volume` other than `keep`/`delete` (both checked before any AWS call), an instance that isn't `running`, a restore already in flight, and a snapshot that isn't a completed daily snapshot of this instance (by its DLM tags and `instance-id` tag). `latest` is the newest completed one. Then it polls the task for up to 30 minutes, waits up to 15 minutes for the SSM agent, gives k3s 90 s, and the after-diagnose runs. `keep` leaves the replaced volume detached (about $1.60 a month for 20 GB until someone deletes it in the console; the ops roles can't delete volumes); `delete` has EC2 delete it once the replacement succeeds. | The disk state is bad and a day's loss is acceptable: a broken upgrade or migration, corrupted k3s or MySQL data, lost data. Everything written after the snapshot (questions asked, cache, budget counters, Flux's progress) is lost; Flux re-applies the `deploy` branch after the boot. Not for a hung node (Reboot node) or a failing host (the recover alarm). | `ops` |
+| `list-snapshots` | Read-only, from the AWS API (works with the node down): the two status-check alarms with their state and whether their actions are enabled (`False` means paused, for example by an interrupted restore), the node's daily snapshots (ID, start time, state, size; oldest first), its root volume replacement tasks, and every detached volume in the region (old root volumes kept by restores) with an estimated monthly cost. Every `diagnose` prints the same section after the node's own output. Missing permissions or resources (before the Bootstrap run or the Terraform apply) print a note instead of failing. | To pick a snapshot for a restore, check the alarms, or see whether a restore finished. | None (`ops-read`) |
+| `restore-snapshot` (`snapshot`: `latest` or `snap-...`; `old_volume`: `keep`, `delete`) | EC2 replace root volume (`CreateReplaceRootVolumeTask`) from one of the node's daily snapshots: EC2 creates a new root volume from it, reboots the instance onto it, and keeps the instance ID, Elastic IP, private IP and network interface. Before asking EC2 for anything it refuses (fails closed): a `snapshot` that isn't `latest` or a well-formed snapshot ID, an `old_volume` other than `keep`/`delete` (both checked before any AWS call), an instance that isn't `running`, a restore already in flight, and a snapshot that isn't a completed daily snapshot of this instance (by its DLM tags and `instance-id` tag). `latest` is the newest completed one. Just before the replacement it pauses the actions of `glassbox-node-reboot` (`DisableAlarmActions`), so a slow boot can't trigger a second reboot mid-restore, and re-enables them on every exit path (success, failure, cancel); if the re-enable fails the run fails and says so, and the listing shows the alarm's actions as `False`. If the pause itself fails it restores anyway (the alarm needs 3 straight minutes of failed checks). Then it polls the task for up to 20 minutes, waits up to 10 minutes for the SSM agent, gives k3s 90 s, and the after-diagnose runs, all inside the act job's 60 minutes and the one-hour OIDC session. `keep` leaves the replaced volume detached (about $1.60 a month for 20 GB until someone deletes it in the console; the ops roles can't delete volumes); `delete` has EC2 delete it once the replacement succeeds. | The disk state is bad and a day's loss is acceptable: a broken upgrade or migration, corrupted k3s or MySQL data, lost data. Everything written after the snapshot (questions asked, cache, budget counters, Flux's progress) is lost; Flux re-applies the `deploy` branch after the boot. Not for a hung node (Reboot node) or a failing host (the recover alarm). | `ops` |
 | `apply-zram` | Runs the Terraform-managed `glassbox-zram-swap` document (`infra/modules/compute/zram-swap.sh`, mode `apply`). First checks that the applied document matches the script at the workflow's commit and refuses if it doesn't. Needs the zram change (PR #55). | Diagnose shows no `/dev/zram0` after a reboot, or you want the weekly self-heal to happen now. | `ops` |
 
 Timeouts are generous because a swapping node is slow. SSM keeps trying to
@@ -263,11 +263,24 @@ Both roles are defined in `infra/bootstrap/runbooks.tf`. They reuse
   `ssm:SendCommand` only with `glassbox-ops-*` and `glassbox-zram-swap`, on
   the tagged instance. It can call `ec2:RebootInstances` only on the tagged
   instance, and `ssm:GetDocument` only on `glassbox-zram-swap`. It can call
-  `ec2:CreateReplaceRootVolumeTask` only on the tagged instance, only from
-  a snapshot tagged `project=glassbox` and `glassbox-backup=daily-root`
-  (the DLM policy's tags), plus the volume and task that call creates, and
-  use the EBS KMS key only through EC2 (`kms:ViaService`). It has no
-  DeleteVolume, DeleteSnapshot or CreateSnapshot. It has the
+  `ec2:CreateReplaceRootVolumeTask` only on the tagged instance, and, when
+  the request names a snapshot, only one tagged `project=glassbox` and
+  `glassbox-backup=daily-root` (the DLM policy's tags). It also has the
+  call on `volume/*` and `replace-root-volume-task/*`. **Residual risk:**
+  IAM does not force a snapshot to be named. A launch-state replacement (no
+  snapshot: the disk as the AMI first created it) or one from an existing
+  detached volume (`--volume-id`; volumes have no tag condition key for
+  this action) would likely be allowed. No condition key separates those
+  modes: `ec2:SnapshotID` exists only on the snapshot resource, so a
+  Null-condition Deny would also deny the instance and task parts of every
+  valid request. Those modes are blocked only by the reviewed script (it
+  always passes a validated daily snapshot) plus the owner's `ops`
+  approval, the same trust every other action of this role rests on. It
+  may use the EBS KMS key only through EC2 (`kms:ViaService`; `CreateGrant`
+  also only for AWS resources), and may disable and enable the actions of
+  the `glassbox-node-reboot` alarm only. It has no DeleteVolume,
+  DeleteSnapshot or CreateSnapshot. The read role's listing also gets
+  `ec2:DescribeVolumes` (no resource-level scoping). It has the
   same reads as `glassbox-ops-read`. `glassbox-ops-boot-id` is covered by its `glassbox-ops-*` document wildcard; `glassbox-ops-read` still sends only `glassbox-ops-diagnose`. It has no StartSession, no
   Stop/Terminate, no AWS-RunShellScript, and no document writes.
 
@@ -346,8 +359,9 @@ approve; the plan should show only in-place updates to the `glassbox-ci`,
 `glassbox-ci-plan`, `glassbox-ops-read` and `glassbox-ops` role policies;
 (3) approve the pending Terraform run on `main` (adds the topic,
 subscription, two alarms, the `glassbox-dlm` role and its attachment, and
-the DLM policy; the instance shows no change or an in-place
-`maintenance_options` update); (4) click the AWS confirmation email;
+the DLM policy: 7 to add; the instance shows no change. The 1 in-place
+change is `module.ops.aws_ssm_document.ops["diagnose"]`, from the earlier
+merged Diagnose changes #116/#121, and is expected); (4) click the AWS confirmation email;
 (5) run Ops · List snapshots (alarms `OK`; snapshots appear after the
 next 04:00 UTC window) and Ops · Diagnose.
 
