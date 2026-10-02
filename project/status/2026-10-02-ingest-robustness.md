@@ -1,6 +1,6 @@
 # Ingest write path: commit first, batch queries, honest failures
 
-**Status:** PR [#138](https://github.com/hacka-tron/basel.engineering/pull/138) open (branch `fix/ingest-robustness`). Review: pending (orchestrator gate).
+**Status:** Merged 2026-10-02 (PR [#138](https://github.com/hacka-tron/basel.engineering/pull/138)); Opus review round 1 APPROVED, minors fixed. Live since that release.
 
 ## TL;DR
 

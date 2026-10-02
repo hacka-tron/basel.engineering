@@ -1,6 +1,6 @@
 # Ops · Reindex runbook, old answer index dropped, chunk text cache fix
 
-**Status:** PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136): review round 1 APPROVED, minors fixed; **waiting for the owner's go-ahead before merge** (new privileged SSM document). **Live:** the index drop and the cache fix ship with the first release after merge; the runbook works once the Terraform workflow applies the new SSM document (one owner approval click, as for every new runbook).
+**Status:** Merged 2026-10-02 with the owner's go-ahead (PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136), Opus review round 2 APPROVED). Terraform apply approved by the owner and succeeded (1 added: SSM document `glassbox-ops-reindex`); live on build-105. **Actions → Ops · Reindex** is usable; not run yet (not needed).
 
 ## TL;DR
 

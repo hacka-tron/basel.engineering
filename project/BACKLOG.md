@@ -4,11 +4,11 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**As of 2026-10-02 morning (Claude, overnight session).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Overnight summary: `project/status/2026-10-02-overnight-session.md` (13 PRs merged, #130–#135 and #137–#143). Live state: `project/SNAPSHOT.md`; handoff: `project/AGENT_HANDOFF.md`. Next actions, in order:
+**As of 2026-10-02 ~10:00 UTC (Claude).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Overnight summary: `project/status/2026-10-02-overnight-session.md` (13 PRs merged, #130–#135 and #137–#143). Live state: `project/SNAPSHOT.md`; handoff: `project/AGENT_HANDOFF.md`. Next actions, in order:
 
-1. **PR #136 Ops · Reindex: merged with the owner's go-ahead (2026-10-02).** Next: the owner approves the Terraform apply that creates SSM document `glassbox-ops-reindex` (until then the button fails at the SSM step and nothing runs). The release after the merge drops `idx:answers` (no `DD`) in its ingest Job. Then **Actions → Ops · Reindex** works on demand. Report `project/status/2026-10-02-ops-reindex.md`.
+1. ~~**PR #136 Ops · Reindex**~~ **Done 2026-10-02:** merged with the owner's go-ahead; the owner approved the Terraform apply (SSM document `glassbox-ops-reindex` created); live on build-105. Use **Actions → Ops · Reindex** after a MySQL restore or when Diagnose shows a partial chunk index. The release's ingest drops `idx:answers` (no `DD`); confirm in the next **Ops · Diagnose** (no `idx:answers` in the Redis index list).
 2. **Alarms and snapshots (#124):** Bootstrap and the Terraform apply both succeeded (2026-10-02 ~04:20 UTC). Remaining: the owner confirms the SNS email, then **Ops · List snapshots** (alarms `OK`) and **Ops · Diagnose**; the next day, the first snapshot. Follow-ups in `project/status/2026-10-01-alarms-snapshots.md`.
-3. **Stream check (#143):** confirm the first post-release run of the **Stream check** workflow passed (it waits for `/api/version` to report that release's build).
+3. ~~**Stream check (#143)**~~ Done: post-release runs passed on build-104 and build-105.
 4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
 5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
 

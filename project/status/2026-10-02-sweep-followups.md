@@ -1,5 +1,7 @@
 # Stale sweep follow-ups: orphan Redis keys and run notes
 
+**Status:** Merged 2026-10-02 (PR [#142](https://github.com/hacka-tron/basel.engineering/pull/142)); Opus review round 1 APPROVED, minors fixed. Live (migration 0006 applied by the release).
+
 ## TL;DR
 Two small gaps in the stale sweep (PR #101) are closed. `--clear` now also finds and removes orphan `chunk:*` hashes (no MySQL row) for the chosen corpus and model, and every ingest run records its sweep outcome in a new `ingestion_runs.notes` JSON column.
 
