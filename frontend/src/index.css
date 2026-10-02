@@ -201,3 +201,14 @@ input {
     display: none;
   }
 }
+
+/*
+ * While the phone details sheet is open, a tap anywhere in the visible strip
+ * closes it (owner, 2026-10-02): nodes and arrows ignore pointers, so the tap
+ * reaches the pane (`onPaneClick` deselects) and Chrome's touch adjustment has
+ * no node to snap to. Switching component means closing, then tapping a node.
+ */
+.sheet-open .react-flow__node,
+.sheet-open .react-flow__edge {
+  pointer-events: none !important;
+}

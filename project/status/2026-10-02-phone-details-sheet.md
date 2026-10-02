@@ -9,7 +9,7 @@ On phones, tapping a diagram component now slides a details sheet up over the bo
 ## What changed for a visitor
 
 - Tap a component: a sheet slides up in 260ms (no slide with reduced motion; no dimming with reduced transparency) with the name, what runs it, what it does, the About This System answer ("Continue in chat →") and the retrieved chunks, in 15px text.
-- The diagram keeps the tapped node visible in the strip above the sheet; tapping another node in the strip switches the sheet; empty space, the chevron or Escape closes it.
+- The diagram keeps the tapped node visible in the strip above the sheet; any tap in the strip (a node or empty space), the chevron or Escape closes it; nodes in the strip are not selectable while the sheet is open, so switching component means closing, then tapping a node.
 - Back, the Chat segment, Escape with nothing selected, or "Continue in chat" return to Chat and close the sheet.
 
 ## How it works
@@ -34,7 +34,7 @@ flowchart LR
 
 ## What review caught
 
-Round 1 (Opus reviewer): APPROVED, no Critical or Important findings. Fixed in this PR: nodes now leave the Tab order while the sheet covers them, so keyboard focus goes straight to the sheet; doc leftovers ("panel" wording, duplicated Escape). Backlogged (see BACKLOG Bugs): empty-strip taps snapping to nearby nodes (awaiting owner decision), desktop Back clearing the selection after a narrow-to-wide resize, and the cosmetic zoom dip during the animated pan.
+Round 1 (Opus reviewer): APPROVED, no Critical or Important findings. Fixed in this PR: nodes now leave the Tab order while the sheet covers them, so keyboard focus goes straight to the sheet; doc leftovers ("panel" wording, duplicated Escape). After review the owner chose "any tap closes" for the empty-strip tap problem (Chrome's touch adjustment snapped taps to nearby nodes and fired new questions): nodes ignore pointers while the sheet is open (`.sheet-open`), verified at 280, 320, 375 and 393 with node, empty-space and between-column taps closing with no `/api/ask`. Backlogged (see BACKLOG Bugs): desktop Back clearing the selection after a narrow-to-wide resize, and the cosmetic zoom dip during the animated pan.
 
 ## Operational notes and risks
 
@@ -42,7 +42,7 @@ Frontend only; no backend, infra or CSP change. Changes visitor behaviour on its
 
 ## How to see it / verify it
 
-`cd frontend && npm run phone`, open `/phone-preview.html`, Diagram, tap a component. Headless-Chrome run (live API unreachable, `/api` faked) at 280x653, 320x568, 360x780, 375x667, 393x852 and desktop 768x1024, 1024x768, 1280x800: no horizontal overflow in any state. Strip heights (sheet top minus region top): 68px at 320x568, 88px at 375x667, 125px at 393x852 (85px at 280x653, 110px at 360x780). Tapping another node in the strip switches the sheet; an empty-space tap, the chevron and Escape close it with focus on the locked bar where applicable; Back closes it with focus on the Diagram toggle; a second Escape returns to Chat. Desktop 1280x800 inspector is unchanged.
+`cd frontend && npm run phone`, open `/phone-preview.html`, Diagram, tap a component. Headless-Chrome run (live API unreachable, `/api` faked) at 280x653, 320x568, 360x780, 375x667, 393x852 and desktop 768x1024, 1024x768, 1280x800: no horizontal overflow in any state. Strip heights (sheet top minus region top): 68px at 320x568, 88px at 375x667, 125px at 393x852 (85px at 280x653, 110px at 360x780). A real touch tap on another node, on empty strip space and between columns (280px) closes the sheet with no new selection and no `/api/ask`; tapping a node with the sheet closed opens it; the chevron and Escape also close it with focus on the locked bar where applicable; Back closes it with focus on the Diagram toggle; a second Escape returns to Chat. Desktop 1280x800 inspector is unchanged.
 
 ## Open items
 
