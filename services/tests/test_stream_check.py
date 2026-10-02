@@ -40,6 +40,7 @@ class FakeSite(BaseHTTPRequestHandler):
     omit_header: str | None = None
     stream_status = 200
     stream_attempts = 0
+    page_errors = 0
 
     def log_message(self, *args):
         pass
@@ -50,7 +51,11 @@ class FakeSite(BaseHTTPRequestHandler):
                 self.send_header(name, value)
 
     def do_GET(self):  # noqa: N802 (http.server API)
-        if self.path == "/":
+        if self.path == "/" and FakeSite.page_errors > 0:
+            FakeSite.page_errors -= 1
+            self.send_response(503)
+            self.end_headers()
+        elif self.path == "/":
             self.send_response(200)
             self._security_headers()
             self.send_header("Content-Type", "text/html")
@@ -100,6 +105,14 @@ class FakeSite(BaseHTTPRequestHandler):
             self.wfile.flush()
             if mode == "closes":
                 return
+            if mode == "busy":
+                # Events more often than the heartbeat interval: no pings are due.
+                for _ in range(10):
+                    time.sleep(HEARTBEAT * 0.6)
+                    self.wfile.write(b'event: backlog\ndata: {"backlog":1}\n\n')
+                    self.wfile.flush()
+                time.sleep(LISTEN)
+                return
             beats = 0 if mode == "no-pings" else 10
             for _ in range(beats):
                 time.sleep(HEARTBEAT)
@@ -117,6 +130,7 @@ def site():
     FakeSite.omit_header = None
     FakeSite.stream_status = 200
     FakeSite.stream_attempts = 0
+    FakeSite.page_errors = 0
     server = ThreadingHTTPServer(("127.0.0.1", 0), FakeSite)
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -159,6 +173,13 @@ def test_broken_streams_fail(site, mode, expected):
     assert any(message.startswith(expected) for message in failures), failures
 
 
+def test_a_stream_busy_with_events_needs_no_pings(site):
+    FakeSite.stream_mode = "busy"
+    failures, arrivals = _stream_failures(site)
+    assert failures == []
+    assert not any(item == "ping" for _, item in arrivals)
+
+
 def test_buffered_burst_also_fails_the_gap_check(site):
     FakeSite.stream_mode = "buffered"
     failures, _ = _stream_failures(site)
@@ -193,6 +214,19 @@ def test_wait_for_build_needs_consecutive_reads_and_accepts_newer(site):
     assert FakeSite.builds == ["build-8"]
 
 
+def test_build_numbers_compare_numerically():
+    assert stream_check.build_number("build-10") > stream_check.build_number("build-9")
+    assert stream_check.build_number("dev") is None
+    assert stream_check.build_number("build-") is None
+
+
+def test_wait_for_build_accepts_a_multi_digit_newer_build(site):
+    FakeSite.builds = ["build-10"]
+    assert stream_check.wait_for_build(site, "build-9", timeout_s=5, poll_s=0.01)
+    FakeSite.builds = ["build-9"]
+    assert not stream_check.wait_for_build(site, "build-10", timeout_s=0.2, poll_s=0.05)
+
+
 def test_wait_for_build_times_out(site):
     FakeSite.builds = ["build-6"]
     assert not stream_check.wait_for_build(site, "build-7", timeout_s=0.2, poll_s=0.05)
@@ -217,3 +251,11 @@ def test_main_against_the_fake_site(site, tmp_path, monkeypatch):
     assert "Stream check: passed" in summary.read_text()
     FakeSite.builds = ["dev"]
     assert stream_check.main([*args[:4], "--wait-timeout", "0.1", "--poll", "0.05"]) == 2
+
+
+def test_page_5xx_during_a_rollout_is_retried(site):
+    FakeSite.page_errors = 2
+    status, headers, _ = stream_check.fetch_page(site + "/", retry_s=0.01)
+    assert status == 200 and headers.get("x-frame-options") == "DENY"
+    FakeSite.page_errors = 5
+    assert stream_check.fetch_page(site + "/", retry_s=0.01)[0] == 503

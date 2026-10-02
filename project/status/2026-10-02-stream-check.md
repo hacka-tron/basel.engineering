@@ -25,10 +25,10 @@ flowchart LR
 ```
 
 - **Knowing the build is live.** The image didn't know its own tag, so `release.yml` now passes `GLASSBOX_BUILD=build-N` as a Docker build argument (declared at the end of the Dockerfile, so it doesn't bust cached layers) and the API reports it at `/api/version`. The check polls that until it sees the Release run's number, or a newer one, on 3 reads in a row (a rolling update can briefly answer from the old pod). Up to 30 minutes; after that the run fails with "not live", which also catches a stuck Flux rollout or migration.
-- **Streaming checks** on `/api/cluster/stream`: 200, `text/event-stream`, no compression even though the request offers gzip/br/zstd, `no-cache`, Cloudflare `cf-cache-status` `DYNAMIC`/`BYPASS`, security headers present. Then it reads for 50 s and timestamps every arrival: the pod snapshot must arrive within 5 s, at least one `: ping` heartbeat must arrive, and no gap may exceed 20 s (15 s heartbeat + 5 s). A buffering layer would hold the snapshot and pings and deliver them in a late burst, failing both the first-event and the gap check. The arrival table is in the run's job summary.
+- **Streaming checks** on `/api/cluster/stream`: 200, `text/event-stream`, no compression even though the request offers gzip/br/zstd, `no-cache`, Cloudflare `cf-cache-status` `DYNAMIC`/`BYPASS`, security headers present. Then it reads for 50 s and timestamps every arrival: the pod snapshot must arrive within 5 s, a `: ping` heartbeat must arrive whenever no event came for 15 s, and no gap may exceed 20 s (15 s heartbeat + 5 s). A buffering layer would hold the snapshot and pings and deliver them in a late burst, failing both the first-event and the gap check. The arrival table is in the run's job summary.
 - **Edge checks:** `http://basel.engineering/` answers 301 to `https://`; the page has all eight security headers.
 
-Proof run against production on 2026-10-02 (before this PR's endpoint existed, so without the build wait): snapshot at 0.20 s, pings at 15.19 s and 30.20 s, longest gap 15.01 s, no Content-Encoding, `cf-cache-status: DYNAMIC`, 301 to HTTPS, all headers present: all checks passed.
+Proof run against production on 2026-10-02 with the default 50 s window (before this PR's endpoint existed, so without the build wait): snapshot at 0.13–0.23 s, pings at 15.24, 30.23 and 45.30 s, longest gap 15.07 s, no Content-Encoding, `cf-cache-status: DYNAMIC`, 301 to HTTPS, all headers present: all checks passed. An earlier run landed in #142's rollout and saw the page answer 503 while the single api pod was replaced; that is why a page 5xx is now retried twice, 30 s apart.
 
 ## Key design decisions
 
@@ -49,6 +49,10 @@ Proof run against production on 2026-10-02 (before this PR's endpoint existed, s
 - After merge: Actions → Stream check should start when that merge's Release run finishes and pass a few minutes later; its summary shows the arrival table.
 - Locally, read-only: `python3 .github/scripts/stream-check.py` (add `--expect-build build-N` to wait for a release).
 - Tests: `pytest services/tests/test_stream_check.py services/tests/test_health.py`.
+
+## What review caught
+
+Round 1 (Opus subagent): APPROVED. Minors fixed: concurrency moved to the job level (a skipped run for a failed Release can no longer cancel a running check); no pings is fine when events never left a 15 s quiet gap; a multi-digit build comparison test (build-10 vs build-9).
 
 ## Open items
 

@@ -174,7 +174,9 @@ and by hand (Actions → Stream check → Run workflow). No secrets, no AWS,
   `/api/cluster/stream` answers 200 with `text/event-stream`, no
   `Content-Encoding` (the request offers gzip, br and zstd), `no-cache`, and
   `cf-cache-status` `DYNAMIC` or `BYPASS`; over 50 s the first event arrives
-  within 5 s, at least one `: ping` arrives, and no gap exceeds 20 s. The
+  within 5 s, a `: ping` arrives whenever no event came for 15 s, and no gap
+  exceeds 20 s. A 5xx on the page (another release's rollout) is retried
+  twice, 30 s apart. The
   arrival table is in the run's job summary.
 - **Why not `/api/ask`.** Every real question spends a slot of the daily LLM
   budget and an embedding call, so the check streams the free cluster

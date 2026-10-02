@@ -82,6 +82,18 @@ def fetch(url: str, headers: dict | None = None, timeout: float = 20.0):
         conn.close()
 
 
+def fetch_page(url: str, retry_s: float, attempts: int = 3):
+    """GET the page, retrying a 5xx: a scheduled run can land in another
+    release's rollout, when the single api pod is briefly replaced (maxSurge 0)."""
+    for attempt in range(1, attempts + 1):
+        status, headers, body = fetch(url)
+        if status < 500 or attempt == attempts:
+            return status, headers, body
+        print(f"{url} answered {status}, retrying in {retry_s:g}s", flush=True)
+        time.sleep(retry_s)
+    raise AssertionError("unreachable")
+
+
 def build_number(tag: str) -> int | None:
     match = re.fullmatch(r"build-(\d+)", tag or "")
     return int(match.group(1)) if match else None
@@ -273,7 +285,23 @@ def check_stream(
         bool(events) and events[0] <= max_first_event_s,
         f"first event within {max_first_event_s:g}s (got {first})",
     )
-    failures.check(bool(pings), f"heartbeats arrive ({len(pings)} ': ping' in {listen_s:.0f}s)")
+    # Pings only go out after a quiet period: a stream busy with events (every
+    # <= heartbeat_s) for the whole window legitimately has none. Then the gap
+    # check below is what proves nothing was held back.
+    quiet = any(
+        later - earlier > heartbeat_s
+        for earlier, later in zip(
+            [0.0] + [at for at, _ in arrivals],
+            [at for at, _ in arrivals] + [listen_s],
+            strict=False,
+        )
+    )
+    failures.check(
+        bool(pings) or not quiet,
+        f"heartbeats arrive ({len(pings)} ': ping' in {listen_s:.0f}s"
+        + ("" if pings or quiet else ", none needed: never quiet for a heartbeat interval")
+        + ")",
+    )
     # From the request to the first arrival, between arrivals, and from the
     # last arrival to the end of the window.
     times = [0.0] + [at for at, _ in arrivals]
@@ -315,6 +343,7 @@ def main(argv=None) -> int:
     parser.add_argument("--max-first-event", type=float, default=5.0)
     parser.add_argument("--heartbeat", type=float, default=15.0, help="the server's ping interval")
     parser.add_argument("--gap-slack", type=float, default=5.0)
+    parser.add_argument("--page-retry", dest="page_retry_s", type=float, default=30.0)
     args = parser.parse_args(argv)
     base_url = args.base_url.rstrip("/")
 
@@ -328,7 +357,7 @@ def main(argv=None) -> int:
     if parts.scheme == "https":
         check_redirect(f"http://{parts.netloc}/", f"https://{parts.netloc}/", failures)
     try:
-        status, headers, _ = fetch(base_url + "/")
+        status, headers, _ = fetch_page(base_url + "/", args.page_retry_s)
         failures.check(status == 200, f"{base_url}/ answers 200 (got {status})")
         check_security_headers(headers, "the page", failures)
     except (OSError, http.client.HTTPException) as exc:
