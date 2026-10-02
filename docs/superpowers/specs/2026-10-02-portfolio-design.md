@@ -32,7 +32,9 @@ None of this may take height from the chat during a conversation, or change how 
 
 1. **Footer "Open to work" callout** (§4). Frontend only, small, independent.
 2. **Portfolio corpus, backend** (§6). Ingest, retrieval, API and DB accept `portfolio`; a placeholder project file. Visitors see no change yet.
-3. **Portfolio frontend and the shared details sheet** (§5, §7). Depends on 2 being deployed (the topic must answer). Adds the popover's "See portfolio →" link.
+3. **Portfolio frontend and the shared details sheet** (§5, §7), split in two (planning, 2026-10-02):
+   - **3a. Shared `DetailsSheet` and the phone diagram sheet** (§5.5 for the diagram). Changes existing behaviour on its own, needs no portfolio content, and does not depend on PR 2.
+   - **3b. The portfolio** (everything else in §5 and §7), stacked on 3a. Depends on PR 2 being deployed (the topic must answer). Adds the popover's "See portfolio →" link.
 
 Each PR gets the normal review gate, a status report in `project/status/`, and the `MOBILE_DESIGN.md` and `SNAPSHOT.md` updates it implies.
 
@@ -57,7 +59,7 @@ Each PR gets the normal review gate, a status report in `project/status/`, and t
 
 **Width fix in the same PR:** with real numbers ("1840ms | 128 queries") the item fits at 360px only after removing the label's side padding (20px to spare after that). A long latency reading ("total 12345ms", shown when a request returns no answer text) already overflows today's footer at 280px and would overflow at 320–375px with the new item. Shorten that reading on phones (for example "12.3s") so the footer never scrolls sideways at 280–393px with any value.
 
-**Tests:** unit tests for `contact.ts` (copy success, fallback, failure shows the address); a component test for open/close and Escape focus return. Phone preview screenshots at 280, 320, 360, 375, 393 and desktop at 1024 and 1280, popover open and closed.
+**Tests:** unit tests for `contact.ts` (copy success, fallback, failure shows the address); a headless-Chrome check of open/close and Escape focus return (§9). Phone preview screenshots at 280, 320, 360, 375, 393 and desktop at 1024 and 1280, popover open and closed.
 
 ## 5. Frontend layout (PR 3)
 
@@ -104,7 +106,7 @@ One component, `frontend/src/components/DetailsSheet.tsx`, used by the portfolio
 
 - **Height:** about 80% of its region at every width, so a strip of the grid or diagram shows above it. The strip behind is subtly dimmed. Desktop portfolio already uses 80%; phones move from about 99% (mocks rounds 2–4) to 80%.
 - **Opening:** a 260ms slide-up; none with `prefers-reduced-motion`.
-- **Closing:** the 44px chevron button, Escape, browser Back, or a tap on empty space in the uncovered strip. Closing deselects and moves focus to the locked bar. Escape order is unchanged: the lightbox first, then deselect, then (phones) back to Chat. See `lib/escapeKey.ts`.
+- **Closing:** the 44px chevron button, Escape, browser Back, or a tap on empty space in the uncovered strip. The sheet has no history entry of its own: Back leaves the Diagram or Portfolio view for Chat and closes the sheet with it (the selection is cleared, so Forward reopens the view without a sheet). This changes today's phone diagram, where the selection survives Back. Closing deselects and moves focus to the locked bar. Escape order is unchanged: the lightbox first, then deselect, then (phones) back to Chat. See `lib/escapeKey.ts`.
 - **Ask box:** on phones the sheet stops above the pipeline strip, so the ask box stays usable while it is open.
 - **Typography:** title `clamp(18px, …, 24px)`; body 15px on phones, rising to 16px at 1280; line-height 1.6; max line length 70ch; uppercase section labels; wider padding than today's panel.
 
@@ -202,6 +204,9 @@ All places that hard-code the two corpora gain `portfolio`:
 - Phones held sideways still show the rotate screen; the new views stay mounted underneath like the diagram does.
 
 ## 9. Testing
+
+The frontend has no DOM test environment (`npm test` is `node --test`), and none is added: pure logic gets unit tests, and component behaviour (popover and sheet open and close, focus return, Escape order, the lightbox focus trap) is checked by a headless-Chrome script driving the phone preview, with `/api` faked so no real questions are sent.
+
 
 - Unit: topic and corpus mapping; view-navigation history for three views (extend `diagramNav.test.ts`); Escape ordering with sheet and lightbox; portfolio frontmatter parsing and validation; `contact.ts`.
 - Backend: scanner picks up `corpus/portfolio`, skips drafts and symlinks; `ask` accepts `portfolio`; migration up and down; warm-up covers the new suggested questions.
