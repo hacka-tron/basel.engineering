@@ -18,7 +18,7 @@ Two entry points share the same delete path:
   override the directory guard for it either (use ``--clear`` for a wipe).
 * ``clear_scope`` targets every document in one corpus and model scope.
 
-Delete order (see BACKLOG, "Redis write inside an open MySQL transaction"):
+Delete order (ingest's per-document write, ``run.write_document``, uses the same one):
 Redis keys first, then the corpus-version bump, then the MySQL rows in their own
 short transaction. No MySQL transaction is open during Redis I/O. The worker
 raises if a KNN match has no MySQL row, so the opposite order could leave Redis

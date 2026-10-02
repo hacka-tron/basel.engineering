@@ -232,7 +232,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - YAML: one chunk per document (`---`).
   - Python/TypeScript: one chunk per top-level function or class.
   - Every chunk keeps `source_path`, `start_line`, `end_line`.
-- **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates the retrieval cache; cached answers are checked against their own source chunks instead, see 7.3).
+- **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged (one query per run loads every document's hash and chunk models). A changed document's old Redis keys are deleted before its MySQL commit and the new ones written after it, never inside the transaction. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates the retrieval cache; cached answers are checked against their own source chunks instead, see 7.3).
 - **Stale documents:** after a complete scan, documents whose files are gone (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
 
 ### 6.5 Redis
@@ -863,7 +863,7 @@ glassbox/
 
 ## 17. Build plan
 
-Each phase ends in something that works. Hand these to Claude Code one phase at a time. Status as of 2026-10-01: Phases 0 to 6 are done and live. Phase 7 is not started.
+Each phase ends in something that works. Hand these to Claude Code one phase at a time. Status as of 2026-10-01: Phases 0 to 6 are done and live. Phase 7 is partly done (README with screenshots); footer stats and load test numbers are not started.
 
 **Phase 0: Scaffold and guardrails** (done)
 - Repo structure, linting, pre-commit, secret scanning.
@@ -898,8 +898,8 @@ Each phase ends in something that works. Hand these to Claude Code one phase at 
 - Image builds to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation, the frontend built into the API image, plan-on-PR.
 - *Done when:* merging to `main` deploys without touching the server.
 
-**Phase 7: Polish (not started)**
-- Not started: README with screenshots/GIF, server-side footer stats, load test numbers recorded, Grafana Cloud (optional).
+**Phase 7: Polish (partly done)**
+- README with screenshots is done (2026-10-02). Not started: server-side footer stats, load test numbers recorded, Grafana Cloud (optional).
 
 ---
 

@@ -280,7 +280,9 @@ async def test_ingest_happy_path_idempotency_and_quarantine(tmp_path, integratio
         (about_me / fixture_name).write_text("# Fixture updated\n\nNew body.\n")
         third = await ingest(tmp_path, engine=engine, redis_client=client)
         assert third.docs_changed == 1
-        assert int(await client.get("corpus:ver:about_me")) == first_version + 1
+        # Two bumps for a changed document: after its old keys go, and after the
+        # new ones are written (write_document).
+        assert int(await client.get("corpus:ver:about_me")) == first_version + 2
         assert third.chunks_written == 1
         assert not await client.exists(redis_key)
         with Session(engine) as session:
@@ -705,7 +707,7 @@ async def test_answer_cache_survives_unrelated_reingest_but_not_source_change_or
         (tmp_path / paths["other"]).write_text(f"# other {name}\n\nEdited.\n")
         changed = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
         assert changed.docs_changed == 1
-        assert int(await client.get("corpus:ver:about_me")) == version + 1
+        assert int(await client.get("corpus:ver:about_me")) == version + 2
         assert served(await cache.get("about_me", model_id, v_source)) == from_source
         assert served(await cache.get("about_me", model_id, v_deleted)) == from_deleted
 
@@ -759,4 +761,360 @@ async def test_model_tag_backfill_sets_fields_only_on_existing_chunk_hashes():
         assert not await client.exists(f"chunk:{gone}")
     finally:
         await client.delete(f"chunk:{present}", f"chunk:{gone}")
+        await client.aclose()
+
+
+class _RecordingRedis:
+    """Just enough of redis.asyncio for ``write_document``: records every call."""
+
+    def __init__(self, on_delete=None, on_pipeline=None):
+        self.calls = []
+        self.keys = {}
+        self.on_delete = on_delete
+        self.on_pipeline = on_pipeline
+
+    async def delete(self, *keys):
+        if self.on_delete:
+            self.on_delete()
+        self.calls.append(("delete", sorted(keys)))
+        for key in keys:
+            self.keys.pop(key, None)
+
+    async def incr(self, key):
+        self.calls.append(("incr", key))
+
+    def pipeline(self, transaction=True):
+        return _RecordingPipeline(self)
+
+
+class _RecordingPipeline:
+    def __init__(self, client):
+        self.client, self.ops = client, []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def delete(self, *keys):
+        self.ops.extend(("delete", key, None) for key in keys)
+
+    def hset(self, key, mapping):
+        self.ops.append(("hset", key, mapping))
+
+    async def execute(self):
+        if self.client.on_pipeline:
+            self.client.on_pipeline()
+        for op, key, mapping in self.ops:
+            if op == "delete":
+                self.client.keys.pop(key, None)
+            else:
+                self.client.keys[key] = mapping
+        self.client.calls.append(("pipeline", [(op, key) for op, key, _ in self.ops]))
+
+
+@pytest.fixture
+def sqlite_sessions(tmp_path):
+    """documents and chunks in SQLite (the models use MySQL-only column types).
+
+    A file, not ``sqlite://``: each session gets its own connection, so a read
+    from another session sees only committed rows.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'ingest.db'}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE documents (id INTEGER PRIMARY KEY AUTOINCREMENT, corpus TEXT, "
+            "source_path TEXT, title TEXT, content_hash TEXT, commit_sha TEXT, "
+            "updated_at TIMESTAMP)"
+        )
+        connection.exec_driver_sql(
+            "CREATE TABLE chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER, "
+            "ordinal INTEGER, text TEXT, start_line INTEGER, end_line INTEGER, "
+            "token_count INTEGER, embedding BLOB, embedding_model TEXT)"
+        )
+    yield sessionmaker(bind=engine)
+    engine.dispose()
+
+
+def _chunks(*texts):
+    from types import SimpleNamespace
+
+    return [
+        SimpleNamespace(text=text, start_line=line, end_line=line, token_count=1)
+        for line, text in enumerate(texts, start=1)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_write_document_commits_mysql_with_no_redis_io_inside_the_transaction(
+    sqlite_sessions,
+):
+    """Old keys go before the commit, new keys after it; a crash in between leaves
+    rows without keys (reconcile repairs those), never keys without rows."""
+    from types import SimpleNamespace
+
+    source = SimpleNamespace(corpus="about_me", source_path="corpus/about-me/order.md")
+
+    def write(client, known, content_hash, texts):
+        return ingest_run.write_document(
+            sqlite_sessions,
+            client,
+            source,
+            content_hash=content_hash,
+            title="Order",
+            chunks=_chunks(*texts),
+            vectors=[[0.5] * 512 for _ in texts],
+            model_id="m",
+            known=known,
+        )
+
+    def indexed():
+        return ingest_run.load_indexed(sqlite_sessions)[("about_me", source.source_path)]
+
+    first = _RecordingRedis()
+    await write(first, None, "h1", ["a", "b", "c"])
+    old = indexed()
+    assert old.content_hash == "h1" and len(old.chunk_ids) == 3 and old.models == {"m"}
+    # A new document has no old keys: one pipeline (each new id's chunktxt cache
+    # dropped with its write, for ids reused after a MySQL wipe), one version bump.
+    assert first.calls == [
+        (
+            "pipeline",
+            [
+                op
+                for chunk_id in old.chunk_ids
+                for op in (("delete", f"chunktxt:{chunk_id}"), ("hset", f"chunk:{chunk_id}"))
+            ],
+        ),
+        ("incr", "corpus:ver:about_me"),
+    ]
+
+    old_keys = [f"chunk:{chunk_id}" for chunk_id in old.chunk_ids]
+    old_text_keys = [f"chunktxt:{chunk_id}" for chunk_id in old.chunk_ids]
+
+    def assert_committed(expected):
+        assert indexed().content_hash == expected
+
+    # The old keys go while MySQL still holds the old version; the new keys are
+    # written only once the new version is committed (read by another session).
+    second = _RecordingRedis(
+        on_delete=lambda: assert_committed("h1"), on_pipeline=lambda: assert_committed("h2")
+    )
+
+    await write(second, old, "h2", ["d", "e"])
+    new = indexed()
+    assert new.content_hash == "h2" and len(new.chunk_ids) == 2
+    assert not set(new.chunk_ids) & set(old.chunk_ids)
+    assert second.calls == [
+        ("delete", sorted(old_keys + old_text_keys)),
+        ("incr", "corpus:ver:about_me"),
+        (
+            "pipeline",
+            [
+                op
+                for chunk_id in old.chunk_ids
+                for op in (("delete", f"chunk:{chunk_id}"), ("delete", f"chunktxt:{chunk_id}"))
+            ]
+            + [
+                op
+                for chunk_id in new.chunk_ids
+                for op in (("delete", f"chunktxt:{chunk_id}"), ("hset", f"chunk:{chunk_id}"))
+            ],
+        ),
+        ("incr", "corpus:ver:about_me"),
+    ]
+    assert sorted(second.keys) == sorted(f"chunk:{chunk_id}" for chunk_id in new.chunk_ids)
+    # Each key describes its own row: content_sha of that id's MySQL text.
+    from sqlalchemy import text as sql_text
+
+    from services.glassbox.cache.answer import chunk_content_sha
+
+    with sqlite_sessions() as session:
+        stored = dict(session.execute(sql_text("SELECT id, text FROM chunks")).all())
+    assert len(set(stored.values())) == len(stored)
+    for chunk_id in new.chunk_ids:
+        mapping = second.keys[f"chunk:{chunk_id}"]
+        assert mapping["content_sha"] == chunk_content_sha(stored[chunk_id])
+        assert mapping["document_id"] == new.document_id
+
+    # Crash after the commit, before the new keys: MySQL has the new version and
+    # Redis has no key for any of its rows (and none for deleted rows).
+    crashed = _RecordingRedis()
+    crashed.keys = dict(second.keys)
+
+    async def fail(*args, **kwargs):
+        raise ConnectionError("Redis went away after the commit")
+
+    original = ingest_run.replace_document_vectors
+    ingest_run.replace_document_vectors = fail
+    try:
+        with pytest.raises(ConnectionError):
+            await write(crashed, new, "h3", ["f"])
+    finally:
+        ingest_run.replace_document_vectors = original
+    after = indexed()
+    assert after.content_hash == "h3" and len(after.chunk_ids) == 1
+    assert crashed.keys == {}
+
+    # A document whose chunker produced no chunks is still recorded.
+    empty = SimpleNamespace(corpus="about_me", source_path="corpus/about-me/empty.md")
+    await ingest_run.write_document(
+        sqlite_sessions,
+        _RecordingRedis(),
+        empty,
+        content_hash="e",
+        title="Empty",
+        chunks=[],
+        vectors=[],
+        model_id="m",
+        known=None,
+    )
+    assert ingest_run.load_indexed(sqlite_sessions)[("about_me", empty.source_path)].chunk_ids == []
+
+
+@pytest.mark.asyncio
+async def test_failed_run_status_update_never_masks_the_original_error(
+    tmp_path, monkeypatch, caplog
+):
+    """If MySQL is gone, marking the run failed fails too: log it, raise the real error."""
+    from contextlib import contextmanager
+
+    from sqlalchemy.exc import OperationalError
+
+    class Sessions:
+        begins = 0
+
+        def begin(self):
+            self.begins += 1
+            if self.begins == 1:
+                return self._create_run()
+            raise OperationalError("UPDATE ingestion_runs", {}, Exception("server has gone away"))
+
+        @contextmanager
+        def _create_run(self):
+            class Session:
+                def add(self, run):
+                    self.run = run
+
+                def flush(self):
+                    self.run.id = 41
+
+            yield Session()
+
+    sessions = Sessions()
+
+    async def redis_failure(*args):
+        raise ConnectionError("the error that ended the run")
+
+    monkeypatch.setattr(ingest_run, "sessionmaker", lambda bind: sessions)
+    monkeypatch.setattr(ingest_run, "prepare_index", redis_failure)
+    with pytest.raises(ConnectionError, match="the error that ended the run"):
+        await ingest_run._ingest(tmp_path, object(), object(), "off", 0.3, False)
+    assert sessions.begins == 2
+    assert "Could not mark ingestion run 41 failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_crash_between_mysql_commit_and_redis_write_is_repaired_by_next_run(
+    tmp_path, integration_stack, monkeypatch
+):
+    """The changed file's new hash is committed but its keys were never written.
+
+    The next run must skip the file (its hash already matches, no embedding call)
+    and its reconcile must write the missing keys from MySQL. The old keys were
+    deleted before the commit, so no orphan is left for the reconcile's guards.
+    """
+    from services.glassbox.ingest.redis_index import chunk_content_sha
+    from services.glassbox.retrieval.search import search_chunks
+
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
+    name = tmp_path.name.replace("-", "_")
+    (tmp_path / "corpus" / "about-me").mkdir(parents=True)
+    source_path = f"corpus/about-me/crash_{name}.md"
+    (tmp_path / source_path).write_text(f"# Crash {name}\n\nFirst version.\n")
+    with engine.connect() as connection:
+        existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
+
+    def rows():
+        with Session(engine) as session:
+            return session.execute(
+                select(DbChunk.id, DbChunk.text)
+                .join(Document, DbChunk.document_id == Document.id)
+                .where(Document.source_path == source_path)
+                .order_by(DbChunk.ordinal)
+            ).all()
+
+    redis_keys = []
+    try:
+        await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        old_ids = [row.id for row in rows()]
+        redis_keys += [f"chunk:{chunk_id}" for chunk_id in old_ids]
+        assert old_ids and await client.exists(*redis_keys) == len(old_ids)
+
+        (tmp_path / source_path).write_text(f"# Crash {name}\n\nSecond version.\n")
+        original_write = ingest_run.replace_document_vectors
+
+        async def crash(*args, **kwargs):
+            raise ConnectionError("Redis went away after the MySQL commit")
+
+        monkeypatch.setattr(ingest_run, "replace_document_vectors", crash)
+        with pytest.raises(ConnectionError):
+            await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        monkeypatch.setattr(ingest_run, "replace_document_vectors", original_write)
+
+        new = rows()
+        new_ids = [row.id for row in new]
+        redis_keys += [f"chunk:{chunk_id}" for chunk_id in new_ids]
+        assert new and "Second version" in new[0].text
+        assert not set(new_ids) & set(old_ids)
+        assert await client.exists(*(f"chunk:{i}" for i in old_ids + new_ids)) == 0
+        with Session(engine) as session:
+            statuses = list(
+                session.scalars(
+                    select(IngestionRun.status)
+                    .where(IngestionRun.id.not_in(existing_run_ids))
+                    .order_by(IngestionRun.id)
+                )
+            )
+        assert statuses == ["succeeded", "failed"]
+
+        class NoEmbed(FakeEmbeddingProvider):
+            async def embed(self, texts):
+                raise AssertionError("the committed document must be skipped, not re-embedded")
+
+        monkeypatch.setattr(ingest_run, "get_embedding_provider", NoEmbed)
+        repaired = await ingest(tmp_path, engine=engine, redis_client=client, sweep="off")
+        assert repaired.docs_changed == 0 and not repaired.errors.get(source_path)
+        report = next(r for r in repaired.reconcile if r.corpus == "about_me")
+        assert set(new_ids) <= set(report.repaired)
+        assert not set(old_ids) & set(report.removed)
+        for row in new:
+            assert await client.hget(f"chunk:{row.id}", "content_sha") == (
+                chunk_content_sha(row.text).encode()
+            )
+        assert await client.exists(*(f"chunk:{chunk_id}" for chunk_id in old_ids)) == 0
+        (vector,) = await FakeEmbeddingProvider().embed([new[0].text])
+        matches = await search_chunks(client, vector, "about_me", "fake-v1", top_k=8)
+        assert new_ids[0] in {match["chunk_id"] for match in matches}
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                Document.__table__.delete().where(Document.source_path == source_path)
+            )
+            new_run_ids = set(connection.scalars(select(IngestionRun.id))) - existing_run_ids
+            if new_run_ids:
+                connection.execute(
+                    IngestionRun.__table__.delete().where(IngestionRun.id.in_(new_run_ids))
+                )
+        if redis_keys:
+            await client.delete(*redis_keys)
         await client.aclose()

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import redis.asyncio as redis
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
@@ -233,6 +233,7 @@ async def _ingest(
         provider = get_embedding_provider()
         quarantine = quarantine_categories()
         seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
+        indexed = load_indexed(sessions)
         for source in scan_sources(root):
             # Quarantined or failed files still exist, so they never count as stale.
             seen[source.corpus].add(source.source_path)
@@ -251,23 +252,13 @@ async def _ingest(
                 # The guard version is part of the hash, so new detection rules
                 # re-scan every about_me document once instead of skipping it.
                 content_hash = guarded_content_hash(content_hash)
-            with sessions() as session:
-                existing = session.scalar(
-                    select(Document).where(
-                        Document.corpus == source.corpus,
-                        Document.source_path == source.source_path,
-                    )
-                )
-                if existing is not None and existing.content_hash == content_hash:
-                    models = set(
-                        session.scalars(
-                            select(DbChunk.embedding_model)
-                            .where(DbChunk.document_id == existing.id)
-                            .distinct()
-                        )
-                    )
-                    if models == {provider.model_id}:
-                        continue
+            known = indexed.get((source.corpus, source.source_path))
+            if (
+                known is not None
+                and known.content_hash == content_hash
+                and known.models == {provider.model_id}
+            ):
+                continue
 
             content = scanned.content
             if source.corpus == "about_me":
@@ -293,57 +284,17 @@ async def _ingest(
                 result.errors[source.source_path] = str(exc)
                 LOGGER.warning("Skipped %s: %s", source.source_path, exc)
                 continue
-            new_vectors = []
-            with sessions.begin() as session:
-                document = session.scalar(
-                    select(Document).where(
-                        Document.corpus == source.corpus,
-                        Document.source_path == source.source_path,
-                    )
-                )
-                if document is None:
-                    document = Document(
-                        corpus=source.corpus,
-                        source_path=source.source_path,
-                        content_hash=content_hash,
-                        title=_title(content, source.path),
-                    )
-                    session.add(document)
-                    session.flush()
-                else:
-                    document.content_hash = content_hash
-                    document.title = _title(content, source.path)
-                    document.updated_at = _now()
-                old_ids = list(
-                    session.scalars(select(DbChunk.id).where(DbChunk.document_id == document.id))
-                )
-                if old_ids:
-                    session.query(DbChunk).filter(DbChunk.document_id == document.id).delete(
-                        synchronize_session=False
-                    )
-                for ordinal, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
-                    packed = struct.pack(f"{len(vector)}f", *vector)
-                    row = DbChunk(
-                        document_id=document.id,
-                        ordinal=ordinal,
-                        text=chunk.text,
-                        start_line=chunk.start_line,
-                        end_line=chunk.end_line,
-                        token_count=chunk.token_count,
-                        embedding=packed,
-                        embedding_model=provider.model_id,
-                    )
-                    session.add(row)
-                    session.flush()
-                    new_vectors.append(
-                        (row.id, source.corpus, packed, source.source_path, document.id, chunk.text)
-                    )
-                await replace_document_vectors(
-                    redis_client, old_ids, new_vectors, provider.model_id
-                )
-            # The DB transaction has committed; invalidate content-dependent
-            # caches for this corpus before another request can reuse them.
-            await redis_client.incr(f"corpus:ver:{source.corpus}")
+            await write_document(
+                sessions,
+                redis_client,
+                source,
+                content_hash=content_hash,
+                title=_title(content, source.path),
+                chunks=chunks,
+                vectors=vectors,
+                model_id=provider.model_id,
+                known=known,
+            )
             result.docs_changed += 1
             result.chunks_written += len(chunks)
         result.shadow_removed = await remove_shadowed(
@@ -371,13 +322,166 @@ async def _ingest(
         return result
     except Exception:
         if run_id is not None:
-            with sessions.begin() as session:
-                run = session.get(IngestionRun, run_id)
-                run.status = "failed"
-                run.finished_at = _now()
-                run.docs_changed = result.docs_changed
-                run.chunks_written = result.chunks_written
+            _mark_run_failed(sessions, run_id, result)
         raise
+
+
+def _mark_run_failed(sessions, run_id: int, result: RunResult) -> None:
+    """Record ``status='failed'`` in a fresh session, never masking the original error.
+
+    If the run failed because MySQL went away, this write fails too: it is logged
+    and swallowed so the caller re-raises (and the Job log shows) the real cause.
+    The row then stays ``running``.
+    """
+    try:
+        with sessions.begin() as session:
+            run = session.get(IngestionRun, run_id)
+            run.status = "failed"
+            run.finished_at = _now()
+            run.docs_changed = result.docs_changed
+            run.chunks_written = result.chunks_written
+    except Exception:
+        LOGGER.exception(
+            "Could not mark ingestion run %s failed; re-raising the error that ended the run",
+            run_id,
+        )
+
+
+@dataclass
+class IndexedDocument:
+    """What MySQL holds for one document: enough for the incremental skip check."""
+
+    document_id: int
+    content_hash: str
+    chunk_ids: list[int] = field(default_factory=list)
+    models: set[str] = field(default_factory=set)
+
+
+def load_indexed(sessions) -> dict[tuple[str, str], IndexedDocument]:
+    """Every indexed document's hash, chunk ids and embedding models, in one query.
+
+    Keyed by ``(corpus, source_path)``. Loaded once per run instead of one
+    ``SELECT`` per scanned file; safe because ``ingest:lock`` keeps any other
+    writer out until the run ends. Vectors and texts are not loaded.
+    """
+    with sessions() as session:
+        rows = session.execute(
+            select(
+                Document.corpus,
+                Document.source_path,
+                Document.id,
+                Document.content_hash,
+                DbChunk.id,
+                DbChunk.embedding_model,
+            ).outerjoin(DbChunk, DbChunk.document_id == Document.id)
+        ).all()
+    indexed: dict[tuple[str, str], IndexedDocument] = {}
+    for corpus, source_path, document_id, content_hash, chunk_id, model in rows:
+        document = indexed.setdefault(
+            (corpus, source_path), IndexedDocument(document_id, content_hash)
+        )
+        if chunk_id is not None:
+            document.chunk_ids.append(chunk_id)
+            document.models.add(model)
+    return indexed
+
+
+async def write_document(
+    sessions,
+    redis_client,
+    source,
+    *,
+    content_hash: str,
+    title: str,
+    chunks,
+    vectors,
+    model_id: str,
+    known: IndexedDocument | None,
+) -> None:
+    """Replace one document's chunks in MySQL and Redis; no Redis I/O inside the transaction.
+
+    Order, like the stale sweep's (``sweep.py``): the worker raises when a KNN
+    match has no MySQL row, so a Redis key must never name a deleted row.
+
+    1. Delete the old ``chunk:{id}`` keys (and their ``chunktxt:{id}``) and bump
+       ``corpus:ver`` (retrieval-cache entries holding the old ids would
+       otherwise outlive the rows).
+    2. One short MySQL transaction: upsert the document (new ``content_hash``),
+       delete its old chunk rows, bulk-insert the new ones, read their ids back.
+    3. Write the new keys and bump ``corpus:ver`` again (entries computed while
+       the document had no keys must not be reused).
+
+    A crash or failure after step 1 leaves MySQL rows with no Redis keys, never
+    keys without rows. Before the commit the old rows and old hash remain, so the
+    next run re-ingests the file; after it the new hash matches, the file is
+    skipped, and that run's reconcile (``reconcile.py``) writes the missing keys
+    from MySQL. Missing keys are repaired without the orphan-deletion guards.
+    The answer cache needs nothing extra: its entries check each source key's
+    ``content_sha``, and a missing or rewritten key reads as changed.
+    """
+    corpus = source.corpus
+    if known is not None and known.chunk_ids:
+        # With each key goes its chunktxt text cache (redis_index.py drops the
+        # new ids' cache too, for ids reused after a MySQL wipe).
+        await redis_client.delete(
+            *(f"chunk:{chunk_id}" for chunk_id in known.chunk_ids),
+            *(f"chunktxt:{chunk_id}" for chunk_id in known.chunk_ids),
+        )
+        await redis_client.incr(f"corpus:ver:{corpus}")
+    packed = [struct.pack(f"{len(vector)}f", *vector) for vector in vectors]
+    with sessions.begin() as session:
+        document = session.get(Document, known.document_id) if known is not None else None
+        if document is None:
+            document = Document(
+                corpus=corpus,
+                source_path=source.source_path,
+                content_hash=content_hash,
+                title=title,
+            )
+            session.add(document)
+            session.flush()
+        else:
+            document.content_hash = content_hash
+            document.title = title
+            document.updated_at = _now()
+        document_id = document.id
+        # Normally the ids deleted in step 1; read here so a key step 1 did not
+        # know about is removed in step 3 too.
+        old_ids = list(
+            session.scalars(select(DbChunk.id).where(DbChunk.document_id == document_id))
+        )
+        if old_ids:
+            session.execute(delete(DbChunk).where(DbChunk.document_id == document_id))
+        rows = [
+            {
+                "document_id": document_id,
+                "ordinal": ordinal,
+                "text": chunk.text,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "token_count": chunk.token_count,
+                "embedding": vector,
+                "embedding_model": model_id,
+            }
+            for ordinal, (chunk, vector) in enumerate(zip(chunks, packed, strict=True))
+        ]
+        if rows:
+            # One executemany (PyMySQL batches it into multi-row INSERTs), then one
+            # SELECT for the ids, instead of a flush per chunk.
+            session.execute(insert(DbChunk), rows)
+        new_ids = list(
+            session.scalars(
+                select(DbChunk.id)
+                .where(DbChunk.document_id == document_id)
+                .order_by(DbChunk.ordinal)
+            )
+        )
+    new_vectors = [
+        (chunk_id, corpus, vector, source.source_path, document_id, chunk.text)
+        for chunk_id, chunk, vector in zip(new_ids, chunks, packed, strict=True)
+    ]
+    await replace_document_vectors(redis_client, old_ids, new_vectors, model_id)
+    await redis_client.incr(f"corpus:ver:{corpus}")
 
 
 async def remove_shadowed(
