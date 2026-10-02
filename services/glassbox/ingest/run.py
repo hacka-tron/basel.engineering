@@ -48,6 +48,7 @@ from services.glassbox.ingest.sweep import (
     plan_sweep,
     run_sweep,
     sweep_mode_from_env,
+    sweep_notes,
 )
 from services.glassbox.privacy import guard_document, guarded_content_hash, quarantine_categories
 from services.glassbox.providers.factory import get_embedding_provider
@@ -294,14 +295,15 @@ async def _ingest(
             run.finished_at = _now()
             run.docs_changed = result.docs_changed
             run.chunks_written = result.chunks_written
+            run.notes = sweep_notes(sweep, result.sweep)
         return result
     except Exception:
         if run_id is not None:
-            _mark_run_failed(sessions, run_id, result)
+            _mark_run_failed(sessions, run_id, result, sweep)
         raise
 
 
-def _mark_run_failed(sessions, run_id: int, result: RunResult) -> None:
+def _mark_run_failed(sessions, run_id: int, result: RunResult, sweep: str) -> None:
     """Record ``status='failed'`` in a fresh session, never masking the original error.
 
     If the run failed because MySQL went away, this write fails too: it is logged
@@ -315,6 +317,7 @@ def _mark_run_failed(sessions, run_id: int, result: RunResult) -> None:
             run.finished_at = _now()
             run.docs_changed = result.docs_changed
             run.chunks_written = result.chunks_written
+            run.notes = sweep_notes(sweep, result.sweep)
     except Exception:
         LOGGER.exception(
             "Could not mark ingestion run %s failed; re-raising the error that ended the run",
@@ -527,20 +530,28 @@ async def clear(
     engine: Engine | None = None,
     redis_client=None,
     documents=None,
+    orphan_chunk_ids=None,
 ):
-    """Wipe one corpus/model scope's documents, chunks and Redis keys.
+    """Wipe one corpus/model scope's documents, chunks and Redis keys (incl. orphans).
 
-    ``documents`` limits the wipe to an already listed (and confirmed) set.
+    ``documents`` and ``orphan_chunk_ids`` limit the wipe to an already listed (and
+    confirmed) set. Redis is read even on a dry run, to count orphan keys.
     """
     model_id = model_id or get_embedding_provider().model_id
     own_engine = engine is None
-    own_redis = redis_client is None and not dry_run
+    own_redis = redis_client is None
     engine = engine or create_db_engine()
-    if redis_client is None and not dry_run:
+    if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
     try:
         return await clear_scope(
-            engine, redis_client, corpus, model_id, dry_run=dry_run, documents=documents
+            engine,
+            redis_client,
+            corpus,
+            model_id,
+            dry_run=dry_run,
+            documents=documents,
+            orphan_chunk_ids=orphan_chunk_ids,
         )
     finally:
         if own_redis:
@@ -593,12 +604,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _confirm_clear(corpus: str, model_id: str, count: int) -> bool:
+def _confirm_clear(corpus: str, model_id: str, count: int, orphans: int = 0) -> bool:
     if not sys.stdin.isatty():
         print("--clear needs --yes when not run interactively", file=sys.stderr)
         return False
     answer = input(
-        f"Delete {count} {corpus} documents and their {model_id} chunks and Redis keys? "
+        f"Delete {count} {corpus} documents and their {model_id} chunks and Redis keys "
+        f"(plus {orphans} orphan Redis chunk keys)? "
         f"Type the corpus name to confirm: "
     )
     return answer.strip() == corpus
@@ -624,7 +636,7 @@ def _print_reconcile(reports: list[ReconcileReport]) -> None:
 def _print_refusals(plans: list[SweepPlan]) -> None:
     """Make a refused sweep impossible to miss in the Job log (stdout and stderr).
 
-    There is no column on ``ingestion_runs`` for it, and a refusal deliberately
+    The refusal is also stored in ``ingestion_runs.notes``, but a refusal deliberately
     doesn't fail the run (a retry would refuse again and skip the warm-up).
     """
     for plan in plans:
@@ -664,20 +676,33 @@ def main(argv: list[str] | None = None) -> int:
         try:
             model_id = args.model or get_embedding_provider().model_id
             planned = asyncio.run(clear(args.corpus, model_id=model_id, dry_run=True))
+            orphans = len(planned.orphan_chunk_ids)
         except Exception:
             LOGGER.exception("Clear dry run failed")
             return 1
         if args.dry_run:
-            print(f"dry run: would clear {len(planned)} {args.corpus} documents ({model_id})")
+            print(
+                f"dry run: would clear {len(planned.documents)} {args.corpus} documents "
+                f"and {orphans} orphan Redis chunk keys ({model_id})"
+            )
             return 0
-        if not planned:
+        if not planned.documents and not orphans:
             print(f"nothing to clear for {args.corpus} ({model_id})")
             return 0
-        if not args.yes and not _confirm_clear(args.corpus, model_id, len(planned)):
+        if not args.yes and not _confirm_clear(
+            args.corpus, model_id, len(planned.documents), orphans
+        ):
             print("clear cancelled", file=sys.stderr)
             return 2
         try:
-            cleared = asyncio.run(clear(args.corpus, model_id=model_id, documents=planned))
+            cleared = asyncio.run(
+                clear(
+                    args.corpus,
+                    model_id=model_id,
+                    documents=planned.documents,
+                    orphan_chunk_ids=planned.orphan_chunk_ids,
+                )
+            )
         except Exception:
             LOGGER.exception("Clear failed")
             print(
@@ -688,7 +713,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"cleared {len(cleared)} {args.corpus} documents ({model_id})")
+        print(
+            f"cleared {len(cleared.documents)} {args.corpus} documents and "
+            f"{len(cleared.orphan_chunk_ids)} orphan Redis chunk keys ({model_id})"
+        )
         return 0
     if args.corpus:
         print("--corpus is only used with --clear", file=sys.stderr)
