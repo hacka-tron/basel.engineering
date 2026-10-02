@@ -31,7 +31,7 @@ sequenceDiagram
 
 ## Key decisions
 
-- **Same clock origin as `total_ms`.** Both start at `request_start_ts`, so `ttft_ms <= total_ms` always and the two are directly comparable.
+- **Same clock origin as `total_ms`.** Both start at `request_start_ts`, so the two are directly comparable, and `ttft_ms <= total_ms` in practice. Both read the wall clock (`time.time()` in `trace.py`), so a clock step during a request could break that ordering in rare cases.
 - **Answer-cache hits are measured.** The cached answer is sent as one `token` event; that is when the visitor first sees text, so it matches what the browser measures. Hits are much faster, so analysis splits by `cache_status`. The no-sources abstention reply is also a streamed answer and is measured (flagged by `stage_timings_ms.abstained`).
 - **NULL when no answer text was sent:** `retrieval_only` (kill switch or budget), Stop before the first token, and errors (which write no row). A Stop after the first token keeps its TTFT.
 - **Server-side only.** It excludes network time to the visitor and Cloudflare. The production-vs-local comparison through Cloudflare (DD2 §7.5's scripted `curl -N` check) is still not built.

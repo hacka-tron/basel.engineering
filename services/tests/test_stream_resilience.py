@@ -721,6 +721,43 @@ def test_ttft_is_measured_for_an_answer_cache_hit(harness, fake_clock):
     assert saved["ttft_ms"] == 140
 
 
+def test_ttft_ignores_an_empty_token_frame(harness, fake_clock):
+    """An empty `token` event (here a cached empty answer) shows no text: no TTFT."""
+
+    class EmptyHitCache(RecordingAnswerCache):
+        async def get(self, *args):
+            fake_clock["now"] = 140
+            return {
+                "answer": "",
+                "chunks": [
+                    {
+                        "n": 1,
+                        "chunk_id": 42,
+                        "text": "source text",
+                        "source_path": "docs/DESIGN.md",
+                        "title": "Design",
+                        "score": 0.9,
+                    }
+                ],
+            }
+
+    harness["cache"] = EmptyHitCache()
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["cache_status"] == "answer_hit"
+    assert saved["ttft_ms"] is None
+
+
+def test_ttft_is_measured_for_the_no_sources_abstention(harness, fake_clock):
+    harness["redis"].outcome = "empty"
+    fake_clock["now"] = 230
+    _run_stream()
+    [saved] = harness["saved"]
+    assert saved["mode"] == "full"
+    assert saved["timings"]["abstained"] == 1
+    assert saved["ttft_ms"] == 230
+
+
 def test_ttft_is_written_to_the_query_row(monkeypatch):
     """_save_query passes ttft_ms through to the ORM row (no database needed)."""
     from services.glassbox.api import ask
