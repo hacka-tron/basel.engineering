@@ -80,7 +80,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "ABOUT_ME_DEPLOY_KEY is not set, so this build uses the public corpus only."
+            echo "ABOUT_ME_DEPLOY_KEY is not set, so this build has no About Basel files."
           fi
       # A configured key that fails (revoked, repo renamed) fails the release
       # rather than shipping an image without the private corpus; removing the
@@ -127,7 +127,7 @@ jobs:
       # 'x' (an empty string is falsy), which once nearly exported the private
       # layer. Exactly one runs; services/tests/test_private_corpus.py checks
       # the conditions and that the private build has no cache settings at all.
-      - name: Build and push (public corpus only)
+      - name: Build and push (without the private corpus)
         if: steps.about_me.outputs.configured != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         env:

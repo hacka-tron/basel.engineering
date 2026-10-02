@@ -19,7 +19,8 @@ Short and current: who is coordinating, what state things are in, what is open, 
 
 **Parked by the owner**
 - RAG quality plan is merged (`docs/DESIGN-005-rag-quality.md`, `docs/superpowers/plans/2026-10-01-rag-quality.md`), but **no evaluations (free or paid) until the owner adds more documents**.
-- The About Basel files (private repo `hacka-tron/basel.engineering-docs`) mirror the owner's resume; don't edit them for architecture facts (e.g. the RDS line); raise it with the owner.
+- The About Basel files (private repo `hacka-tron/basel.engineering-docs`) mirror the owner's resume and describe the owner's skills, not this project; its RDS line is intentional (owner, 2026-10-02). Don't edit them for architecture facts.
+- Done by the owner 2026-10-02: Cloudflare "Always Use HTTPS" (HTTP now 301s).
 
 **Where to look**
 - Next actions: `project/BACKLOG.md` "> RESUME HERE"; owner-only decisions: its "Open decisions".

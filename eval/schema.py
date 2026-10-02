@@ -59,6 +59,11 @@ def _fail(case_id: str, message: str) -> None:
 
 
 PRIVATE_PREFIX = "private/"
+# The About Basel files in the private repo. Committed so CI still catches a typo in a
+# `private/...` expected source; extend it when the owner adds a file there.
+KNOWN_PRIVATE_SOURCES = frozenset(
+    f"{PRIVATE_PREFIX}{name}.md" for name in ("bio", "google", "microsoft", "projects", "skills")
+)
 
 
 def _source_file(root: Path, source: str) -> Path | None:
@@ -104,7 +109,10 @@ def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
     for source in sources:
         # About Basel files live in a private repo, so a `private/...` source can only be
         # checked when a local checkout of it exists (see _source_file).
-        if not source.startswith(PRIVATE_PREFIX) and not (root / source).is_file():
+        if source.startswith(PRIVATE_PREFIX):
+            if source not in KNOWN_PRIVATE_SOURCES:
+                _fail(case_id, f"unknown private source {source} (add it to KNOWN_PRIVATE_SOURCES)")
+        elif not (root / source).is_file():
             _fail(case_id, f"expected source {source} does not exist")
         if (case["corpus"] == "about_me") != source.startswith(PRIVATE_PREFIX):
             _fail(case_id, f"expected source {source} is outside corpus {case['corpus']}")

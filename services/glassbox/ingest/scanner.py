@@ -1,4 +1,4 @@
-"""Discover public corpus files and quarantine likely secrets before ingestion."""
+"""Discover corpus files and quarantine likely secrets before ingestion."""
 
 import hashlib
 import math
