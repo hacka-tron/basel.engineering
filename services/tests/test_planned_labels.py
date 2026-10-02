@@ -154,6 +154,17 @@ LIVE_UNITS = [
         '- **One-click restore.** "Ops · Restore from snapshot"',
     ),
     ("docs/architecture/deep-dive.md", "## Alarms, uptime probe and daily snapshots"),
+    # The post-deploy stream check (DD2 §7.8), built 2026-10-02.
+    ("docs/DESIGN-004-action-plan.md", "**Streaming hardening formalized (DD2 §7)**"),
+    ("docs/DESIGN-004-action-plan.md", "post-deploy streaming check in CI |"),
+    ("docs/DESIGN-004-action-plan.md", "post-deploy Cloudflare streaming check was added in M3"),
+    ("docs/DESIGN-002-followups.md", "A scripted post-deploy streaming check through Cloudflare"),
+    ("docs/DESIGN-002-followups.md", "- **Scripted check (built, §7.8):**"),
+    ("docs/DESIGN-002-followups.md", "- The check runs in CI after every deploy"),
+    ("docs/DESIGN-002-followups.md", "### 7.8 Implementation notes (post-deploy stream check)"),
+    ("docs/DESIGN-002-followups.md", "| Phase 6: CI/CD | Post-deploy streaming check"),
+    ("docs/DESIGN.md", "`stream-check.yml` waits until `/api/version`"),
+    ("docs/architecture/deep-dive.md", "## Post-deploy streaming check through Cloudflare"),
 ]
 
 # (path, text inside a unit that describes work not built yet)
@@ -161,7 +172,6 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "## 20. Stretch ideas"),
     ("docs/DESIGN-004-action-plan.md", "| M3 (not built yet) | DD2 | Self-healing (ASG)"),
     ("docs/DESIGN-004-action-plan.md", "DD2's self-healing node and the DD3 Google Drive"),
-    ("docs/DESIGN-004-action-plan.md", "**Streaming hardening formalized (DD2 §7)**"),
     ("docs/DESIGN-004-action-plan.md", "**Corpus authoring guide + validation (DD2 §4)**"),
     # Heading marks cover their section: bullets under DESIGN.md's stretch ideas.
     ("docs/DESIGN.md", "- **EKS for an afternoon:**"),
@@ -238,20 +248,15 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "External Secrets Operator to sync automatically"),
     ("docs/DESIGN-005-rag-quality.md", "Planned: a **lexical-only retrieval eval**"),
     ("docs/DESIGN-005-rag-quality.md", "| **Online (weekly, manual; planned)** |"),
-    ("docs/DESIGN-002-followups.md", "- **Scripted check (not built yet):**"),
-    ("docs/DESIGN-002-followups.md", "- Running the scripted check in CI after every deploy"),
     ("docs/DESIGN-002-followups.md", "## 8. Network: S3 gateway endpoint (not built yet)"),
     ("docs/DESIGN-002-followups.md", "ALTER TABLE documents ADD COLUMN metadata JSON NULL;"),
-    ("docs/DESIGN-002-followups.md", "The scripted post-deploy streaming check"),
     ("docs/DESIGN-003-ingestion.md", "### 4.2 Why a raw zone at all (planned)"),
     ("docs/DESIGN-003-ingestion.md", "### 8.2 Processing one message (planned)"),
     ("docs/DESIGN-003-ingestion.md", "## 5. Google Drive connector (dropped"),
     ("docs/DESIGN-004-action-plan.md", "load test numbers recorded are not started"),
-    ("docs/DESIGN-004-action-plan.md", "post-deploy Cloudflare streaming check is not built"),
     ("docs/DESIGN-005-rag-quality.md", "| Retrieval, lexical leg (planned with hybrid search) |"),
     ("docs/DESIGN-005-rag-quality.md", "| Answer: faithfulness (planned) |"),
     ("docs/DESIGN-005-rag-quality.md", "### 5.3 Judge design (planned)"),
-    ("docs/architecture/deep-dive.md", "**Streaming checks (DD2).**"),
     ("docs/architecture/deep-dive.md", "**Deleting stale documents automatically.**"),
 ]
 

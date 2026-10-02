@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,6 +39,17 @@ app.include_router(csp_report_router)
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/version")
+async def version(response: Response) -> dict[str, str]:
+    """The image's release tag (`build-N`), baked in by release.yml as GLASSBOX_BUILD.
+
+    The post-deploy stream check (.github/workflows/stream-check.yml) polls this
+    to know when a release is live. Local and test images report "dev".
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return {"build": os.environ.get("GLASSBOX_BUILD") or "dev"}
 
 
 @app.get("/readyz")
