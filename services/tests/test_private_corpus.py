@@ -295,3 +295,21 @@ def test_no_release_step_lists_or_prints_files():
     for step in _release_steps():
         run = step.get("run", "")
         assert not re.search(r"\b(ls|cat|find|tree|head|tail|xxd|base64)\b", run), run
+
+
+def test_every_dockerfile_copy_source_is_tracked_in_git():
+    """A build without the private checkout must not fail on an empty COPY source."""
+    import subprocess
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    for line in (REPO / "Dockerfile").read_text().splitlines():
+        parts = line.split()
+        if not parts or parts[0] != "COPY" or any(p.startswith("--from") for p in parts):
+            continue
+        for source in [p for p in parts[1:-1] if not p.startswith("--")]:
+            prefix = source.rstrip("/")
+            assert any(
+                f == prefix or f.startswith(prefix + "/") for f in tracked
+            ), f"Dockerfile COPY source {source} has no tracked files"
