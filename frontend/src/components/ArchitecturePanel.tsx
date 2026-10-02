@@ -335,6 +335,8 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
           // Phones, sheet open (owner, 2026-10-02): nodes and arrows ignore taps, so any
           // tap in the strip falls through to the pane and closes the sheet (index.css).
           className={portrait && detailsOpen ? 'sheet-open' : undefined}
+          nodesFocusable={!(portrait && detailsOpen)}
+          edgesFocusable={!(portrait && detailsOpen)}
           nodes={nodes}
           edges={portrait ? portraitEdges : architectureEdges}
           defaultEdgeOptions={portrait ? portraitEdgeOptions : defaultEdgeOptions}

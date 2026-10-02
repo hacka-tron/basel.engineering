@@ -75,15 +75,16 @@ type DetailsSheetProps = {
 }
 
 /**
- * Not keyed by the selected item: a tap on another card or node in the strip
- * switches the content straight away, without sliding the sheet in again.
+ * Not keyed by the selected item, so a switch of content (portfolio cards,
+ * keyboard) does not slide the sheet in again. On the phone diagram every tap
+ * in the strip closes the sheet; there is no switching by tap.
  */
 export function DetailsSheet({ label, closeLabel, onClose, sheetRef, scrollRef, children }: DetailsSheetProps) {
   return (
     <>
       {/* Dims the strip above the sheet so it reads as behind. Pass-through:
-          a tap there reaches the grid or diagram (another item switches the
-          sheet to it; empty space closes it). */}
+          a tap there reaches the grid or diagram (on the diagram every
+          strip tap closes the sheet). */}
       <div aria-hidden="true" className="sheet-scrim pointer-events-none absolute inset-0 z-[9] bg-canvas/45" />
       <div
         ref={sheetRef}
