@@ -392,6 +392,110 @@ data "aws_iam_policy_document" "ci" {
     }
   }
 
+  # ---- Alarms, alert topic and daily snapshots (infra/modules/compute
+  # alarms.tf and snapshots.tf). ----
+
+  # The recover and reboot alarms on the instance's status checks. Writes
+  # are limited to glassbox-* alarm names. DescribeAlarms is read-only and
+  # granted region-wide: the provider calls it with a name filter, and
+  # whether CloudWatch checks that filter against an alarm ARN is not
+  # something a failed apply should find out.
+  statement {
+    sid    = "ManageProjectAlarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:ListTagsForResource",
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:TagResource",
+      "cloudwatch:UntagResource",
+    ]
+    resources = ["arn:aws:cloudwatch:${var.aws_region}:${var.aws_account_id}:alarm:glassbox-*"]
+  }
+
+  statement {
+    sid       = "DescribeAlarms"
+    effect    = "Allow"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  # CloudWatch's EC2 alarm actions (reboot) run through the
+  # AWSServiceRoleForCloudWatchEvents service-linked role, which
+  # PutMetricAlarm creates the first time if the account doesn't have it.
+  # Only that one service's role.
+  statement {
+    sid       = "CloudWatchEventsServiceLinkedRole"
+    effect    = "Allow"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${var.aws_account_id}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForCloudWatchEvents*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["events.amazonaws.com"]
+    }
+  }
+
+  # The glassbox-alerts topic and its email subscription. A subscription's
+  # ARN is the topic ARN plus ":<id>", so glassbox-* covers both.
+  statement {
+    sid       = "ManageProjectTopics"
+    effect    = "Allow"
+    actions   = ["sns:*"]
+    resources = ["arn:aws:sns:${var.aws_region}:${var.aws_account_id}:glassbox-*"]
+  }
+
+  # The Data Lifecycle Manager policy that snapshots the root volume daily.
+  # DLM policy IDs are generated (policy/policy-0123...), so they can't be
+  # scoped by name; CreateLifecyclePolicy and GetLifecyclePolicies have no
+  # resource at all. Residual risk: this role can change or delete any DLM
+  # policy in the region (there are no others). Accepted: it already has
+  # ec2:* there, which includes deleting snapshots directly.
+  statement {
+    sid    = "ManageLifecyclePolicies"
+    effect = "Allow"
+    actions = [
+      "dlm:CreateLifecyclePolicy",
+      "dlm:DeleteLifecyclePolicy",
+      "dlm:GetLifecyclePolicies",
+      "dlm:GetLifecyclePolicy",
+      "dlm:ListTagsForResource",
+      "dlm:TagResource",
+      "dlm:UntagResource",
+      "dlm:UpdateLifecyclePolicy",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  # DLM runs the policy as the glassbox-dlm role (created by the compute
+  # module through ProjectRolesAndProfiles above). Pass only that role, and
+  # only to DLM.
+  statement {
+    sid       = "PassDlmRole"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${var.aws_account_id}:role/glassbox-dlm"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["dlm.amazonaws.com"]
+    }
+  }
+
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
@@ -568,6 +672,40 @@ data "aws_iam_policy_document" "plan" {
     resources = [
       "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/glassbox",
     ]
+  }
+
+  # Refresh of the alarms, the alert topic and its subscription, and the DLM
+  # snapshot policy (infra/modules/compute alarms.tf and snapshots.tf).
+  statement {
+    sid       = "ReadProjectAlarmTags"
+    effect    = "Allow"
+    actions   = ["cloudwatch:ListTagsForResource"]
+    resources = ["arn:aws:cloudwatch:${var.aws_region}:${var.aws_account_id}:alarm:glassbox-*"]
+  }
+
+  statement {
+    sid    = "DescribeAlarmsAndLifecyclePolicies"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:DescribeAlarms",
+      "dlm:GetLifecyclePolicies",
+      "dlm:GetLifecyclePolicy",
+      "dlm:ListTagsForResource",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
+    }
+  }
+
+  statement {
+    sid       = "ReadProjectTopics"
+    effect    = "Allow"
+    actions   = ["sns:Get*", "sns:List*"]
+    resources = ["arn:aws:sns:${var.aws_region}:${var.aws_account_id}:glassbox-*"]
   }
 
   statement {

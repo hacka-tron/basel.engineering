@@ -1,0 +1,43 @@
+name: "Ops · Restore from snapshot"
+
+# Puts the whole node (k3s, MySQL, Redis: everything on the root volume)
+# back to one of its daily snapshots with EC2 "replace root volume". Same
+# instance, same Elastic IP. The node reboots; everything written after the
+# snapshot is lost. Needs owner approval. Run "Ops · List snapshots" first
+# to pick a snapshot ID, or use "latest".
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: Snapshot to restore ("latest", or a snap- ID from Ops · List snapshots)
+        type: string
+        required: true
+        default: latest
+      old_volume:
+        description: The current root volume after the restore (keep = detached, about $1.60/month until deleted)
+        type: choice
+        options:
+          - keep
+          - delete
+        default: keep
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: restore-snapshot
+      snapshot: ${{ inputs.snapshot }}
+      old_volume: ${{ inputs.old_volume }}
+      reason: ${{ inputs.reason }}
