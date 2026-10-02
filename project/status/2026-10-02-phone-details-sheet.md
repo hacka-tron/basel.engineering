@@ -1,6 +1,6 @@
 # Phone diagram details in a pull-up sheet
 
-**Status:** In review (PR 3a of the portfolio feature, stacked on #147). Not merged.
+**Status:** In review, [#148](https://github.com/hacka-tron/basel.engineering/pull/148) (PR 3a of the portfolio feature, stacked on #147). Not merged.
 
 ## TL;DR
 
