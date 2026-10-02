@@ -4,8 +4,8 @@ import ArchitecturePanel, { type WorkerPod } from './components/ArchitecturePane
 import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
-import TopicChips, { type TopicChip } from './components/TopicChips'
-import { createDiagramNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
+import TopicChips from './components/TopicChips'
+import { createViewNav, OTHER_VIEWS, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
@@ -14,7 +14,7 @@ import { DESKTOP_QUERY } from './lib/layout'
 import { useRotateScreen } from './hooks/useRotateScreen'
 import RotateScreen from './components/RotateScreen'
 import { useStressTest } from './hooks/useStressTest'
-import { architectureNodes, questionForComponent, type NodeId } from './architecture'
+import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
 import { pickBudgetReply } from './lib/budgetReplies'
@@ -31,29 +31,28 @@ import {
   serializeConversation,
   storageKey,
   writeConversation,
-  type ApiCorpus,
   type ChatMessage,
   type MessageSource,
 } from './lib/conversation'
+import { apiCorpus, CORPORA, idkCorpus, topicLabel, visibleTopics, type Corpus } from './lib/topics'
+import projects from 'virtual:portfolio'
+import PortfolioPanel from './components/PortfolioPanel'
+import { questionForProject } from './lib/portfolioView'
+import { selectionAnswer, selectionQuestions } from './lib/selection'
 
 const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight'
 
-export type Corpus = 'basel' | 'system'
+// Component and project questions are sent without history (they stay
+// answer-cache eligible); Retry recognises them by their exact wording.
+const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project.title))
 
-const CORPORA: Corpus[] = ['basel', 'system']
-
-const TOPIC_CHIPS: TopicChip<Corpus>[] = [
-  { value: 'basel', label: 'About Basel', short: 'Basel' },
-  { value: 'system', label: 'About This System', short: 'System' },
-]
-
-function apiCorpus(corpus: Corpus): ApiCorpus {
-  return corpus === 'basel' ? 'about_me' : 'about_system'
-}
-
-// Component questions are sent without history (they stay answer-cache
-// eligible); Retry recognises them by their exact wording.
-const COMPONENT_QUESTIONS: ReadonlySet<string> = new Set(architectureNodes.map((node) => questionForComponent(node.id)))
+// Owner (2026-10-02): the Portfolio topic, the phone Portfolio view and the
+// footer's "See portfolio →" are left out until the build has at least one
+// published (non-draft) project; they appear by themselves on the first
+// release with one. A history entry saved on the Portfolio view reads as Chat.
+const HAS_PORTFOLIO = projects.length > 0
+const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
+const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
 
 function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
   const seen = new Set<string>()
@@ -70,12 +69,13 @@ function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
   // Below md the diagram replaces the conversation in place (no overlay).
   // A reload while in the diagram keeps it (its history entry survives).
-  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state))
+  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state, SHOWN_VIEWS))
   // Focus mode: below md, the header and footer slide away while the ask box
   // has focus, so the conversation keeps its room with the keyboard up.
   const [askFocused, setAskFocused] = useState(false)
   const [activeNode, setActiveNode] = useState<NodeId | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
+  const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   // One conversation per corpus tab (DESIGN-002 §5.1): switching the toggle
@@ -84,6 +84,7 @@ function App() {
   const [conversations, setConversations] = useState<Record<Corpus, ChatMessage[]>>(() => ({
     basel: loadConversation('about_me'),
     system: loadConversation('about_system'),
+    portfolio: loadConversation('portfolio'),
   }))
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
@@ -108,7 +109,10 @@ function App() {
   // The in-flight retry's reply: until it settles, the saved conversation keeps
   // the failure reply it replaces, so a reload mid-retry still offers Retry.
   const retryTargetRef = useRef<{ corpus: Corpus; messageId: string } | null>(null)
-  const pendingComponentRef = useRef<NodeId | null>(null)
+  // A component or project question asked while another answer streams: it
+  // is asked (without history) once that answer finishes, unless the visitor
+  // moves on first (deselects, types a question, switches topic).
+  const pendingSelectionRef = useRef<{ question: string; corpus: Corpus } | null>(null)
   // A question sent while an answer streams (DESIGN-002 §6.4): the current
   // answer is stopped first, and this is asked once that stop has rendered, so
   // its history includes the stopped answer exactly as it was saved.
@@ -364,9 +368,9 @@ function App() {
     abortControllerRef.current = null
     streamTargetRef.current = null
     retryTargetRef.current = null
-    const pendingComponent = pendingComponentRef.current
-    pendingComponentRef.current = null
-    if (pendingComponent) handleAsk(questionForComponent(pendingComponent), 'system', { sendHistory: false })
+    const pending = pendingSelectionRef.current
+    pendingSelectionRef.current = null
+    if (pending) handleAsk(pending.question, pending.corpus, { sendHistory: false })
   }
 
   function handleAsk(question: string, targetCorpus: Corpus = corpus, { sendHistory = true, retry }: { sendHistory?: boolean; retry?: RetryPlan } = {}) {
@@ -447,7 +451,7 @@ function App() {
           if (event.abstained && event.mode === 'full') {
             const savedIdk = conversationsRef.current[targetCorpus]
               .findLast((message) => message.role === 'assistant' && message.idk)?.content
-            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, targetCorpus)
+            idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, idkCorpus(targetCorpus))
             lastIdkReplyRef.current = idkReply
           }
           // Budget reached or LLM switched off: the sources still came back, and
@@ -552,12 +556,13 @@ function App() {
   // behind the stopped answer is dropped: the visitor's newer question wins.
   function handleSend(question: string) {
     setSelectedNode(null)
+    setSelectedProject(null)
     if (!requestInFlightRef.current) {
       handleAsk(question)
       return
     }
     queuedAskRef.current = { question, corpus }
-    pendingComponentRef.current = null
+    pendingSelectionRef.current = null
     handleStop()
   }
 
@@ -567,7 +572,7 @@ function App() {
     if (requestInFlightRef.current) return
     const plan = planRetry(conversationsRef.current[corpus])
     if (!plan) return
-    handleAsk(plan.question, corpus, { sendHistory: !COMPONENT_QUESTIONS.has(plan.question), retry: plan })
+    handleAsk(plan.question, corpus, { sendHistory: !SELECTION_QUESTIONS.has(plan.question), retry: plan })
   }
 
   // Empty diagram space, Escape, or (phones) the details panel's close
@@ -577,7 +582,7 @@ function App() {
   // is dropped, since the visitor just let go of it.
   const handleDeselectComponent = useCallback(() => {
     setSelectedNode(null)
-    pendingComponentRef.current = null
+    pendingSelectionRef.current = null
   }, [])
 
   function handleNewChat() {
@@ -586,24 +591,46 @@ function App() {
     setRetrievedChunks([])
     setNodeCacheStatus({})
     if (corpus === 'system') setSelectedNode(null)
+    if (corpus === 'portfolio') setSelectedProject(null)
+  }
+
+  // Asks about a selected component or project, unless its answer is already
+  // streaming (no second request) or is the topic's latest finished answer
+  // (re-selecting shows it again, with no duplicate turn and no rate-limited
+  // request). A failed answer is asked again (Retry also exists). Mid-answer,
+  // it is queued.
+  function askAboutSelection(question: string, target: Corpus) {
+    if (requestInFlightRef.current) {
+      pendingSelectionRef.current = inFlightQuestionRef.current === question ? null : { question, corpus: target }
+    } else if (!latestQuestionAnswered(conversationsRef.current[target], question)) {
+      handleAsk(question, target, { sendHistory: false })
+    }
   }
 
   function handleInspectComponent(id: NodeId) {
     setSelectedNode(id)
+    setSelectedProject(null)
     setCorpus('system')
-    if (requestInFlightRef.current) {
-      // Re-selecting the component whose answer is still streaming (say,
-      // after deselecting it) shows that answer again instead of queueing
-      // the same question a second time.
-      pendingComponentRef.current = inFlightQuestionRef.current === questionForComponent(id) ? null : id
-    } else if (!latestQuestionAnswered(conversationsRef.current.system, questionForComponent(id))) {
-      handleAsk(questionForComponent(id), 'system', { sendHistory: false })
-    }
-    // Otherwise its answer is already the latest one (say, re-selected after
-    // the chevron or an empty-space tap): selecting shows it again, with no
-    // duplicate turn and no rate-limited request. A failed answer is asked
-    // again, as before (Retry also exists).
+    askAboutSelection(questionForComponent(id), 'system')
   }
+
+  // Picking a project switches the topic to Portfolio and asks
+  // "Tell me about <title>", like a component tap does for About This System.
+  function handleSelectProject(slug: string) {
+    const project = projects.find((candidate) => candidate.slug === slug)
+    if (!project) return
+    setSelectedProject(slug)
+    setSelectedNode(null)
+    setCorpus('portfolio')
+    askAboutSelection(questionForProject(project.title), 'portfolio')
+  }
+
+  // The chevron, Escape or a tap in the strip. An answer still streaming
+  // keeps streaming into Chat; only the selection clears.
+  const handleDeselectProject = useCallback(() => {
+    setSelectedProject(null)
+    pendingSelectionRef.current = null
+  }, [])
   // Matches Tailwind's `md` breakpoint (redefined in index.css so a phone held
   // sideways keeps the phone layout under the rotate screen). Drives which ArchitecturePanel / React
   // Flow instance is mounted so only one ever exists at a time — see the
@@ -614,34 +641,40 @@ function App() {
   // streaming answer, the conversation and the selection survive the turn.
   const showRotateScreen = useRotateScreen()
   const showDiagramView = !isDesktop && mobileView === 'diagram'
+  const showPortfolioView = !isDesktop && mobileView === 'portfolio'
+  const showOtherView = showDiagramView || showPortfolioView
   const focusMode = !isDesktop && askFocused
 
-  // The diagram view is a history entry, so the browser's Back button (and
+  // Each phone view is a history entry, so the browser's Back button (and
   // Escape, "Chat", or "Continue in chat") returns to the conversation.
   const diagramButtonRef = useRef<HTMLButtonElement | null>(null)
-  const [diagramNav] = useState(() => createDiagramNav({
+  const portfolioButtonRef = useRef<HTMLButtonElement | null>(null)
+  const mobileViewRef = useRef(mobileView)
+  mobileViewRef.current = mobileView
+  const [viewNav] = useState(() => createViewNav({
     history: window.history,
+    views: SHOWN_VIEWS,
     setView: setMobileView,
     afterRender: (callback) => { requestAnimationFrame(callback) },
-    focusDiagramToggle: () => diagramButtonRef.current?.focus(),
-    // Back, Escape, Chat or "Continue in chat" close the phone details sheet.
-    onReturnToChat: () => { setSelectedNode(null); pendingComponentRef.current = null },
+    focusViewToggle: (view) => (view === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current?.focus(),
+    // Leaving a view closes its details sheet (spec §5.5: Back closes the sheet).
+    onReturnToChat: () => { setSelectedNode(null); setSelectedProject(null); pendingSelectionRef.current = null },
   }))
-  const showMobileView = diagramNav.showView
+  const showMobileView = viewNav.showView
   isDesktopRef.current = isDesktop
-  revealDiagramRef.current = diagramNav.revealDiagram
+  revealDiagramRef.current = viewNav.revealDiagram
   useEffect(() => {
     function handlePopState(event: PopStateEvent) {
-      diagramNav.handlePopState(event.state)
+      viewNav.handlePopState(event.state)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [diagramNav])
+  }, [viewNav])
   useEffect(() => {
-    if (!showDiagramView) return
-    document.addEventListener('keydown', diagramNav.handleKeyDown)
-    return () => document.removeEventListener('keydown', diagramNav.handleKeyDown)
-  }, [showDiagramView, diagramNav])
+    if (!showOtherView) return
+    document.addEventListener('keydown', viewNav.handleKeyDown)
+    return () => document.removeEventListener('keydown', viewNav.handleKeyDown)
+  }, [showOtherView, viewNav])
 
   // Leaving the ask box restores the header and footer. If a tap caused the
   // blur, wait until it is released: restoring mid-tap would slide the button
@@ -681,38 +714,59 @@ function App() {
   }, [])
 
   // Focus rescue when the chips unmount while holding focus: on a switch to
-  // Diagram view it goes to the Diagram toggle; when the window widens past md
+  // Diagram or Portfolio view it goes to that view's toggle segment (a ref:
+  // the chips call this from a commit, before any later view change); when the window widens past md
   // (chips replaced by the desktop topic nav) it goes to the nav button for the
   // current topic. Runs after the commit, so isDesktopRef and the nav are current.
   const rescueChipFocus = () => {
     const target = isDesktopRef.current
       ? navRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
-      : diagramButtonRef.current
+      : (mobileViewRef.current === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current
     target?.focus()
   }
 
-  const selectedQuestion = selectedNode ? questionForComponent(selectedNode) : null
-  // Component questions always go to About This System's conversation.
-  const systemMessages = conversations.system
-  // The latest reply to the selected component's question: its answer, or the
-  // friendly failure reply that follows any partial text.
-  const questionIndex = selectedQuestion
-    ? systemMessages.findLastIndex((message) => message.role === 'user' && message.content === selectedQuestion)
-    : -1
-  const selectedReply = questionIndex === -1 || questionIndex !== systemMessages.findLastIndex((message) => message.role === 'user')
-    ? undefined
-    : systemMessages.slice(questionIndex + 1).findLast((message) => message.role === 'assistant')
-  const selectedAnswer = selectedReply ? selectedReply.content
-    : selectedNode ? 'Waiting for the current answer…' : null
+  const selectedAnswer = selectionAnswer(conversations.system, selectedNode ? questionForComponent(selectedNode) : null)
+  const selectedProjectData = projects.find((project) => project.slug === selectedProject)
+  const projectAnswer = selectionAnswer(conversations.portfolio, selectedProjectData ? questionForProject(selectedProjectData.title) : null)
+  // Receives the first card (or the empty-state text) for "See portfolio →".
+  const portfolioFocusRef = useRef<HTMLElement | null>(null)
+  // Phones show the answer in the sheet ("Ask about this"); desktop shows it
+  // in the chat column beside the pane.
+  const portfolioPanel = (phone: boolean) => (
+    <PortfolioPanel
+      projects={projects}
+      phone={phone}
+      selectedSlug={selectedProject}
+      answerText={phone ? projectAnswer : undefined}
+      onSelect={handleSelectProject}
+      onDeselect={handleDeselectProject}
+      onContinueInChat={phone ? () => showMobileView('chat') : undefined}
+      focusTargetRef={portfolioFocusRef}
+    />
+  )
 
   const headerRef = useRef<HTMLElement>(null)
   const nameMeasureRef = useRef<HTMLSpanElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
-  // One handler for the desktop nav and the mobile topic chips.
+  // One handler for the desktop nav and the mobile topic chips. Leaving About
+  // This System drops the diagram selection (only it belongs to that topic).
   const selectTopic = (next: Corpus) => {
-    if (next === 'basel') { setCorpus('basel'); setSelectedNode(null); pendingComponentRef.current = null }
-    else setCorpus('system')
+    if (next === corpus) return
+    setCorpus(next)
+    if (next !== 'system') setSelectedNode(null)
+    if (next !== 'portfolio') setSelectedProject(null)
+    pendingSelectionRef.current = null
+  }
+  // Footer popover "See portfolio →" (spec §5.7): the Portfolio topic and, on
+  // phones, the Portfolio view; an open project sheet closes, and focus moves
+  // to the first card (or the empty state) once the panel has rendered.
+  function handleSeePortfolio() {
+    selectTopic('portfolio')
+    setSelectedProject(null)
+    pendingSelectionRef.current = null
+    if (!isDesktopRef.current) showMobileView('portfolio')
+    requestAnimationFrame(() => portfolioFocusRef.current?.focus())
   }
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
@@ -720,23 +774,19 @@ function App() {
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
-        <button
-          type="button"
-          aria-pressed={corpus === 'basel'}
-          onClick={() => selectTopic('basel')}
-          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'basel' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About Basel
-        </button>
-        <span aria-hidden="true" className="text-hairline">|</span>
-        <button
-          type="button"
-          aria-pressed={corpus === 'system'}
-          onClick={() => selectTopic('system')}
-          className={`inline-flex items-center rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === 'system' ? 'text-cyan' : 'text-muted'}`}
-        >
-          About This System
-        </button>
+        {SHOWN_TOPICS.map((topic, index) => (
+          <span key={topic.value} className="contents">
+            {index > 0 && <span aria-hidden="true" className="text-hairline">|</span>}
+            <button
+              type="button"
+              aria-pressed={corpus === topic.value}
+              onClick={() => selectTopic(topic.value)}
+              className={`inline-flex items-center whitespace-nowrap rounded-[3px] px-3 py-2 transition-colors hover:text-primary ${corpus === topic.value ? 'text-cyan' : 'text-muted'}`}
+            >
+              {topic.label}
+            </button>
+          </span>
+        ))}
       </nav>
   )
 
@@ -809,33 +859,36 @@ function App() {
           onRetry={handleRetry}
           onNewChat={handleNewChat}
           onInputFocusChange={handleAskFocusChange}
-          replacement={showDiagramView ? (
+          replacement={showOtherView ? (
             <div className="flex min-h-0 flex-1 flex-col pt-[var(--chrome-top,0rem)] transition-[padding-top] duration-200 ease-out motion-reduce:transition-none [&>section]:flex-1">
-              <ArchitecturePanel
-                portrait
-                fitMinZoom={0.75}
-                activeNode={activeNode}
-                nodeCacheStatus={nodeCacheStatus}
-                retrievedChunks={retrievedChunks}
-                selectedNode={selectedNode}
-                answerText={selectedAnswer}
-                onContinueInChat={() => showMobileView('chat')}
-                onInspect={handleInspectComponent}
-                onDeselect={handleDeselectComponent}
-                workerPods={shownWorkerPods}
-                backlog={shownBacklog}
-              />
+              {showPortfolioView ? portfolioPanel(true) : (
+                <ArchitecturePanel
+                  portrait
+                  fitMinZoom={0.75}
+                  activeNode={activeNode}
+                  nodeCacheStatus={nodeCacheStatus}
+                  retrievedChunks={retrievedChunks}
+                  selectedNode={selectedNode}
+                  answerText={selectedAnswer}
+                  onContinueInChat={() => showMobileView('chat')}
+                  onInspect={handleInspectComponent}
+                  onDeselect={handleDeselectComponent}
+                  workerPods={shownWorkerPods}
+                  backlog={shownBacklog}
+                />
+              )}
             </div>
           ) : undefined}
-          inputTopic={isDesktop || showDiagramView ? undefined : (
-            <TopicChips value={corpus} options={TOPIC_CHIPS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
+          inputTopic={isDesktop || showOtherView ? undefined : (
+            <TopicChips value={corpus} options={SHOWN_TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
-              view={showDiagramView ? 'diagram' : 'chat'}
+              view={isDesktop ? 'chat' : mobileView}
               onViewChange={showMobileView}
               activeNode={activeNode}
-              diagramButtonRef={diagramButtonRef}
+              toggleRefs={{ diagram: diagramButtonRef, portfolio: portfolioButtonRef }}
+              views={SHOWN_VIEWS}
             />
           }
         />
@@ -846,7 +899,14 @@ function App() {
           portrait diagram above mounts only in the diagram view. Only one
           ArchitecturePanel ever exists at a time.
         */}
-        {isDesktop && <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} onDeselect={handleDeselectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />}
+        {/* The right pane follows the topic (spec 2026-10-02 §5.2): the
+            portfolio for Portfolio, the diagram otherwise; no tabs. Only one
+            ArchitecturePanel is ever mounted, and it unmounts while the
+            portfolio shows (a stress test still runs and shakes; its workers
+            show after switching topic). */}
+        {isDesktop && (corpus === 'portfolio'
+          ? portfolioPanel(false)
+          : <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} onDeselect={handleDeselectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />)}
       </main>
 
       <Collapsible open={!focusMode}>
@@ -859,10 +919,11 @@ function App() {
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
         stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
+        onSeePortfolio={HAS_PORTFOLIO ? handleSeePortfolio : undefined}
         {...(isDesktop ? {} : {
           onNewChat: handleNewChat,
           newChatDisabled: isStreaming || messages.length === 0,
-          topicLabel: corpus === 'basel' ? 'About Basel' : 'About This System',
+          topicLabel: topicLabel(corpus),
         })}
       />
       </Collapsible>

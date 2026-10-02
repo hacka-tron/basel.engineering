@@ -121,8 +121,12 @@ _StrictLoader.add_implicit_resolver(_BOOL_TAG, re.compile(r"^(?:true|false)$"), 
 
 
 def split_front_matter(text: str) -> tuple[dict, str]:
-    """The YAML front matter as a dict, and the body after it."""
-    lines = text.splitlines(keepends=True)
+    """The YAML front matter as a dict, and the body after it.
+
+    A leading UTF-8 byte-order mark (some Windows editors add one) is ignored, as in
+    the frontend's loader (frontend/vite-plugins/portfolio.ts).
+    """
+    lines = text.removeprefix("\ufeff").splitlines(keepends=True)
     if not lines or lines[0].strip() != "---":
         raise PortfolioError("missing front matter: the file must start with a '---' line")
     end = next((i for i, line in enumerate(lines[1:], 1) if line.strip() == "---"), None)

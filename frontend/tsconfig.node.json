@@ -19,5 +19,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite.phone.config.ts", "src/**/*.test.ts"]
+  "include": ["vite.config.ts", "vite.phone.config.ts", "vite-plugins/**/*.ts", "src/**/*.test.ts"]
 }

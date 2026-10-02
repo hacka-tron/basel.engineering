@@ -1,68 +1,81 @@
-// History + focus transitions for the mobile diagram view. The diagram is a
-// history entry; every way back to the conversation (Back/popstate, Escape,
-// the Chat segment, "Continue in chat") must leave focus on the Diagram
-// toggle, because whatever had focus (including the Chat segment itself) is
-// about to be unmounted or is no longer the control that opened the view.
+// History and focus for the phone views (spec 2026-10-02 §5.3): Chat |
+// Diagram | Portfolio. Each non-Chat view is one history entry above Chat:
+// opening one from Chat pushes it, switching between Diagram and Portfolio
+// replaces it, so Back always returns to Chat and Forward reopens the last
+// non-Chat view. Every way back to Chat (Back/popstate, Escape, the Chat
+// segment, "Continue in chat") moves focus to the toggle segment of the view
+// that was left, because whatever had focus (including the Chat segment
+// itself) is about to be unmounted or is no longer the control that opened
+// the view, and closes that view's details sheet (onReturnToChat; no extra
+// history entry is used for a sheet).
 
-export type MobileView = 'chat' | 'diagram'
+export type MobileView = 'chat' | 'diagram' | 'portfolio'
+export type OtherView = Exclude<MobileView, 'chat'>
 
-export interface DiagramNavDeps {
-  history: Pick<History, 'state' | 'pushState' | 'back'>
+export const OTHER_VIEWS: readonly OtherView[] = ['diagram', 'portfolio']
+
+export interface ViewNavDeps {
+  history: Pick<History, 'state' | 'pushState' | 'replaceState' | 'back'>
   setView: (view: MobileView) => void
   /** Runs after the view has re-rendered (e.g. requestAnimationFrame). */
   afterRender: (callback: () => void) => void
-  focusDiagramToggle: () => void
-  /**
-   * Called once whenever the view returns to Chat, by any route. Leaving the
-   * Diagram view closes its details sheet (spec 2026-10-02 §5.5: Back closes
-   * the sheet); no extra history entry is used for the sheet.
-   */
+  /** Focuses the toggle segment of `view`. */
+  focusViewToggle: (view: OtherView) => void
+  /** Called once whenever the view returns to Chat, by any route. */
   onReturnToChat?: () => void
+  /** The non-Chat views offered (Portfolio is hidden until there is content); others read as Chat. */
+  views?: readonly OtherView[]
 }
 
-export function viewFromHistoryState(state: unknown): MobileView {
-  return (state as { glassboxView?: MobileView } | null)?.glassboxView === 'diagram' ? 'diagram' : 'chat'
+/** The view a history entry holds; an unknown or hidden view (say, Portfolio saved before it was hidden) reads as Chat. */
+export function viewFromHistoryState(state: unknown, views: readonly OtherView[] = OTHER_VIEWS): MobileView {
+  const view = (state as { glassboxView?: unknown } | null)?.glassboxView
+  return views.includes(view as OtherView) ? view as OtherView : 'chat'
 }
 
-export function createDiagramNav(deps: DiagramNavDeps) {
-  const restoreFocus = () => deps.afterRender(deps.focusDiagramToggle)
+export function createViewNav(deps: ViewNavDeps) {
+  const views = deps.views ?? OTHER_VIEWS
+  const viewOf = (state: unknown) => viewFromHistoryState(state, views)
+  const initial = viewOf(deps.history.state)
+  // The non-Chat view shown last. A reload inside one restores it from history.
+  let lastView: OtherView = initial === 'chat' ? 'diagram' : initial
 
-  function showChat() {
+  function returnToChat() {
+    const left = lastView
+    deps.afterRender(() => deps.focusViewToggle(left))
     deps.setView('chat')
     deps.onReturnToChat?.()
   }
 
   function showView(view: MobileView) {
-    if (view === 'diagram') {
-      if (viewFromHistoryState(deps.history.state) !== 'diagram') {
-        deps.history.pushState({ glassboxView: 'diagram' }, '')
-      }
-      deps.setView('diagram')
+    const current = viewOf(deps.history.state)
+    if (view !== 'chat' && !views.includes(view)) return
+    if (view !== 'chat') {
+      lastView = view
+      if (current === 'chat') deps.history.pushState({ glassboxView: view }, '')
+      else if (current !== view) deps.history.replaceState({ glassboxView: view }, '')
+      deps.setView(view)
       return
     }
-    restoreFocus()
-    if (viewFromHistoryState(deps.history.state) === 'diagram') {
-      // popstate then sets the view.
-      deps.history.back()
-    } else {
-      showChat()
-    }
+    // From a view entry, go back; popstate then returns to Chat.
+    if (current !== 'chat') deps.history.back()
+    else returnToChat()
   }
 
   /** Every stress-test tap (including one ignored during the countdown or an
-   * in-flight request) shows the workers: open the diagram on mobile (no
-   * extra history entry if it is already shown); desktop shows it always. */
+   * in-flight request) shows the workers: open the Diagram on phones (no
+   * extra history entry if a view is already shown); desktop shows it always. */
   function revealDiagram(isDesktop: boolean) {
     if (!isDesktop) showView('diagram')
   }
 
   function handlePopState(state: unknown) {
-    const view = viewFromHistoryState(state)
+    const view = viewOf(state)
     if (view === 'chat') {
-      restoreFocus()
-      showChat()
+      returnToChat()
       return
     }
+    lastView = view
     deps.setView(view)
   }
 

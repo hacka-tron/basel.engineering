@@ -4,7 +4,7 @@ export type TopicChip<T extends string> = { value: T; label: string; short: stri
 
 type TopicChipsProps<T extends string> = {
   value: T
-  options: TopicChip<T>[]
+  options: readonly TopicChip<T>[]
   onChange: (value: T) => void
   /** Called if a chip still has focus when the chips unmount (e.g. on a switch to Diagram view). */
   onUnmountWithFocus?: () => void
@@ -12,7 +12,7 @@ type TopicChipsProps<T extends string> = {
 
 /**
  * Below md, the question topic as a radio group directly above the ask box:
- * "Asking about (● Basel) (○ System)". One 44px row, Chat view only (the
+ * "Asking about (● Basel) (○ System) (○ Portfolio)". One 44px row, Chat view only (the
  * Diagram view unmounts it and gives the diagram that height; the topic is
  * unchanged, so a question typed there still uses it). Roving
  * tabindex: Tab reaches the checked chip; arrows (and Home/End) move and
@@ -52,8 +52,12 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
 
   return (
     <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:hidden">
-      {/* Below 320px (e.g. a 280px Fold cover screen) the label would push the System chip off screen, so it becomes screen-reader-only there; the radiogroup keeps its name. */}
-      <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted max-[319px]:sr-only">Asking about</span>
+      {/* Three chips and the label need about 400px: below 440px the label is
+          screen-reader-only (the radiogroup keeps it as its name); below 360px
+          the chips' padding tightens and below 320px their dots hide, so all
+          three fit at 280px (spec 2026-10-02 §5.1). With two chips (Portfolio
+          hidden until it has content) the label shows down to 320px. */}
+      <span id="topic-chips-label" className={`mr-1 whitespace-nowrap text-xs text-muted ${options.length > 2 ? 'max-[440px]:sr-only' : 'max-[320px]:sr-only'}`}>Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
         {options.map((option, index) => {
           const checked = option.value === value
@@ -67,14 +71,14 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
               aria-label={option.label}
               tabIndex={checked ? 0 : -1}
               onClick={() => { if (!checked) onChange(option.value) }}
-              className="group flex min-h-11 items-center px-1 outline-none"
+              className="group flex min-h-11 items-center px-1 outline-none max-[360px]:px-0.5"
             >
               <span
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm leading-tight transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cyan ${
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-sm max-[360px]:px-2 leading-tight transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cyan ${
                   checked ? 'border-cyan text-cyan' : 'border-hairline text-muted group-hover:text-primary'
                 }`}
               >
-                <span aria-hidden="true" className={`size-2 shrink-0 rounded-full border ${checked ? 'border-cyan bg-cyan' : 'border-muted'}`} />
+                <span aria-hidden="true" className={`size-2 shrink-0 rounded-full border max-[320px]:hidden ${checked ? 'border-cyan bg-cyan' : 'border-muted'}`} />
                 {option.short}
               </span>
             </button>

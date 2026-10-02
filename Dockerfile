@@ -3,6 +3,10 @@ FROM node:22-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
+# The portfolio grid is built from corpus/portfolio/*.md (vite-plugins/portfolio.ts
+# resolves ../corpus/portfolio from /app/frontend); without it the build fails
+# rather than shipping an empty portfolio. Images are in frontend/public/portfolio/.
+COPY corpus/portfolio/ /app/corpus/portfolio/
 COPY frontend/ ./
 RUN npm run build
 
