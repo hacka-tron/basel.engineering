@@ -28,6 +28,12 @@ COPY --from=frontend-build /app/frontend/dist frontend/dist
 # suggested questions the frontend shows.
 COPY frontend/src/suggested-questions.json frontend/src/suggested-questions.json
 
+# The release tag (build-N) for GET /api/version, which the post-deploy
+# stream check polls to see a release go live. Declared last so a new value
+# only rebuilds this metadata layer, never the cached layers above.
+ARG GLASSBOX_BUILD=dev
+ENV GLASSBOX_BUILD=$GLASSBOX_BUILD
+
 USER glassbox
 EXPOSE 8000
 CMD ["uvicorn", "services.glassbox.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "25"]
