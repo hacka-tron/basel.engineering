@@ -81,3 +81,6 @@ class Query(Base):
     )
     # The standalone retrieval query a follow-up was rewritten to, if any.
     rewritten_query: Mapped[str | None] = mapped_column(String(1000))
+    # Added by migration 0005 (DESIGN-002 §7.5, §9.3): ms from request receipt to the
+    # first streamed answer token; NULL when no answer text was streamed.
+    ttft_ms: Mapped[int | None] = mapped_column(Integer)
