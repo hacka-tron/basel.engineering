@@ -26,6 +26,7 @@ from services.glassbox.cache.embedding import (
     embedding_cache_key,
     normalize_question,
 )
+from services.glassbox.corpora import Corpus
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.killswitch import get_kill_switch
@@ -127,7 +128,7 @@ class HistoryMessage(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
-    corpus: Literal["about_me", "about_system"]
+    corpus: Corpus
     history: list[HistoryMessage] = Field(
         default_factory=list, max_length=_HISTORY_MAX_RAW_MESSAGES
     )

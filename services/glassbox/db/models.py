@@ -4,6 +4,8 @@ from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, UniqueCon
 from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP, TINYINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from services.glassbox.corpora import CORPORA
+
 
 class Base(DeclarativeBase):
     pass
@@ -14,7 +16,7 @@ class Document(Base):
     __table_args__ = (UniqueConstraint("corpus", "source_path", name="uq_doc"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    corpus: Mapped[str] = mapped_column(ENUM("about_me", "about_system"), nullable=False)
+    corpus: Mapped[str] = mapped_column(ENUM(*CORPORA), nullable=False)
     source_path: Mapped[str] = mapped_column(String(512), nullable=False)
     title: Mapped[str | None] = mapped_column(String(512))
     content_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
@@ -63,7 +65,7 @@ class Query(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     request_id: Mapped[str] = mapped_column(CHAR(26), nullable=False)
-    corpus: Mapped[str] = mapped_column(ENUM("about_me", "about_system"), nullable=False)
+    corpus: Mapped[str] = mapped_column(ENUM(*CORPORA), nullable=False)
     question: Mapped[str] = mapped_column(String(1000), nullable=False)
     cache_status: Mapped[str] = mapped_column(ENUM("answer_hit", "miss"), nullable=False)
     mode: Mapped[str] = mapped_column(ENUM("full", "retrieval_only", "stopped"), nullable=False)
