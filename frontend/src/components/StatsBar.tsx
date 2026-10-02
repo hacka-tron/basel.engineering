@@ -139,9 +139,12 @@ function StatsBar({
           onPointerUp={latencyPressHandlers.onPointerUp}
           onPointerCancel={latencyPressHandlers.onPointerCancel}
           onContextMenu={latencyPressHandlers.onContextMenu}
-          className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
+          className="group relative -mx-2 flex min-h-11 min-w-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:min-w-0 md:px-0 md:mx-0"
         >
-          <span>{latency.timing}</span>
+          {/* Phones (below sm) get the at-most-5-character reading so the
+              row fits at 280px; the aria-label keeps the full description. */}
+          <span className="sm:hidden">{latency.short}</span>
+          <span className="hidden sm:inline">{latency.timing}</span>
           <span
             id={latencyTooltipId}
             role="tooltip"
