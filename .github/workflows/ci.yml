@@ -3,8 +3,10 @@ name: CI
 # No trigger path filters: backend-tests and frontend-checks are required
 # status checks on main, and a workflow skipped by a path filter never
 # reports them, so the PR would wait forever. Instead the `changes` job
-# decides, and the test jobs skip themselves for process-doc-only changes
-# (a job skipped by `if:` counts as passing a required check). Process docs
+# decides, and the test jobs skip themselves only for changes that touch
+# process docs exclusively (a job skipped by `if:` counts as passing a
+# required check). They run unless `changes` positively said "false", so a
+# failed `changes` job runs the tests instead of skipping them. Process docs
 # are project/** (except SNAPSHOT.md, which test_planned_labels reads) and
 # repo-root *.md. docs/** still runs CI: it is chatbot corpus and tested.
 on:
@@ -32,7 +34,7 @@ jobs:
 
   backend-tests:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-24.04
     services:
       mysql:
@@ -82,7 +84,7 @@ jobs:
 
   frontend-checks:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-24.04
     defaults:
       run:
