@@ -1,6 +1,6 @@
 # Process docs match how we work now
 
-**Status:** PR open (branch `docs/process-refresh`). Docs only; nothing in `project/` is ingested into the chatbot, so no visitor-visible change.
+**Status:** PR open ([#127](https://github.com/hacka-tron/basel.engineering/pull/127), branch `docs/process-refresh`). Docs only; nothing in `project/` is ingested into the chatbot, so no visitor-visible change.
 **Date:** 2026-10-02
 
 ## TL;DR
