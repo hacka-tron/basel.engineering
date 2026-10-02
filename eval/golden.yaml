@@ -182,7 +182,7 @@ cases:
     expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
     gold_snippets:
       - response is an SSE stream. The frontend maps
-      - 'yield frame("token", {"text": safe})'
+      - 'return frame("token", {"text": text})'
     must_include: ['\bstage\b', '\bretrieval\b', '\btoken\b', '\bdone\b', '\berror\b']
   - id: system-vector
     origin: questions.yaml
