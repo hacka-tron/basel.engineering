@@ -1,6 +1,6 @@
 # Portfolio topic (frontend)
 
-**Status:** In review, PR (PR 3b of the portfolio feature, stacked on #148; merge after it). Not merged. Needs PR 2 (#149, merged and live on build-107).
+**Status:** In review, [#150](https://github.com/hacka-tron/basel.engineering/pull/150) (PR 3b of the portfolio feature, stacked on #148; merge after it). Not merged. Needs PR 2 (#149, merged and live on build-107).
 
 ## TL;DR
 

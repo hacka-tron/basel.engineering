@@ -6,7 +6,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 **As of 2026-10-02 ~10:00 UTC (Claude).** The site is live; zram is on; KEDA is suspended and scaled to 0; `warm-answers` is running. Overnight summary: `project/status/2026-10-02-overnight-session.md` (13 PRs merged, #130–#135 and #137–#143). Live state: `project/SNAPSHOT.md`; handoff: `project/AGENT_HANDOFF.md`. Next actions, in order:
 
-0. PR 3a (phone diagram details sheet, #148) in review; PR 3b (portfolio frontend, `feat/portfolio-topic`) in review, stacked on #148 (report `project/status/2026-10-02-portfolio-frontend.md`).
+0. PR 3a (phone diagram details sheet, #148) in review; PR 3b (portfolio frontend, #150, `feat/portfolio-topic`) in review, stacked on #148 (report `project/status/2026-10-02-portfolio-frontend.md`).
 1. ~~**PR #136 Ops · Reindex**~~ **Done 2026-10-02:** merged with the owner's go-ahead; the owner approved the Terraform apply (SSM document `glassbox-ops-reindex` created); live on build-105. Use **Actions → Ops · Reindex** after a MySQL restore or when Diagnose shows a partial chunk index. The release's ingest drops `idx:answers` (no `DD`); confirm in the next **Ops · Diagnose** (no `idx:answers` in the Redis index list).
 2. **Alarms and snapshots (#124):** Bootstrap and the Terraform apply both succeeded (2026-10-02 ~04:20 UTC). Remaining: the owner confirms the SNS email, then **Ops · List snapshots** (alarms `OK`) and **Ops · Diagnose**; the next day, the first snapshot. Follow-ups in `project/status/2026-10-01-alarms-snapshots.md`.
 3. ~~**Stream check (#143)**~~ Done: post-release runs passed on build-104 and build-105.
