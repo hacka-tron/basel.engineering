@@ -1,4 +1,4 @@
-"""The owner's private About Basel repo as an about_me source, the sweep guard and shadowing.
+"""The private About Basel repo as an about_me source, the sweep guard, the ignored public dir.
 
 The checkout (``corpus/about-me-private/``, from hacka-tron/basel.engineering-docs)
 exists only in images built with the deploy key. These tests build one in a
@@ -14,10 +14,8 @@ import yaml
 
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest.scanner import (
-    PRIVATE_SOURCE_PREFIX,
     scan_file,
     scan_sources,
-    shadowed_public_paths,
     strip_front_matter,
 )
 from services.glassbox.ingest.sweep import ScopedDocument, plan_sweep, source_root
@@ -43,7 +41,6 @@ def test_only_markdown_under_about_me_is_read_as_private_paths(tmp_path):
     _tree(
         tmp_path,
         {
-            "corpus/about-me/bio.md": "# Bio\n",
             "corpus/about-me-private/README.md": "# Private docs repo\n",
             "corpus/about-me-private/LICENSE.md": "license\n",
             "corpus/about-me-private/other/notes.md": "# Not about-me\n",
@@ -54,11 +51,7 @@ def test_only_markdown_under_about_me_is_read_as_private_paths(tmp_path):
             "corpus/about-me-private/.git/description.md": "# git\n",
         },
     )
-    assert _about_me(tmp_path) == {
-        "corpus/about-me/bio.md",
-        "private/notes.md",
-        "private/roles/google.md",
-    }
+    assert _about_me(tmp_path) == {"private/notes.md", "private/roles/google.md"}
     sources = {s.source_path: s for s in scan_sources(tmp_path)}
     assert scan_file(sources["private/roles/google.md"]).content == "# Google\n"
 
@@ -72,11 +65,9 @@ def test_symlinks_in_the_private_checkout_are_not_followed(tmp_path):
     assert _about_me(tmp_path) == set()
 
 
-def test_no_checkout_means_no_private_sources_and_nothing_shadowed(tmp_path):
+def test_no_checkout_means_no_about_me_sources(tmp_path):
     _tree(tmp_path, {"corpus/about-me/bio.md": "# Bio\n"})
-    assert _about_me(tmp_path) == {"corpus/about-me/bio.md"}
-    assert not any(p.startswith(PRIVATE_SOURCE_PREFIX) for p in _about_me(tmp_path))
-    assert shadowed_public_paths(tmp_path) == set()
+    assert _about_me(tmp_path) == set()
 
 
 def test_private_files_pass_the_secret_scanner_and_the_personal_data_guard(tmp_path):
@@ -99,77 +90,21 @@ def test_private_files_pass_the_secret_scanner_and_the_personal_data_guard(tmp_p
     assert "555-0100" not in guarded.text and guarded.text.count(REDACTION) == 2
 
 
-# --- Shadowing: a private twin replaces the public copy -----------------------------
+# --- A public corpus/about-me directory is ignored -------------------------------------
 
 
-def test_a_public_file_with_a_private_twin_is_not_ingested(tmp_path):
+def test_a_public_about_me_directory_is_never_scanned(tmp_path):
     _tree(
         tmp_path,
         {
             "corpus/about-me/bio.md": "# Bio (public)\n",
             "corpus/about-me/skills.md": "# Skills (public)\n",
             "corpus/about-me-private/about-me/bio.md": "# Bio (private)\n",
-            "corpus/about-me-private/about-me/extra.md": "# Extra\n",
         },
     )
-    assert shadowed_public_paths(tmp_path) == {"corpus/about-me/bio.md"}
-    assert _about_me(tmp_path) == {
-        "corpus/about-me/skills.md",
-        "private/bio.md",
-        "private/extra.md",
-    }
-    # The dry run and the sweep still count the shadowed file as present.
-    assert "corpus/about-me/bio.md" in ingest_run.seen_source_paths(tmp_path)["about_me"]
-
-
-class _DeleteRecorder:
-    def __init__(self, monkeypatch, indexed):
-        self.deleted = []
-
-        def load(engine, corpus, model_id):
-            assert corpus == "about_me" and model_id == MODEL
-            return indexed
-
-        async def delete(engine, redis_client, corpus, model_id, documents):
-            self.deleted.extend(document.source_path for document in documents)
-
-        monkeypatch.setattr(ingest_run, "load_scope_documents", load)
-        monkeypatch.setattr(ingest_run, "delete_documents", delete)
-
-
-@pytest.mark.asyncio
-async def test_the_public_document_is_deleted_only_after_its_twin_is_indexed(tmp_path, monkeypatch):
-    _tree(
-        tmp_path,
-        {
-            "corpus/about-me/bio.md": "# Bio\n",
-            "corpus/about-me/google.md": "# Google\n",
-            "corpus/about-me/skills.md": "# Skills\n",
-            "corpus/about-me-private/about-me/bio.md": "# Bio\n",
-            "corpus/about-me-private/about-me/google.md": "# Google\n",
-        },
-    )
-    indexed = [
-        ScopedDocument(1, "corpus/about-me/bio.md", (1,)),
-        ScopedDocument(2, "corpus/about-me/google.md", (2,)),
-        ScopedDocument(3, "corpus/about-me/skills.md", (3,)),
-    ]
-    recorder = _DeleteRecorder(monkeypatch, indexed)
-    seen = {"about_me": {"private/bio.md", "private/google.md", "corpus/about-me/skills.md"}}
-    # google.md's twin failed this run (e.g. quarantined): keep the public one.
-    errors = {"private/google.md": "personal data guard quarantined the document (gov_id)"}
-    removed = await ingest_run.remove_shadowed(tmp_path, None, None, MODEL, seen, errors)
-    assert removed == ["corpus/about-me/bio.md"] == recorder.deleted
-    assert {"corpus/about-me/bio.md", "corpus/about-me/google.md"} <= seen["about_me"]
-
-
-@pytest.mark.asyncio
-async def test_nothing_is_deleted_without_the_private_checkout(tmp_path, monkeypatch):
-    _tree(tmp_path, {"corpus/about-me/bio.md": "# Bio\n"})
-    recorder = _DeleteRecorder(monkeypatch, [ScopedDocument(1, "corpus/about-me/bio.md", (1,))])
-    seen = {"about_me": {"corpus/about-me/bio.md"}}
-    assert await ingest_run.remove_shadowed(tmp_path, None, None, MODEL, seen, {}) == []
-    assert recorder.deleted == []
+    assert _about_me(tmp_path) == {"private/bio.md"}
+    assert ingest_run.seen_source_paths(tmp_path)["about_me"] == {"private/bio.md"}
+    assert not any(s.source_path.startswith("corpus/about-me/") for s in scan_sources(tmp_path))
 
 
 # --- The stale sweep must never delete private documents it can't see -------------------
@@ -186,7 +121,7 @@ def _known():
 
 def test_private_paths_have_their_own_source_root():
     assert source_root("private/roles/google.md") == "private"
-    assert source_root("corpus/about-me/bio.md") == "corpus/about-me"
+    assert source_root("docs/DESIGN.md") == "docs"
 
 
 @pytest.mark.parametrize("force", [False, True])
@@ -206,11 +141,17 @@ def test_a_file_deleted_from_the_private_repo_is_swept_normally():
     assert plan.refused is None
 
 
-def test_public_files_still_follow_the_ordinary_guards_with_the_checkout_present():
-    seen = {"corpus/about-me/bio.md", "private/notes.md", "private/roles/google.md"}
+def test_a_legacy_public_document_left_in_the_index_is_refused_by_the_directory_guard():
+    """corpus/about-me is no longer scanned, so a leftover indexed public doc looks dropped."""
+    seen = {"private/notes.md", "private/roles/google.md"}
     plan = plan_sweep("about_me", MODEL, _known(), seen)
-    assert [doc.source_path for doc in plan.stale] == ["corpus/about-me/skills.md"]
-    assert plan.refused is None
+    assert [doc.source_path for doc in plan.stale] == [
+        "corpus/about-me/bio.md",
+        "corpus/about-me/skills.md",
+    ]
+    assert plan.refused and "corpus" in plan.refused
+    forced = plan_sweep("about_me", MODEL, _known(), seen, force=True)
+    assert forced.refused is None
 
 
 # --- Nothing private can reach Git, the image's extras, or public caches -------------

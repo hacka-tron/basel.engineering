@@ -29,7 +29,6 @@ SYSTEM_DIRECTORIES = ("infra", "k8s", "services", "docs")
 PRIVATE_CHECKOUT_DIR = ("corpus", "about-me-private")
 PRIVATE_ABOUT_ME_DIR = (*PRIVATE_CHECKOUT_DIR, "about-me")
 PRIVATE_SOURCE_PREFIX = "private/"
-PUBLIC_ABOUT_ME_PREFIX = "corpus/about-me/"
 _AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----")
 # Provider token formats: (label, pattern). Prefixes plus minimum lengths keep
@@ -147,20 +146,12 @@ def strip_front_matter(content: str) -> str:
 def scan_sources(root: Path) -> Iterator[SourceFile]:
     """Yield supported files and denied-path candidates from both corpora.
 
-    A public ``corpus/about-me/`` file with a private twin (``shadowed_public_paths``)
-    is not yielded: the private copy replaces it, so the index never holds the
-    same text twice.
+    About Basel (``about_me``) comes only from the private checkout. A public
+    ``corpus/about-me/`` directory is deliberately not scanned, so About Basel
+    text can't be added to this repo and indexed by accident.
     """
     root = root.resolve()
-    private_sources = list(_private_sources(root))
-    shadowed = shadowed_public_paths(root, private_sources)
-    about_me = root / "corpus" / "about-me"
-    if about_me.is_dir():
-        for path in sorted(about_me.rglob("*.md")):
-            source_path = path.relative_to(root).as_posix()
-            if path.is_file() and not path.is_symlink() and source_path not in shadowed:
-                yield SourceFile("about_me", source_path, path)
-    yield from private_sources
+    yield from _private_sources(root)
     for directory in SYSTEM_DIRECTORIES:
         base = root / directory
         if not base.is_dir():
@@ -185,29 +176,6 @@ def _private_sources(root: Path) -> Iterator[SourceFile]:
             continue
         if path.is_file() and not path.is_symlink():
             yield SourceFile("about_me", PRIVATE_SOURCE_PREFIX + relative.as_posix(), path)
-
-
-def private_twin(public_path: str) -> str:
-    """``corpus/about-me/bio.md`` -> ``private/bio.md``."""
-    return PRIVATE_SOURCE_PREFIX + public_path.removeprefix(PUBLIC_ABOUT_ME_PREFIX)
-
-
-def shadowed_public_paths(root: Path, private_sources=None) -> set[str]:
-    """Public about-me paths that a private file of the same relative path replaces.
-
-    Transition aid from before the public copies were deleted (2026-10-02): with
-    the checkout present, ``corpus/about-me/bio.md`` gives way to ``private/bio.md``.
-    With ``corpus/about-me/`` absent (the normal state now) nothing is shadowed.
-    """
-    root = root.resolve()
-    if private_sources is None:
-        private_sources = list(_private_sources(root))
-    shadowed = set()
-    for source in private_sources:
-        public = PUBLIC_ABOUT_ME_PREFIX + source.source_path.removeprefix(PRIVATE_SOURCE_PREFIX)
-        if (root / public).is_file():
-            shadowed.add(public)
-    return shadowed
 
 
 def scan_file(source: SourceFile) -> ScannedFile:

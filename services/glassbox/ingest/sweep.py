@@ -8,7 +8,7 @@ Two entry points share the same delete path:
   documents already indexed for that scope, is refused unless ``force`` is set
   (the zero-file guard can't be overridden; use ``--clear`` for that). So is one
   where a source directory that has indexed documents (``infra``, ``k8s``,
-  ``services``, ``docs``, ``corpus/about-me``) produced zero scanned files: each
+  ``services``, ``docs``) produced zero scanned files: each
   directory alone is under the fraction limit, so an image that stopped copying,
   say, ``docs/`` would otherwise lose every docs document quietly. ``force``
   overrides the directory guard (for a deliberate removal), never the zero-file one.
@@ -98,9 +98,7 @@ PRIVATE_ROOT = PRIVATE_SOURCE_PREFIX.rstrip("/")
 
 
 def source_root(source_path: str) -> str:
-    """The scanned directory a path came from: ``corpus/about-me``, ``private`` or a top dir."""
-    if source_path.startswith("corpus/about-me/"):
-        return "corpus/about-me"
+    """The scanned directory a path came from: ``private`` or a top dir."""
     return source_path.split("/", 1)[0]
 
 
