@@ -1,0 +1,29 @@
+name: "Ops · Reindex"
+
+# Run `python -m services.glassbox.ingest.run --reindex` once as a Job with the
+# api's current image: rewrite every Redis chunk key from MySQL (no file scan,
+# no embedding calls). After a MySQL restore, or to let the reconcile delete
+# more than 30% orphan keys. Refuses while a release is rolling out or an
+# ingest Job is running. Needs owner approval.
+# Thin wrapper: shows only this runbook's inputs and calls the reusable core
+# (ops.yml). Approval, roles and diagnose-before/after live there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why (optional; shown in the public run summary, so no secrets)
+        type: string
+        required: false
+
+# Reusable workflows can't raise permissions above the caller's.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/ops.yml
+    with:
+      action: reindex
+      reason: ${{ inputs.reason }}

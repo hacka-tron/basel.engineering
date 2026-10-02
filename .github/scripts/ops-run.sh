@@ -467,6 +467,10 @@ act() {
       parameters=$(jq -cn --arg v "$CRONJOB" '{cronjob: [$v]}')
       send_and_wait "glassbox-ops-$action" "$parameters" 600 "$action $CRONJOB"
       ;;
+    reindex)
+      # The document refuses mid-release and waits up to 16 minutes for the Job.
+      send_and_wait glassbox-ops-reindex '{}' 1260 "reindex"
+      ;;
     apply-zram)
       apply_zram
       ;;

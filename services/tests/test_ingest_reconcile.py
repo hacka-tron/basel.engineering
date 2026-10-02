@@ -411,7 +411,7 @@ async def test_lock_is_taken_with_a_ttl_and_released_by_token():
     assert redis.value == "someone-else"
 
 
-def test_cli_exits_zero_when_locked_out(monkeypatch):
+def test_cli_locked_out_ingest_exits_zero_but_reindex_fails(monkeypatch):
     async def fake_ingest(**kwargs):
         return ingest_run.RunResult(locked_out=True)
 
@@ -421,7 +421,8 @@ def test_cli_exits_zero_when_locked_out(monkeypatch):
     monkeypatch.setattr(ingest_run, "ingest", fake_ingest)
     monkeypatch.setattr(ingest_run, "reindex", fake_reindex)
     assert ingest_run.main([]) == 0
-    assert ingest_run.main(["--reindex"]) == 0
+    # An operator-requested reindex that did nothing must fail (Ops · Reindex).
+    assert ingest_run.main(["--reindex"]) == ingest_run.REINDEX_LOCKED_OUT
 
 
 # --- CLI ----------------------------------------------------------------------
@@ -483,3 +484,26 @@ def test_cli_prints_a_banner_for_a_refused_reconcile(monkeypatch, capsys):
     out = capsys.readouterr()
     for stream in (out.out, out.err):
         assert "!!! REDIS RECONCILE REFUSED for about_system (titan)" in stream
+
+
+@pytest.mark.asyncio
+async def test_prepare_index_drops_the_legacy_answer_index(monkeypatch):
+    """Every ingest and reindex drops idx:answers (if present) before touching idx:chunks."""
+    calls = []
+
+    async def fake_drop(client):
+        calls.append("drop idx:answers")
+        return False
+
+    async def fake_ensure(client):
+        calls.append("ensure idx:chunks")
+        return False
+
+    class TagsReady:
+        async def get(self, key):
+            return b"1"
+
+    monkeypatch.setattr(ingest_run, "drop_legacy_index", fake_drop)
+    monkeypatch.setattr(ingest_run, "ensure_index", fake_ensure)
+    await ingest_run.prepare_index(None, TagsReady())
+    assert calls == ["drop idx:answers", "ensure idx:chunks"]

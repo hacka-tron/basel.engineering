@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
+from services.glassbox.cache.answer import drop_legacy_index
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document, IngestionRun
 from services.glassbox.db.session import create_db_engine
@@ -72,6 +73,8 @@ _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 INGEST_LOCK_KEY = "ingest:lock"
 # Longer than any ingest run so far; if a run outlives it, the lock just expires.
 INGEST_LOCK_TTL_MS = 30 * 60 * 1000
+# Exit status of ``--reindex`` when another run holds ``ingest:lock`` (EX_TEMPFAIL).
+REINDEX_LOCKED_OUT = 75
 _RELEASE_LOCK = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   return redis.call('DEL', KEYS[1])
@@ -130,7 +133,12 @@ def _title(content: str, path: Path) -> str:
 
 
 async def prepare_index(sessions, redis_client) -> None:
-    """Create or migrate ``idx:chunks`` and finish any pending model-tag backfill."""
+    """Create or migrate ``idx:chunks`` and finish any pending model-tag backfill.
+
+    Also drops the unused v1 answer index ``idx:answers`` (keeping its keys,
+    which expire by TTL) if it still exists; a no-op afterwards.
+    """
+    await drop_legacy_index(redis_client)
     index_changed = await ensure_index(redis_client)
     # Retry the backfill if an earlier run stopped after FT.ALTER but before
     # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
@@ -644,8 +652,13 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             LOGGER.exception("Reindex failed")
             return 1
-        if reports is not None:
-            _print_reconcile(reports)
+        if reports is None:
+            # Unlike the ingest Job's locked-out run (exit 0, the next release
+            # catches up), an operator asked for this reindex and it did nothing:
+            # fail, so the Ops · Reindex Job reports it.
+            print("reindex did nothing: another ingest or reindex is running", file=sys.stderr)
+            return REINDEX_LOCKED_OUT
+        _print_reconcile(reports)
         return 0
     if args.dry_run:
         try:

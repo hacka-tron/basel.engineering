@@ -78,6 +78,7 @@ jobs:
           bash infra/modules/ops/tests/ops-run-test.sh
           bash infra/modules/ops/tests/restore-snapshot-test.sh
           bash infra/modules/ops/tests/diagnose-budget-test.sh
+          bash infra/modules/ops/tests/reindex-test.sh
       # Release provenance and deploy-branch sync retry, against local bare
       # repositories (the sync test races a fake Flux push).
       - name: Test release workflow scripts
