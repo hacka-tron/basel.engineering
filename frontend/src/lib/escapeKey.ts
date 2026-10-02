@@ -4,10 +4,13 @@
 //      otherwise an open footer "Open to work" popover closes and focus
 //      returns to its trigger (window, capture phase, listening only while
 //      open; `takesEscape` in lib/popover.ts, components/OpenToWork.tsx),
-//   2. a selected diagram component or portfolio project is deselected
+//   2. an open portfolio lightbox closes, and nothing else (window, capture
+//      phase, registered while it is open; components/PortfolioVisuals.tsx),
+//   3. a selected diagram component or portfolio project is deselected
 //      (document, capture phase; `deselectsOnKey` in lib/detailsPanel.ts,
 //      used by ArchitecturePanel and PortfolioPanel),
-//   3. the phone Diagram view returns to Chat (document, bubble; diagramNav).
+//   4. the phone Diagram or Portfolio view returns to Chat (document, bubble;
+//      createViewNav in lib/diagramNav.ts).
 
 type ControlLike = { contains: (node: never) => boolean } | null
 type ActiveLike = { matches: (selector: string) => boolean } | null

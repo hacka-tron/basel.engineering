@@ -15,6 +15,7 @@ import { PORTFOLIO_DETAILS_HINT, PORTFOLIO_EMPTY_TEXT, portfolioHeading } from '
 import { DetailsSheet, LockedBar } from './DetailsSheet'
 import ProjectCard from './ProjectCard'
 import ProjectDetails from './ProjectDetails'
+import { VisualsGallery } from './PortfolioVisuals'
 
 type PortfolioPanelProps = {
   projects: readonly Project[]
@@ -121,7 +122,7 @@ function PortfolioPanel({ projects, selectedSlug, answerText, onSelect, onDesele
           scrollRef={sheetScrollRef}
         >
           {/* Keyed: a new project starts with fresh section state (gallery position). */}
-          <ProjectDetails key={selected.slug} project={selected} answerText={answerText} onContinueInChat={onContinueInChat} />
+          <ProjectDetails key={selected.slug} project={selected} answerText={answerText} onContinueInChat={onContinueInChat} visuals={<VisualsGallery project={selected} />} />
         </DetailsSheet>
       )}
     </section>
