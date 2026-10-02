@@ -8,6 +8,7 @@ const LABEL = 'Open to work'
 const HEADLINE = 'Open to full-time work and freelancing'
 const BODY = 'Talking to teams about full-time roles and taking on freelance projects. Copy my email and say hi.'
 const COPY_LABEL = 'Copy email'
+const PORTFOLIO_LINK = 'See portfolio →'
 
 /** Green "available" dot with a soft ping (none with reduced motion). */
 function StatusDot() {
@@ -51,8 +52,12 @@ function CopyEmailButton() {
  *   trigger). Rules in lib/popover.ts; Escape order in lib/escapeKey.ts.
  * - It stays mounted (`hidden` while closed) so `aria-controls` always
  *   points at an element.
+ * - "See portfolio →" (spec §5.7) closes it and hands focus to the portfolio.
  */
-function OpenToWork() {
+function OpenToWork({ onSeePortfolio }: {
+  /** Selects the Portfolio topic and, on phones, opens the Portfolio view (spec §5.7). Omitted, the link is not shown. */
+  onSeePortfolio?: () => void
+}) {
   const [open, setOpen] = useState(false)
   const popoverId = useId()
   const headlineId = useId()
@@ -116,6 +121,19 @@ function OpenToWork() {
         <div className="mt-2 flex">
           <CopyEmailButton />
         </div>
+        {onSeePortfolio && (
+          <button
+            type="button"
+            onClick={() => {
+              // Close without returning focus to the trigger: focus moves to the portfolio instead.
+              setOpen(false)
+              onSeePortfolio()
+            }}
+            className="mt-1 inline-flex min-h-11 items-center text-xs text-primary underline underline-offset-4 outline-none transition-colors hover:text-cyan focus-visible:ring-1 focus-visible:ring-cyan md:mt-2 md:min-h-0"
+          >
+            {PORTFOLIO_LINK}
+          </button>
+        )}
       </div>
     </div>
   )

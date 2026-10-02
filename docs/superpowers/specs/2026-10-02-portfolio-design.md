@@ -1,6 +1,6 @@
 # Portfolio topic, shared details sheet, and "Open to work" footer
 
-**Status:** design approved by the owner on 2026-10-02 after four rounds of live mocks. Next: implementation plan.
+**Status:** design approved by the owner on 2026-10-02 after four rounds of live mocks. Plans: `docs/superpowers/plans/2026-10-02-{open-to-work-footer,portfolio-corpus-backend,portfolio-frontend}.md`; PR 1 #147 and PR 2 #149 merged, PR 3a #148 and PR 3b #150 in review.
 **Mocks (throwaway, not to be merged):** branch `mock/portfolio` (portfolio, sheets) and branch `mock/hire-banner` (footer callout). Use them as a visual reference only; production code is written fresh from this spec.
 
 ## 1. Goal
@@ -34,7 +34,7 @@ None of this may take height from the chat during a conversation, or change how 
 2. **Portfolio corpus, backend** (§6). Ingest, retrieval, API and DB accept `portfolio`; a placeholder project file. Visitors see no change yet.
 3. **Portfolio frontend and the shared details sheet** (§5, §7), split in two (planning, 2026-10-02):
    - **3a. Shared `DetailsSheet` and the phone diagram sheet** (§5.5 for the diagram). Changes existing behaviour on its own, needs no portfolio content, and does not depend on PR 2.
-   - **3b. The portfolio** (everything else in §5 and §7), stacked on 3a. Depends on PR 2 being deployed (the topic must answer). Adds the popover's "See portfolio →" link.
+   - **3b. The portfolio** (everything else in §5 and §7), stacked on 3a (#150). Depends on PR 2 being deployed (the topic must answer). Adds the popover's "See portfolio →" link.
 
 Each PR gets the normal review gate, a status report in `project/status/`, and the `MOBILE_DESIGN.md` and `SNAPSHOT.md` updates it implies.
 
@@ -125,7 +125,7 @@ One component, `frontend/src/components/DetailsSheet.tsx`, used by the portfolio
 
 - Portfolio: the selected card scrolls to the top of the grid, so it sits in the strip.
 - Phone diagram: the view pans, at the same zoom, so the selected node sits in the middle of the strip; deselecting returns to the normal fitted view.
-- A tap on a different card or node in the strip switches the sheet straight to that item (and asks about it). A tap on empty grid or diagram space closes the sheet and deselects.
+- **Taps in the strip (owner, 2026-10-02, replacing the line that was here):** on phones, any tap in the strip while a sheet is open closes it, a card or diagram node included (they are inert under the sheet), so an accidental tap never asks a new, rate-limited question; switching means close, then pick. On desktop (md and up) the portfolio sheet switches when another card is clicked (and asks about it); clicking the selected card or empty grid space closes it. The desktop diagram has no sheet (unchanged inspector). Opening from the keyboard moves focus into the sheet (its chevron); closing with the chevron or Escape moves it to the locked bar.
 - Measured strip heights: about 68px at 320×568, 88px at 375×667, 125px at 393×852, 134px on a 1280×800 desktop pane.
 
 ### 5.6 Visuals gallery and lightbox
@@ -191,7 +191,7 @@ All places that hard-code the two corpora gain `portfolio`:
 
 - A Vite import of `corpus/portfolio/*.md` as raw text (`import.meta.glob` with `server.fs.allow` for the repo root, or a small build-time plugin) reads the Markdown files, parses frontmatter, drops `draft: true`, sorts by `order`, and exposes a typed `Project[]`. No runtime fetch.
 - The frontmatter parser and validator are shared in spirit with §6.1's CI check; the frontend build fails on an invalid file, like CI.
-- With zero non-draft projects (the state after PR 2), the Portfolio topic still works and the panel shows a short empty state: "Projects are on their way. Ask the chat in the meantime." The owner may prefer to keep the topic hidden until there is content; decide at PR 3 review.
+- **Hidden until there is content (owner, 2026-10-02).** With zero non-draft projects (the state after PR 2) the build leaves out every entry point: the Portfolio topic (desktop nav and phone chip), the phone Portfolio segment (the toggle stays Chat | Diagram) and the popover's "See portfolio →". They appear by themselves on the first build with a published project. A history entry saved on the Portfolio view reads as Chat. The empty state ("Projects are on their way. Ask the chat in the meantime.") stays in code for robustness but is unreachable.
 
 ## 8. Accessibility and behaviour checklist
 
@@ -216,5 +216,5 @@ The frontend has no DOM test environment (`npm test` is `node --test`), and none
 
 - **Visitor focus on desktop:** while on the Portfolio topic the diagram, the site's main demonstration, is hidden. Accepted by the owner; revisit if analytics or feedback suggest people miss it.
 - **Footer width:** the "Open to work" item leaves little room at 360px; any new footer content must be checked against it.
-- **Empty portfolio:** until the owner adds projects, the topic answers from nothing useful. Decide at PR 3 whether to hide the topic until there is content (§7).
+- **Empty portfolio:** decided (owner, 2026-10-02): the topic is hidden until there is content (§7).
 - **Bundle size:** many screenshots are fine (lazy, not in the JS bundle), but long Markdown bodies are in the bundle. Keep write-ups to a few paragraphs, or move bodies to a fetched JSON if they grow.

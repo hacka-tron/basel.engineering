@@ -179,6 +179,12 @@ def test_only_literal_true_and_false_are_booleans(value):
     assert not is_draft(text)
 
 
+def test_a_leading_byte_order_mark_is_ignored():
+    # Same rule as frontend/vite-plugins/portfolio.ts, so both accept the file.
+    assert parse_project("\ufeff" + VALID, "jobpilot").title == "JobPilot"
+    assert is_draft("\ufeff" + RAW.format(extra="draft: true\n"))
+
+
 def test_literal_true_and_false_still_work():
     assert parse_project(RAW.format(extra="draft: true\n"), "jobpilot").draft is True
     assert parse_project(RAW.format(extra="draft: false\n"), "jobpilot").draft is False
