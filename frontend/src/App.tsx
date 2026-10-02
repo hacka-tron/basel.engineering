@@ -750,14 +750,19 @@ function App() {
       className={`flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas font-mono text-primary max-md:relative ${focusMode ? '' : 'max-md:[--chrome-top:3.75rem]'} ${shaking ? 'earthquake-shake' : ''} ${showRotateScreen ? 'invisible' : ''}`}
     >
       {/*
-        Below md the header floats over the page (owner, 2026-10-01): no bar,
-        no border, the messages scroll under it and fade out beneath it. Only
-        its buttons take taps; everything else passes through to the page.
+        Below md the header floats over the page (owner, 2026-10-01): no
+        border, the messages scroll under it. The header itself is opaque in
+        the chat's colour and takes taps (nothing hidden under it can be
+        tapped or long-pressed); below it, the fade band is pass-through.
       */}
-      <Collapsible open={!focusMode} className="max-md:pointer-events-none max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-20">
-      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-hairline px-4 py-2 md:gap-0 md:border-b md:px-8 md:py-0`}>
-        {/* The fade: page colour behind the row, then transparent 16px below it. */}
-        <div aria-hidden="true" className="header-fade pointer-events-none absolute inset-x-0 top-0 -bottom-4 -z-10 md:hidden" />
+      <Collapsible
+        open={!focusMode}
+        className="max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-20"
+        // Outside the clipped wrapper, so the band rides on the closing edge
+        // while the header slides away instead of being cut off.
+        after={<div aria-hidden="true" className="header-fade pointer-events-none absolute inset-x-0 top-[calc(100%-0.5rem)] h-6 md:hidden" />}
+      >
+      <header ref={headerRef} className={`relative flex shrink-0 md:min-h-[72px] flex-nowrap items-center gap-x-4 gap-y-0 border-hairline px-4 py-2 max-md:bg-panel md:gap-0 md:border-b md:px-8 md:py-0`}>
         {/*
           Below md: one row, [h1 ... envelope (Copy email), GitHub] (the topic
           chips sit above the ask box in Chat view). The envelope sits directly
@@ -775,7 +780,7 @@ function App() {
         <span ref={nameMeasureRef} aria-hidden="true" className={`pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${NAME_TEXT}`}>{FULL_NAME}</span>
           {isDesktop && topicNav}
 
-        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:pointer-events-auto max-md:shrink-0 md:order-3 md:gap-3">
+        <div ref={actionsRef} data-auto-margin className="order-2 ml-auto flex items-center max-md:shrink-0 md:order-3 md:gap-3">
           <ContactReveal />
           <a
             href="https://github.com/hacka-tron/basel.engineering"

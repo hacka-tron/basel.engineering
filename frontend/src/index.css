@@ -50,25 +50,25 @@
 }
 
 /*
- * Below md the header floats over the page (App.tsx, owner 2026-10-01): this
- * layer sits behind its row and reaches 16px below it. It is the panel colour,
- * opaque behind the name and icons, and fades to transparent over the last
- * 24px, so messages scrolling up under the header fade out instead of being
- * cut by a line. With reduced transparency it ends in a hard edge at the
- * header's bottom instead.
+ * Below md the header floats over the page (App.tsx, owner 2026-10-01). The
+ * header itself is opaque --color-panel; this band starts 8px above its
+ * bottom edge and reaches 16px below it, fading from the panel colour to
+ * transparent, so messages scrolling up fade out instead of being cut by a
+ * line. With reduced transparency there is no band: the header ends in a
+ * hard edge.
  */
 .header-fade {
   background-image: linear-gradient(
     to bottom,
-    var(--color-panel) calc(100% - 1.5rem),
-    color-mix(in srgb, var(--color-panel) 55%, transparent) calc(100% - 0.75rem),
+    var(--color-panel),
+    color-mix(in srgb, var(--color-panel) 55%, transparent) 50%,
     transparent
   );
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .header-fade {
-    background-image: linear-gradient(to bottom, var(--color-panel) calc(100% - 1rem), transparent calc(100% - 1rem));
+    display: none;
   }
 }
 
@@ -95,6 +95,11 @@
   font-family: 'JetBrains Mono', monospace;
   color: var(--color-primary);
   background: var(--color-canvas);
+  /* Phones: the panel colour, like the floating header, so iOS's status-bar
+     tint and overscroll match it (the app covers the rest). */
+  @variant max-md {
+    background: var(--color-panel);
+  }
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

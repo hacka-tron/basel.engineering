@@ -11,9 +11,10 @@ const TRANSITION_MS = 200
  * wrappers are `display: contents`, so the desktop layout is untouched. The
  * inner wrapper is `min-w-0` so a grid item never grows to its content's
  * min-content width: the header must stay as wide as the screen for the
- * name to switch to its short form on very narrow screens.
+ * name to switch to its short form on very narrow screens. `after` renders
+ * outside the clipped wrapper (the floating header's fade band in App.tsx).
  */
-function Collapsible({ open, className = '', children }: { open: boolean; className?: string; children: ReactNode }) {
+function Collapsible({ open, className = '', after, children }: { open: boolean; className?: string; after?: ReactNode; children: ReactNode }) {
   const [settledOpen, setSettledOpen] = useState(open)
   useEffect(() => {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -27,6 +28,7 @@ function Collapsible({ open, className = '', children }: { open: boolean; classN
       className={`grid shrink-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none md:contents ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${className}`}
     >
       <div className={`min-h-0 min-w-0 md:contents ${clipped ? 'overflow-hidden' : ''}`}>{children}</div>
+      {after}
     </div>
   )
 }
