@@ -1,6 +1,6 @@
 # Portfolio corpus in the backend (portfolio spec PR 2)
 
-**Status:** PR open (PR [#N](https://github.com/hacka-tron/basel.engineering/pull/N)); review pending. Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
+**Status:** PR open (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149)); review pending. Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
 
 ## TL;DR
 `portfolio` is now a third corpus end to end in the backend: a content format with a CI check, the ingest scanner, the stale sweep, retrieval, `POST /api/ask`, MySQL (Alembic `0007`) and the answer warm-up all know it. The repo ships one draft example project, so nothing is indexed yet. Visitors see no change until the frontend PR (spec PR 3) adds the Portfolio topic.
