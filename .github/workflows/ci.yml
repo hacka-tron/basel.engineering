@@ -1,10 +1,12 @@
 name: CI
 
-# No path filters: backend-tests and frontend-checks are required status
-# checks on main, and a docs/config-only PR with no matching-path commit
-# would otherwise never get a check run to satisfy that requirement. Both
-# jobs are fast (well under a minute combined), so running unconditionally
-# is cheap.
+# No trigger path filters: backend-tests and frontend-checks are required
+# status checks on main, and a workflow skipped by a path filter never
+# reports them, so the PR would wait forever. Instead the `changes` job
+# decides, and the test jobs skip themselves for process-doc-only changes
+# (a job skipped by `if:` counts as passing a required check). Process docs
+# are project/** (except SNAPSHOT.md, which test_planned_labels reads) and
+# repo-root *.md. docs/** still runs CI: it is chatbot corpus and tested.
 on:
   pull_request:
     branches: [main]
@@ -15,7 +17,22 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: .github/scripts/ci-code-changed.sh "$BASE" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
   backend-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     services:
       mysql:
@@ -64,6 +81,8 @@ jobs:
         run: pytest services/tests -q -rs
 
   frontend-checks:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
