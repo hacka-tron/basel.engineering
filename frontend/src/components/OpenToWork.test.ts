@@ -17,6 +17,6 @@ test('the footer item uses the approved wording, verbatim', () => {
   }
 })
 
-test('the portfolio link waits for the portfolio PR', () => {
-  assert.doesNotMatch(source, /See portfolio/i)
+test('the portfolio link uses the approved wording (spec §5.7)', () => {
+  assert.ok(source.includes("'See portfolio →'"))
 })

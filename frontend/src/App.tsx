@@ -748,6 +748,14 @@ function App() {
     if (next !== 'portfolio') setSelectedProject(null)
     pendingSelectionRef.current = null
   }
+  // Footer popover "See portfolio →" (spec §5.7): the Portfolio topic and, on
+  // phones, the Portfolio view; focus moves to the first card (or the empty
+  // state) once the panel has rendered.
+  function handleSeePortfolio() {
+    selectTopic('portfolio')
+    if (!isDesktopRef.current) showMobileView('portfolio')
+    requestAnimationFrame(() => portfolioFocusRef.current?.focus())
+  }
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
   // md+ only; below md the topic is chosen with the chips above the ask box
@@ -898,6 +906,7 @@ function App() {
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
         stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
+        onSeePortfolio={handleSeePortfolio}
         {...(isDesktop ? {} : {
           onNewChat: handleNewChat,
           newChatDisabled: isStreaming || messages.length === 0,
