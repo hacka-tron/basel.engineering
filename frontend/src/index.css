@@ -165,3 +165,51 @@ input {
     animation: none;
   }
 }
+
+/*
+ * The shared details sheet (components/DetailsSheet.tsx, spec 2026-10-02
+ * §5.5) slides up over its region in 260ms, and the strip left above it is
+ * dimmed. No slide with reduced motion; no dimming with reduced transparency
+ * (the sheet then ends in a hard edge, like the phone header).
+ */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.sheet-up {
+  animation: sheet-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes sheet-scrim {
+  from { opacity: 0; }
+}
+
+.sheet-scrim {
+  animation: sheet-scrim 260ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-up,
+  .sheet-scrim {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sheet-scrim {
+    display: none;
+  }
+}
+
+/*
+ * While the phone details sheet is open, a tap anywhere in the visible strip
+ * closes it (owner, 2026-10-02): nodes and arrows ignore pointers, so the tap
+ * reaches the pane (`onPaneClick` deselects) and Chrome's touch adjustment has
+ * no node to snap to. Switching component means closing, then tapping a node.
+ */
+.sheet-open .react-flow__node,
+.sheet-open .react-flow__edge,
+.sheet-open .react-flow__handle {
+  pointer-events: none !important;
+}

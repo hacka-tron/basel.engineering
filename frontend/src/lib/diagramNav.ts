@@ -12,6 +12,12 @@ export interface DiagramNavDeps {
   /** Runs after the view has re-rendered (e.g. requestAnimationFrame). */
   afterRender: (callback: () => void) => void
   focusDiagramToggle: () => void
+  /**
+   * Called once whenever the view returns to Chat, by any route. Leaving the
+   * Diagram view closes its details sheet (spec 2026-10-02 §5.5: Back closes
+   * the sheet); no extra history entry is used for the sheet.
+   */
+  onReturnToChat?: () => void
 }
 
 export function viewFromHistoryState(state: unknown): MobileView {
@@ -20,6 +26,11 @@ export function viewFromHistoryState(state: unknown): MobileView {
 
 export function createDiagramNav(deps: DiagramNavDeps) {
   const restoreFocus = () => deps.afterRender(deps.focusDiagramToggle)
+
+  function showChat() {
+    deps.setView('chat')
+    deps.onReturnToChat?.()
+  }
 
   function showView(view: MobileView) {
     if (view === 'diagram') {
@@ -34,7 +45,7 @@ export function createDiagramNav(deps: DiagramNavDeps) {
       // popstate then sets the view.
       deps.history.back()
     } else {
-      deps.setView('chat')
+      showChat()
     }
   }
 
@@ -47,7 +58,11 @@ export function createDiagramNav(deps: DiagramNavDeps) {
 
   function handlePopState(state: unknown) {
     const view = viewFromHistoryState(state)
-    if (view === 'chat') restoreFocus()
+    if (view === 'chat') {
+      restoreFocus()
+      showChat()
+      return
+    }
     deps.setView(view)
   }
 
