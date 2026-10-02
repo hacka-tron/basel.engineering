@@ -1,6 +1,9 @@
 // Who gets an Escape keypress. Listeners that use one up call preventDefault,
 // and later listeners skip handled events:
-//   1. a showing footer tooltip closes (window, capture phase; this file),
+//   1. a showing footer tooltip closes (window, capture phase; this file);
+//      otherwise an open footer "Open to work" popover closes and focus
+//      returns to its trigger (window, capture phase, listening only while
+//      open; `takesEscape` in lib/popover.ts, components/OpenToWork.tsx),
 //   2. a selected diagram component is deselected (document, capture phase;
 //      `deselectsOnKey` in lib/detailsPanel.ts),
 //   3. the phone Diagram view returns to Chat (document, bubble; diagramNav).
