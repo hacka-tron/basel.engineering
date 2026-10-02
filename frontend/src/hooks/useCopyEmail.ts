@@ -10,13 +10,19 @@ import { copyEmail, copyFeedback } from '../lib/contact'
 export function useCopyEmail(): { result: string; copy: () => Promise<void> } {
   const [result, setResult] = useState('')
   const timerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
 
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    }
   }, [])
 
   async function copy() {
     const feedback = copyFeedback(await copyEmail())
+    if (!mountedRef.current) return
     setResult(feedback.text)
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(() => setResult(''), feedback.ms)

@@ -92,6 +92,7 @@ function OpenToWork() {
         ref={triggerRef}
         type="button"
         aria-label={LABEL}
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={popoverId}
         onClick={() => setOpen((value) => !value)}
