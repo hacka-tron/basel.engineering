@@ -8,6 +8,7 @@ import re
 import struct
 import sys
 import uuid
+from collections import Counter
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -31,12 +32,19 @@ from services.glassbox.ingest.redis_index import (
     ensure_index,
     replace_document_vectors,
 )
-from services.glassbox.ingest.scanner import scan_file, scan_sources, strip_front_matter
+from services.glassbox.ingest.scanner import (
+    private_twin,
+    scan_file,
+    scan_sources,
+    shadowed_public_paths,
+    strip_front_matter,
+)
 from services.glassbox.ingest.sweep import (
     CORPORA,
     SWEEP_MODES,
     SweepPlan,
     clear_scope,
+    delete_documents,
     load_scope_documents,
     log_plan,
     max_fraction_from_env,
@@ -44,6 +52,7 @@ from services.glassbox.ingest.sweep import (
     run_sweep,
     sweep_mode_from_env,
 )
+from services.glassbox.privacy import guard_document, guarded_content_hash, quarantine_categories
 from services.glassbox.providers.factory import get_embedding_provider
 
 LOGGER = logging.getLogger(__name__)
@@ -101,6 +110,10 @@ class RunResult:
     sweep: list[SweepPlan] = field(default_factory=list)
     reconcile: list[ReconcileReport] = field(default_factory=list)
     locked_out: bool = False
+    # Personal-data guard: per about_me document, the categories it redacted.
+    pii_redacted: dict[str, Counter] = field(default_factory=dict)
+    # Public corpus/about-me documents removed because their private twin replaced them.
+    shadow_removed: list[str] = field(default_factory=list)
 
 
 def chunker_for_path(path: Path):
@@ -136,6 +149,8 @@ def seen_source_paths(root: Path) -> dict[str, set[str]]:
     seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
     for source in scan_sources(root):
         seen[source.corpus].add(source.source_path)
+    # A public file replaced by its private twin still exists: never stale.
+    seen["about_me"] |= shadowed_public_paths(root)
     return seen
 
 
@@ -201,6 +216,7 @@ async def _ingest(
             run_id = run.id
         await prepare_index(sessions, redis_client)
         provider = get_embedding_provider()
+        quarantine = quarantine_categories()
         seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
         for source in scan_sources(root):
             # Quarantined or failed files still exist, so they never count as stale.
@@ -215,6 +231,11 @@ async def _ingest(
                 LOGGER.warning("Skipping unsupported extension: %s", source.source_path)
                 continue
             assert scanned.content is not None and scanned.content_hash is not None
+            content_hash = scanned.content_hash
+            if source.corpus == "about_me":
+                # The guard version is part of the hash, so new detection rules
+                # re-scan every about_me document once instead of skipping it.
+                content_hash = guarded_content_hash(content_hash)
             with sessions() as session:
                 existing = session.scalar(
                     select(Document).where(
@@ -222,7 +243,7 @@ async def _ingest(
                         Document.source_path == source.source_path,
                     )
                 )
-                if existing is not None and existing.content_hash == scanned.content_hash:
+                if existing is not None and existing.content_hash == content_hash:
                     models = set(
                         session.scalars(
                             select(DbChunk.embedding_model)
@@ -233,11 +254,21 @@ async def _ingest(
                     if models == {provider.model_id}:
                         continue
 
-            content = (
-                strip_front_matter(scanned.content)
-                if source.corpus == "about_me"
-                else scanned.content
-            )
+            content = scanned.content
+            if source.corpus == "about_me":
+                # Personal-data guard (privacy.py): redact before chunking, so no
+                # chunk, embedding, title or snippet ever holds the value.
+                guarded = guard_document(
+                    strip_front_matter(content), source.source_path, quarantine=quarantine
+                )
+                if guarded.counts:
+                    result.pii_redacted[source.source_path] = guarded.counts
+                if guarded.quarantined:
+                    # Like a secret-scanner hit: skipped, still "seen", so the
+                    # last good version keeps serving.
+                    result.errors[source.source_path] = guarded.quarantined
+                    continue
+                content = guarded.text
             try:
                 chunks = chunker(content, source.source_path)
                 vectors = await provider.embed([chunk.text for chunk in chunks])
@@ -259,13 +290,13 @@ async def _ingest(
                     document = Document(
                         corpus=source.corpus,
                         source_path=source.source_path,
-                        content_hash=scanned.content_hash,
+                        content_hash=content_hash,
                         title=_title(content, source.path),
                     )
                     session.add(document)
                     session.flush()
                 else:
-                    document.content_hash = scanned.content_hash
+                    document.content_hash = content_hash
                     document.title = _title(content, source.path)
                     document.updated_at = _now()
                 old_ids = list(
@@ -300,6 +331,9 @@ async def _ingest(
             await redis_client.incr(f"corpus:ver:{source.corpus}")
             result.docs_changed += 1
             result.chunks_written += len(chunks)
+        result.shadow_removed = await remove_shadowed(
+            root, engine, redis_client, provider.model_id, seen, result.errors
+        )
         # Reached only when the scan walked every file without raising.
         result.sweep = await run_sweep(
             engine,
@@ -329,6 +363,39 @@ async def _ingest(
                 run.docs_changed = result.docs_changed
                 run.chunks_written = result.chunks_written
         raise
+
+
+async def remove_shadowed(
+    root: Path, engine: Engine, redis_client, model_id: str, seen, errors
+) -> list[str]:
+    """Delete indexed public about-me documents whose private twin was indexed this run.
+
+    While the public ``corpus/about-me/`` copies still exist next to the private
+    checkout, the scanner skips a public file with a private twin. Its earlier
+    document is deleted here (Redis keys, version bump, MySQL rows: the sweep's
+    delete path), but only once the twin was scanned in this run without an
+    error, so the text keeps being served from one of the two at every moment.
+    The shadowed paths are added to ``seen`` so the stale sweep never reports them.
+    """
+    shadowed = shadowed_public_paths(root)
+    seen["about_me"] |= shadowed
+    replaced = {
+        path
+        for path in shadowed
+        if private_twin(path) in seen["about_me"] and private_twin(path) not in errors
+    }
+    if not replaced:
+        return []
+    documents = [
+        document
+        for document in load_scope_documents(engine, "about_me", model_id)
+        if document.source_path in replaced
+    ]
+    await delete_documents(engine, redis_client, "about_me", model_id, documents)
+    removed = sorted(document.source_path for document in documents)
+    for path in removed:
+        LOGGER.warning("Removed %s: replaced by %s", path, private_twin(path))
+    return removed
 
 
 async def reindex(
@@ -608,6 +675,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     for source_path, reason in result.errors.items():
         print(f"skipped {source_path}: {reason}")
+    for source_path in result.shadow_removed:
+        print(f"replaced by its private twin: {source_path}")
+    for source_path, counts in result.pii_redacted.items():
+        # Categories and counts only: never the redacted values.
+        summary = ", ".join(f"{category}={count}" for category, count in sorted(counts.items()))
+        print(f"personal data redacted in {source_path}: {summary}")
     for plan in result.sweep:
         action = "deleted" if plan.deleted else "would delete"
         print(f"sweep {plan.corpus}: {action} {len(plan.stale)} of {plan.known}")

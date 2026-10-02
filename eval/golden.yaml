@@ -182,7 +182,7 @@ cases:
     expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
     gold_snippets:
       - response is an SSE stream. The frontend maps
-      - 'yield frame("token", {"text": part})'
+      - 'yield frame("token", {"text": safe})'
     must_include: ['\bstage\b', '\bretrieval\b', '\btoken\b', '\bdone\b', '\berror\b']
   - id: system-vector
     origin: questions.yaml
@@ -221,7 +221,7 @@ cases:
     question: How are source files scanned and ingested into Glassbox?
     expected_sources: [services/glassbox/ingest/run.py, docs/DESIGN-003-ingestion.md]
     gold_snippets:
-      - existing.content_hash == scanned.content_hash
+      - scanned = scan_file(source)
     must_include: ['hash', 'chunk', 'embed']
   - id: system-secrets
     origin: questions.yaml

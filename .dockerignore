@@ -25,3 +25,10 @@ frontend/.vite
 *.log
 coverage.xml
 .coverage
+# The private About Basel checkout (release.yml): only Markdown under its
+# about-me/ folder goes into the image; never its .git, README, LICENSE or
+# anything else from that repo.
+corpus/about-me-private/**
+!corpus/about-me-private/about-me/**/*.md
+corpus/about-me-private/about-me/**/.*
+corpus/about-me-private/about-me/**/.*/**

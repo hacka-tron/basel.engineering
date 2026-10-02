@@ -60,6 +60,40 @@ jobs:
           REF: ${{ github.ref }}
           SHA: ${{ github.sha }}
         run: .github/scripts/release-provenance.sh
+      # The owner's private About Basel repo (docs/DESIGN-003-ingestion.md §1.2),
+      # baked into the image (private ECR) so the ingest Job indexes its
+      # about-me/ Markdown as about_me, behind the personal-data guard. Read with
+      # a read-only deploy key (ABOUT_ME_DEPLOY_KEY, a `release` environment
+      # secret) that can read that one repo and nothing else. Without the secret
+      # this is skipped and the image carries the public corpus only. Nothing
+      # here prints file names or contents (no ls/cat/debug steps; the build log
+      # shows only Dockerfile steps). corpus/about-me-private/ is in .gitignore,
+      # and .dockerignore lets only its about-me/**/*.md into the image.
+      - name: Private About Basel repo configured?
+        id: about_me
+        env:
+          # Only whether the secret is set, never its value, reaches the shell.
+          ABOUT_ME_CONFIGURED: ${{ secrets.ABOUT_ME_DEPLOY_KEY != '' }}
+        run: |
+          if [ "$ABOUT_ME_CONFIGURED" = true ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "ABOUT_ME_DEPLOY_KEY is not set, so this build uses the public corpus only."
+          fi
+      # A configured key that fails (revoked, repo renamed) fails the release
+      # rather than shipping an image without the private corpus; removing the
+      # secret is the way to build without it. Either way the ingest's stale
+      # sweep never deletes private documents it can't see (ingest/sweep.py).
+      - name: Check out the private About Basel repo
+        if: steps.about_me.outputs.configured == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: hacka-tron/basel.engineering-docs
+          ssh-key: ${{ secrets.ABOUT_ME_DEPLOY_KEY }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: corpus/about-me-private
       - id: tag
         # Also tags with a prefixed run number: short git SHAs have no
         # inherent ordering, but Flux's ImagePolicy needs to pick "the
@@ -88,13 +122,22 @@ jobs:
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          # The build record is a run artifact, downloadable on this public
+          # repo's run page: keep it off so nothing about the context is published.
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/arm64
           push: true
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No cache export when the private corpus is in the context: the
+          # GitHub Actions cache would hold the layer with the private files,
+          # and other workflow runs in this public repo can restore main's cache
+          # entries. Reading the older public-only cache is harmless; builds
+          # with the private corpus are slower (no fresh cache).
+          cache-to: ${{ steps.about_me.outputs.configured == 'true' && '' || 'type=gha,mode=max' }}
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/glassbox:${{ steps.tag.outputs.build_number }}

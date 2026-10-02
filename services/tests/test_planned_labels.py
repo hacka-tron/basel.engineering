@@ -463,6 +463,9 @@ PLANNED_UNITS = [
     ("docs/DESIGN-002-followups.md", "The scripted post-deploy streaming check"),
     ("docs/DESIGN-003-ingestion.md", "### 4.2 Why a raw zone at all (planned)"),
     ("docs/DESIGN-003-ingestion.md", "### 8.2 Processing one message (planned)"),
+    ("docs/DESIGN-003-ingestion.md", "## 1.2 Private About Basel repo"),
+    ("docs/DESIGN-003-ingestion.md", "- **The public copies during the switch.**"),
+    ("docs/DESIGN-003-ingestion.md", "## 5. Google Drive connector (dropped"),
     ("docs/DESIGN-004-action-plan.md", "| 7 (not started) |"),
     ("docs/DESIGN-004-action-plan.md", "post-deploy Cloudflare streaming check is not built"),
     ("docs/DESIGN-005-rag-quality.md", "| Retrieval, lexical leg (planned with hybrid search) |"),
@@ -510,12 +513,14 @@ def _rendered_source(path: str, text: str) -> str:
 
 def test_every_design_003_chunk_is_marked_in_the_prompt_except_what_runs_today():
     # DD3 is unbuilt M4 design; only section 1.1 describes the running ingest Job
-    # and stale sweep. Since prompt v14 DD3 has no fixed whole-document label: every
-    # heading carries the planned wording, so each real chunk is marked in the
-    # rendered prompt (including chunks that start at a ### heading) and 1.1 is not.
+    # and stale sweep. Section 1.2 (the private About Basel repo) is in the code but
+    # inactive until the owner adds the deploy key, so its headings say planned too.
+    # Since prompt v14 DD3 has no fixed whole-document label: every heading carries
+    # the planned wording, so each real chunk is marked in the rendered prompt
+    # (including chunks that start at a ### heading) and 1.1 is not.
     path = "docs/DESIGN-003-ingestion.md"
     chunks = _real_chunks(path)
-    assert len(chunks) == 13
+    assert len(chunks) == 14
     for text in chunks:
         rendered = _rendered_source(path, text)
         assert "PLANNED M4 DESIGN" not in rendered

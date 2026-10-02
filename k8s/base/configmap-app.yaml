@@ -35,3 +35,6 @@ data:
   # The api refuses to start without a stable >= 32-character salt
   # (glassbox-app secret, from SSM /glassbox/ip_hash_salt).
   GLASSBOX_REQUIRE_IP_HASH_SALT: "true"
+  # Personal-data guard (services/glassbox/privacy.py): about_me documents with
+  # a government ID (SSN-like) are skipped whole instead of redacted.
+  GLASSBOX_PII_QUARANTINE: gov_id

@@ -14,6 +14,8 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 4. **Answer cache survives unrelated re-ingests:** PR [#117](https://github.com/hacka-tron/basel.engineering/pull/117) open (report `project/status/2026-10-01-answer-cache-sources.md`). Answers are validated against their own source chunks instead of the corpus-wide version, so a docs merge no longer cold-starts every cached answer. Needs the review gate, then merge. Deploy note: one-time cold answer cache (new index `idx:answers:v2`, and the first ingest backfills `content_sha` onto existing chunk hashes); warm-answers refills the suggested questions within its 10/day cap.
 5. **UI review follow-ups:** PR [#113](https://github.com/hacka-tron/basel.engineering/pull/113) open (reload mid-retry, chat announcements, phone focus after Retry, segment tap area, 568x320 landscape fit); needs the review gate, then merge.
 
+6. **Private About Basel repo + personal-data guard:** PR open (report `project/status/2026-10-01-private-about-me.md`). Needs the review gate, then merge. Inactive until the owner follows the report's "Owner setup" (SSH key pair, read-only deploy key on `hacka-tron/basel.engineering-docs`, `ABOUT_ME_DEPLOY_KEY` in the `release` environment, then run Release). **Follow-up after the first release that ingests the private repo:** delete the public `corpus/about-me/*.md` copies in a PR (the shadowing already removed their indexed documents, so the index doesn't change), then check the next ingest log. Also after private edits: run Release by hand (no `repository_dispatch` yet).
+
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 
 - **About Basel corpus error: RDS (owner sign-off).** `corpus/about-me/skills.md` line 15 says this site runs on "Terraform, EC2, RDS, and Kubernetes (k3s)". Glassbox has no RDS; MySQL runs in the cluster (`docs/DESIGN.md` §10.5). Suggested fix: drop "RDS" (or say "in-cluster MySQL"). It is About Basel text, so it needs the owner's OK. Golden case `me-site-stack` (`must_not_include` RDS) fails until it is fixed.
@@ -30,7 +32,7 @@ PRs #78 (one-row mobile header, topic chips, envelope Contact), #81 (smaller des
 - ~~Release pipeline hardening~~: in review, PR [#91](https://github.com/hacka-tron/basel.engineering/pull/91) (see `project/status/2026-10-01-release-hardening.md`).
 - Security pass: IP-hash salt and trusted proxy CIDRs verified in production, Terraform preview credential audit.
 - Self-healing node (ASG + EIP reassociation, M3).
-- Google Drive content pipeline (M4).
+- Content pipeline (M4): Google Drive dropped 2026-10-01; About Basel moves to a private repo checked out at release (item 6 above). The S3/SQS/KEDA remainder of DESIGN-003 stays planned. Ideas: a `repository_dispatch` from the private repo so its edits release without a manual run (needs a token); a registry (ECR) build cache so private-corpus builds keep caching without the GitHub Actions cache.
 - Docs: "Status: planned" tags in the design docs and a design-doc drift pass (`docs/DESIGN*.md` lag the deep dive in places).
 
 **Reviewer availability:** Codex is out of usage; Opus subagents review with the same primer brief. Gemini's quota was exhausted as of 2026-09-30 (resets about 2026-10-07).

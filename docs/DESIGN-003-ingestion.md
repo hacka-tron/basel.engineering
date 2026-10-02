@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Planned for Milestone 4, not built yet. Only §1.1 describes code that runs today. |
+| **Status** | Planned for Milestone 4, not built yet. Only §1.1 describes code that runs today. §1.2 (the private About Basel repo) is in the code but planned until the owner adds its deploy key. The Google Drive connector (§5) was dropped on 2026-10-01. |
 | **Owner** | Basel |
 | **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` ("DD1") and `DESIGN-002-followups.md` ("DD2") |
@@ -42,6 +42,20 @@ Everything else in this document describes the connector pipeline. The ingest Jo
 - **Operator commands:** `python -m services.glassbox.ingest.run --dry-run` prints the list without ingesting or writing anything. `--clear --corpus about_me|about_system [--model M] [--dry-run] [--yes]` wipes one corpus and model's documents, chunks and Redis keys for a clean re-ingest; it asks you to type the corpus name unless `--yes` is given, and the Job never runs it. `--reindex` rewrites every Redis chunk key from MySQL.
 
 The connector design below (sections 8 and 11) replaces this with event-driven deletes and nightly reconciliation (its MySQL-to-Redis rows already run as the reconcile above).
+
+## 1.2 Private About Basel repo (planned: in the code, not active until the owner adds the deploy key)
+
+Owner decision, 2026-10-01: About Basel content moves to a private GitHub repo, `hacka-tron/basel.engineering-docs` (Markdown under its `about-me/` folder). The Google Drive design (§5) is dropped. About This System stays in this repo. Until the owner adds the deploy key, nothing below runs and the site keeps serving the public `corpus/about-me/` files.
+
+- **Release-time checkout.** `release.yml` checks the private repo out into `corpus/about-me-private/` before the image build, with a read-only deploy key (`ABOUT_ME_DEPLOY_KEY`, a `release` environment secret), `persist-credentials: false` and `fetch-depth: 1`. Without the secret the step is skipped and the image carries the public corpus only. A key that is set but fails fails the release. The content is baked into the image, which lives in private ECR. A deploy key reads one repo and nothing else and belongs to no person; a fine-grained token would be tied to the owner's account, expire, and need a broader scope to reach a repo of another name.
+- **What reaches the image.** `.dockerignore` keeps only `corpus/about-me-private/about-me/**/*.md`, never the private repo's `.git`, README or LICENSE. `.gitignore` keeps the checkout out of this public repo. No workflow step lists or prints files, and the build record artifact is turned off.
+- **Cache leak, closed.** The build normally exports its layer cache to the GitHub Actions cache, which other workflow runs in this public repo can restore. With the private checkout present the cache export is off (the private layer would otherwise sit in that cache); reading the older public-only cache stays on. Builds with the private corpus are therefore slower.
+### 1.2.1 Ingest, the public copies and deletes (planned until the deploy key exists)
+
+- **Ingest.** The scanner reads `about-me/**/*.md` from the checkout (hidden paths and symlinks skipped) as `about_me` documents with source path `private/<path under about-me/>`. They pass the secret scanner and the personal-data guard (DD1 §11) like every About Basel file. The content hash makes edits re-embed only the changed file.
+- **The public copies during the switch.** The owner keeps `corpus/about-me/*.md` until a release has ingested the private repo. A public file with a private twin of the same name (`corpus/about-me/bio.md` and `private/bio.md`) is not ingested while the checkout is present, and its earlier indexed document is deleted, but only after the twin was indexed without an error in the same run, so the text is always served from one of the two and never twice. Deleting the public copies afterwards is a follow-up (`project/BACKLOG.md`).
+- **Deletes.** A file removed from the private repo goes through the stale sweep (report mode in production) and the Redis reconcile. A release built without the checkout (no secret, or the secret removed) scans zero private files; the sweep refuses to delete `private/` documents then, and `--force-sweep` does not override that (`--clear` is the deliberate wipe).
+- **Freshness.** Releases trigger on changes in this repo only. After editing the private repo the owner runs the Release workflow by hand on `main` (the existing manual dispatch). A `repository_dispatch` from the private repo would need a token with access to this repo, so it is not set up.
 
 ---
 
@@ -102,50 +116,9 @@ The raw zone holds exact copies of what came from the source. If the chunking st
 
 ---
 
-## 5. Google Drive connector (planned, not built yet)
+## 5. Google Drive connector (dropped 2026-10-01, not built)
 
-### 5.1 Access (planned)
-
-- A Google Cloud **service account** (for example `glassbox-reader@<project>.iam.gserviceaccount.com`).
-- The "Glassbox Corpus" folder is shared with that email as **Viewer**. It can see nothing else.
-- OAuth scope: `https://www.googleapis.com/auth/drive.readonly`.
-- The service account key JSON is stored in SSM Parameter Store (SecureString) and loaded into a Kubernetes Secret at boot, like other secrets (DD1 10.6).
-- **Upgrade path:** Workload Identity Federation, where Google trusts the AWS instance role directly and no key file exists. Recorded as a stretch goal.
-
-### 5.2 Folder layout = labels (planned)
-
-```
-Glassbox Corpus/
-  Roles/        -> type: role
-  Projects/     -> type: project
-  Bio           -> type: bio
-  Skills        -> type: skills
-  Bullet Bank   -> type: other
-```
-
-The first subfolder name (lowercased, singularized) becomes `type`. Docs at the top level get their type from a small mapping on the title, defaulting to `other`. The full folder path is stored as metadata.
-
-**Authoring rule:** use real heading styles (Heading 1, Heading 2) for section titles. The Markdown export turns these into `#` headings, which the chunker splits on. Bold text is not a heading.
-
-### 5.3 Sync algorithm (planned)
-
-Runs as a Kubernetes **CronJob every 15 minutes**. At this scale (dozens of docs), the simplest correct approach is to list the whole folder tree every run rather than track incremental change tokens.
-
-1. List all items under the root folder recursively (a handful of Drive API calls). Build the set `seen` of Google Doc IDs with `headRevisionId`/`modifiedTime`, title and folder path.
-2. For each doc in `seen`:
-   - If its revision matches `sync_state.source_revision`, skip.
-   - Otherwise export it with `files.export` as `text/markdown`, compute SHA-256.
-   - If the hash matches `sync_state.content_hash`, update revision/metadata only and skip (formatting-only edits).
-   - Run validation (section 10). On failure, write to `quarantine/`, set status `quarantined`, record the error, and **leave `raw/` untouched** so the last good version keeps serving.
-   - On success, `PutObject` to `raw/about_me/gdrive/<id>.md` with metadata. Set status `pending`.
-   - If only metadata changed (rename or move), rewrite the object with new metadata so ingestion updates the title and type.
-3. For each `about_me` doc in `sync_state` that is **not** in `seen` (deleted, trashed, or moved out of the folder): `DeleteObject` on its raw key.
-4. Non-Doc files: skip, log a warning once per file.
-5. Record the run in `connector_runs` (section 9).
-
-S3 events from steps 2 and 3 drive ingestion (section 7). The connector never touches MySQL chunks or Redis.
-
-**Scale note:** at thousands of documents, replace step 1 with the Drive Changes API (`changes.list` with a stored page token) and rely on reconciliation for deletions. Not needed here.
+The owner dropped Google Drive as the About Basel source on 2026-10-01 in favour of the private GitHub repo in §1.2. Nothing of the Drive connector is built: no service account, no Drive API client, no sync CronJob, no S3 raw zone writes. The original design (a shared folder read with `drive.readonly`, Google Docs exported as Markdown, folder names as type labels, a 15-minute CronJob writing to the S3 raw zone) is kept in Git history only. Sections 2 to 23 still mention Google Docs as the authoring source; read that as the private repo.
 
 ---
 
@@ -513,7 +486,7 @@ New module `modules/ingestion`:
 - `aws_s3_bucket_notification` on `raw/` to the queue.
 - `aws_cloudwatch_metric_alarm` on DLQ depth + `aws_sns_topic` with email subscription.
 - IAM: instance role statements (section 15); GitHub OIDC role scoped to `raw/about_system/git/*`.
-- `aws_ssm_parameter` for the Drive service account key (value set manually, not in Terraform state).
+- `aws_ssm_parameter` for the Drive service account key (dropped with the Drive connector, §5).
 - `modules/compute` launch template: `metadata_options` hop limit 2.
 
 Kubernetes (`k8s/base/ingestion/`): ScaledJob + TriggerAuthentication, Drive connector CronJob, reconcile CronJob, `reembed` Job template, egress NetworkPolicies, ServiceAccounts.
@@ -575,6 +548,6 @@ Fill in numbers only after measuring.
 | Question | Options | Leaning |
 |---|---|---|
 | Drive sync interval | 5, 15 or 30 minutes | 15 |
-| Support Sheets/PDFs | v1 vs. later | Later |
-| Drive credential | Key in SSM vs. Workload Identity Federation | Key first, WIF as stretch |
+| Support Sheets/PDFs | v1 vs. later | Markdown only (§1.2) |
+| Drive credential | Key in SSM vs. Workload Identity Federation | Moot: Drive dropped 2026-10-01; the private repo uses a read-only deploy key (§1.2) |
 | Pipeline panel | Public aggregate panel vs. owner CLI only | Both; panel shows counts only |

@@ -12,6 +12,10 @@ Two entry points share the same delete path:
   directory alone is under the fraction limit, so an image that stopped copying,
   say, ``docs/`` would otherwise lose every docs document quietly. ``force``
   overrides the directory guard (for a deliberate removal), never the zero-file one.
+  The private About Basel checkout (``private/...`` paths) is stricter: a release
+  built without it (no ``ABOUT_ME_DEPLOY_KEY``, or a failed checkout) scans zero
+  private files, and that is never a reason to delete them, so ``force`` does not
+  override the directory guard for it either (use ``--clear`` for a wipe).
 * ``clear_scope`` targets every document in one corpus and model scope.
 
 Delete order (see BACKLOG, "Redis write inside an open MySQL transaction"):
@@ -42,6 +46,7 @@ from sqlalchemy.orm import sessionmaker
 
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
+from services.glassbox.ingest.scanner import PRIVATE_SOURCE_PREFIX
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,8 +94,11 @@ def max_fraction_from_env() -> float:
     return value
 
 
+PRIVATE_ROOT = PRIVATE_SOURCE_PREFIX.rstrip("/")
+
+
 def source_root(source_path: str) -> str:
-    """The scanned directory a path came from: ``corpus/about-me`` or its top-level dir."""
+    """The scanned directory a path came from: ``corpus/about-me``, ``private`` or a top dir."""
     if source_path.startswith("corpus/about-me/"):
         return "corpus/about-me"
     return source_path.split("/", 1)[0]
@@ -124,6 +132,13 @@ def plan_sweep(
         {source_root(doc.source_path) for doc in plan.stale}
         - {source_root(path) for path in seen_paths}
     )
+    if PRIVATE_ROOT in missing_roots:
+        plan.refused = (
+            f"the private About Basel checkout produced zero scanned files but has indexed "
+            f"{corpus} documents (release built without ABOUT_ME_DEPLOY_KEY?); refusing to "
+            "sweep, and --force-sweep does not override this (use --clear for a wipe)"
+        )
+        return plan
     if missing_roots and not force:
         plan.refused = (
             f"source director{'ies' if len(missing_roots) > 1 else 'y'} "
