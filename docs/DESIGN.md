@@ -691,10 +691,10 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 | Prompt injection via user questions | Strict system prompt; context is only the owner's curated content; no tools/actions exposed to the model |
 | LLM cost abuse | Per-IP token bucket, global daily cap, answer cache, max tokens, retrieval-only fallback |
 | Direct origin access | Security group limited to Cloudflare's published IP ranges |
-| Cluster API exposure | Kubernetes API port not opened publicly; Flux pulls from GitHub; admin via SSM Session Manager |
-| Long-lived CI credentials | GitHub Actions uses OIDC to assume a scoped IAM role |
+| Cluster API exposure | Kubernetes API port not opened publicly; no SSH port; Flux pulls from GitHub; node administration only through the approval-gated "Ops · ..." runbook workflows, which run fixed `glassbox-ops-*` SSM documents (§12, `infra/CI.md`) |
+| Long-lived CI credentials | GitHub Actions uses OIDC, with no stored AWS keys, to assume one of several narrowly scoped IAM roles (Terraform apply, Terraform plan, release, ops, ops read-only, bootstrap). Each role's trust is pinned to its own GitHub environment; the release role also requires the run's git ref to be `main` (`infra/bootstrap/main.tf`, `infra/CI.md` "Release role trust") |
 | Over-broad in-cluster permissions | Read-only, namespace-scoped RBAC for the cluster view; NetworkPolicies |
-| Clickjacking, MIME sniffing, downgrade to HTTP for returning visitors | Security response headers set by the API (below); plain HTTP is not yet redirected at the edge |
+| Clickjacking, MIME sniffing, downgrade to HTTP for returning visitors | Security response headers set by the API (below); Cloudflare's "Always Use HTTPS" zone setting redirects plain HTTP to HTTPS with a 301 (turned on by the owner in the Cloudflare dashboard on 2026-10-02, not managed in Terraform) |
 | Injected script or style (XSS) | Same-origin-only Content-Security-Policy, Report-Only for now (below); answers render as text, never as HTML |
 
 **Privacy: the personal-data guard.** The owner's rule (2026-10-01): never leak the phone number or any similar detail from the resume, now that About Basel content is moving to a private repo of the owner's own notes. One detector (`services/glassbox/privacy.py`, regular expressions, no model) is used in two layers.
