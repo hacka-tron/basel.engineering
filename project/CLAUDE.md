@@ -4,21 +4,24 @@ Instructions for Claude Code when working in this repository.
 
 ## Repo layout
 
-- `docs/` — design docs (`DESIGN.md` core architecture, `DESIGN-002-followups.md` resilience/chat features, `DESIGN-003-ingestion.md` content pipeline, `DESIGN-004-action-plan.md` build sequencing) and `docs/superpowers/plans/` implementation plans.
-- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below), `status/` (owner-facing feature reports, see below), `MOBILE_DESIGN.md` (responsive/typography rules and the screenshot verification checklist — required reading before any `frontend/` change), and `orchestration/` (model roles and the Codex review-gate template — Claude orchestrates and implements, choosing Opus/Sonnet/Haiku subagents per task and parallelizing across worktrees; Codex reviews and validates every change before check-in. Use the templates instead of writing dispatch prompts from scratch). Kept out of the repo root to keep it readable; the root `CLAUDE.md` is a one-line stub that imports this file, so it still auto-loads.
+- `docs/` — design docs (`DESIGN.md` core architecture, `DESIGN-002-followups.md` resilience/chat features, `DESIGN-003-ingestion.md` content pipeline, `DESIGN-004-action-plan.md` build sequencing, `DESIGN-005-rag-quality.md` RAG quality) and `docs/superpowers/plans/` implementation plans.
+- `project/` — this file, `AGENT_HANDOFF.md` (short current handoff), `SNAPSHOT.md`, `BACKLOG.md` (see below), `status/` (owner-facing feature reports, see below), `MOBILE_DESIGN.md` (responsive/typography rules and the screenshot checklist — required reading before any `frontend/` change), `orchestration/` (model roles, the review gate, merging; use its templates instead of writing dispatch prompts from scratch) and `archive/` (old handoff checkpoints and legacy Codex/Gemini guides). Kept out of the repo root; the root `CLAUDE.md` is a stub that imports this file and the handoff. Not ingested into the chatbot corpus (only `docs/`, `infra/`, `k8s/`, `services/` and the About Basel files are).
 - `services/` — application code.
 
 Read the relevant design doc before implementing a feature. If an implementation needs to diverge from what's written, update the doc in the same change rather than letting it drift.
 
 ## Working style (owner preferences)
 
-- Scope new features with a subagent (see `orchestration/README.md`), not in the main conversation, so the orchestrator's context stays short.
-- When current work is waiting on review or owner approval, pick up the next backlog item instead of idling.
-- **Merge without asking** once a PR's review is APPROVED and CI is green: run `gh pr merge` as its own command (not chained with other commands). Exception: changes that need the owner's explicit go-ahead (see `orchestration/README.md` "What checked in means", step 6).
-- **Reviewer:** Codex by default. When Codex is out of usage, an Opus subagent reviews with the same brief (`orchestration/codex-reviewer.md` prompt, `orchestration/reviewer-primer.md` first). **Round cap:** after 2 review rounds, only Critical findings or Important findings with a reachable failure scenario block the merge; everything else goes to `BACKLOG.md`. Keep track of each open PR's review state (round, verdict, what is fixed).
-- **The owner never runs AWS or Terraform by hand.** Production changes go through the Terraform, Bootstrap and "Ops · ..." workflows (`infra/CI.md`); ask the owner for approval clicks, never for commands to paste. Every infra dispatch (implementer or reviewer) restates the hard rules: never read, open or copy any `terraform.tfstate` or plan file; no `terraform apply` and no live AWS/Kubernetes writes from agents.
-- **Mobile testing:** use the phone preview (`cd frontend && npm run phone`, see `MOBILE_DESIGN.md`) and side-by-side comparison pages when the owner has to choose between designs, not a shrunk browser window. Record each mobile design decision in `MOBILE_DESIGN.md`.
-- **Status reports** for every substantial change (section below), and add generalizable lessons to the `~/Coding/template` repo as you go, in the guide they belong to.
+Details and the why are in `orchestration/README.md`.
+
+- **Orchestrate, parallelize.** Claude orchestrates with parallel worktree subagents (`.worktrees/<name>`): Opus for judgment and review, Sonnet for mechanical work and verification loops. Scope new features with a subagent, not in the main conversation. When work waits on review or the owner, start the next backlog item.
+- **Review gate:** an Opus subagent with `orchestration/reviewer-brief.md` (reads `orchestration/reviewer-primer.md` first). Codex is optional, only when it has usage; Gemini is legacy. **Round cap 2:** after that only Critical findings, or Important ones with a reachable failure scenario, block; the rest go to `BACKLOG.md`. Track each open PR's round, verdict and fixes since.
+- **PRs:** record the review in the PR body with `gh api -X PATCH` (`gh pr edit` fails here). Chain or stack PRs that touch the same files, and trial-merge parallel ones.
+- **Merge without asking** once review is APPROVED and CI is green: `gh pr update-branch`, full test suite on the merged tree, wait for green CI, then `gh pr merge` as its own command. Exception: changes needing the owner's go-ahead (live infra, IAM, RBAC; `orchestration/README.md` "What checked in means" step 6).
+- **The owner never runs AWS or Terraform by hand.** Production changes go through the Terraform, Bootstrap and "Ops · ..." workflows (`infra/CI.md`); ask the owner for approval clicks, never commands. **Every dispatch restates the hard rules:** never read, open or copy any `terraform.tfstate` or plan file; no `terraform apply` and no live AWS/Kubernetes writes from agents; never `git stash`.
+- **Owner content rules:** no RAG evaluations (free or paid) until the owner has added more documents. `corpus/about-me/` mirrors the owner's resume: don't edit it to fix architecture facts (raise it with the owner). About Basel content is moving to the private repo `hacka-tron/basel.engineering-docs` (PR #126); don't touch that PR's files from other work.
+- **Mobile testing:** use the phone preview (`cd frontend && npm run phone`, see `MOBILE_DESIGN.md`) and side-by-side pages when the owner chooses between designs. Record each mobile design decision in `MOBILE_DESIGN.md`.
+- **Status reports** for every substantial change (below), and add generalizable lessons to `~/Coding/template` as you go, in the guide they belong to.
 
 ## Session memory (read this before scanning the repo)
 
