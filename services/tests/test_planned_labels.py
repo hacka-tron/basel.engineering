@@ -101,7 +101,7 @@ LIVE_UNITS = [
     ("docs/DESIGN-003-ingestion.md", "## 1.1 What runs today: the current ingest Job"),
     ("docs/DESIGN-003-ingestion.md", "- **On by default (report only):**"),
     ("docs/DESIGN-003-ingestion.md", "## 1.2 Private About Basel repo"),
-    ("docs/DESIGN-003-ingestion.md", "- **The public copies during the switch.**"),
+    ("docs/DESIGN-003-ingestion.md", "- **The public copies are gone.**"),
     ("docs/DESIGN-003-ingestion.md", "- **No GitHub Actions cache for private builds.**"),
     ("docs/DESIGN-004-action-plan.md", "Milestones 0 to 2 are done and live"),
     ("docs/DESIGN-004-action-plan.md", "| 6 (done) | GitHub Actions building images to Amazon ECR"),

@@ -162,17 +162,17 @@ The only required labeling is **location**. Folder decides corpus:
 
 | Location | Corpus |
 |---|---|
-| `corpus/about-me/**/*.md` | `about_me` |
+| `about-me/**/*.md` in the private About Basel repo (source path `private/...`) | `about_me` |
 | Allowlisted repo paths (DD1 6.4): `infra/`, `k8s/`, `services/`, `docs/` (`frontend/` is not scanned) | `about_system` |
 
 The ingest job derives everything else automatically: source path, title (nearest heading), line range and chunk type (by extension). Not built yet: the GitHub URL at the deployed commit.
 
 ### 4.2 Recommended `about_me` file set
 
-A recommendation, not the live list: the corpus today is `bio.md`, `google.md`, `microsoft.md`, `projects.md` and `skills.md`.
+A recommendation, not the live list: the corpus today is `bio.md`, `google.md`, `microsoft.md`, `projects.md` and `skills.md`, kept in the private repo.
 
 ```
-corpus/about-me/
+about-me/
   bio.md           # who you are, what you're looking for, in 3 to 5 short sections
   microsoft.md     # one file per role
   youtube.md
