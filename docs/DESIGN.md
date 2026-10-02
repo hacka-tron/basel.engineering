@@ -223,7 +223,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - Kubernetes Job built from the repo; the image contains the repo snapshot at that commit (tagged `build-N` and with the short commit SHA), so no Git credentials are needed in the cluster. It runs once per release, after the rollout (§12).
 - Not built yet: a nightly ingest CronJob.
 - **Sources:**
-  - `about_me`: curated Markdown in `corpus/about-me/` (bio, projects, and an export of the resume bullet bank). Only public-safe content.
+  - `about_me`: curated Markdown in `corpus/about-me/` (bio, projects, and an export of the resume bullet bank). Only public-safe content. Every `about_me` document passes the personal-data guard (§11, "Privacy") before chunking. From the first release after PR #126 (the owner added the deploy key on 2026-10-01), the owner's private GitHub repo, checked out at release time, is a second source; its files replace the public copies of the same name (DD3 §1.2).
   - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `docs/` (`.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts`, `.tsx`). `frontend/` is not scanned.
 - **Denylist (always enforced):** `*.tfvars`, `*.tfstate*`, `.env*`, `**/secrets/**`, anything matching a secret-scanner pattern. The job fails if the scanner finds a match.
 - **Chunking:**
@@ -667,6 +667,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 - Terraform generates the MySQL root/app password (`random_password`) and stores it in SSM Parameter Store as a SecureString (standard tier is free) — same mechanism originally specified for RDS's master password, just naming a self-hosted database's credential instead.
 - A bootstrap step on the node reads SSM via the instance role and creates the Kubernetes Secret the MySQL `StatefulSet` and the API/worker/ingest pods consume. (External Secrets Operator to sync automatically: planned, not built yet.)
+- The read-only deploy key for the private About Basel repo (live from the first release after PR #126; added by the owner on 2026-10-01) is a GitHub secret (`ABOUT_ME_DEPLOY_KEY` in the `release` environment), used only by the release build to check the repo out (DD3 §1.2). It never reaches AWS or the cluster.
 - The Cloudflare API token is a separate secret, supplied as a Terraform variable (see §10.3) — not stored in SSM, since Terraform itself needs it before any AWS resources (including the secrets module) exist.
 - No secrets in the repo, in Terraform variables files, or in container images.
 
@@ -686,6 +687,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 | Risk | Mitigation |
 |---|---|
 | Secrets indexed into the public corpus | Allowlist + denylist + secret scanner that fails the ingest job |
+| Personal details (phone, address, ID numbers) leaking from About Basel sources | Ingest-time personal-data guard on every `about_me` document (redaction, optional quarantine) and an answer-time mask on every streamed answer (below, "Privacy") |
 | Prompt injection via user questions | Strict system prompt; context is only the owner's curated content; no tools/actions exposed to the model |
 | LLM cost abuse | Per-IP token bucket, global daily cap, answer cache, max tokens, retrieval-only fallback |
 | Direct origin access | Security group limited to Cloudflare's published IP ranges |
@@ -694,6 +696,13 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 | Over-broad in-cluster permissions | Read-only, namespace-scoped RBAC for the cluster view; NetworkPolicies |
 | Clickjacking, MIME sniffing, downgrade to HTTP for returning visitors | Security response headers set by the API (below); plain HTTP is not yet redirected at the edge |
 | Injected script or style (XSS) | Same-origin-only Content-Security-Policy, Report-Only for now (below); answers render as text, never as HTML |
+
+**Privacy: the personal-data guard.** The owner's rule (2026-10-01): never leak the phone number or any similar detail from the resume, now that About Basel content is moving to a private repo of the owner's own notes. One detector (`services/glassbox/privacy.py`, regular expressions, no model) is used in two layers.
+
+- **Ingest time, every `about_me` document** (`corpus/about-me/` files and the private repo's `private/...` files): detected spans are replaced with `[redacted]` before chunking, so the stored chunk text, the embeddings, the title and the public retrieval snippets never hold them. Categories: phone numbers (North American formats with or without +1, parentheses, dots, spaces or hyphens; international numbers with a leading +; national numbers with a trunk 0; any number right after a word like "call", "phone" or "tel"), email addresses other than the public `baselmabdelrahman@gmail.com`, street addresses (best effort: number plus street suffix, PO boxes, US state plus ZIP, UK postcodes), dates of birth (a date after "born", "DOB", "date of birth" or "birthday") and government IDs (SSN-like `123-45-6789`, or an SSN, passport or licence number after its label). The LinkedIn and GitHub links already on the site are allowed. Matching runs on a same-length copy with fullwidth digits and other compatibility characters folded (NFKC) and every dash variant turned into a hyphen, so en/em dashes, minus signs, slashes and fullwidth digits don't hide a number. Dates, versions, percentages, years and IP ranges are not phone numbers (tested). Logs name the document and the per-category counts, never the value. Categories listed in `GLASSBOX_PII_QUARANTINE` skip the whole document instead (production: `gov_id`), and its last good version keeps serving. The guard version is part of each `about_me` document's content hash, so changing the rules re-scans every document once. The repo's own `corpus/about-me/` files pass with zero findings.
+- **Answer time, every generated answer:** phone numbers and government IDs are masked before a token is streamed. A phone number can arrive split across tokens ("614", " 555", "-0100"), so the stream masker holds back only the trailing run of digits, spaces and `+()-.` characters and releases it once a token ends the run; prose goes out with at most one token of delay, and masking costs a regular-expression pass over a few dozen characters per token. Matching sees the last 40 characters already sent, so a labelled ID ("SSN: 123 45 6789") is still recognised. A run longer than 64 characters is released from its head. An answer that needed masking is never written to the answer cache (`answer_pii_masked` in the query log's timings), the cache refuses any answer that still holds such a number, and a cached answer is masked again on the way out.
+
+The detector is not a general PII classifier: names are not detected (the corpus is about a named person on purpose), and addresses outside the US and UK formats are best effort. It is a backstop, not a licence to put private details in the private repo.
 
 **Security response headers.** The API sets these on every HTTP response it sends: the page, static assets, API JSON, 404s and both SSE streams (`services/glassbox/api/security_headers.py`):
 

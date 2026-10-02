@@ -9,6 +9,15 @@ from pathlib import Path
 
 SUPPORTED_EXTENSIONS = frozenset({".md", ".tf", ".yml", ".yaml", ".py", ".ts", ".tsx"})
 SYSTEM_DIRECTORIES = ("infra", "k8s", "services", "docs")
+# The owner's private About Basel repo (hacka-tron/basel.engineering-docs),
+# checked out at corpus/about-me-private/ by release.yml before the image build
+# when the release has its deploy key (absent otherwise). Only Markdown under
+# its about-me/ folder is read (README, LICENSE and the rest are ignored), with
+# the source path private/<path under about-me/>. Never committed (.gitignore).
+PRIVATE_CHECKOUT_DIR = ("corpus", "about-me-private")
+PRIVATE_ABOUT_ME_DIR = (*PRIVATE_CHECKOUT_DIR, "about-me")
+PRIVATE_SOURCE_PREFIX = "private/"
+PUBLIC_ABOUT_ME_PREFIX = "corpus/about-me/"
 _AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----")
 _ASSIGNMENT = re.compile(
@@ -75,13 +84,22 @@ def strip_front_matter(content: str) -> str:
 
 
 def scan_sources(root: Path) -> Iterator[SourceFile]:
-    """Yield supported files and denied-path candidates from both corpora."""
+    """Yield supported files and denied-path candidates from both corpora.
+
+    A public ``corpus/about-me/`` file with a private twin (``shadowed_public_paths``)
+    is not yielded: the private copy replaces it, so the index never holds the
+    same text twice.
+    """
     root = root.resolve()
+    private_sources = list(_private_sources(root))
+    shadowed = shadowed_public_paths(root, private_sources)
     about_me = root / "corpus" / "about-me"
     if about_me.is_dir():
         for path in sorted(about_me.rglob("*.md")):
-            if path.is_file() and not path.is_symlink():
-                yield SourceFile("about_me", path.relative_to(root).as_posix(), path)
+            source_path = path.relative_to(root).as_posix()
+            if path.is_file() and not path.is_symlink() and source_path not in shadowed:
+                yield SourceFile("about_me", source_path, path)
+    yield from private_sources
     for directory in SYSTEM_DIRECTORIES:
         base = root / directory
         if not base.is_dir():
@@ -93,6 +111,43 @@ def scan_sources(root: Path) -> Iterator[SourceFile]:
                 and (path.suffix in SUPPORTED_EXTENSIONS or denied_path(path.relative_to(root)))
             ):
                 yield SourceFile("about_system", path.relative_to(root).as_posix(), path)
+
+
+def _private_sources(root: Path) -> Iterator[SourceFile]:
+    private = root.joinpath(*PRIVATE_ABOUT_ME_DIR)
+    if not private.is_dir():
+        return
+    for path in sorted(private.rglob("*.md")):
+        relative = path.relative_to(private)
+        # Skip hidden paths; never follow symlinks (they could point outside).
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if path.is_file() and not path.is_symlink():
+            yield SourceFile("about_me", PRIVATE_SOURCE_PREFIX + relative.as_posix(), path)
+
+
+def private_twin(public_path: str) -> str:
+    """``corpus/about-me/bio.md`` -> ``private/bio.md``."""
+    return PRIVATE_SOURCE_PREFIX + public_path.removeprefix(PUBLIC_ABOUT_ME_PREFIX)
+
+
+def shadowed_public_paths(root: Path, private_sources=None) -> set[str]:
+    """Public about-me paths that a private file of the same relative path replaces.
+
+    Transition aid while the public copies still exist (they stay until a
+    release has ingested the private repo): with the checkout present,
+    ``corpus/about-me/bio.md`` gives way to ``private/bio.md``. Without the
+    checkout nothing is shadowed.
+    """
+    root = root.resolve()
+    if private_sources is None:
+        private_sources = list(_private_sources(root))
+    shadowed = set()
+    for source in private_sources:
+        public = PUBLIC_ABOUT_ME_PREFIX + source.source_path.removeprefix(PRIVATE_SOURCE_PREFIX)
+        if (root / public).is_file():
+            shadowed.add(public)
+    return shadowed
 
 
 def scan_file(source: SourceFile) -> ScannedFile:
