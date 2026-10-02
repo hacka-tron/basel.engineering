@@ -87,6 +87,7 @@ def test_schema_columns_and_constraints():
         "docs_changed",
         "chunks_written",
         "status",
+        "notes",
     ]
     assert isinstance(runs.c.id.type, BigInteger)
     assert runs.c.commit_sha.type.length == 40 and runs.c.commit_sha.nullable
@@ -278,6 +279,21 @@ def test_ttft_migration_follows_stopped_mode_and_is_additive():
     assert migration.revision == "0005_query_ttft_ms"
     assert len(migration.revision) <= 32
     # Safe during a rolling release: one nullable column added, nothing altered.
+    upgrade = inspect.getsource(migration.upgrade)
+    assert "add_column" in upgrade and "nullable=True" in upgrade
+    assert "alter_column" not in upgrade and "drop_column" not in upgrade
+
+
+def test_ingestion_run_notes_migration_follows_ttft_and_is_additive():
+    import importlib
+    import inspect
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0006_ingestion_run_notes"
+    )
+    assert migration.down_revision == "0005_query_ttft_ms"
+    assert migration.revision == "0006_ingestion_run_notes"
+    assert len(migration.revision) <= 32
     upgrade = inspect.getsource(migration.upgrade)
     assert "add_column" in upgrade and "nullable=True" in upgrade
     assert "alter_column" not in upgrade and "drop_column" not in upgrade
