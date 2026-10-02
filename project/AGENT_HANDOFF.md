@@ -9,7 +9,9 @@ Short and current: who is coordinating, what state things are in, what is open, 
 **State:** the site is live and every merge to `main` deploys hands-off (release → ECR `build-N` → Flux). zram is on. KEDA is installed but **suspended** (scaled to 0) since the 2026-09-30 incident. `warm-answers` is running. Full live state: `project/SNAPSHOT.md` "Live state".
 
 **Open PRs**
-- [#126](https://github.com/hacka-tron/basel.engineering/pull/126) About Basel from the private repo `hacka-tron/basel.engineering-docs`, with a personal-data guard. In review. The private repo and its read-only deploy key are set up. Don't touch its files from other work.
+- None. [#126](https://github.com/hacka-tron/basel.engineering/pull/126) (About Basel from the private repo `hacka-tron/basel.engineering-docs`, with a personal-data guard) merged 2026-10-02; its release checked out the private repo successfully.
+
+**Next action:** after that release deploys, ask the site an About Basel question and confirm the answer cites `private/...` sources. Then open a follow-up PR deleting the public `corpus/about-me/*.md` copies (BACKLOG item 6).
 
 **Waiting on the owner (approval clicks, not commands)**
 - **Alarms and snapshots (#124, merged):** run Bootstrap, approve the Terraform apply, confirm the SNS email. Until then the alarms, DLM snapshots and restore runbook aren't live (the uptime probe already runs). See `project/status/2026-10-01-alarms-snapshots.md`.
