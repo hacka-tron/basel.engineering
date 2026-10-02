@@ -1,4 +1,4 @@
-"""Incrementally ingest the public Glassbox corpora into MySQL and Redis."""
+"""Incrementally ingest the Glassbox corpora into MySQL and Redis."""
 
 import argparse
 import asyncio

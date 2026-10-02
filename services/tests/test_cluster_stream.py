@@ -728,6 +728,26 @@ def test_stopping_upstream_silences_its_poller_before_closing_the_client(fake_en
     asyncio.run(scenario())
 
 
+def test_aclose_is_bounded_when_an_upstream_close_never_returns(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    monkeypatch.setattr(cluster, "_CLOSE_TIMEOUT_S", 0.2)
+
+    async def scenario():
+        server.live = asyncio.Queue()
+        server.close_gate = asyncio.Event()  # never set: the client close hangs
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.wait_for(fake_env.aclose(), timeout=2.0)
+        assert loop.time() - started < 1.0
+        assert fake_env._upstream is None
+        assert server.closed_clients == 0  # the close really was stuck
+
+    asyncio.run(scenario())
+
+
 # --- Test-depth follow-ups from the #99 review ---------------------------------
 
 
@@ -738,16 +758,13 @@ def test_read_timeout_relists_after_the_restart_delay_not_the_error_backoff(fake
     # Distinct, recognisable values; the sleeps are recorded and skipped.
     monkeypatch.setattr(cluster, "_WATCH_RESTART_S", 1.0)
     monkeypatch.setattr(cluster, "_WATCH_RETRY_BASE_S", 2.0)
-    real_sleep = asyncio.sleep
     delays = []
 
-    async def recording_sleep(delay, *args):
-        if delay in (1.0, 2.0, 4.0):
-            delays.append(delay)
-            delay = 0
-        return await real_sleep(delay, *args)
+    async def recording_sleep(delay):
+        delays.append(delay)  # recorded and skipped
+        await asyncio.sleep(0)
 
-    monkeypatch.setattr(cluster.asyncio, "sleep", recording_sleep)
+    monkeypatch.setattr(cluster, "_sleep", recording_sleep)
 
     async def scenario():
         sub = fake_env.try_subscribe("one", cluster.StreamLimits())
