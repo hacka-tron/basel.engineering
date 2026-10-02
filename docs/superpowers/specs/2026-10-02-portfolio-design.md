@@ -104,7 +104,7 @@ One component, `frontend/src/components/DetailsSheet.tsx`, used by the portfolio
 
 - **Height:** about 80% of its region at every width, so a strip of the grid or diagram shows above it. The strip behind is subtly dimmed. Desktop portfolio already uses 80%; phones move from about 99% (mocks rounds 2–4) to 80%.
 - **Opening:** a 260ms slide-up; none with `prefers-reduced-motion`.
-- **Closing:** the 44px chevron button, Escape, browser Back, or a tap on the uncovered strip. Closing deselects and moves focus to the locked bar. Escape order is unchanged: the lightbox first, then deselect, then (phones) back to Chat. See `lib/escapeKey.ts`.
+- **Closing:** the 44px chevron button, Escape, browser Back, or a tap on empty space in the uncovered strip. Closing deselects and moves focus to the locked bar. Escape order is unchanged: the lightbox first, then deselect, then (phones) back to Chat. See `lib/escapeKey.ts`.
 - **Ask box:** on phones the sheet stops above the pipeline strip, so the ask box stays usable while it is open.
 - **Typography:** title `clamp(18px, …, 24px)`; body 15px on phones, rising to 16px at 1280; line-height 1.6; max line length 70ch; uppercase section labels; wider padding than today's panel.
 
@@ -118,6 +118,13 @@ One component, `frontend/src/components/DetailsSheet.tsx`, used by the portfolio
 6. **Ask about this** (phones only): the question, the streamed answer, and "Continue in chat →". On desktop the answer appears in the chat column beside the sheet, so the section is left out.
 
 **Phone diagram sheet sections:** component name and what runs it; What it does; About This System answer with "Continue in chat →"; Retrieved chunks. These are today's details, laid out in the sheet.
+
+**The strip above the sheet** (mock round 5):
+
+- Portfolio: the selected card scrolls to the top of the grid, so it sits in the strip.
+- Phone diagram: the view pans, at the same zoom, so the selected node sits in the middle of the strip; deselecting returns to the normal fitted view.
+- A tap on a different card or node in the strip switches the sheet straight to that item (and asks about it). A tap on empty grid or diagram space closes the sheet and deselects.
+- Measured strip heights: about 68px at 320×568, 88px at 375×667, 125px at 393×852, 134px on a 1280×800 desktop pane.
 
 ### 5.6 Visuals gallery and lightbox
 
