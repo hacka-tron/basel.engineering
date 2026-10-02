@@ -1,4 +1,4 @@
-"""Incrementally ingest the public Glassbox corpora into MySQL and Redis."""
+"""Incrementally ingest the Glassbox corpora into MySQL and Redis."""
 
 import argparse
 import asyncio
@@ -33,10 +33,8 @@ from services.glassbox.ingest.redis_index import (
     replace_document_vectors,
 )
 from services.glassbox.ingest.scanner import (
-    private_twin,
     scan_file,
     scan_sources,
-    shadowed_public_paths,
     strip_front_matter,
 )
 from services.glassbox.ingest.sweep import (
@@ -44,7 +42,6 @@ from services.glassbox.ingest.sweep import (
     SWEEP_MODES,
     SweepPlan,
     clear_scope,
-    delete_documents,
     load_scope_documents,
     log_plan,
     max_fraction_from_env,
@@ -112,8 +109,6 @@ class RunResult:
     locked_out: bool = False
     # Personal-data guard: per about_me document, the categories it redacted.
     pii_redacted: dict[str, Counter] = field(default_factory=dict)
-    # Public corpus/about-me documents removed because their private twin replaced them.
-    shadow_removed: list[str] = field(default_factory=list)
 
 
 def chunker_for_path(path: Path):
@@ -149,8 +144,6 @@ def seen_source_paths(root: Path) -> dict[str, set[str]]:
     seen: dict[str, set[str]] = {corpus: set() for corpus in CORPORA}
     for source in scan_sources(root):
         seen[source.corpus].add(source.source_path)
-    # A public file replaced by its private twin still exists: never stale.
-    seen["about_me"] |= shadowed_public_paths(root)
     return seen
 
 
@@ -282,9 +275,6 @@ async def _ingest(
             )
             result.docs_changed += 1
             result.chunks_written += len(chunks)
-        result.shadow_removed = await remove_shadowed(
-            root, engine, redis_client, provider.model_id, seen, result.errors
-        )
         # Reached only when the scan walked every file without raising.
         result.sweep = await run_sweep(
             engine,
@@ -461,39 +451,6 @@ async def write_document(
     ]
     await replace_document_vectors(redis_client, old_ids, new_vectors, model_id)
     await redis_client.incr(f"corpus:ver:{corpus}")
-
-
-async def remove_shadowed(
-    root: Path, engine: Engine, redis_client, model_id: str, seen, errors
-) -> list[str]:
-    """Delete indexed public about-me documents whose private twin was indexed this run.
-
-    While the public ``corpus/about-me/`` copies still exist next to the private
-    checkout, the scanner skips a public file with a private twin. Its earlier
-    document is deleted here (Redis keys, version bump, MySQL rows: the sweep's
-    delete path), but only once the twin was scanned in this run without an
-    error, so the text keeps being served from one of the two at every moment.
-    The shadowed paths are added to ``seen`` so the stale sweep never reports them.
-    """
-    shadowed = shadowed_public_paths(root)
-    seen["about_me"] |= shadowed
-    replaced = {
-        path
-        for path in shadowed
-        if private_twin(path) in seen["about_me"] and private_twin(path) not in errors
-    }
-    if not replaced:
-        return []
-    documents = [
-        document
-        for document in load_scope_documents(engine, "about_me", model_id)
-        if document.source_path in replaced
-    ]
-    await delete_documents(engine, redis_client, "about_me", model_id, documents)
-    removed = sorted(document.source_path for document in documents)
-    for path in removed:
-        LOGGER.warning("Removed %s: replaced by %s", path, private_twin(path))
-    return removed
 
 
 async def reindex(
@@ -773,8 +730,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     for source_path, reason in result.errors.items():
         print(f"skipped {source_path}: {reason}")
-    for source_path in result.shadow_removed:
-        print(f"replaced by its private twin: {source_path}")
     for source_path, counts in result.pii_redacted.items():
         # Categories and counts only: never the redacted values.
         summary = ", ".join(f"{category}={count}" for category, count in sorted(counts.items()))
