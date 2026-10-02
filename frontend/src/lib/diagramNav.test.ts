@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createViewNav, type MobileView } from './diagramNav.ts'
+import { createViewNav, viewFromHistoryState, type MobileView, type OtherView } from './diagramNav.ts'
 
 // A fake browser: a history stack, a focused element, and a frame queue.
-function setup(initialState: unknown = null) {
+function setup(initialState: unknown = null, views?: readonly OtherView[]) {
   const stack: unknown[] = [initialState]
   let index = 0
   let view: MobileView = 'chat'
@@ -19,6 +19,7 @@ function setup(initialState: unknown = null) {
   }
   const nav = createViewNav({
     history,
+    views,
     setView: (next) => { view = next },
     afterRender: (cb) => frames.push(cb),
     focusViewToggle: (toggle) => { focused = `${toggle}-toggle` },
@@ -216,4 +217,20 @@ test('unknown history states read as chat', () => {
   t.nav.showView('chat')
   assert.equal(t.view, 'chat')
   assert.deepEqual(t.log, [])
+})
+
+test('with the Portfolio view hidden, a saved Portfolio history state reads as chat', () => {
+  assert.equal(viewFromHistoryState({ glassboxView: 'portfolio' }, ['diagram']), 'chat')
+  assert.equal(viewFromHistoryState({ glassboxView: 'diagram' }, ['diagram']), 'diagram')
+  assert.equal(viewFromHistoryState({ glassboxView: 'portfolio' }), 'portfolio')
+})
+
+test('with the Portfolio view hidden, Forward onto an old Portfolio entry returns to chat', () => {
+  const t = setup({ glassboxView: 'portfolio' }, ['diagram'])
+  t.nav.handlePopState({ glassboxView: 'portfolio' })
+  t.flush()
+  assert.equal(t.view, 'chat')
+  assert.equal(t.focused, 'diagram-toggle')
+  t.nav.showView('portfolio')
+  assert.equal(t.view, 'chat')
 })

@@ -13,6 +13,13 @@
 // two `---` lines; files in subfolders and symlinked files are errors; an
 // image must be a real file with no symlink on its path. The personal-data
 // check stays in CI (portfolio.py) only.
+//
+// Known differences, all of which fail loudly in one of the two checks (CI
+// runs both on any corpus change), so a file is never silently read two ways:
+// explicit tags (`!!bool yes`, `!foo`, `!!omap`), a bare `=` value, a
+// merge-only `<<:` mapping, base-60 numbers with a leading zero (`0:33:10`) or
+// a fraction (`33:10.0`), and lone-CR line endings. Body links must be https
+// here only.
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { Plugin } from 'vite'
@@ -26,7 +33,8 @@ export class PortfolioFileError extends Error {}
 
 /** The front matter (between a first `---` line and the next `---` line) and the body after it. */
 export function splitFrontmatter(text: string): { frontmatter: string; body: string } {
-  const lines = text.split(/(?<=\n)|(?<=\r)(?!\n)/)
+  // A leading UTF-8 byte-order mark is ignored, as in portfolio.py.
+  const lines = text.replace(/^\uFEFF/, '').split(/(?<=\n)|(?<=\r)(?!\n)/)
   if (lines.length === 0 || lines[0].trim() !== '---') {
     throw new PortfolioFileError("missing front matter: the file must start with a '---' line")
   }

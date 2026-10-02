@@ -54,8 +54,8 @@ function ProjectCard({ project, selected, onPress, buttonRef }: ProjectCardProps
         </span>
         <span id={descriptionId} className="line-clamp-3 break-words text-xs leading-relaxed text-muted">{project.oneLiner}</span>
         <span className="mt-auto flex min-w-0 flex-wrap gap-1">
-          {shown.map((tag) => (
-            <span key={tag} className="max-w-full truncate rounded-[2px] bg-canvas px-1.5 text-[11px] leading-[1.6] text-muted">{tag}</span>
+          {shown.map((tag, index) => (
+            <span key={`${index}:${tag}`} className="max-w-full truncate rounded-[2px] bg-canvas px-1.5 text-[11px] leading-[1.6] text-muted">{tag}</span>
           ))}
           {rest > 0 && <span className="px-1 text-[11px] leading-[1.6] text-muted">+{rest}</span>}
         </span>

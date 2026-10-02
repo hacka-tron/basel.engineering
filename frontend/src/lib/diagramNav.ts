@@ -12,6 +12,8 @@
 export type MobileView = 'chat' | 'diagram' | 'portfolio'
 export type OtherView = Exclude<MobileView, 'chat'>
 
+export const OTHER_VIEWS: readonly OtherView[] = ['diagram', 'portfolio']
+
 export interface ViewNavDeps {
   history: Pick<History, 'state' | 'pushState' | 'replaceState' | 'back'>
   setView: (view: MobileView) => void
@@ -21,15 +23,20 @@ export interface ViewNavDeps {
   focusViewToggle: (view: OtherView) => void
   /** Called once whenever the view returns to Chat, by any route. */
   onReturnToChat?: () => void
+  /** The non-Chat views offered (Portfolio is hidden until there is content); others read as Chat. */
+  views?: readonly OtherView[]
 }
 
-export function viewFromHistoryState(state: unknown): MobileView {
+/** The view a history entry holds; an unknown or hidden view (say, Portfolio saved before it was hidden) reads as Chat. */
+export function viewFromHistoryState(state: unknown, views: readonly OtherView[] = OTHER_VIEWS): MobileView {
   const view = (state as { glassboxView?: unknown } | null)?.glassboxView
-  return view === 'diagram' || view === 'portfolio' ? view : 'chat'
+  return views.includes(view as OtherView) ? view as OtherView : 'chat'
 }
 
 export function createViewNav(deps: ViewNavDeps) {
-  const initial = viewFromHistoryState(deps.history.state)
+  const views = deps.views ?? OTHER_VIEWS
+  const viewOf = (state: unknown) => viewFromHistoryState(state, views)
+  const initial = viewOf(deps.history.state)
   // The non-Chat view shown last. A reload inside one restores it from history.
   let lastView: OtherView = initial === 'chat' ? 'diagram' : initial
 
@@ -41,7 +48,8 @@ export function createViewNav(deps: ViewNavDeps) {
   }
 
   function showView(view: MobileView) {
-    const current = viewFromHistoryState(deps.history.state)
+    const current = viewOf(deps.history.state)
+    if (view !== 'chat' && !views.includes(view)) return
     if (view !== 'chat') {
       lastView = view
       if (current === 'chat') deps.history.pushState({ glassboxView: view }, '')
@@ -62,7 +70,7 @@ export function createViewNav(deps: ViewNavDeps) {
   }
 
   function handlePopState(state: unknown) {
-    const view = viewFromHistoryState(state)
+    const view = viewOf(state)
     if (view === 'chat') {
       returnToChat()
       return

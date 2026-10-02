@@ -55,8 +55,9 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
       {/* Three chips and the label need about 400px: below 440px the label is
           screen-reader-only (the radiogroup keeps it as its name); below 360px
           the chips' padding tightens and below 320px their dots hide, so all
-          three fit at 280px (spec 2026-10-02 §5.1). */}
-      <span id="topic-chips-label" className="mr-1 whitespace-nowrap text-xs text-muted max-[440px]:sr-only">Asking about</span>
+          three fit at 280px (spec 2026-10-02 §5.1). With two chips (Portfolio
+          hidden until it has content) the label shows down to 320px. */}
+      <span id="topic-chips-label" className={`mr-1 whitespace-nowrap text-xs text-muted ${options.length > 2 ? 'max-[440px]:sr-only' : 'max-[320px]:sr-only'}`}>Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
         {options.map((option, index) => {
           const checked = option.value === value

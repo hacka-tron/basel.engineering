@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { architectureNodes, type NodeId } from '../architecture'
-import type { MobileView, OtherView } from '../lib/diagramNav'
+import { OTHER_VIEWS, type MobileView, type OtherView } from '../lib/diagramNav'
 import { PORTFOLIO_STATUS_HINT } from '../lib/portfolioView'
 export type { MobileView }
 
@@ -10,9 +10,10 @@ type PipelineStripProps = {
   activeNode?: NodeId | null
   /** The Diagram and Portfolio segments; focus returns to the one whose view closes. */
   toggleRefs?: Record<OtherView, RefObject<HTMLButtonElement | null>>
+  /** The non-Chat views offered: Portfolio is left out until there is a published project. */
+  views?: readonly OtherView[]
 }
 
-const VIEWS = ['chat', 'diagram', 'portfolio'] as const
 const LABELS: Record<MobileView, string> = { chat: 'Chat', diagram: 'Diagram', portfolio: 'Portfolio' }
 
 /** Below 360px the segments are icons: a speech bubble, a node graph, a 2x2 grid. */
@@ -32,7 +33,10 @@ function ViewIcon({ view }: { view: MobileView }) {
  * switch (always shown). The diagram and the portfolio replace the
  * conversation in place, so the ask box stays usable while a request runs.
  */
-function PipelineStrip({ view, onViewChange, activeNode, toggleRefs }: PipelineStripProps) {
+function PipelineStrip({ view, onViewChange, activeNode, toggleRefs, views = OTHER_VIEWS }: PipelineStripProps) {
+  const options: readonly MobileView[] = ['chat', ...views]
+  // Three segments need icons below 360px; two (Chat | Diagram) fit as text down to 280px.
+  const compact = options.length > 2
   const stagesRef = useRef<HTMLOListElement>(null)
   const activeLabel = architectureNodes.find((node) => node.id === activeNode)?.data.label
 
@@ -79,7 +83,7 @@ function PipelineStrip({ view, onViewChange, activeNode, toggleRefs }: PipelineS
         )}
       </div>
       <div role="group" aria-label="View" className="flex shrink-0 rounded-[3px] border border-hairline p-0.5 text-xs">
-        {VIEWS.map((option) => (
+        {options.map((option) => (
           <button
             key={option}
             ref={option === 'chat' ? undefined : toggleRefs?.[option]}
@@ -95,10 +99,10 @@ function PipelineStrip({ view, onViewChange, activeNode, toggleRefs }: PipelineS
             // control hits a segment. Making the segments h-11 instead would
             // grow the strip by 4px and take it from the messages. From 360px
             // the segments are text (about 222px); below 360px 44px-wide icons.
-            className={`relative inline-flex h-10 items-center justify-center rounded-[2px] px-3 transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] first:after:-left-[3px] last:after:-right-[3px] focus-visible:outline-1 focus-visible:outline-cyan max-[360px]:w-11 max-[360px]:px-0 ${view === option ? 'bg-canvas text-cyan' : 'text-muted hover:text-primary'}`}
+            className={`relative inline-flex h-10 items-center justify-center rounded-[2px] px-3 transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] first:after:-left-[3px] last:after:-right-[3px] focus-visible:outline-1 focus-visible:outline-cyan ${compact ? 'max-[360px]:w-11 max-[360px]:px-0' : ''} ${view === option ? 'bg-canvas text-cyan' : 'text-muted hover:text-primary'}`}
           >
-            <span className="max-[360px]:hidden">{LABELS[option]}</span>
-            <span className="min-[360px]:hidden"><ViewIcon view={option} /></span>
+            <span className={compact ? 'max-[360px]:hidden' : undefined}>{LABELS[option]}</span>
+            {compact && <span className="min-[360px]:hidden"><ViewIcon view={option} /></span>}
           </button>
         ))}
       </div>

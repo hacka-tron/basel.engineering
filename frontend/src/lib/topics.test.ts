@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { storageKey } from './conversation.ts'
-import { apiCorpus, CORPORA, idkCorpus, topicLabel, TOPICS } from './topics.ts'
+import { apiCorpus, CORPORA, idkCorpus, topicLabel, TOPICS, visibleTopics } from './topics.ts'
 
 test('three topics in display order, with full and short labels', () => {
   assert.deepEqual(TOPICS.map((topic) => [topic.value, topic.label, topic.short]), [
@@ -24,4 +24,9 @@ test('labels and the "I don\'t know" pool per topic', () => {
   assert.equal(idkCorpus('system'), 'system')
   assert.equal(idkCorpus('portfolio'), 'basel')
   assert.equal(idkCorpus('basel'), 'basel')
+})
+
+test('the Portfolio topic is left out until there is a published project', () => {
+  assert.deepEqual(visibleTopics(false).map((topic) => topic.value), ['basel', 'system'])
+  assert.deepEqual(visibleTopics(true).map((topic) => topic.value), ['basel', 'system', 'portfolio'])
 })

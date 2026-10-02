@@ -41,8 +41,8 @@ function ProjectDetails({ project, answerText, onContinueInChat, visuals }: Proj
 
       <SheetSection heading="Stack & links">
         <ul aria-label="Stack" className="flex min-w-0 flex-wrap gap-1.5">
-          {project.stack.map((tag) => (
-            <li key={tag} className="max-w-full break-words rounded-[3px] border border-hairline bg-canvas px-2 py-0.5 text-[13px] text-primary">{tag}</li>
+          {project.stack.map((tag, index) => (
+            <li key={`${index}:${tag}`} className="max-w-full break-words rounded-[3px] border border-hairline bg-canvas px-2 py-0.5 text-[13px] text-primary">{tag}</li>
           ))}
         </ul>
         {(live || code) && (

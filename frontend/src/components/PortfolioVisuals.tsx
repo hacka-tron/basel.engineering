@@ -89,10 +89,24 @@ export function VisualsGallery({ project }: { project: Project }) {
   const [current, setCurrent] = useState(0)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const count = project.visuals.length
+  // While prev/next scroll the row, the index they chose stands: when the last
+  // visuals already fit, the row can't bring visual 2 to the left edge, and
+  // reading the index back from the scroll position would jump from 1 to 3.
+  const steppingRef = useRef<number | null>(null)
+  useEffect(() => () => { if (steppingRef.current !== null) window.clearTimeout(steppingRef.current) }, [])
+  function holdIndex(ms: number) {
+    if (steppingRef.current !== null) window.clearTimeout(steppingRef.current)
+    steppingRef.current = window.setTimeout(() => { steppingRef.current = null }, ms)
+  }
 
   function handleScroll() {
     const scroller = scrollerRef.current
     if (!scroller) return
+    if (steppingRef.current !== null) {
+      // Still scrolling from prev/next: wait until the row settles.
+      holdIndex(150)
+      return
+    }
     const lefts = [...scroller.children].map((item) => (item as HTMLElement).offsetLeft - scroller.offsetLeft)
     const atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2
     setCurrent(nearestIndex(lefts, scroller.scrollLeft, atEnd))
@@ -103,6 +117,7 @@ export function VisualsGallery({ project }: { project: Project }) {
     const item = scroller?.children[index] as HTMLElement | undefined
     if (!scroller || !item) return
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    holdIndex(400)
     scroller.scrollTo({ left: item.offsetLeft - scroller.offsetLeft, behavior: reduceMotion ? 'auto' : 'smooth' })
     setCurrent(index)
   }
@@ -117,7 +132,7 @@ export function VisualsGallery({ project }: { project: Project }) {
     <div>
       <ul ref={scrollerRef} onScroll={handleScroll} aria-label={`${project.title} screenshots`} className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-5 px-5 pb-2 [scrollbar-width:thin] md:-mx-8 md:scroll-px-8 md:px-8">
         {project.visuals.map((visual, index) => (
-          <li key={visual.src} className="shrink-0 snap-start">
+          <li key={`${index}:${visual.src}`} className="shrink-0 snap-start">
             <figure className="m-0 w-min">
               <button
                 type="button"
@@ -136,7 +151,7 @@ export function VisualsGallery({ project }: { project: Project }) {
       {galleryControlsShown(count) && (
         <div className="mt-1 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2" aria-hidden="true">
-            {project.visuals.map((visual, index) => <span key={visual.src} className={`size-1.5 rounded-full ${index === current ? 'bg-cyan' : 'bg-hairline'}`} />)}
+            {project.visuals.map((visual, index) => <span key={`${index}:${visual.src}`} className={`size-1.5 rounded-full ${index === current ? 'bg-cyan' : 'bg-hairline'}`} />)}
             <span className="ml-1 text-xs text-muted">{current + 1} / {count}</span>
           </div>
           {/* Phones swipe; desktop gets buttons. */}

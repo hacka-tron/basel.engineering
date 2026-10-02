@@ -36,6 +36,7 @@ function loadErrors(f: ReturnType<typeof fixture>): string {
 test('front matter sits between the first two --- lines (trailing spaces allowed, as in portfolio.py)', () => {
   assert.deepEqual(splitFrontmatter('---\na: 1\n---\nBody\n'), { frontmatter: 'a: 1\n', body: 'Body\n' })
   assert.deepEqual(splitFrontmatter('--- \r\na: 1\r\n---\r\n'), { frontmatter: 'a: 1\r\n', body: '' })
+  assert.deepEqual(splitFrontmatter('\uFEFF---\na: 1\n---\n'), { frontmatter: 'a: 1\n', body: '' })
   assert.throws(() => splitFrontmatter('No frontmatter'), /missing front matter/)
   assert.throws(() => splitFrontmatter('---\na: 1\n'), /not closed/)
 })

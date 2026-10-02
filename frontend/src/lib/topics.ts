@@ -15,6 +15,15 @@ export const TOPICS: readonly Topic[] = [
 
 export const CORPORA: readonly Corpus[] = TOPICS.map((topic) => topic.value)
 
+/**
+ * The topics a visitor can pick. Portfolio is left out until the build has at
+ * least one published project (owner, 2026-10-02: hidden until content), so
+ * it appears by itself on the first release with a real project.
+ */
+export function visibleTopics(hasPortfolio: boolean): readonly Topic[] {
+  return hasPortfolio ? TOPICS : TOPICS.filter((topic) => topic.value !== 'portfolio')
+}
+
 const API_CORPUS: Record<Corpus, ApiCorpus> = { basel: 'about_me', system: 'about_system', portfolio: 'portfolio' }
 
 export function apiCorpus(corpus: Corpus): ApiCorpus {

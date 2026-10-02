@@ -5,7 +5,7 @@ import Collapsible from './components/Collapsible'
 import ContactReveal from './components/ContactReveal'
 import PipelineStrip from './components/PipelineStrip'
 import TopicChips from './components/TopicChips'
-import { createViewNav, viewFromHistoryState, type MobileView } from './lib/diagramNav'
+import { createViewNav, OTHER_VIEWS, viewFromHistoryState, type MobileView } from './lib/diagramNav'
 import StatsBar from './components/StatsBar'
 import { useFullNameFits } from './hooks/useFullNameFits'
 import { FULL_NAME, SHORT_NAME } from './lib/headerName'
@@ -34,7 +34,7 @@ import {
   type ChatMessage,
   type MessageSource,
 } from './lib/conversation'
-import { apiCorpus, CORPORA, idkCorpus, topicLabel, TOPICS, type Corpus } from './lib/topics'
+import { apiCorpus, CORPORA, idkCorpus, topicLabel, visibleTopics, type Corpus } from './lib/topics'
 import projects from 'virtual:portfolio'
 import PortfolioPanel from './components/PortfolioPanel'
 import { questionForProject } from './lib/portfolioView'
@@ -45,6 +45,14 @@ const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold trackin
 // Component and project questions are sent without history (they stay
 // answer-cache eligible); Retry recognises them by their exact wording.
 const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project.title))
+
+// Owner (2026-10-02): the Portfolio topic, the phone Portfolio view and the
+// footer's "See portfolio →" are left out until the build has at least one
+// published (non-draft) project; they appear by themselves on the first
+// release with one. A history entry saved on the Portfolio view reads as Chat.
+const HAS_PORTFOLIO = projects.length > 0
+const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
+const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
 
 function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
   const seen = new Set<string>()
@@ -61,7 +69,7 @@ function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
   // Below md the diagram replaces the conversation in place (no overlay).
   // A reload while in the diagram keeps it (its history entry survives).
-  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state))
+  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state, SHOWN_VIEWS))
   // Focus mode: below md, the header and footer slide away while the ask box
   // has focus, so the conversation keeps its room with the keyboard up.
   const [askFocused, setAskFocused] = useState(false)
@@ -645,6 +653,7 @@ function App() {
   mobileViewRef.current = mobileView
   const [viewNav] = useState(() => createViewNav({
     history: window.history,
+    views: SHOWN_VIEWS,
     setView: setMobileView,
     afterRender: (callback) => { requestAnimationFrame(callback) },
     focusViewToggle: (view) => (view === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current?.focus(),
@@ -726,6 +735,7 @@ function App() {
   const portfolioPanel = (phone: boolean) => (
     <PortfolioPanel
       projects={projects}
+      phone={phone}
       selectedSlug={selectedProject}
       answerText={phone ? projectAnswer : undefined}
       onSelect={handleSelectProject}
@@ -749,10 +759,12 @@ function App() {
     pendingSelectionRef.current = null
   }
   // Footer popover "See portfolio →" (spec §5.7): the Portfolio topic and, on
-  // phones, the Portfolio view; focus moves to the first card (or the empty
-  // state) once the panel has rendered.
+  // phones, the Portfolio view; an open project sheet closes, and focus moves
+  // to the first card (or the empty state) once the panel has rendered.
   function handleSeePortfolio() {
     selectTopic('portfolio')
+    setSelectedProject(null)
+    pendingSelectionRef.current = null
     if (!isDesktopRef.current) showMobileView('portfolio')
     requestAnimationFrame(() => portfolioFocusRef.current?.focus())
   }
@@ -762,7 +774,7 @@ function App() {
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
-        {TOPICS.map((topic, index) => (
+        {SHOWN_TOPICS.map((topic, index) => (
           <span key={topic.value} className="contents">
             {index > 0 && <span aria-hidden="true" className="text-hairline">|</span>}
             <button
@@ -868,7 +880,7 @@ function App() {
             </div>
           ) : undefined}
           inputTopic={isDesktop || showOtherView ? undefined : (
-            <TopicChips value={corpus} options={TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
+            <TopicChips value={corpus} options={SHOWN_TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
@@ -876,6 +888,7 @@ function App() {
               onViewChange={showMobileView}
               activeNode={activeNode}
               toggleRefs={{ diagram: diagramButtonRef, portfolio: portfolioButtonRef }}
+              views={SHOWN_VIEWS}
             />
           }
         />
@@ -906,7 +919,7 @@ function App() {
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
         stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
-        onSeePortfolio={handleSeePortfolio}
+        onSeePortfolio={HAS_PORTFOLIO ? handleSeePortfolio : undefined}
         {...(isDesktop ? {} : {
           onNewChat: handleNewChat,
           newChatDisabled: isStreaming || messages.length === 0,
