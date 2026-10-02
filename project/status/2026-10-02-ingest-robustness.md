@@ -1,6 +1,6 @@
 # Ingest write path: commit first, batch queries, honest failures
 
-**Status:** PR open (branch `fix/ingest-robustness`). Review: pending (orchestrator gate).
+**Status:** PR [#138](https://github.com/hacka-tron/basel.engineering/pull/138) open (branch `fix/ingest-robustness`). Review: pending (orchestrator gate).
 
 ## TL;DR
 
