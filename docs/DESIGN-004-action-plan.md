@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Milestones 0 to 2 are done and live (apart from Phase 7 polish). Milestone 3 is partly shipped. Milestone 4 is deferred. |
+| **Status** | Milestones 0 to 2 are done and live (apart from Phase 7 polish, which is partly done). Milestone 3 is partly shipped. Milestone 4 is deferred. |
 | **Owner** | Basel |
 | **Last updated** | 2026-10-01 |
 | **Builds on** | `DESIGN.md` ("DD1"), `DESIGN-002-followups.md` ("DD2"), `DESIGN-003-ingestion.md` ("DD3") |
@@ -27,7 +27,7 @@ DD1, DD2 and DD3 specify the system. This document is the execution plan: what g
 |---|---|---|
 | M0 | — (new) | Accounts, tooling, and repo ready to build |
 | M1 | DD1 Phases 0–3 | Full system running locally via Docker Compose: chat, RAG, streaming, live architecture panel, mock and real data |
-| M2 | DD1 Phases 4–7 (edge adjusted) | Live at `basel.engineering` on AWS: k3s on EC2, in-cluster MySQL (not RDS), Redis, Bedrock, KEDA autoscaling (installed, suspended since 2026-09-30), CI/CD, push-button ops runbooks. Phase 7 polish is not started. |
+| M2 | DD1 Phases 4–7 (edge adjusted) | Live at `basel.engineering` on AWS: k3s on EC2, in-cluster MySQL (not RDS), Redis, Bedrock, KEDA autoscaling (installed, suspended since 2026-09-30), CI/CD, push-button ops runbooks. Phase 7 polish is partly done: the README has screenshots, while footer stats and load test numbers are not started. |
 | M3 (shipped part) | DD2 | Conversational memory, chat UX polish, streaming heartbeats and server-side Stop |
 | M3 (not built yet) | DD2 | Self-healing (ASG), post-deploy streaming check in CI |
 | M4 | DD3 | Production content pipeline: author "About Basel" in Google Docs, S3/SQS event pipeline, reconciliation, blue-green re-embedding |
@@ -80,7 +80,7 @@ Unchanged from DD1 §17 Phases 0–3, run entirely with Docker Compose (MySQL, R
 | 4 (done) | Terraform: `network` (VPC, no NAT), `compute` (EC2 t4g.small + k3s user_data), `secrets` (SSM), `registry` (ECR), and an `edge` module after all (Cloudflare DNS record → Elastic IP, `/api/*` cache rule). MySQL runs in-cluster instead of a `database` (RDS) module; the AWS Budgets alert was set up outside Terraform instead of a `budgets` module. Security group scoped to Cloudflare's IP ranges. Traefik routes the site and `/api/*` to the API, which serves the frontend. K8s base manifests, RBAC, NetworkPolicies, manual first deploy | `https://basel.engineering` serves the site and answers questions |
 | 5 (done) | KEDA, synthetic load endpoint, cluster stream, pod dots in the UI. KEDA has been suspended since the 2026-09-30 memory incident, so the stress test plays its simulation for now | Stress test visibly scales workers 1→3 and back |
 | 6 (done) | GitHub Actions building images to Amazon ECR (GHCR was dropped), Flux bootstrap with image automation onto a `deploy` branch, the frontend build baked into the API image, Terraform plan-on-PR with approval-gated apply, the bootstrap pipeline and the "Ops · ..." runbooks. The post-deploy Cloudflare streaming check is not built yet | Merging to `main` deploys without touching the server |
-| 7 (not started) | README with screenshots, footer stats, load test numbers recorded | Polish complete |
+| 7 (partly done) | README with screenshots (done 2026-10-02). Footer stats and load test numbers recorded are not started | Polish complete |
 
 Frontend delivery (decided in Phase 6): the static build is baked into the API image and FastAPI serves it at `/`; there is no separate static-file container.
 

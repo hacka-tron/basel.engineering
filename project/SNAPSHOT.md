@@ -75,7 +75,7 @@ Browser → Cloudflare (TLS/proxy) → Traefik on one EC2 `t4g.small` (k3s) → 
 |---|---|
 | M0 — accounts/tooling | Done, except Anthropic Haiku streaming (blocked by the first-time-use form; Nova Lite used instead). |
 | M1 — DD1 Phases 0–3, local system | Done. |
-| M2 — DD1 Phases 4–7, live on AWS | Phases 4–6 done and live (Terraform, k3s, CI/CD, Flux GitOps, KEDA stress test with capacity gate; KEDA currently suspended). Phase 7 polish (load-test numbers, README screenshots) not started. |
+| M2 — DD1 Phases 4–7, live on AWS | Phases 4–6 done and live (Terraform, k3s, CI/CD, Flux GitOps, KEDA stress test with capacity gate; KEDA currently suspended). Phase 7 polish: README with screenshots done; footer stats and load-test numbers not started. |
 | M3 — DD2: self-healing, conversational memory, chat UX | Conversational chat, stream resilience (heartbeat, Stop, watchdog, auto-scroll) and the live chat UX leftovers (typing while streaming, Up-arrow recall, Retry) done. Node protection: status-check alarms, uptime probe, daily snapshots and a restore runbook merged 2026-10-01 (owner's choice; live once applied). Remaining: ASG-based node recovery (deferred), Cloudflare streaming check, TTFT logging. |
 | M4 — DD3: production ingestion pipeline (Google Drive/S3/SQS) | Not started. |
 
