@@ -7,6 +7,7 @@ what a client can hold open.
 """
 
 import asyncio
+import gc
 import json
 
 import httpx
@@ -611,7 +612,7 @@ def test_client_joining_while_the_hub_stops_gets_a_fresh_upstream(fake_env, monk
 
     async def scenario():
         server.live = asyncio.Queue()
-        server.close_gate = asyncio.Event()  # the old upstream's shutdown hangs
+        server.close_gate = asyncio.Event()  # the old upstream's aclose blocks
         first = fake_env.try_subscribe("one", cluster.StreamLimits())
         await _drain(first, lambda item: item[0] == "synced")
         old = fake_env._upstream
@@ -619,12 +620,16 @@ def test_client_joining_while_the_hub_stops_gets_a_fresh_upstream(fake_env, monk
         await asyncio.sleep(0.15)  # past the 0.05 s linger: old upstream cancelled
         assert old.cancelling() and not old.done()
 
-        server.close_gate.set()  # new clients close normally; old one finishes too
+        # The old upstream is still blocked in aclose while the client joins.
         late = fake_env.try_subscribe("two", cluster.StreamLimits())
+        assert fake_env._upstream is not old
         snapshot = await _drain(late, lambda item: item[0] == "synced")
         assert any(kind == "pod" for kind, _ in snapshot)
         assert fake_env.upstream_starts == 2
-        await asyncio.sleep(0.05)
+        assert old.cancelling() and not old.done()  # the race really was open
+
+        server.close_gate.set()  # now let the old upstream finish closing
+        await asyncio.wait([old], timeout=2.0)
         assert old.done()
         # The finishing old upstream must not wipe the new one's state.
         assert fake_env._listed and "retrieval-worker-a" in fake_env._pods
@@ -719,5 +724,71 @@ def test_stopping_upstream_silences_its_poller_before_closing_the_client(fake_en
         server.close_gate.set()
         await asyncio.sleep(0.05)
         assert old.done()
+
+    asyncio.run(scenario())
+
+
+# --- Test-depth follow-ups from the #99 review ---------------------------------
+
+
+def test_read_timeout_relists_after_the_restart_delay_not_the_error_backoff(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    server.watch_error = httpx.ReadTimeout("silent watch")
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+    # Distinct, recognisable values; the sleeps are recorded and skipped.
+    monkeypatch.setattr(cluster, "_WATCH_RESTART_S", 1.0)
+    monkeypatch.setattr(cluster, "_WATCH_RETRY_BASE_S", 2.0)
+    real_sleep = asyncio.sleep
+    delays = []
+
+    async def recording_sleep(delay, *args):
+        if delay in (1.0, 2.0, 4.0):
+            delays.append(delay)
+            delay = 0
+        return await real_sleep(delay, *args)
+
+    monkeypatch.setattr(cluster.asyncio, "sleep", recording_sleep)
+
+    async def scenario():
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        await _drain(sub, lambda item: item[0] == "synced")  # a second list
+        await fake_env.aclose()
+
+    asyncio.run(scenario())
+    assert delays and set(delays) == {1.0}
+
+
+def test_aclose_waits_for_the_cancelled_upstream_to_finish(fake_env, monkeypatch):
+    server = _FakeK8s([[_pod("retrieval-worker-a")]])
+    monkeypatch.setattr(cluster, "_incluster_client", server.client)
+
+    async def scenario():
+        problems = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _loop, context: problems.append(context.get("message", ""))
+        )
+        server.live = asyncio.Queue()
+        server.close_gate = asyncio.Event()
+        sub = fake_env.try_subscribe("one", cluster.StreamLimits())
+        await _drain(sub, lambda item: item[0] == "synced")
+        old = fake_env._upstream
+        fake_env.unsubscribe(sub)
+        await asyncio.sleep(0.15)  # linger passed: cancelled, stuck in aclose
+        assert old.cancelling() and not old.done()
+        assert fake_env._upstream is None
+        del old
+        gc.collect()  # only the hub's own reference keeps the task alive now
+
+        closing = asyncio.ensure_future(fake_env.aclose())
+        await asyncio.sleep(0.05)
+        assert not closing.done()  # aclose is waiting on the cancelled upstream
+        assert server.closed_clients == 0
+        server.close_gate.set()
+        await asyncio.wait_for(closing, timeout=2.0)
+        assert server.closed_clients == 1  # the old client really finished closing
+        assert not fake_env._stopping
+        gc.collect()
+        assert not [m for m in problems if "destroyed" in m]
 
     asyncio.run(scenario())
