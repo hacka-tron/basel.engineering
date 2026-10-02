@@ -35,6 +35,7 @@ from services.glassbox.ingest.redis_index import (
     replace_document_vectors,
 )
 from services.glassbox.ingest.scanner import (
+    SourceFile,
     scan_file,
     scan_sources,
     strip_front_matter,
@@ -52,7 +53,18 @@ from services.glassbox.ingest.sweep import (
     sweep_mode_from_env,
     sweep_notes,
 )
-from services.glassbox.privacy import guard_document, guarded_content_hash, quarantine_categories
+from services.glassbox.portfolio import (
+    PortfolioError,
+    index_content_hash,
+    index_text,
+    parse_project,
+)
+from services.glassbox.privacy import (
+    GUARDED_CORPORA,
+    guard_document,
+    guarded_content_hash,
+    quarantine_categories,
+)
 from services.glassbox.providers.factory import get_embedding_provider
 
 LOGGER = logging.getLogger(__name__)
@@ -119,7 +131,7 @@ class RunResult:
     sweep: list[SweepPlan] = field(default_factory=list)
     reconcile: list[ReconcileReport] = field(default_factory=list)
     locked_out: bool = False
-    # Personal-data guard: per about_me document, the categories it redacted.
+    # Personal-data guard: per guarded document, the categories it redacted.
     pii_redacted: dict[str, Counter] = field(default_factory=dict)
 
 
@@ -134,6 +146,54 @@ def _now() -> datetime:
 def _title(content: str, path: Path) -> str:
     match = _HEADING.search(content)
     return (match.group(1).strip() if match else path.name)[:512]
+
+
+@dataclass
+class Prepared:
+    """The text to chunk for one scanned file, or why the file is skipped."""
+
+    text: str | None
+    error: str | None = None
+    redacted: Counter | None = None
+
+
+def content_hash_for(corpus: str, raw_hash: str) -> str:
+    """The stored ``content_hash``: the file's hash plus every rule shaping its indexed text.
+
+    The portfolio index format and the personal-data guard versions are folded in, so
+    changing either re-embeds the affected documents once instead of skipping them.
+    """
+    if corpus == "portfolio":
+        raw_hash = index_content_hash(raw_hash)
+    if corpus in GUARDED_CORPORA:
+        raw_hash = guarded_content_hash(raw_hash)
+    return raw_hash
+
+
+def prepare_content(source: SourceFile, content: str, quarantine: frozenset[str]) -> Prepared:
+    """Portfolio files become preface + body; About Basel loses its front matter.
+
+    Then the personal-data guard (privacy.py) redacts guarded corpora before chunking,
+    so no chunk, embedding, title or snippet ever holds a redacted value. An invalid
+    portfolio file or a quarantined document comes back with ``error`` set: like a
+    secret-scanner hit it is skipped but still "seen", so its last good version keeps
+    serving. About This System files are indexed as written.
+    """
+    if source.corpus == "portfolio":
+        try:
+            project = parse_project(content, source.path.stem)
+        except PortfolioError as exc:
+            return Prepared(None, f"invalid portfolio file: {exc}")
+        content = index_text(project)
+    elif source.corpus == "about_me":
+        content = strip_front_matter(content)
+    if source.corpus not in GUARDED_CORPORA:
+        return Prepared(content)
+    guarded = guard_document(content, source.source_path, quarantine=quarantine)
+    redacted = guarded.counts or None
+    if guarded.quarantined:
+        return Prepared(None, guarded.quarantined, redacted)
+    return Prepared(guarded.text, None, redacted)
 
 
 async def prepare_index(sessions, redis_client) -> None:
@@ -242,11 +302,7 @@ async def _ingest(
                 LOGGER.warning("Skipping unsupported extension: %s", source.source_path)
                 continue
             assert scanned.content is not None and scanned.content_hash is not None
-            content_hash = scanned.content_hash
-            if source.corpus == "about_me":
-                # The guard version is part of the hash, so new detection rules
-                # re-scan every about_me document once instead of skipping it.
-                content_hash = guarded_content_hash(content_hash)
+            content_hash = content_hash_for(source.corpus, scanned.content_hash)
             known = indexed.get((source.corpus, source.source_path))
             if (
                 known is not None
@@ -255,21 +311,14 @@ async def _ingest(
             ):
                 continue
 
-            content = scanned.content
-            if source.corpus == "about_me":
-                # Personal-data guard (privacy.py): redact before chunking, so no
-                # chunk, embedding, title or snippet ever holds the value.
-                guarded = guard_document(
-                    strip_front_matter(content), source.source_path, quarantine=quarantine
-                )
-                if guarded.counts:
-                    result.pii_redacted[source.source_path] = guarded.counts
-                if guarded.quarantined:
-                    # Like a secret-scanner hit: skipped, still "seen", so the
-                    # last good version keeps serving.
-                    result.errors[source.source_path] = guarded.quarantined
-                    continue
-                content = guarded.text
+            prepared = prepare_content(source, scanned.content, quarantine)
+            if prepared.redacted:
+                result.pii_redacted[source.source_path] = prepared.redacted
+            if prepared.error:
+                result.errors[source.source_path] = prepared.error
+                LOGGER.warning("Skipped %s: %s", source.source_path, prepared.error)
+                continue
+            content = prepared.text
             try:
                 chunks = chunker(content, source.source_path)
                 vectors = await provider.embed([chunk.text for chunk in chunks])

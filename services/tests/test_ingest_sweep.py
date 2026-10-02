@@ -160,7 +160,11 @@ SEEN = {
 @pytest.mark.asyncio
 async def test_apply_deletes_only_safe_corpora_scoped_to_the_model(recorder):
     plans = await sweep.run_sweep(None, None, SEEN, "titan", mode="apply")
-    assert recorder.loaded == [("about_me", "titan"), ("about_system", "titan")]
+    assert recorder.loaded == [
+        ("about_me", "titan"),
+        ("about_system", "titan"),
+        ("portfolio", "titan"),
+    ]
     assert recorder.deleted == [("about_me", "titan", ["corpus/about-me/gone.md"])]
     by_corpus = {plan.corpus: plan for plan in plans}
     assert by_corpus["about_me"].deleted and not by_corpus["about_me"].refused
@@ -172,7 +176,7 @@ async def test_report_mode_never_deletes(recorder, caplog):
     caplog.set_level("INFO", logger="services.glassbox.ingest.sweep")
     plans = await sweep.run_sweep(None, None, SEEN, "titan", mode="report")
     assert recorder.deleted == []
-    assert [len(plan.stale) for plan in plans] == [1, 5]
+    assert [len(plan.stale) for plan in plans] == [1, 5, 0]
     assert "would delete corpus/about-me/gone.md" in caplog.text
     assert "REFUSED" in caplog.text
 

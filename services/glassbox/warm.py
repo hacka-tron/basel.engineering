@@ -39,9 +39,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from services.glassbox.corpora import CORPORA
+
 LOGGER = logging.getLogger("glassbox.warm")
 DEFAULT_QUESTIONS = Path(__file__).resolve().parents[2] / "frontend/src/suggested-questions.json"
-CORPORA = ("about_me", "about_system")
 REQUEST_TIMEOUT_S = 90.0
 DEFAULT_DAILY_LLM_CAP = 10
 _DAILY_KEY_TTL_S = 48 * 3600

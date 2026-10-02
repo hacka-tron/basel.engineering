@@ -13,11 +13,22 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 4. **KEDA stays off** (owner, 2026-10-02). Re-propose only if the owner asks or the node is upgraded (e.g. t4g.medium, ~+$12/month).
 5. **RAG quality plan: merged, evaluations parked** until the owner adds more documents.
 
+**Portfolio (spec `docs/superpowers/specs/2026-10-02-portfolio-design.md`):** PR 2, the backend corpus (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149), `feat/portfolio-backend`; report `project/status/2026-10-02-portfolio-backend.md`), is open and waiting for review. Next is **portfolio PR 3** (frontend panel, shared details sheet, "See portfolio →"), which needs PR 2 merged and deployed.
+
 **Open items** (not started unless noted):
 
 - ~~Phase 7 README with screenshots~~ Done 2026-10-02 (`docs/readme-screenshots`; images in `.github/readme/`, not ingested). Phase 7 still open: server-side footer stats, load-test numbers (KEDA is off, so none until it returns).
 
 6. ~~**Private About Basel repo + personal-data guard**~~ **Done 2026-10-02** (PR #126 plus the cleanup PR on `chore/remove-public-about-me`; reports `project/status/2026-10-01-private-about-me.md`). Release run 36963576115 checked out the private repo, and a live About Basel answer cited `private/google.md`, `private/microsoft.md`, `private/bio.md` and others; the public `corpus/about-me/*.md` copies are deleted. `eval/golden.yaml` and `questions.yaml` now use `private/...` sources (gold snippets are checked only against a local `corpus/about-me-private/` checkout). Still true: after private edits, run Release by hand (no `repository_dispatch` yet). **Degraded mode (fails safe):** a release without the checkout now has no About Basel files, so the about_me sweep refuses (zero files for the corpus) and the last indexed documents keep serving; new private edits just don't go live. The twin-shadowing code was removed (branch `chore/remove-twin-shadowing`): the scanner no longer scans `corpus/about-me/`, and `sweep.py` guards only `private/` and the system directories. Minor (#133 review): the Dockerfile COPY test reads line by line, so a backslash-continued COPY would be missed.
+
+**Open items from the portfolio backend (PR 2)** (not started):
+
+- **Portfolio sources get the planned marker.** `_mark_planned` (`api/ask.py`) runs over every non-code source, so a project write-up mentioning "SQS", "ASG", "deferred" or "planned" would be labelled `[PLANNED, not built yet]` and answered as not built. Exempt `corpus/portfolio/` before real projects land (a prompt change: owner go-ahead, spec §6.3).
+- **Ops · Diagnose corpus versions:** `infra/modules/ops/scripts/diagnose.sh` prints `corpus:ver` for `about_me` and `about_system` only; add `portfolio` with the next `ops` Terraform apply.
+- **Portfolio eval and golden cases:** `eval/run_eval.py` and `eval/schema.py` know two corpora; add `portfolio` and golden cases for its suggested questions once the owner has added real projects (owner rule: not before).
+- **Decide at PR 3:** hide the Portfolio topic until there is content (spec §7, §10).
+- **Stale portfolio projects in report mode:** a deleted or drafted project stays searchable until the sweep is applied or `--clear --corpus portfolio` runs (DD3 §1.3).
+- **Portfolio backend follow-ups (minor, #149 review).** (a) Mid-rollout skew: a new api can enqueue a `portfolio` job that an old retrieval worker picks up; it raises `unknown corpus`, the ask ends with `error internal` (no LLM spend, slot refunded), and that `warm-answers` CronJob run exits 1. Transient and harmless, but not covered by a test or the status report's skew note (which covers only new CronJob → old api, HTTP 422). (b) The `0007` downgrade's delete-then-narrow path is executed in CI only on empty tables (the round trip runs before the tests insert rows); its correctness rests on reading the code (only FK is chunks → documents with CASCADE; strict mode would fail the MODIFY loudly on a leftover row).
 
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 
@@ -101,6 +112,8 @@ Same roles as Phase 0 (Claude orchestrates, Codex implements, Gemini reviews), a
 - ~~**No production path to run `--reindex` without kubectl.**~~ Fixed by the "Ops · Reindex" runbook (PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136), `project/status/2026-10-02-ops-reindex.md`; live once the Terraform workflow applies `glassbox-ops-reindex`). The reconcile in every ingest run covers Redis data loss, but a forced `--reindex` (after a MySQL restore, or to purge more than 30% orphan keys past the fraction guard) can only be run by exec-ing into a pod. Consider an "Ops · Reindex" runbook (owner-approved, like the other Ops workflows) that runs `python -m services.glassbox.ingest.run --reindex` as a one-off Job.
 
 - **Ops · Reindex follow-ups (minor, #136 round-2 review).** (1) A failed `job/ingest` (e.g. Bedrock down during embedding) makes the runbook refuse ("has not completed") until the next release, because Flux doesn't recreate a failed Job; `--reindex` doesn't need Bedrock, so accept Failed as well as Complete when the image matches. (2) SIGTERM edge cases in `run.py` `reindex`: a SIGTERM during the lock's `SET NX` round trip, or during a blocking MySQL call past the 30 s grace, leaves `ingest:lock` held for its TTL; `test_reindex_releases_the_lock_on_sigterm` sends a real SIGTERM to pytest, which would kill the run where the handler can't install.
+
+- **Open to work popover follow-ups (minor, #147 review rounds 1–2).** (1) `RotateScreen` stops Escape with `stopPropagation` on window capture, so the popover's window listener still sees Escape behind the rotate screen; harmless today, `stopImmediatePropagation` would make it airtight. (2) At 300–320px the open popover covers the ask input, so the first tap only closes the popover and focus mode needs a second tap. (3) `closesOnFocusOut` ignores the copy-fallback textarea, so if focus went from that textarea straight to an element outside the item the popover would stay open; unreachable today because `legacyCopy` adds, copies, removes and restores focus synchronously (Safari edge: Clipboard API rejected with the ask box focused leaves the popover open with focus in the ask box; an outside tap closes it).
 
 ## Feature work (priority)
 

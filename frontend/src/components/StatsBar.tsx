@@ -4,6 +4,7 @@ import { useLongPressTooltip } from '../hooks/useLongPressTooltip'
 import { tooltipShowing } from '../lib/escapeKey'
 import { lastStatsDetails, lastStatsParts, type LastStats } from '../lib/lastStats'
 import { RABBIT_FACE_PATHS, TIGER_FACE_PATHS } from './capacityIcons'
+import OpenToWork from './OpenToWork'
 
 type StatsBarProps = {
   lastStats?: LastStats | null
@@ -117,11 +118,13 @@ function StatsBar({
 
   return (
     // Below md, gaps/padding/font are tightened (rather than left at the
-    // desktop md: values) so this row fits at ~375px. It must not scroll
-    // (overflow-x-auto would clip the absolutely-positioned tooltips, which
-    // open upward out of the footer). "queries served" also drops to "queries" below `sm`,
-    // since that's the single biggest chunk of text width at this size.
-    <footer className="flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
+    // desktop md: values) so this row fits from 280px with the Open to work
+    // item. It must not scroll (overflow-x-auto would clip the
+    // absolutely-positioned tooltips, which open upward out of the footer).
+    // Below `sm` "queries served" drops to "queries" and the latency shows
+    // its short form (at most 5 characters). `relative` anchors the Open to
+    // work popover to the footer so it can span the screen at 280px.
+    <footer className="relative flex min-h-[58px] shrink-0 items-center justify-between gap-2 border-t border-hairline bg-canvas pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] text-[11px] text-muted sm:px-4 sm:text-xs md:gap-0 md:px-8">
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3 md:gap-5">
         {/* Always one line: the stats are never wrapped or squeezed. The
             timing is a focusable control so hover, focus, and a long press
@@ -139,9 +142,12 @@ function StatsBar({
           onPointerUp={latencyPressHandlers.onPointerUp}
           onPointerCancel={latencyPressHandlers.onPointerCancel}
           onContextMenu={latencyPressHandlers.onContextMenu}
-          className="group relative -mx-2 flex min-h-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:px-0 md:mx-0"
+          className="group relative -mx-2 flex min-h-11 min-w-11 cursor-help touch-manipulation select-none items-center px-2 leading-normal outline-none transition-colors [-webkit-touch-callout:none] hover:text-primary focus-visible:text-primary active:text-primary focus-visible:ring-1 focus-visible:ring-cyan md:min-h-0 md:min-w-0 md:px-0 md:mx-0"
         >
-          <span>{latency.timing}</span>
+          {/* Phones (below sm) get the at-most-5-character reading so the
+              row fits at 280px; the aria-label keeps the full description. */}
+          <span className="sm:hidden">{latency.short}</span>
+          <span className="hidden sm:inline">{latency.timing}</span>
           <span
             id={latencyTooltipId}
             role="tooltip"
@@ -155,6 +161,9 @@ function StatsBar({
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* First in the right group: left of New chat (phones) or Stress
+            test (desktop), and before them in focus order. */}
+        <OpenToWork />
         {/* Below md: the "+" New chat icon sits at the right, in the same
             group as the capacity icon, so it comes after the stats in DOM and
             focus order. At md+ New chat lives under the ask box. */}

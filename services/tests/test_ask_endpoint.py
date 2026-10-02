@@ -418,6 +418,41 @@ def test_empty_model_filtered_retrieval_answers_without_llm(monkeypatch):
     assert all(name != "error" for name, _ in stream)
 
 
+def test_portfolio_question_with_no_projects_indexed_abstains_without_llm(monkeypatch):
+    # The state right after this PR deploys: the corpus exists but holds only a draft.
+    from services.glassbox.api import ask
+
+    class NoBudget:
+        async def reserve(self):
+            pytest.fail("empty retrieval must not reserve LLM budget")
+
+    class NoLLM:
+        model_id = "no-llm"
+
+        async def generate(self, prompt, *, max_tokens):
+            pytest.fail("empty retrieval must not invoke the LLM")
+            yield ""
+
+    saved = []
+    client = MemoryRedis("empty")
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: client)
+    monkeypatch.setattr(ask, "get_daily_budget", lambda client: NoBudget())
+    monkeypatch.setattr(ask, "get_llm_provider", lambda: NoLLM())
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: saved.append(kwargs))
+    stream = events(
+        TestClient(app).post(
+            "/api/ask", json={"question": "What can Basel build for me?", "corpus": "portfolio"}
+        )
+    )
+    assert client.enqueued["corpus"] == "portfolio"
+    assert next(data for name, data in stream if name == "token")["text"] == (
+        "I don't know from what I have."
+    )
+    assert all(name != "error" for name, _ in stream)
+    assert saved[0]["request"].corpus == "portfolio"
+
+
 @pytest.mark.asyncio
 async def test_simultaneous_answer_cache_misses_use_one_llm_call(monkeypatch):
     from services.glassbox.api import ask

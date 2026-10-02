@@ -19,6 +19,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from services.glassbox.portfolio import PORTFOLIO_DIR, is_draft, portfolio_files
+
 SUPPORTED_EXTENSIONS = frozenset({".md", ".tf", ".yml", ".yaml", ".py", ".ts", ".tsx"})
 SYSTEM_DIRECTORIES = ("infra", "k8s", "services", "docs")
 # The owner's private About Basel repo (hacka-tron/basel.engineering-docs),
@@ -144,14 +146,16 @@ def strip_front_matter(content: str) -> str:
 
 
 def scan_sources(root: Path) -> Iterator[SourceFile]:
-    """Yield supported files and denied-path candidates from both corpora.
+    """Yield supported files and denied-path candidates from every corpus.
 
     About Basel (``about_me``) comes only from the private checkout. A public
     ``corpus/about-me/`` directory is deliberately not scanned, so About Basel
-    text can't be added to this repo and indexed by accident.
+    text can't be added to this repo and indexed by accident. Portfolio projects
+    (``portfolio``) come from ``corpus/portfolio/``, drafts left out.
     """
     root = root.resolve()
     yield from _private_sources(root)
+    yield from _portfolio_sources(root)
     for directory in SYSTEM_DIRECTORIES:
         base = root / directory
         if not base.is_dir():
@@ -176,6 +180,25 @@ def _private_sources(root: Path) -> Iterator[SourceFile]:
             continue
         if path.is_file() and not path.is_symlink():
             yield SourceFile("about_me", PRIVATE_SOURCE_PREFIX + relative.as_posix(), path)
+
+
+def _portfolio_sources(root: Path) -> Iterator[SourceFile]:
+    """Non-draft project files; hidden paths skipped, symlinks never followed.
+
+    A file whose front matter can't be read is still yielded: ingest reports it and
+    it counts as seen, so its last good version keeps serving.
+    """
+    base = root.joinpath(*PORTFOLIO_DIR)
+    for path in portfolio_files(root):
+        # A symlinked file or folder could point outside the repo: skip both.
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(base):
+            continue
+        try:
+            draft = is_draft(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            draft = False  # scan_file reports the unreadable file
+        if not draft:
+            yield SourceFile("portfolio", path.relative_to(root).as_posix(), path)
 
 
 def scan_file(source: SourceFile) -> ScannedFile:

@@ -25,7 +25,7 @@ def test_schema_columns_and_constraints():
     assert isinstance(documents.c.id.type, BigInteger)
     assert documents.c.id.primary_key and documents.c.id.autoincrement
     assert isinstance(documents.c.corpus.type, ENUM)
-    assert documents.c.corpus.type.enums == ["about_me", "about_system"]
+    assert documents.c.corpus.type.enums == ["about_me", "about_system", "portfolio"]
     assert not documents.c.corpus.nullable
     assert isinstance(documents.c.source_path.type, String)
     assert documents.c.source_path.type.length == 512
@@ -126,7 +126,7 @@ def test_schema_columns_and_constraints():
     assert isinstance(queries.c.request_id.type, CHAR)
     assert queries.c.request_id.type.length == 26
     assert isinstance(queries.c.corpus.type, ENUM)
-    assert queries.c.corpus.type.enums == ["about_me", "about_system"]
+    assert queries.c.corpus.type.enums == ["about_me", "about_system", "portfolio"]
     assert isinstance(queries.c.question.type, String)
     assert queries.c.question.type.length == 1000
     assert isinstance(queries.c.cache_status.type, ENUM)
@@ -196,7 +196,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
     }
     assert set(ddl) == {"documents", "chunks", "ingestion_runs", "queries"}
     assert "AUTO_INCREMENT" in ddl["documents"]
-    assert "ENUM('about_me','about_system')" in ddl["documents"]
+    assert "ENUM('about_me','about_system','portfolio')" in ddl["documents"]
     assert "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" in ddl["documents"]
     assert "uq_doc" in ddl["documents"]
     assert "MEDIUMTEXT" in ddl["chunks"]
@@ -207,7 +207,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "DEFAULT 0" in ddl["ingestion_runs"]
     assert "AUTO_INCREMENT" in ddl["queries"]
     assert "CHAR(26) NOT NULL" in ddl["queries"]
-    assert "ENUM('about_me','about_system') NOT NULL" in ddl["queries"]
+    assert "ENUM('about_me','about_system','portfolio') NOT NULL" in ddl["queries"]
     assert "VARCHAR(1000) NOT NULL" in ddl["queries"]
     assert "ENUM('answer_hit','miss') NOT NULL" in ddl["queries"]
     assert "ENUM('full','retrieval_only','stopped') NOT NULL" in ddl["queries"]
@@ -297,3 +297,29 @@ def test_ingestion_run_notes_migration_follows_ttft_and_is_additive():
     upgrade = inspect.getsource(migration.upgrade)
     assert "add_column" in upgrade and "nullable=True" in upgrade
     assert "alter_column" not in upgrade and "drop_column" not in upgrade
+
+
+def test_portfolio_migration_appends_the_enum_member_on_both_tables():
+    import importlib
+    import inspect
+
+    from services.glassbox.db.wait_for_migrations import get_head_revisions
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0007_portfolio_corpus"
+    )
+    assert migration.down_revision == "0006_ingestion_run_notes"
+    assert migration.revision == "0007_portfolio_corpus"
+    assert len(migration.revision) <= 32
+    assert get_head_revisions() == frozenset({"0007_portfolio_corpus"})
+    assert migration.TABLES == ("documents", "queries")
+    assert migration.OLD.enums == ["about_me", "about_system"]
+    # Appended at the end only: existing values keep their index, storage stays 1 byte.
+    assert migration.NEW.enums == [*migration.OLD.enums, "portfolio"]
+    assert migration.NEW.enums == list(Document.__table__.c.corpus.type.enums)
+    upgrade = inspect.getsource(migration.upgrade)
+    assert "alter_column" in upgrade
+    assert "drop_column" not in upgrade and "DELETE" not in upgrade
+    downgrade = inspect.getsource(migration.downgrade)
+    assert "DELETE FROM queries WHERE corpus = 'portfolio'" in downgrade
+    assert "DELETE FROM documents WHERE corpus = 'portfolio'" in downgrade
