@@ -209,6 +209,7 @@ input {
  * no node to snap to. Switching component means closing, then tapping a node.
  */
 .sheet-open .react-flow__node,
-.sheet-open .react-flow__edge {
+.sheet-open .react-flow__edge,
+.sheet-open .react-flow__handle {
   pointer-events: none !important;
 }
