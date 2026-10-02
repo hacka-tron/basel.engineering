@@ -34,7 +34,7 @@ flowchart LR
 
 ## What review caught
 
-(Filled in after review.)
+Round 1 (Opus reviewer): APPROVED, no Critical or Important findings. Fixed in this PR: nodes now leave the Tab order while the sheet covers them, so keyboard focus goes straight to the sheet; doc leftovers ("panel" wording, duplicated Escape). Backlogged (see BACKLOG Bugs): empty-strip taps snapping to nearby nodes (awaiting owner decision), desktop Back clearing the selection after a narrow-to-wide resize, and the cosmetic zoom dip during the animated pan.
 
 ## Operational notes and risks
 
@@ -46,4 +46,4 @@ Frontend only; no backend, infra or CSP change. Changes visitor behaviour on its
 
 ## Open items
 
-Not exercised: reduced-motion/transparency emulation, rotate-screen with a sheet open, real-device iOS.
+Reduced motion/transparency and rotation with a sheet open were verified by the reviewer. Not exercised: real-device iOS.

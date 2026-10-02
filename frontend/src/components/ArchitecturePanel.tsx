@@ -16,6 +16,8 @@ type LiveNode = Node<{
   implementation: string
   active: boolean
   selected: boolean
+  /** False while the phone details sheet covers the diagram: nodes leave the Tab order so keyboard focus goes to the sheet. */
+  tabbable: boolean
   cache?: 'hit' | 'miss'
   pods?: WorkerPod[]
   backlog?: number | null
@@ -92,6 +94,7 @@ function ArchitectureNodeView({ data }: NodeProps<LiveNode>) {
         type="button"
         aria-label={`Explore ${data.label}: ${data.implementation}`}
         aria-pressed={data.selected}
+        tabIndex={data.tabbable ? 0 : -1}
         title={`${data.label} · ${data.implementation}`}
         onFocus={() => data.onPreview(data.id)}
         onBlur={data.onLeave}
@@ -232,6 +235,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
       id: node.id,
       active: node.id === activeNode,
       selected: node.id === selectedNode,
+      tabbable: !(portrait && selectedNode != null),
       cache: nodeCacheStatus?.[node.id],
       pods: node.id === 'worker' ? workerPods : undefined,
       backlog: node.id === 'worker' ? backlog : undefined,
