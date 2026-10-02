@@ -4,8 +4,9 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 **Last updated:** 2026-10-01 (session wrap-up after the node memory incident, ops runbooks and the mobile pass)
 
-## Live state (2026-10-01)
+## Live state (2026-10-02)
 
+- **2026-10-02:** build-105 live (`GET /api/version`). Alarms, uptime probe and daily-snapshot Terraform (#124) applied; the SNS email confirmation and the first **Ops · List snapshots** check are still the owner's. The `glassbox-ops-reindex` SSM document is applied (#136), so **Ops · Reindex** is usable. The **Stream check** workflow (#143) passes after each release and daily. Cloudflare "Always Use HTTPS" is on (HTTP 301). Public `corpus/about-me/` is gone; About Basel is served only from the private repo.
 - `https://basel.engineering` is live and serving. Merging to `main` deploys hands-off: GitHub Actions builds and pushes `build-N` to ECR, Flux Image Update Automation commits the tag to the `deploy` branch, and ordered Flux Kustomizations roll it out (`flux-system` → `app-ready` → `ingest`).
 - **Node memory:** compressed swap is on (`/dev/zram0`, ~920 MB uncompressed capacity, lzo-rle, priority 100; EBS `/swapfile` overflow at priority -2). After the 2026-09-30 incident fix: memory PSI about 3% (`some` avg300), about 357 MiB available.
 - **KEDA is installed but suspended:** its Flux Kustomizations (`keda`, `keda-scaling`) and the `keda` HelmRelease are suspended, and the Deployments in the `keda` namespace are scaled to 0. The HelmRelease is in a failed state from the incident's install timeout. The retrieval worker runs at one replica and nothing autoscales. Free memory is below the stress test's 512 MiB gate, so the stress-test button plays the simulation.
