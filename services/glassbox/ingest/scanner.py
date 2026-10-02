@@ -33,9 +33,10 @@ PUBLIC_ABOUT_ME_PREFIX = "corpus/about-me/"
 _AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----")
 # Provider token formats: (label, pattern). Prefixes plus minimum lengths keep
-# prose like "sk-learn" or "ghp_" in a sentence from matching. Patterns over
-# character classes that include "-" start after a non-class character
-# (``(?<![A-Za-z0-9_-])``) so a long run of repeated prefixes stays linear.
+# prose like "sk-learn" or "ghp_" in a sentence from matching. The JWT pattern
+# starts after a non-class character (``(?<![A-Za-z0-9_-])``) so a long run of
+# repeated ``eyJ-`` stays linear; the others are anchored by ``\b`` plus a
+# fixed prefix or a bounded length, which keeps them linear too.
 _PROVIDER_TOKENS = (
     ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
     ("GitHub token", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{50,}")),
@@ -61,8 +62,9 @@ _OPENAI_KEY = re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}")
 _BEARER = re.compile(r"\bBearer\s+([A-Za-z0-9._~+/=-]{20,})", re.IGNORECASE)
 # The lookbehind makes each name start at the beginning of a word run; without
 # it a long run of word characters is rescanned from every position (quadratic).
+# Names may start with a digit ("2fa_secret: ...").
 _ASSIGNMENT = re.compile(
-    r"""(?<![A-Za-z0-9_])['"]?[A-Za-z_][A-Za-z0-9_]*['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
+    r"""(?<![A-Za-z0-9_])['"]?[A-Za-z0-9_]+['"]?\s*[:=]\s*['"]?([A-Za-z0-9_+/=-]{33,})['"]?"""
 )
 
 

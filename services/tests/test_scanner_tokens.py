@@ -100,12 +100,26 @@ def test_provider_token_is_flagged_with_its_label(name):
         "sk-" * 100_000,
         "Bearer " * 50_000,
         "xoxb-" * 100_000,
+        '"a"' * 333_000,
+        "a: " * 333_000,
     ],
 )
 def test_pathological_lines_scan_in_bounded_time(line):
     start = time.perf_counter()
     secret_reason(line)
     assert time.perf_counter() - start < 2
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '"2fa' + '_secret": "' + A40 + '"',
+        "3des" + "_key: " + A40,
+        "1password=" + A40,
+    ],
+)
+def test_assignment_name_may_start_with_a_digit(line):
+    assert secret_reason(line) is not None
 
 
 @pytest.mark.parametrize("name", NEGATIVE)
