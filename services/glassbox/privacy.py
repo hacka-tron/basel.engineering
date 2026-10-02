@@ -2,9 +2,10 @@
 
 Two layers use the same detector:
 
-* **Ingest time** (``guard_document``): every ``about_me`` document, from
-  the owner's private About Basel repo (``private/...``),
-  is scanned before chunking. Detected spans are replaced
+* **Ingest time** (``guard_document``): every ``about_me`` document (from the
+  owner's private About Basel repo, ``private/...``) and every ``portfolio``
+  document (``corpus/portfolio/*.md``, public, but a write-up may quote a client's
+  details) is scanned before chunking. Detected spans are replaced
   with ``[redacted]``, so neither the stored chunk text, the embeddings, the
   title nor the public retrieval snippets ever hold them. Categories listed in
   ``GLASSBOX_PII_QUARANTINE`` (for example ``gov_id``) skip the whole document
@@ -29,10 +30,12 @@ from dataclasses import dataclass, field
 
 LOGGER = logging.getLogger(__name__)
 
-# Bump when a pattern changes: it is folded into about_me content hashes, so every
-# about_me document is re-scanned (and re-embedded) once under the new rules.
+# Bump when a pattern changes: it is folded into every guarded document's content
+# hash, so each one is re-scanned (and re-embedded) once under the new rules.
 PII_GUARD_VERSION = "1"
 REDACTION = "[redacted]"
+# Corpora whose documents pass guard_document at ingest.
+GUARDED_CORPORA = frozenset({"about_me", "portfolio"})
 
 PHONE = "phone"
 EMAIL = "email"
@@ -327,7 +330,7 @@ def guarded_content_hash(raw_hash: str) -> str:
 def guard_document(
     text: str, document_id: str, *, quarantine: frozenset[str] | None = None
 ) -> GuardResult:
-    """Redact personal data from one ``about_me`` document, or quarantine it.
+    """Redact personal data from one guarded document, or quarantine it.
 
     Logs ``document_id`` and per-category counts only, never a matched value.
     """
