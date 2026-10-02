@@ -14,6 +14,7 @@ from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest import sweep as sweep_module
+from services.glassbox.ingest.redis_index import chunk_fields
 from services.glassbox.ingest.run import chunker_for_path, dry_run_sweep, ingest
 from services.glassbox.ingest.scanner import (
     SYSTEM_DIRECTORIES,
@@ -505,12 +506,21 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
         assert chunk_ids(keep_path) == keep_ids
         assert await client.exists(*(f"chunk:{chunk_id}" for chunk_id in keep_ids)) == len(keep_ids)
         assert int(await client.get("corpus:ver:about_me")) == version + 1
+        # The sweep's mode, counts and (here, no) refusal are stored on the run row.
+        with Session(engine) as session:
+            notes = session.scalar(
+                select(IngestionRun.notes).order_by(IngestionRun.id.desc()).limit(1)
+            )
+        corpora = {entry["corpus"]: entry for entry in notes["sweep"]["corpora"]}
+        assert notes["sweep"]["mode"] == "apply"
+        assert corpora["about_me"]["planned"] == 1 and corpora["about_me"]["deleted"] == 1
+        assert corpora["about_me"]["refused"] is None
 
         # --clear: the dry run lists, the real run wipes the scope.
         listed = await ingest_run.clear(
             "about_me", engine=engine, redis_client=client, dry_run=True
         )
-        assert [doc.source_path for doc in listed] == [keep_path]
+        assert [doc.source_path for doc in listed.documents] == [keep_path]
         assert chunk_ids(keep_path) == keep_ids
         await ingest_run.clear("about_me", engine=engine, redis_client=client)
         assert document_exists(keep_path) is None
@@ -528,6 +538,44 @@ async def test_stale_sweep_dry_run_apply_and_clear_against_real_stores(
                 )
         if redis_keys:
             await client.delete(*redis_keys)
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_clear_removes_orphan_chunk_keys_with_no_mysql_row(integration_stack, monkeypatch):
+    engine, client = integration_stack
+    try:
+        await client.ping()
+    except Exception as exc:
+        pytest.skip(f"real MySQL/Redis integration stack unavailable: {exc}")
+    # A model id no other test or dev data uses, so the SCAN matches only these keys.
+    model_id = f"orphan-test-{hashlib.sha256(str(id(client)).encode()).hexdigest()[:8]}"
+    orphan_ids = [2_000_000_001, 2_000_000_002]
+    other = 2_000_000_003  # same model, other corpus: must survive
+    for chunk_id in orphan_ids:
+        await client.hset(
+            f"chunk:{chunk_id}",
+            mapping=chunk_fields("about_me", model_id, b"v", "private/x.md", 1, "text"),
+        )
+        await client.set(f"chunktxt:{chunk_id}", "{}")
+    await client.hset(
+        f"chunk:{other}",
+        mapping=chunk_fields("about_system", model_id, b"v", "docs/x.md", 1, "text"),
+    )
+    keys = [f"chunk:{i}" for i in (*orphan_ids, other)] + [f"chunktxt:{i}" for i in orphan_ids]
+    try:
+        listed = await ingest_run.clear(
+            "about_me", model_id=model_id, engine=engine, redis_client=client, dry_run=True
+        )
+        assert listed.orphan_chunk_ids == orphan_ids
+        assert await client.exists(*keys) == len(keys)  # dry run removes nothing
+        await ingest_run.clear("about_me", model_id=model_id, engine=engine, redis_client=client)
+        assert not await client.exists(
+            *(f"chunk:{i}" for i in orphan_ids), *(f"chunktxt:{i}" for i in orphan_ids)
+        )
+        assert await client.exists(f"chunk:{other}") == 1
+    finally:
+        await client.delete(*keys)
         await client.aclose()
 
 

@@ -44,6 +44,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
+from services.glassbox.cache.answer import _model_tag
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
 from services.glassbox.ingest.scanner import PRIVATE_SOURCE_PREFIX
@@ -57,6 +58,7 @@ DEFAULT_MAX_STALE_FRACTION = 0.30
 # Removing this many documents is always allowed, so renaming one or two files in
 # the five-document About Basel corpus doesn't trip the fraction guard.
 ALWAYS_ALLOWED_STALE = 2
+SCAN_BATCH = 500
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,15 @@ class ScopedDocument:
     document_id: int
     source_path: str
     chunk_ids: tuple[int, ...]
+
+
+@dataclass
+class ClearResult:
+    """What ``--clear`` removed (or would remove): documents plus orphan Redis chunk keys."""
+
+    documents: list[ScopedDocument]
+    # ``chunk:{id}`` hashes for this corpus and model with no MySQL row behind them.
+    orphan_chunk_ids: list[int]
 
 
 @dataclass
@@ -191,22 +202,70 @@ def scope_documents(
     return scoped
 
 
+async def find_orphan_chunk_ids(
+    redis_client, corpus: str, model_id: str, known_ids: Iterable[int]
+) -> list[int]:
+    """``chunk:{id}`` hashes tagged with this corpus and model whose id MySQL doesn't hold.
+
+    ``known_ids`` are the chunk ids MySQL has for the scope (the documents'
+    ``chunk_ids``), which the normal delete path already removes. SCAN with a
+    bounded COUNT, then one non-transactional pipeline of HMGETs per batch; a
+    hash of another corpus or model is never matched.
+    """
+    known = set(known_ids)
+    tag = _model_tag(model_id)
+    candidates: list[int] = []
+    async for key in redis_client.scan_iter(match="chunk:*", count=SCAN_BATCH):
+        suffix = (key.decode() if isinstance(key, bytes) else key).removeprefix("chunk:")
+        if suffix.isdigit() and int(suffix) not in known:
+            candidates.append(int(suffix))
+    orphans = []
+    for start in range(0, len(candidates), SCAN_BATCH):
+        batch = candidates[start : start + SCAN_BATCH]
+        async with redis_client.pipeline(transaction=False) as pipeline:
+            for chunk_id in batch:
+                pipeline.hmget(f"chunk:{chunk_id}", ["corpus", "model"])
+            values = await pipeline.execute()
+        for chunk_id, (found_corpus, found_model) in zip(batch, values, strict=True):
+            found_corpus = (
+                found_corpus.decode() if isinstance(found_corpus, bytes) else found_corpus
+            )
+            found_model = found_model.decode() if isinstance(found_model, bytes) else found_model
+            if found_corpus == corpus and found_model == tag:
+                orphans.append(chunk_id)
+    return sorted(orphans)
+
+
 async def delete_documents(
-    engine: Engine, redis_client, corpus: str, model_id: str, documents: list[ScopedDocument]
+    engine: Engine,
+    redis_client,
+    corpus: str,
+    model_id: str,
+    documents: list[ScopedDocument],
+    orphan_chunk_ids: Iterable[int] = (),
 ) -> None:
     """Delete these documents' chunks for ``model_id`` from Redis, then MySQL.
 
     A document row is removed only when it has no chunks left for any model.
+    ``orphan_chunk_ids`` are Redis-only keys (no MySQL row) removed with them.
+    Each removed id's ``chunktxt:{id}`` text cache goes too.
     """
-    if not documents:
+    orphan_chunk_ids = list(orphan_chunk_ids)
+    if not documents and not orphan_chunk_ids:
         return
     chunk_ids = [chunk_id for document in documents for chunk_id in document.chunk_ids]
-    for start in range(0, len(chunk_ids), 500):
-        batch = chunk_ids[start : start + 500]
-        await redis_client.delete(*(f"chunk:{chunk_id}" for chunk_id in batch))
+    redis_ids = [*chunk_ids, *orphan_chunk_ids]
+    for start in range(0, len(redis_ids), 500):
+        batch = redis_ids[start : start + 500]
+        await redis_client.delete(
+            *(f"chunk:{chunk_id}" for chunk_id in batch),
+            *(f"chunktxt:{chunk_id}" for chunk_id in batch),
+        )
     # Bump before the MySQL delete: a retrieval-cache entry from the old version
     # could otherwise name chunk ids whose rows are about to disappear.
     await redis_client.incr(f"corpus:ver:{corpus}")
+    if not documents:
+        return
     document_ids = [document.document_id for document in documents]
     with sessionmaker(bind=engine).begin() as session:
         if chunk_ids:
@@ -241,6 +300,26 @@ def log_plan(plan: SweepPlan, mode: str) -> None:
         plan.seen_files,
         len(plan.stale),
     )
+
+
+def sweep_notes(mode: str, plans: list[SweepPlan]) -> dict:
+    """The ``ingestion_runs.notes`` payload: sweep mode, planned/deleted counts, refusals."""
+    return {
+        "sweep": {
+            "mode": mode,
+            "corpora": [
+                {
+                    "corpus": plan.corpus,
+                    "model": plan.model_id,
+                    "known": plan.known,
+                    "planned": len(plan.stale),
+                    "deleted": len(plan.stale) if plan.deleted else 0,
+                    "refused": plan.refused,
+                }
+                for plan in plans
+            ],
+        }
+    }
 
 
 async def run_sweep(
@@ -287,15 +366,25 @@ async def clear_scope(
     *,
     dry_run: bool,
     documents: list[ScopedDocument] | None = None,
-) -> list[ScopedDocument]:
+    orphan_chunk_ids: list[int] | None = None,
+) -> ClearResult:
     """Remove every document in one corpus/model scope (or list them on a dry run).
 
-    Pass ``documents`` (from an earlier dry run) to delete exactly the list that was
-    confirmed, rather than re-reading the scope.
+    Also removes orphan ``chunk:*`` hashes for the scope: keys with no MySQL row,
+    found by SCAN (a dry run only counts them). Pass ``documents`` and
+    ``orphan_chunk_ids`` (from an earlier dry run) to delete exactly the lists that
+    were confirmed, rather than re-reading the scope.
     """
     if documents is None:
         documents = load_scope_documents(engine, corpus, model_id)
     documents = sorted(documents, key=lambda doc: doc.source_path)
+    if orphan_chunk_ids is None:
+        orphan_chunk_ids = await find_orphan_chunk_ids(
+            redis_client,
+            corpus,
+            model_id,
+            (chunk_id for document in documents for chunk_id in document.chunk_ids),
+        )
     verb = "would clear" if dry_run else "clearing"
     for document in documents:
         LOGGER.warning(
@@ -306,6 +395,14 @@ async def clear_scope(
             document.source_path,
             len(document.chunk_ids),
         )
+    if orphan_chunk_ids:
+        LOGGER.warning(
+            "clear [%s, model %s] %s %d orphan Redis chunk keys (no MySQL row)",
+            corpus,
+            model_id,
+            verb,
+            len(orphan_chunk_ids),
+        )
     if not dry_run:
-        await delete_documents(engine, redis_client, corpus, model_id, documents)
-    return documents
+        await delete_documents(engine, redis_client, corpus, model_id, documents, orphan_chunk_ids)
+    return ClearResult(documents, orphan_chunk_ids)

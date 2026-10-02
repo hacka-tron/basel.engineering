@@ -257,7 +257,7 @@ async def test_delete_order_is_redis_then_version_then_mysql(monkeypatch):
         "mysql.delete",
         "mysql.commit",
     ]
-    assert events[0][1] == ("chunk:11", "chunk:12")
+    assert events[0][1] == ("chunk:11", "chunk:12", "chunktxt:11", "chunktxt:12")
     assert events[1][1] == "corpus:ver:about_me"
     assert [target for name, target in events if name == "mysql.delete"] == [
         "chunks",
@@ -298,7 +298,7 @@ def cli(monkeypatch):
         calls.setdefault("clear_documents", []).append(documents)
         if calls.get("clear_fails") and not dry_run:
             raise RuntimeError("mysql went away")
-        return planned if documents is None else documents
+        return sweep.ClearResult(planned if documents is None else documents, [])
 
     calls["planned"] = planned
 
@@ -407,3 +407,137 @@ def test_cli_prints_an_unmissable_banner_for_a_refused_sweep(monkeypatch, capsys
     out = capsys.readouterr()
     for stream in (out.out, out.err):
         assert "!!! STALE SWEEP REFUSED for about_system (titan): scan found zero files" in stream
+
+
+# --- orphan Redis keys and run notes -------------------------------------------
+
+
+class _ScanRedis:
+    """Fake Redis with hashes (as bytes), strings, scan_iter, hmget pipelines, delete, incr."""
+
+    def __init__(self, hashes):
+        self.hashes = hashes
+        self.deleted = []
+        self.versions = {}
+        self.scan_counts = []
+
+    async def scan_iter(self, match, count):
+        self.scan_counts.append(count)
+        for key in list(self.hashes):
+            yield key.encode()
+
+    def pipeline(self, transaction=True):
+        assert not transaction  # read-only batches
+        return _HmgetPipeline(self)
+
+    async def delete(self, *keys):
+        self.deleted.append(keys)
+
+    async def incr(self, key):
+        self.versions[key] = self.versions.get(key, 0) + 1
+
+
+class _HmgetPipeline:
+    def __init__(self, redis):
+        self.redis, self.keys = redis, []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def hmget(self, key, fields):
+        self.keys.append((key, fields))
+
+    async def execute(self):
+        return [
+            [self.redis.hashes.get(key, {}).get(field) for field in fields]
+            for key, fields in self.keys
+        ]
+
+
+def _hash(corpus, model):
+    return {"corpus": corpus.encode(), "model": sweep._model_tag(model).encode()}
+
+
+@pytest.mark.asyncio
+async def test_orphan_scan_matches_only_this_corpus_and_model_without_a_mysql_row():
+    redis = _ScanRedis(
+        {
+            "chunk:1": _hash("about_me", "titan"),  # known to MySQL: normal path
+            "chunk:2": _hash("about_me", "titan"),  # orphan
+            "chunk:3": _hash("about_system", "titan"),  # other corpus
+            "chunk:4": _hash("about_me", "other-model"),  # other model
+            "chunk:5": {},  # no fields: not matched
+            "chunk:x": _hash("about_me", "titan"),  # not a numeric id
+            "chunk:7": _hash("about_me", "titan"),  # orphan
+        }
+    )
+    orphans = await sweep.find_orphan_chunk_ids(redis, "about_me", "titan", [1])
+    assert orphans == [2, 7]
+    assert redis.scan_counts == [sweep.SCAN_BATCH]
+
+
+@pytest.mark.asyncio
+async def test_orphan_scan_batches_its_pipelines(monkeypatch):
+    monkeypatch.setattr(sweep, "SCAN_BATCH", 2)
+    redis = _ScanRedis({f"chunk:{i}": _hash("about_me", "titan") for i in range(1, 6)})
+    assert await sweep.find_orphan_chunk_ids(redis, "about_me", "titan", []) == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_clear_removes_orphans_and_chunk_text_without_documents(monkeypatch):
+    events = []
+    monkeypatch.setattr(sweep, "sessionmaker", _FakeSessionmaker(events))
+    redis = _ScanRedis({"chunk:9": _hash("about_me", "titan")})
+    monkeypatch.setattr(sweep, "load_scope_documents", lambda *a: [])
+    result = await sweep.clear_scope(None, redis, "about_me", "titan", dry_run=False)
+    assert result.documents == [] and result.orphan_chunk_ids == [9]
+    assert redis.deleted == [("chunk:9", "chunktxt:9")]
+    assert redis.versions == {"corpus:ver:about_me": 1}
+    assert events == []  # nothing for MySQL to do
+
+
+@pytest.mark.asyncio
+async def test_clear_dry_run_counts_orphans_and_deletes_nothing(monkeypatch):
+    redis = _ScanRedis(
+        {"chunk:91": _hash("about_me", "titan"), "chunk:92": _hash("about_me", "titan")}
+    )
+    monkeypatch.setattr(sweep, "load_scope_documents", lambda *a: _docs("a.md"))
+    result = await sweep.clear_scope(None, redis, "about_me", "titan", dry_run=True)
+    assert result.orphan_chunk_ids == [91, 92] and len(result.documents) == 1
+    assert redis.deleted == [] and redis.versions == {}
+
+
+def test_sweep_notes_records_mode_counts_and_refusals():
+    deleted = sweep.SweepPlan("about_me", "titan", known=5, seen_files=4, stale=_docs("a.md"))
+    deleted.deleted = True
+    refused = sweep.SweepPlan(
+        "about_system", "titan", known=10, seen_files=5, stale=_docs("b.md", "c.md")
+    )
+    refused.refused = "too many"
+    assert sweep.sweep_notes("apply", [deleted, refused]) == {
+        "sweep": {
+            "mode": "apply",
+            "corpora": [
+                {
+                    "corpus": "about_me",
+                    "model": "titan",
+                    "known": 5,
+                    "planned": 1,
+                    "deleted": 1,
+                    "refused": None,
+                },
+                {
+                    "corpus": "about_system",
+                    "model": "titan",
+                    "known": 10,
+                    "planned": 2,
+                    "deleted": 0,
+                    "refused": "too many",
+                },
+            ],
+        }
+    }
+    assert sweep.sweep_notes("off", []) == {"sweep": {"mode": "off", "corpora": []}}
