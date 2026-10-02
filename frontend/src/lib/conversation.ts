@@ -93,7 +93,7 @@ function isStorable(message: ChatMessage): boolean {
  * failed, or has no reply yet, is left out, so re-sending it (Retry, or
  * Up-arrow and Enter) never puts the same question in twice. A retrieval_only
  * (budget-exhausted) turn is left out whole, question and reply: the server said
- * nothing for it, and dropping both keeps user/assistant alternation.
+ * nothing for it, and dropping both avoids adding a lone user turn.
  */
 function isHistoryTurn(message: ChatMessage, next: ChatMessage | undefined): boolean {
   if (!message.content) return false
