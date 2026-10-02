@@ -624,6 +624,8 @@ function App() {
     setView: setMobileView,
     afterRender: (callback) => { requestAnimationFrame(callback) },
     focusDiagramToggle: () => diagramButtonRef.current?.focus(),
+    // Back, Escape, Chat or "Continue in chat" close the phone details sheet.
+    onReturnToChat: () => { setSelectedNode(null); pendingComponentRef.current = null },
   }))
   const showMobileView = diagramNav.showView
   isDesktopRef.current = isDesktop

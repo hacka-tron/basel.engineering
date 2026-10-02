@@ -15,16 +15,19 @@ function setup() {
     pushState(state: unknown) { stack.splice(index + 1); stack.push(state); index++; log.push('push') },
     back() { log.push('back') },
   }
+  let returns = 0
   const nav = createDiagramNav({
     history,
     setView: (next) => { view = next },
     afterRender: (cb) => frames.push(cb),
     focusDiagramToggle: () => { focused = 'diagram-toggle' },
+    onReturnToChat: () => { returns++ },
   })
   return {
     nav, log,
     get view() { return view },
     get focused() { return focused },
+    get returns() { return returns },
     focus(id: string) { focused = id },
     flush() { frames.splice(0).forEach((cb) => cb()) },
     // What the browser does for history.back(): move and fire popstate.
@@ -126,4 +129,20 @@ test('revealDiagram opens the diagram on mobile once, and does nothing on deskto
   assert.deepEqual(t.log, ['push'])
   t.back()
   assert.equal(t.view, 'chat')
+})
+
+test('every way back to chat closes the details sheet exactly once', () => {
+  for (const leave of ['chat-segment', 'escape', 'back'] as const) {
+    const t = setup()
+    openDiagram(t)
+    assert.equal(t.returns, 0)
+    if (leave === 'chat-segment') t.nav.showView('chat')
+    if (leave === 'escape') t.nav.handleKeyDown({ key: 'Escape', defaultPrevented: false })
+    t.back()
+    assert.equal(t.view, 'chat')
+    assert.equal(t.returns, 1, leave)
+  }
+  const reloaded = setup()
+  reloaded.nav.showView('chat')
+  assert.equal(reloaded.returns, 1)
 })
