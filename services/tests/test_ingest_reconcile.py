@@ -394,7 +394,11 @@ async def test_ingest_and_reindex_do_nothing_while_another_run_holds_the_lock(ca
     assert result.locked_out and result.docs_changed == 0
     assert await ingest_run.reindex(engine=object(), redis_client=held) is None
     assert held.value == "other-run"  # never released someone else's lock
-    assert "ANOTHER INGEST OR REINDEX HOLDS ingest:lock" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "ANOTHER INGEST OR REINDEX HOLDS ingest:lock" in err
+    # Each mode's banner states its own exit status.
+    assert "this ingest did nothing (it exits 0" in err
+    assert f"this reindex did nothing (it exits {ingest_run.REINDEX_LOCKED_OUT}" in err
 
 
 @pytest.mark.asyncio
@@ -411,7 +415,7 @@ async def test_lock_is_taken_with_a_ttl_and_released_by_token():
     assert redis.value == "someone-else"
 
 
-def test_cli_exits_zero_when_locked_out(monkeypatch):
+def test_cli_locked_out_ingest_exits_zero_but_reindex_fails(monkeypatch):
     async def fake_ingest(**kwargs):
         return ingest_run.RunResult(locked_out=True)
 
@@ -421,7 +425,8 @@ def test_cli_exits_zero_when_locked_out(monkeypatch):
     monkeypatch.setattr(ingest_run, "ingest", fake_ingest)
     monkeypatch.setattr(ingest_run, "reindex", fake_reindex)
     assert ingest_run.main([]) == 0
-    assert ingest_run.main(["--reindex"]) == 0
+    # An operator-requested reindex that did nothing must fail (Ops · Reindex).
+    assert ingest_run.main(["--reindex"]) == ingest_run.REINDEX_LOCKED_OUT
 
 
 # --- CLI ----------------------------------------------------------------------
@@ -483,3 +488,93 @@ def test_cli_prints_a_banner_for_a_refused_reconcile(monkeypatch, capsys):
     out = capsys.readouterr()
     for stream in (out.out, out.err):
         assert "!!! REDIS RECONCILE REFUSED for about_system (titan)" in stream
+
+
+@pytest.mark.asyncio
+async def test_prepare_index_drops_the_legacy_answer_index(monkeypatch):
+    """Every ingest and reindex drops idx:answers (if present) before touching idx:chunks."""
+    calls = []
+
+    async def fake_drop(client):
+        calls.append("drop idx:answers")
+        return False
+
+    async def fake_ensure(client):
+        calls.append("ensure idx:chunks")
+        return False
+
+    class TagsReady:
+        async def get(self, key):
+            return b"1"
+
+    monkeypatch.setattr(ingest_run, "drop_legacy_index", fake_drop)
+    monkeypatch.setattr(ingest_run, "ensure_index", fake_ensure)
+    await ingest_run.prepare_index(None, TagsReady())
+    assert calls == ["drop idx:answers", "ensure idx:chunks"]
+
+
+@pytest.mark.asyncio
+async def test_reindex_releases_the_lock_on_sigterm(monkeypatch):
+    """Kubernetes stops the Ops · Reindex Job with SIGTERM: the lock must not stay held."""
+    import asyncio
+    import os
+    import signal
+
+    redis = _LockRedis()
+
+    async def slow_reconcile(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    async def ready(*args):
+        return None
+
+    monkeypatch.setattr(ingest_run, "prepare_index", ready)
+    monkeypatch.setattr(ingest_run, "reconcile", slow_reconcile)
+    asyncio.get_running_loop().call_later(0.05, os.kill, os.getpid(), signal.SIGTERM)
+    with pytest.raises(asyncio.CancelledError):
+        await ingest_run.reindex(engine=object(), redis_client=redis)
+    assert redis.value is None  # released
+    assert ("eval", "ingest:lock") in redis.calls
+    # The handler is removed afterwards: SIGTERM is back to its default.
+    assert signal.getsignal(signal.SIGTERM) == signal.SIG_DFL
+
+
+def test_cli_reindex_exits_143_when_stopped(monkeypatch, capsys):
+    import asyncio
+
+    async def stopped(**kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ingest_run, "reindex", stopped)
+    assert ingest_run.main(["--reindex"]) == 143
+    assert "ingest:lock released" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_clear_takes_the_ingest_lock(monkeypatch, capsys):
+    """--clear holds ingest:lock; locked out it deletes nothing. A dry run needs no lock."""
+    calls = []
+
+    async def fake_clear_scope(engine, client, corpus, model_id, *, dry_run, **kwargs):
+        calls.append(dry_run)
+        return "result"
+
+    monkeypatch.setattr(ingest_run, "clear_scope", fake_clear_scope)
+    held = _LockRedis(holder="other-run")
+    assert (
+        await ingest_run.clear("about_me", model_id="m", engine=object(), redis_client=held) is None
+    )
+    assert calls == [] and held.value == "other-run"
+    assert "this clear did nothing (it exits 75" in capsys.readouterr().err
+    assert (
+        await ingest_run.clear(
+            "about_me", model_id="m", dry_run=True, engine=object(), redis_client=held
+        )
+        == "result"
+    )
+    free = _LockRedis()
+    assert (
+        await ingest_run.clear("about_me", model_id="m", engine=object(), redis_client=free)
+        == "result"
+    )
+    assert calls == [True, False] and free.value is None

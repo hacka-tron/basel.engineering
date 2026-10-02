@@ -70,7 +70,7 @@ Every instance, first boot or replacement, runs the same script:
 5. Install k3s (pinned version).
 6. Create the Kubernetes Secrets from SSM (DB password, origin-verify header value).
 7. Bootstrap Flux against the repo. Flux then applies everything in `k8s/overlays/prod`: Redis, API, workers, KEDA, and the jobs.
-8. The `ingest` Job runs after the rollout; its reconcile step finds the empty Redis vector index and rewrites every chunk key from MySQL (no `reindex` Job exists; see DESIGN.md §6.5).
+8. The `ingest` Job runs after the rollout; its reconcile step finds the empty Redis vector index and rewrites every chunk key from MySQL (no separate reindex step is needed; the owner-approved "Ops · Reindex" runbook exists for a MySQL-only restore; see DESIGN.md §6.5).
 
 Nothing in this script is specific to first boot, which is the whole point: a fresh machine and a replacement follow the identical path.
 

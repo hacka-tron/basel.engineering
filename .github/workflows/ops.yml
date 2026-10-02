@@ -7,7 +7,7 @@ name: Ops · reusable core (not run directly)
 #   ops-diagnose.yml, ops-reboot-node.yml, ops-restart-deployment.yml,
 #   ops-flux-suspend-resume.yml, ops-flux-reconcile.yml, ops-keda.yml,
 #   ops-cronjob-suspend-resume.yml, ops-apply-zram.yml,
-#   ops-list-snapshots.yml, ops-restore-snapshot.yml
+#   ops-list-snapshots.yml, ops-restore-snapshot.yml, ops-reindex.yml
 # (GitHub can't show inputs conditionally, hence one wrapper per runbook.)
 # There is no free-form command input on purpose: every action runs a
 # Terraform-managed SSM document (infra/modules/ops) or one fixed EC2 call

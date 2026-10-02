@@ -9,9 +9,9 @@ Short and current: who is coordinating, what state things are in, what is open, 
 **State:** the site is live and every merge to `main` deploys hands-off. 13 PRs merged overnight (#130–#135, #137–#143); summary in `project/status/2026-10-02-overnight-session.md`. zram is on. KEDA is suspended (owner hold). `warm-answers` is running. The alarms and snapshots Terraform apply is done.
 
 **Open PRs**
-- **#136 Ops · Reindex** (`feature/ops-reindex`, worktree `.worktrees/ops-reindex`): round 2 APPROVED, merged with main at 81fdd3b, CI green. **Waiting for the owner's go-ahead** (new privileged SSM document via the Terraform apply). Re-sync with main before merging.
+- None. #136 Ops · Reindex merged with the owner's go-ahead (2026-10-02).
 
-**Waiting on the owner:** the #136 go-ahead and the apply approval; the SNS confirmation email; **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
+**Waiting on the owner:** the Terraform apply approval for #136 (SSM document `glassbox-ops-reindex`); the SNS confirmation email; **Ops · List snapshots** / **Ops · Diagnose**. Other owner decisions are in BACKLOG "Open decisions".
 
 **Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
 

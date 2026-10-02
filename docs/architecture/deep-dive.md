@@ -190,7 +190,7 @@ Redis in Glassbox is `redis/redis-stack-server` 7.2, which includes RediSearch v
 Redis structures and keys:
 
 - **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id` and `content_sha` (SHA-256 of the chunk text; checked by the answer cache and the reconcile). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
-- **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes each source chunk's id and `content_sha`. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read.)
+- **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes each source chunk's id and `content_sha`. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read; ingest drops it without `DD`.)
 - **`emb:{sha256}`**: the embedding cache. 7-day TTL.
 - **`ret:{corpus}:v{version}:{sha256}`**: the retrieval cache. 1-hour TTL.
 - **`chunktxt:{chunk_id}`**: the chunk text cache. 1-day TTL.

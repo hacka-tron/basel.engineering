@@ -298,6 +298,8 @@ def cli(monkeypatch):
         calls.setdefault("clear_documents", []).append(documents)
         if calls.get("clear_fails") and not dry_run:
             raise RuntimeError("mysql went away")
+        if calls.get("clear_locked_out") and not dry_run:
+            return None
         return sweep.ClearResult(planned if documents is None else documents, [])
 
     calls["planned"] = planned
@@ -598,3 +600,9 @@ def test_mark_run_failed_records_notes_even_with_no_plans():
     ingest_run._mark_run_failed(Sessions(), 1, ingest_run.RunResult(), "apply")
     assert run.status == "failed"
     assert run.notes == {"sweep": {"mode": "apply", "corpora": []}}
+
+
+def test_cli_clear_exits_75_when_another_run_holds_the_lock(cli, capsys):
+    cli["clear_locked_out"] = True
+    assert ingest_run.main(["--clear", "--corpus", "about_me", "--yes"]) == 75
+    assert "another ingest or reindex is running" in capsys.readouterr().err
