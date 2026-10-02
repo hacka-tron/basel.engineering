@@ -264,6 +264,10 @@ class ClusterHub:
         self._backlog: int | None = None
         self._upstream: asyncio.Task | None = None
         self._linger: asyncio.Task | None = None
+        # Cancelled upstreams still closing their clients. The loop only keeps
+        # weak references to tasks, so hold them here: they are not garbage
+        # collected mid-close, and `aclose` can wait for them.
+        self._stopping: set[asyncio.Task] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self.upstream_starts = 0  # For tests and logs: how many times the watch started.
 
@@ -285,6 +289,7 @@ class ClusterHub:
             self._reset_state()
             self._upstream = None
             self._linger = None
+            self._stopping.clear()
 
     def _reset_state(self) -> None:
         self._pods.clear()
@@ -341,8 +346,11 @@ class ClusterHub:
             # Forget it at once: the cancelled task may still be closing its
             # clients, and a subscriber arriving meanwhile must start a fresh
             # upstream rather than wait on one that is going away.
-            self._upstream.cancel()
+            stopping = self._upstream
             self._upstream = None
+            self._stopping.add(stopping)
+            stopping.add_done_callback(self._stopping.discard)
+            stopping.cancel()
 
     def _offer(self, subscriber: Subscriber, item) -> None:
         try:
@@ -464,11 +472,17 @@ class ClusterHub:
         if self._loop is not asyncio.get_running_loop():
             return
         self._close_all()
+        stopping = list(self._stopping)
         for task in (self._linger, self._upstream):
             if task is not None and not task.done():
                 task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await task
+                stopping.append(task)
+        # Wait for every cancelled upstream to finish closing its clients.
+        # Already-cancelled ones are only awaited, not cancelled again, which
+        # would cut their close short.
+        for task in stopping:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
         self._linger = None
         self._upstream = None
 
