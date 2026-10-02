@@ -1,6 +1,6 @@
 # Portfolio corpus in the backend (portfolio spec PR 2)
 
-**Status:** PR open (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149)); review round 1 APPROVED, minors fixed. Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
+**Status:** Merged and live on build-107 (PR [#149](https://github.com/hacka-tron/basel.engineering/pull/149); review round 1 APPROVED, minors fixed; Release and post-deploy Stream check passed; Alembic `0007` applied automatically on deploy). Spec: `docs/superpowers/specs/2026-10-02-portfolio-design.md` §6. Plan: `docs/superpowers/plans/2026-10-02-portfolio-corpus-backend.md`.
 
 ## TL;DR
 `portfolio` is now a third corpus end to end in the backend: a content format with a CI check, the ingest scanner, the stale sweep, retrieval, `POST /api/ask`, MySQL (Alembic `0007`) and the answer warm-up all know it. The repo ships one draft example project, so nothing is indexed yet. Visitors see no change until the frontend PR (spec PR 3) adds the Portfolio topic.
@@ -59,4 +59,4 @@ To BACKLOG: the old-worker skew during a rollout (one CronJob run can exit 1) an
 - Portfolio write-ups pass through the planned marker in `api/ask.py`, so a write-up mentioning "SQS", "ASG", "deferred" or "planned" would be labelled as not built. Exempt `corpus/portfolio/` before real projects land (a prompt change: owner go-ahead).
 - Ops · Diagnose prints corpus versions for two corpora only; add `portfolio` with the next `ops` Terraform apply.
 - Portfolio eval and golden cases once the owner adds real projects.
-- Decide at PR 3 whether to hide the Portfolio topic until there is content.
+- ~~Decide whether to hide the Portfolio topic until there is content~~ Decided by the owner: hidden until the first published project ([#150](https://github.com/hacka-tron/basel.engineering/pull/150)).

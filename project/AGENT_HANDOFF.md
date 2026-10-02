@@ -2,17 +2,13 @@
 
 Short and current: who is coordinating, what state things are in, what is open, and where to look. Rewrite it (don't append) at each session end or coordinator switch. Older checkpoints: `project/archive/AGENT_HANDOFF-2026-09-29-to-10-01.md`.
 
-## Current — Claude, 2026-10-02 (portfolio planning done; owner cleared the session)
+## Current — Claude, 2026-10-02 (portfolio feature shipped; end of session)
 
-**Active coordinator:** none running; the next session coordinates. **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`.
+**Active coordinator:** none. **Review gate:** an Opus subagent with `project/orchestration/reviewer-brief.md`. **Open PRs:** none at this checkpoint (`gh pr list`), apart from the docs wrap-up PR from `docs/portfolio-wrapup` if it is still open.
 
-**Next action:** run the portfolio feature (BACKLOG "RESUME HERE" item 0). First merge the docs PR for branch `docs/portfolio-spec` (spec, three plans, this handoff; full CI because `docs/**` is corpus). Then dispatch PR 1 (`2026-10-02-open-to-work-footer.md`) and PR 2 (`2026-10-02-portfolio-corpus-backend.md`) in parallel worktrees; then PR 3a and, after PR 2 is deployed, PR 3b (`2026-10-02-portfolio-frontend.md`, split after its Task 3).
+**Done this session:** the portfolio feature, all merged and deployed with Release and post-deploy Stream checks passing. #146 spec, plans and handoff; #147 footer "Open to work" (build-106; review r1 changes needed, fixed, r2 approved); #149 `portfolio` corpus and Alembic `0007` (build-107); #148 phone diagram details sheet (build-109; r2 found React Flow handles swallowing taps in the strip, fixed and orchestrator-reviewed at the round cap); #150 Portfolio topic (build-110, merge commit 7c889f2; r1 keyboard focus, fixed, r2 approved). Owner decisions: the Portfolio topic, segment and "See portfolio →" stay hidden until at least one published project exists; on phones any tap in the diagram strip closes the open sheet, on desktop clicking another card switches. The Dockerfile now copies `corpus/portfolio` into the frontend stage (build-110 is the first release built with it). Feature worktrees and branches are cleaned up; the `mock/portfolio` and `mock/hire-banner` worktrees are removed (local branches remain, never merge them). Reports: `project/status/2026-10-02-{open-to-work-footer,portfolio-backend,phone-details-sheet,portfolio-frontend}.md`.
 
-**Owner decisions in this round** (all in the spec §2): Portfolio is a third chat topic; desktop right pane follows the topic (no tabs); phones get Chat | Diagram | Portfolio; card grid; pull-up sheets at 80% for projects and for phone diagram components; 15–16px sheet text; footer "● Open to work" → "Open to full-time work and freelancing" + Copy email; "See portfolio" link only after the portfolio ships; Back from Diagram/Portfolio clears the selection.
-
-**References (throwaway, never merge):** `mock/portfolio` (worktree `.claude/worktrees/agent-a01263ebcbb683826`) and `mock/hire-banner` (worktree `.claude/worktrees/agent-a8129ac02153a1001`). Remove both worktrees once PR 3b merges.
-
-**Open PRs:** only the docs PR for `docs/portfolio-spec`, if opened.
+**Next action:** the owner adds real projects under `corpus/portfolio/` (non-draft) with images in `frontend/public/portfolio/<slug>/`; the topic appears on the next release. Before real projects land, the owner decides the planned-marker prompt change (BACKLOG, "Open items from the portfolio backend": portfolio sources must not get `[PLANNED, not built yet]`); golden cases for Portfolio only after real projects. Other BACKLOG items are unchanged.
 
 **Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
 

@@ -1,6 +1,6 @@
 # Phone diagram details in a pull-up sheet
 
-**Status:** In review, [#148](https://github.com/hacka-tron/basel.engineering/pull/148) (PR 3a of the portfolio feature, stacked on #147). Not merged.
+**Status:** Merged and live on build-109 ([#148](https://github.com/hacka-tron/basel.engineering/pull/148), PR 3a of the portfolio feature). Review: round 1 APPROVED; round 2 changes needed (React Flow handles swallowed taps in the strip), fixed and checked by the orchestrator at the review-round cap. Owner decision: any tap in the strip closes the open phone sheet. Release and post-deploy Stream check passed.
 
 ## TL;DR
 
