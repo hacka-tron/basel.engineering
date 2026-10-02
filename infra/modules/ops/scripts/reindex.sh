@@ -13,8 +13,14 @@
 # ingest-job.yaml: ConfigMap, MySQL password reference, pull secret,
 # app=ingest label for the data NetworkPolicies). tests/reindex-test.sh
 # checks that those names still match. It refuses while a release is
-# rolling out or an ingest/reindex Job is running; the Redis lock
-# ingest:lock is the second guard (a locked-out --reindex exits 75).
+# rolling out, while an ingest/reindex Job is running, and until this
+# release's ingest Job has completed; the Redis lock ingest:lock is the
+# second guard (a locked-out --reindex exits 75). On its deadline
+# Kubernetes sends SIGTERM and --reindex releases the lock as it stops.
+#
+# Time budget (the document's on-node limit is 1800 s): kc calls are capped
+# at about 100 s each; 5 checks and the create (worst 500 s), the poll
+# (960 s plus one last call), then logs and status (200 s) stay under it.
 
 # reindex_manifest <job-name> <image>: the Job, on stdout.
 reindex_manifest() {
@@ -67,7 +73,7 @@ main() {
   exec </dev/null 2>&1
   set -euo pipefail
   local jobs line job_name active rollout generation observed want updated ready
-  local image name deadline state
+  local image ingest ingest_image ingest_complete name deadline state
 
   # 1. Nothing else may be writing the index: no running ingest Job (a
   # release) and no earlier reindex still going.
@@ -95,7 +101,21 @@ main() {
   [[ $image =~ ^[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/glassbox:[A-Za-z0-9._-]+$ ]] ||
     die "unexpected api image '$(printf '%s' "$image" | redact 120)'"
 
-  # 3. Create the Job and wait for it.
+  # 3. This release's ingest has already run: job/ingest exists, completed,
+  # with the api's image. A reindex started between the api rollout and
+  # Flux recreating job/ingest would hold ingest:lock when that ingest
+  # starts; a locked-out ingest exits 0, so the release's corpus changes
+  # would wait for the next release. (A release that starts after this check
+  # can still meet a running reindex: same outcome, a much smaller window.)
+  ingest=$(kc -n app get job ingest -o jsonpath='{.spec.template.spec.containers[?(@.name=="ingest")].image}|{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null) ||
+    die "job/ingest not found; Flux recreates it each release (run the Flux reconcile runbook), then run this again"
+  IFS='|' read -r ingest_image ingest_complete <<<"$ingest"
+  [ "$ingest_image" = "$image" ] ||
+    die "job/ingest runs ${ingest_image##*/}, not the api's ${image##*/}: this release's ingest has not run yet; wait for it, then run this again"
+  [ "$ingest_complete" = True ] ||
+    die "job/ingest has not completed (running, or failed: check Diagnose); run this once it has"
+
+  # 4. Create the Job and wait for it.
   name="ops-reindex-$(date -u +%Y%m%d%H%M%S)"
   log "creating job/$name with image ${image##*/}"
   reindex_manifest "$name" "$image" | kc create --field-manager=glassbox-ops -f -

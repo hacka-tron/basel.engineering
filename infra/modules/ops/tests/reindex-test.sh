@@ -23,7 +23,7 @@ check() { # check <label> <condition-exit-status>
 IMAGE=123456789012.dkr.ecr.us-east-1.amazonaws.com/glassbox:build-42
 
 # run_main: runs main in a subshell with the stubs below; prints its output.
-# Scenario variables: JOBS, ROLLOUT, API_IMAGE, JOB_STATE.
+# Scenario variables: JOBS, ROLLOUT, API_IMAGE, INGEST, JOB_STATE.
 run_main() {
   (
     # shellcheck source=../scripts/lib.sh
@@ -37,6 +37,10 @@ run_main() {
         *"get jobs -o jsonpath"*) printf '%b' "$JOBS" ;;
         *"get deployment api -o jsonpath={.metadata.generation}"*) echo "$ROLLOUT" ;;
         *"get deployment api -o jsonpath={.spec.template"*) echo "$API_IMAGE" ;;
+        *"get job ingest -o jsonpath="*)
+          [ "$INGEST" != missing ] || return 1
+          echo "$INGEST"
+          ;;
         "create --field-manager=glassbox-ops -f -") cat >"$created" ;;
         *"get job ops-reindex-"*"-o jsonpath=complete="*)
           case "$JOB_STATE" in
@@ -59,6 +63,7 @@ reset() {
   JOBS='ingest \nwarm-answers-29000 1\n'
   ROLLOUT='3|3|1|1|1'
   API_IMAGE=$IMAGE
+  INGEST="$IMAGE|True"
   JOB_STATE=ok
 }
 
@@ -112,6 +117,15 @@ refuses "api new pods not rolled out (missing field doesn't shift)" "mid-rollout
 reset
 API_IMAGE='evil.example.com/glassbox:build-1'
 refuses "unexpected image" "unexpected api image"
+reset
+INGEST=missing
+refuses "no ingest Job yet" "job/ingest not found"
+reset
+INGEST="${IMAGE%:*}:build-41|True"
+refuses "ingest Job still the previous release's" "this release's ingest has not run yet"
+reset
+INGEST="$IMAGE|"
+refuses "this release's ingest not completed" "job/ingest has not completed"
 
 # 4. A failed or unfinished Job fails the run, after printing its log.
 reset

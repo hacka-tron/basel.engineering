@@ -102,7 +102,7 @@ locals {
       script      = "reindex.sh"
       fixed_args  = []
       parameters  = []
-      timeout     = 1200
+      timeout     = 1800
     }
     cronjob-suspend = {
       description = "Suspend one known CronJob in the app namespace."

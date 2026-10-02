@@ -394,7 +394,11 @@ async def test_ingest_and_reindex_do_nothing_while_another_run_holds_the_lock(ca
     assert result.locked_out and result.docs_changed == 0
     assert await ingest_run.reindex(engine=object(), redis_client=held) is None
     assert held.value == "other-run"  # never released someone else's lock
-    assert "ANOTHER INGEST OR REINDEX HOLDS ingest:lock" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "ANOTHER INGEST OR REINDEX HOLDS ingest:lock" in err
+    # Each mode's banner states its own exit status.
+    assert "this ingest did nothing (it exits 0" in err
+    assert f"this reindex did nothing (it exits {ingest_run.REINDEX_LOCKED_OUT}" in err
 
 
 @pytest.mark.asyncio
@@ -507,3 +511,40 @@ async def test_prepare_index_drops_the_legacy_answer_index(monkeypatch):
     monkeypatch.setattr(ingest_run, "ensure_index", fake_ensure)
     await ingest_run.prepare_index(None, TagsReady())
     assert calls == ["drop idx:answers", "ensure idx:chunks"]
+
+
+@pytest.mark.asyncio
+async def test_reindex_releases_the_lock_on_sigterm(monkeypatch):
+    """Kubernetes stops the Ops · Reindex Job with SIGTERM: the lock must not stay held."""
+    import asyncio
+    import os
+    import signal
+
+    redis = _LockRedis()
+
+    async def slow_reconcile(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    async def ready(*args):
+        return None
+
+    monkeypatch.setattr(ingest_run, "prepare_index", ready)
+    monkeypatch.setattr(ingest_run, "reconcile", slow_reconcile)
+    asyncio.get_running_loop().call_later(0.05, os.kill, os.getpid(), signal.SIGTERM)
+    with pytest.raises(asyncio.CancelledError):
+        await ingest_run.reindex(engine=object(), redis_client=redis)
+    assert redis.value is None  # released
+    assert ("eval", "ingest:lock") in redis.calls
+    # The handler is removed afterwards: SIGTERM is back to its default.
+    assert signal.getsignal(signal.SIGTERM) == signal.SIG_DFL
+
+
+def test_cli_reindex_exits_143_when_stopped(monkeypatch, capsys):
+    import asyncio
+
+    async def stopped(**kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ingest_run, "reindex", stopped)
+    assert ingest_run.main(["--reindex"]) == 143
+    assert "ingest:lock released" in capsys.readouterr().err

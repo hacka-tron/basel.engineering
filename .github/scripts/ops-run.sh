@@ -468,8 +468,9 @@ act() {
       send_and_wait "glassbox-ops-$action" "$parameters" 600 "$action $CRONJOB"
       ;;
     reindex)
-      # The document refuses mid-release and waits up to 16 minutes for the Job.
-      send_and_wait glassbox-ops-reindex '{}' 1260 "reindex"
+      # The document refuses mid-release, waits up to 16 minutes for the Job
+      # and stops itself at 30 (on-node limit 1800 s); wait a minute longer.
+      send_and_wait glassbox-ops-reindex '{}' 1860 "reindex"
       ;;
     apply-zram)
       apply_zram

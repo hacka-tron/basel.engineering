@@ -1,6 +1,6 @@
 # Ops · Reindex runbook, old answer index dropped, chunk text cache fix
 
-**Status:** PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136) open, review pending. **Live:** the index drop and the cache fix ship with the first release after merge; the runbook works once the Terraform workflow applies the new SSM document (one owner approval click, as for every new runbook).
+**Status:** PR [#136](https://github.com/hacka-tron/basel.engineering/pull/136): review round 1 APPROVED, minors fixed; **waiting for the owner's go-ahead before merge** (new privileged SSM document). **Live:** the index drop and the cache fix ship with the first release after merge; the runbook works once the Terraform workflow applies the new SSM document (one owner approval click, as for every new runbook).
 
 ## TL;DR
 
@@ -30,7 +30,7 @@ flowchart LR
 
 - **Runbook** (`.github/workflows/ops-reindex.yml` → `ops.yml` action `reindex` → `.github/scripts/ops-run.sh` → SSM document `glassbox-ops-reindex` = `infra/modules/ops/scripts/reindex.sh`). It works like every other mutating runbook: a read-only diagnose first, then the owner's approval in the `ops` environment, then the action, then diagnose again.
 - **The Job:** named `ops-reindex-<UTC timestamp>`. It uses the image of the `api` Deployment and the ingest Job's ConfigMap, MySQL password reference, pull secret and `app: ingest` label (the data NetworkPolicies only let listed apps reach MySQL and Redis). It never retries, Kubernetes stops it after 15 minutes, and it is deleted a day after it finishes. The script prints the Job's last 100 log lines (passed through the redaction filter).
-- **Guards:** the runbook creates nothing while the release `ingest` Job or an earlier reindex Job is running, or while `api` is mid-rollout. It also refuses if the image is not the project's ECR `glassbox` image. A second guard is the Redis lock `ingest:lock`: if another run holds it, `--reindex` now exits 75 instead of 0, so the runbook fails visibly instead of reporting success after doing nothing. The ingest Job's own locked-out run still exits 0, so a release isn't failed by this.
+- **Guards:** the runbook creates nothing while the release `ingest` Job or an earlier reindex Job is running, while `api` is mid-rollout, or until this release's `ingest` Job has completed with the api's image. It also refuses if the image is not the project's ECR `glassbox` image. A second guard is the Redis lock `ingest:lock`: if another run holds it, `--reindex` now exits 75 instead of 0, so the runbook fails visibly instead of reporting success after doing nothing. The ingest Job's own locked-out run still exits 0, so a release isn't failed by this.
 - **Index drop:** `drop_legacy_index` (`services/glassbox/cache/answer.py`) runs at the start of `prepare_index`, which every ingest and reindex calls. "Unknown index" means already dropped and is a no-op; any other Redis error fails the run, just as an `idx:chunks` error would.
 
 ## Key decisions and trade-offs
@@ -43,7 +43,11 @@ flowchart LR
 
 ## What review caught
 
-Pending.
+Round 1 (Opus): approved, no Critical or Important findings. The four minor findings were fixed:
+- **Race with the release ingest.** A reindex could start after the api rollout but before Flux recreated `job/ingest`. That ingest would then be locked out (exit 0), and the release's corpus changes skipped until the next release. The runbook now also requires `job/ingest` to have completed with the api's image. A release that starts during a reindex is still possible, in a much smaller window.
+- **Wrong exit status in the lock banner.** It always said "exits 0"; it now states each mode's real status (ingest 0, reindex 75).
+- **Time budget.** Worst-case kubectl timeouts plus the poll could outrun the 1200 s on-node limit and lose the log. The limit is now 1800 s, and the workflow waits 1860 s.
+- **Lock held after a deadline kill.** At its deadline Kubernetes sends SIGTERM. `--reindex` now cancels itself on SIGTERM and releases `ingest:lock` (exit 143), so a killed reindex no longer blocks the next release's ingest for 30 minutes. Only a hard kill (SIGKILL after the 30 s grace period, or a node crash) still leaves the lock held until its TTL.
 
 ## Operational notes and risks
 
@@ -54,7 +58,7 @@ Pending.
 
 ## How to verify
 
-- Offline: `bash infra/modules/ops/tests/reindex-test.sh` (22 checks: happy path, every refusal, failed and unfinished Jobs, no Secret reads, name parity with the ingest Job). Python: `services/tests/test_answer_cache.py` (drop keeps keys and is idempotent, other errors raise, new chunk keys drop cached text), `test_ingest_reconcile.py` (`prepare_index` drops the old index; a locked-out `--reindex` exits 75).
+- Offline: `bash infra/modules/ops/tests/reindex-test.sh` (25 checks: happy path, every refusal (including the release-ingest check), failed and unfinished Jobs, no Secret reads, name parity with the ingest Job). Python: `services/tests/test_answer_cache.py` (drop keeps keys and is idempotent, other errors raise, new chunk keys drop cached text), `test_ingest_reconcile.py` (`prepare_index` drops the old index; a locked-out `--reindex` exits 75; SIGTERM releases the lock and exits 143).
 - Live, after the next release: the ingest Job log has one `Dropped the unused answer index idx:answers` warning, and later releases don't. Diagnose doesn't list Redis indexes, so this log line is the check.
 - Live, after the Terraform apply: run **Actions → Ops · Reindex**, approve, and check that the summary shows `reconcile about_me: ... rewritten=N` and `about_system` lines and that the after-diagnose looks healthy.
 

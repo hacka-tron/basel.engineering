@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import re
+import signal
 import struct
 import sys
 import uuid
@@ -83,15 +84,21 @@ return 0
 """
 
 
+_LOCKED_OUT_OUTCOME = {
+    "ingest": "it exits 0 so the Job doesn't fail; the next run catches up",
+    "reindex": f"it exits {REINDEX_LOCKED_OUT}; run the reindex again once the other run ends",
+}
+
+
 @asynccontextmanager
-async def ingest_lock(redis_client):
+async def ingest_lock(redis_client, mode: str = "ingest"):
     """Hold ``ingest:lock`` for one ingest or reindex; yields False if another holds it."""
     token = uuid.uuid4().hex
     acquired = await redis_client.set(INGEST_LOCK_KEY, token, nx=True, px=INGEST_LOCK_TTL_MS)
     if not acquired:
         message = (
-            f"!!! ANOTHER INGEST OR REINDEX HOLDS {INGEST_LOCK_KEY}; this run did nothing "
-            "(it exits 0 so the Job doesn't fail; the next run catches up) !!!"
+            f"!!! ANOTHER INGEST OR REINDEX HOLDS {INGEST_LOCK_KEY}; this {mode} did nothing "
+            f"({_LOCKED_OUT_OUTCOME[mode]}) !!!"
         )
         LOGGER.error(message)
         print(message)
@@ -415,6 +422,11 @@ async def reindex(
     embedding API (the vectors come from MySQL); idempotent. Orphan keys are
     removed under the zero-row guard (the fraction guard is lifted). Returns None,
     doing nothing, when another ingest or reindex holds ``ingest:lock``.
+
+    SIGTERM (Kubernetes stopping the Ops · Reindex Job at its deadline) cancels
+    the run, so the lock is released on the way out instead of blocking the next
+    release's ingest for up to its 30-minute TTL; ``asyncio.CancelledError``
+    then propagates to the caller.
     """
     model_id = get_embedding_provider().model_id
     own_engine = engine is None
@@ -422,13 +434,21 @@ async def reindex(
     engine = engine or create_db_engine()
     if redis_client is None:
         redis_client = redis.from_url(os.environ["REDIS_URL"])
+    loop = asyncio.get_running_loop()
     try:
-        async with ingest_lock(redis_client) as acquired:
+        loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
+        handles_sigterm = True
+    except (NotImplementedError, RuntimeError, ValueError):  # not the main thread
+        handles_sigterm = False
+    try:
+        async with ingest_lock(redis_client, "reindex") as acquired:
             if not acquired:
                 return None
             await prepare_index(sessionmaker(bind=engine), redis_client)
             return await reconcile(engine, redis_client, model_id, force=True)
     finally:
+        if handles_sigterm:
+            loop.remove_signal_handler(signal.SIGTERM)
         if own_redis:
             await redis_client.aclose()
         if own_engine:
@@ -649,6 +669,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.reindex:
         try:
             reports = asyncio.run(reindex())
+        except asyncio.CancelledError:
+            print("reindex stopped by SIGTERM; ingest:lock released", file=sys.stderr)
+            return 143
         except Exception:
             LOGGER.exception("Reindex failed")
             return 1
