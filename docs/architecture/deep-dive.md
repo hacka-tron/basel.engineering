@@ -4,7 +4,7 @@ This document describes how the Glassbox system behind basel.engineering works t
 
 ## System overview: what Glassbox is and its components
 
-Glassbox is the chatbot on the basel.engineering portfolio site. A visitor picks one of two corpora, "About Me" (Basel's work history, projects and skills) or "About This System" (this repository's code, Kubernetes manifests, Terraform and design docs), and asks a question. A third corpus, `portfolio` (Basel's other projects, from `corpus/portfolio/`), is indexed and accepted by the API; the site offers it once the Portfolio topic is added to the frontend. Glassbox answers with retrieval-augmented generation (RAG): it embeds the question, finds the most similar document chunks in a Redis vector index, and has a language model on Amazon Bedrock write a short answer grounded only in those chunks. The answer streams to the browser over Server-Sent Events (SSE), and a live architecture diagram next to the chat lights up each component as the request passes through it.
+Glassbox is the chatbot on the basel.engineering portfolio site. A visitor picks one of two corpora, "About Me" (Basel's work history, projects and skills) or "About This System" (this repository's code, Kubernetes manifests, Terraform and design docs), and asks a question. Glassbox answers with retrieval-augmented generation (RAG): it embeds the question, finds the most similar document chunks in a Redis vector index, and has a language model on Amazon Bedrock write a short answer grounded only in those chunks. The answer streams to the browser over Server-Sent Events (SSE), and a live architecture diagram next to the chat lights up each component as the request passes through it.
 
 The whole Glassbox system runs on one small AWS EC2 instance (a `t4g.small` with 2 GiB of memory) running k3s, a lightweight Kubernetes distribution. Cloudflare sits in front of it for DNS, TLS and proxying.
 
@@ -45,7 +45,7 @@ Non-goals are just as deliberate: no high availability (a single node by design)
 
 ## Request lifecycle, part 1: from the browser to the answer cache
 
-When a visitor asks a question, the browser sends `POST /api/ask` with a JSON body of `question` (1 to 1,000 characters), `corpus` (`about_me`, `about_system` or `portfolio`) and an optional `history` of earlier chat turns. The API responds with a `text/event-stream` SSE stream and assigns the request a 26-character ULID `request_id`. The request passes through Cloudflare, then Traefik on the k3s node, then the `api` Service. Cloudflare has a cache rule that bypasses caching for `/api/*`, so the SSE stream is never buffered at the edge.
+When a visitor asks a question, the browser sends `POST /api/ask` with a JSON body of `question` (1 to 1,000 characters), `corpus` (`about_me`, `about_system` or `portfolio`) and an optional `history` of earlier chat turns. The third corpus, `portfolio` (Basel's other projects, from `corpus/portfolio/`), is indexed and accepted by the API; the site offers it once the Portfolio topic is added to the frontend. The API responds with a `text/event-stream` SSE stream and assigns the request a 26-character ULID `request_id`. The request passes through Cloudflare, then Traefik on the k3s node, then the `api` Service. Cloudflare has a cache rule that bypasses caching for `/api/*`, so the SSE stream is never buffered at the edge.
 
 The API then runs these steps in order, emitting `stage` events so the diagram can follow along:
 
