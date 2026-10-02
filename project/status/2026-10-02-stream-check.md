@@ -1,6 +1,6 @@
 # Post-deploy streaming check through Cloudflare
 
-**Status:** PR open (branch `feature/post-deploy-stream-check`). Review: pending.
+**Status:** PR open ([#143](https://github.com/hacka-tron/basel.engineering/pull/143), branch `feature/post-deploy-stream-check`). Review: pending.
 **Design:** `docs/DESIGN-002-followups.md` §7.5 and §7.8; DESIGN-004 §7 item 2.
 
 ## TL;DR
