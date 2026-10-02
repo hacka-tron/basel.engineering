@@ -67,7 +67,7 @@ JetBrains Mono is wide (~0.6em per character), so everything wraps sooner than a
 3. Check at each width: no horizontal scroll, no text clipped or overflowing, nothing overlapping, bottom bar and chat input visible, tap targets usable, diagram view (mobile: all 11 nodes visible, a component tap opens the details panel, its chevron and a tap on empty space deselect back to the locked bar, a pan keeps the selection, Escape deselects first and then returns to chat, Back returns to chat; landscape phones: the rotate screen, and turning back upright keeps the conversation, a streaming answer and the selection) and diagram nodes + arrows visible (desktop).
 4. Fix everything found in **one batch**, re-check once, stop. Don't polish in an open-ended loop.
 5. `npm run lint && npm run build` pass.
-6. The Codex review gate (`project/orchestration/codex-reviewer.md`) for a UI change should include the same width checklist.
+6. The review gate (`project/orchestration/reviewer-brief.md`) for a UI change should include the same width checklist.
 
 ## Manual phone preview (for the owner and for agents)
 

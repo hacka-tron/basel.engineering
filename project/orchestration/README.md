@@ -1,41 +1,58 @@
 # Multi-model orchestration
 
-How work is split between models on this project, plus the dispatch template for the Codex review gate, so Claude (the orchestrator) fills in a template instead of re-deriving the boilerplate each time.
+How work is split between models on this project, how every change passes the review gate, and how PRs get merged. Claude (the orchestrator) fills in templates here instead of re-deriving boilerplate. Generic version of this guide: `~/Coding/template/agent-orchestration.md`.
 
-- `codex-reviewer.md` — dispatch template + CLI constraints for the Codex review gate. **Every change goes through it before being checked in** — "checked in" means merged to `main` (or a PR marked ready); work-in-progress commits on a feature branch come first and are what Codex reviews.
+- `reviewer-brief.md` — the review-gate dispatch template (Opus subagent by default, Codex optional) and the Codex CLI form.
 - `reviewer-primer.md` — what every reviewer reads first (system map, hard rules, known traps, per-area checklist).
-- `gemini-reviewer.md` — older fallback reviewer (via `agy`); its quota has been exhausted since 2026-09-30.
+- Legacy, kept for history: `project/archive/CODEX.md` (Codex as implementer) and `project/archive/gemini-reviewer.md` (Gemini via `agy`).
 
-**When Codex is out of usage** (the case since 2026-10-01), an Opus subagent (`Agent` tool, `model: "opus"`) is the review gate. Give it the same prompt as `codex-reviewer.md` (requirements, prior rounds, status report, the change, "your job", the report format) and tell it to read `reviewer-primer.md` first. Same rules: it validates but does not edit, commit, push or touch live infrastructure.
+## Roles (as of 2026-10-02)
 
-## Roles (as of 2026-09-30 — owner moved Claude to a Max plan)
+- **Claude Opus: orchestrator.** Owns the plan, the specs, judgment calls, reading reports, the merge sequence and talking to the owner. Only Claude (the orchestrator or its subagents) commits, pushes and merges. It chooses per task who does the hands-on work:
+  - **Opus itself:** small or judgment-heavy changes where writing the spec would take longer than the change.
+  - **Opus subagent** (`Agent`, `model: "opus"`): larger features with design or correctness risk (cache semantics, concurrency, security, cost controls), scoping that needs design judgment, and **reviews**.
+  - **Sonnet subagent** (`model: "sonnet"`): well-specified implementation, dev-server and browser verification loops, test/lint/build legwork, surveys for a scoping brief, status-report writing.
+  - **Haiku subagent** (`model: "haiku"`): mechanical low-risk edits and searches.
+- **Reviewer (the gate):** an **Opus subagent** with `reviewer-brief.md` by default. **Codex** (`gpt-6-sol`) is optional, used only when it has usage, with the same brief. Gemini is legacy. Never skip review because a reviewer is out of quota; switch to the other one. Reviewers validate hands-on but never edit, commit, push, merge or touch live infrastructure.
+- **The owner:** decisions only the owner can make (BACKLOG "Open decisions"), approval clicks on the Bootstrap, Terraform and "Ops · ..." workflows, and go-aheads for live-effect merges (below). The owner never runs AWS or Terraform by hand.
 
-- **Claude Opus (orchestrator + implementer):** owns the blueprint, the plan, and the implementation. Opus decides per task which model does the hands-on work:
-  - **Opus itself** — small or judgment-heavy changes where writing the spec would take longer than the change.
-  - **Opus subagent** (`Agent` tool, `model: "opus"`) — larger features with real design/correctness risk (e.g. cache semantics, concurrency, security-relevant code).
-  - **Sonnet subagent** (`model: "sonnet"`) — well-specified implementation, browser/dev-server verification loops (`claude-in-chrome` screenshots, DOM inspection), test/lint/build legwork.
-  - **Haiku subagent** (`model: "haiku"`) — mechanical, low-risk edits and searches.
-  - **Parallelize by default.** Independent work streams each get their own git worktree under `.worktrees/` and their own subagent, dispatched in the same turn. Give each concurrent stream distinct local ports (e.g. API 8000/8001, Vite 5173/5174) and tell them not to stop/recreate a shared `docker compose` stack.
-  - **Delegate scoping and research to subagents to keep the orchestrator's context short.** The orchestrator's conversation gets long fast (reviews, fix rounds, owner feedback), and a bloated context costs more and degrades judgment. Reading design docs, surveying code, mining history/transcripts, comparing options, and drafting a spec or plan go to a subagent (Sonnet for surveys and reading, Opus when the scoping needs real design judgment) that returns a compact brief: the relevant file:line pointers, the spec or plan, open questions for the owner, and risks. The orchestrator reads the brief, decides, and dispatches implementation — it should not re-read the files the brief already summarized. Keep in the main context only what's needed to decide and to talk to the owner.
-  - **Keep a feature pipeline moving.** When the current features are in review or waiting on the owner (merge grants, approvals), start the next item from `project/BACKLOG.md`'s `> RESUME HERE` list: dispatch a scoping subagent for it right away so implementation can start as soon as the brief lands.
-- **Codex (`gpt-6-sol`) — reviewer and check-in gate, not implementer.** Before anything is merged to `main` or a PR is marked ready, Codex reviews the committed feature-branch diff against its requirements and **validates** it: reads the diff and the spec, re-runs tests/lint/build itself, and can bring up services to exercise the change. Runs in agentic mode with full permissions (`--dangerously-bypass-approvals-and-sandbox`) so it has network, can run `docker compose`, bind ports and write git metadata in worktrees. It still must not edit files, commit, push, or touch live AWS/Kubernetes — its output is a verdict, not changes. See `codex-reviewer.md`.
-- **Fix loop:** Opus (or the implementing subagent) fixes every Critical/Important finding, then re-runs the reviewer on the updated diff. **Round cap (owner rule):** after 2 rounds, only a Critical finding, or an Important one with a reachable failure scenario, blocks the merge; everything else is logged in `project/BACKLOG.md` and the PR merges. If a blocking finding is disputed, bring it to the owner.
-- **Track review state per PR.** Keep a short list of open PRs with their round number, last verdict and what was fixed since, so nothing merges unreviewed and nothing waits on a review nobody started.
-- **Infra dispatches restate the hard rules** every time, in both implementer and reviewer prompts: never read, open or copy any `terraform.tfstate` or plan file; no `terraform apply`, no AWS/kubectl writes against the live system. Live changes happen only through the Terraform, Bootstrap and "Ops · ..." workflows after the owner's approval click. The owner does not run AWS or Terraform by hand; give the owner the click to make, not commands.
+## Working rules
+
+- **Parallelize by default.** Independent streams each get a branch in `.worktrees/<name>` and their own subagent, dispatched in the same turn. Give each stream distinct ports (API 8000/8001, Vite 5173/5174) and tell it not to stop or recreate the shared `docker compose` stack. About 3 concurrent reviews or heavy builds at most; agents delete the `node_modules`, `dist` and `.terraform` they create.
+- **Delegate scoping and research to subagents** (Sonnet for surveys, Opus when it needs design judgment) and ask for a compact brief: file:line pointers, the spec or plan, owner questions, risks. Don't re-read what the brief summarized.
+- **Keep a feature pipeline moving.** When current work waits on review or the owner, dispatch scoping for the next `> RESUME HERE` item.
+- **Every dispatch restates the hard rules** (implementer and reviewer, every time; subagents don't inherit standing instructions):
+  - never read, open or copy any `terraform.tfstate`, `*.tfstate.backup`, `*.tfvars` or plan file;
+  - no `terraform apply`, no AWS/SSM/`kubectl` writes against the live system, no GitHub environment or secret changes;
+  - never run `git stash`.
+  Live changes happen only through the Terraform, Bootstrap and "Ops · ..." workflows after the owner's approval click; give the owner the click, never commands.
+- **Unique scratch file names** (`pr<n>-body.md`, `pr<n>-review-r1-prompt.md`): parallel agents share the scratchpad.
+- **Stacked and chained PRs.** Never rebase a pushed branch; merge `main` into it. Cut dependent work from the branch it builds on and open its PR against that branch. Chain PRs that touch the same files and state the merge order in each PR body. Trial-merge parallel approved PRs (`git merge-tree --write-tree <a> <b>`, or a scratch merge plus tests) and look for semantic conflicts git won't flag. Retarget a stacked PR (REST, below) before deleting its base branch; deleting the base closes the PR.
 
 ## What "checked in" means
 
-1. Implementation + tests committed on a feature branch in its worktree (not yet checked in — this is the input to review).
-2. Codex review returns **APPROVED** (or CHANGES NEEDED → fixed → APPROVED).
-3. Real end-to-end verification done (review-by-reading doesn't catch integration bugs — see `gemini-reviewer.md`).
-4. PR opened with the review verdict summarized in the description. Once the verdict is APPROVED and CI is green, merge **without asking the owner** (`gh pr merge` as its own command), except for step 6 changes.
-5. For a substantial feature or change: a status report in `project/status/` (`YYYY-MM-DD-<slug>.md`, format in `project/status/README.md`) is written when the PR opens and added to that folder's index, then updated at merge and at deploy. A subagent can write it from the PR body, the Codex review results and the commit log.
-6. Anything that changes the live cluster on merge (Flux applies `k8s/overlays/prod` from the `deploy` branch) or grants new permissions (RBAC, IAM) needs the owner's explicit go-ahead before merge.
+1. Implementation and tests committed on a feature branch in its worktree.
+2. The reviewer returns **APPROVED** (or CHANGES NEEDED, fixed, re-reviewed, APPROVED, within the round cap).
+3. Real end-to-end verification by the orchestrator or a verification subagent (review-by-reading misses integration bugs).
+4. PR open, with the reviewer, round and verdict recorded in the PR body, and for a substantial change a status report in `project/status/` (written when the PR opens, updated at merge and at deploy; format in `project/status/README.md`).
+5. The merge sequence (below) completed.
+6. Anything that changes the live cluster or AWS on merge beyond a normal release (a new Flux component or Kustomization, ConfigMap/infra applied by GitOps) or grants permissions (RBAC, IAM, trust policies) needs the owner's explicit go-ahead before merge.
 
-## Division of labor for git
+**Round cap: 2.** Fix every Critical/Important finding and re-run the reviewer with the previous result file and the list of fixes. After round 2, only Critical findings, or Important findings with a reachable failure scenario, block the merge; everything else goes to `project/BACKLOG.md` (tell the owner). Disputed blocking findings go to the owner. Track each open PR's review state (round, verdict, fixes since, re-review pending) so nothing merges unreviewed and no fix sits unreviewed. Copy-only or one-class changes can be reviewed by the orchestrator from the diff plus a screenshot; say so in the PR.
 
-Only Claude (orchestrator or its implementing subagents) commits and pushes. Codex has full permissions for validation but is instructed not to commit, push, or modify files.
+## Merging
+
+Agents merge **without asking** once the review is APPROVED and CI is green (owner, reconfirmed 2026-10-02), except step 6 changes.
+
+1. **Record the review in the PR body** through REST: `gh api -X PATCH repos/hacka-tron/basel.engineering/pulls/<n> -F body=@<scratch>/pr<n>-body.md`. `gh pr edit` fails on this repo (the deprecated projectCards GraphQL field errors); use REST for retargets too (`-f base=main`).
+2. **Re-sync:** `gh pr update-branch <n>`, pull the new head into the worktree, and run the **full** test suite on that merged tree (`.venv/bin/python -m pytest services/tests -q`, plus frontend lint/test/build when `frontend/` changed).
+3. **Wait for CI:** `gh pr checks <n> --watch --fail-fast` in the background.
+4. **Merge as its own command:** `gh pr merge <n> --merge` (this repo uses merge commits), not chained with other commands. Then update the status report and the PR's dependents.
+
+## Coordinator handoff
+
+`project/AGENT_HANDOFF.md` holds only the current coordinator, the current state, open PRs and where to look; older checkpoints are in `project/archive/`. On a coordinator switch (or a session ending low on tokens), the outgoing agent commits, pushes and rewrites the handoff: branch/worktree/commit, tests actually run, open PRs with review state, blockers and the next action.
 
 ## History
 
-Until 2026-09-30 the roles were reversed: Codex (`workspace-write` sandbox, no network) implemented from exact specs, a Sonnet subagent did frontend verification, and Gemini reviewed. The pilot findings behind that setup are in `project/BACKLOG.md`; the Codex CLI constraints learned then (model choice, headless behavior) still apply and are carried into `codex-reviewer.md`.
+Until 2026-09-30 Codex implemented from exact specs and Gemini reviewed; from 2026-09-30 Claude implemented and Codex was the gate; since 2026-10-01 Codex has mostly been out of usage and an Opus subagent has been the gate, which is now the default. Pilot lessons are in `project/BACKLOG.md` "Multi-model pipeline notes".

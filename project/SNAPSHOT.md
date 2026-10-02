@@ -1,6 +1,6 @@
 # SNAPSHOT
 
-Architecture and repo-state blueprint. Read this first when starting a new session: it should make scanning the repo unnecessary for orientation. It is a snapshot, not a changelog: overwrite stale sections. History lives in `project/AGENT_HANDOFF.md` and `project/status/`.
+Architecture and repo-state blueprint. Read this first when starting a new session: it should make scanning the repo unnecessary for orientation. It is a snapshot, not a changelog: overwrite stale sections. History lives in `project/status/` and `project/archive/` (old handoff checkpoints); `project/AGENT_HANDOFF.md` is the short current handoff.
 
 **Last updated:** 2026-10-01 (session wrap-up after the node memory incident, ops runbooks and the mobile pass)
 
@@ -61,7 +61,7 @@ Architecture and repo-state blueprint. Read this first when starting a new sessi
 
 ### Process
 
-- Claude orchestrates and implements (Opus/Sonnet/Haiku subagents, parallel worktrees). Codex (`gpt-6-sol`) is the review gate when it has usage; while Codex is out of usage, an Opus subagent reviews with the same primer brief (`project/orchestration/reviewer-primer.md`). Review-round cap, auto-merge after review and green CI, and the other standing owner instructions are in `project/CLAUDE.md` "Working style" and `project/orchestration/README.md`.
+- Claude orchestrates and implements (Opus/Sonnet/Haiku subagents, parallel worktrees). The review gate is an Opus subagent with `project/orchestration/reviewer-brief.md` (primer: `reviewer-primer.md`); Codex is optional when it has usage; Gemini is legacy. Review-round cap, auto-merge after review and green CI, and the other standing owner instructions are in `project/CLAUDE.md` "Working style" and `project/orchestration/README.md`.
 - Owner-facing reports per change in `project/status/` (index in its README).
 - Docs: `docs/architecture/deep-dive.md` (ingested into About This System; keep it accurate), `docs/DESIGN*.md` (design; drift pass 2026-10-01: unbuilt parts say "not built yet" or "(planned)" so the grounding marker catches them).
 

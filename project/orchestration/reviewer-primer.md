@@ -1,6 +1,6 @@
 # Reviewer primer (read this first)
 
-For the review gate: Codex, or an Opus subagent standing in when Codex is out of usage (same brief, same rules). A compact orientation plus the traps earlier review rounds found, so a review starts warm. It is a map, not a spec: the dispatch prompt's requirements win, and anything here that contradicts the code is stale (fix the primer in the same PR). Last mined: 33 Codex results through 2026-09-30.
+For the review gate: an Opus subagent by default, or Codex when it has usage (same brief, `reviewer-brief.md`, same rules). A compact orientation plus the traps earlier review rounds found, so a review starts warm. It is a map, not a spec: the dispatch prompt's requirements win, and anything here that contradicts the code is stale (fix the primer in the same PR). Last mined: 33 Codex results through 2026-09-30.
 
 ## System in one screen
 
@@ -87,13 +87,13 @@ Workflows (`.github/workflows/`):
 
 ## Where to read more
 
-- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`), `project/AGENT_HANDOFF.md` (top entries; the Task 5 history holds the Flux lessons), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
+- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`), `project/AGENT_HANDOFF.md` (current state; older checkpoints, including the Task 5 Flux lessons, are in `project/archive/`), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
 - Design: `docs/DESIGN.md` (4 UX, 5 architecture, 8 SSE contract, 9 k8s and memory budget, 10 Terraform, 12 CI/CD), `docs/DESIGN-002-followups.md` (chat, resilience), `docs/DESIGN-003-ingestion.md` (planned), `docs/architecture/deep-dive.md`.
 - Frontend: `project/MOBILE_DESIGN.md`, `frontend/src/index.css` (token pitfalls).
 - Backend: `services/glassbox/api/ask.py`, `trace.py`, `limits.py`, `worker/main.py`, `retrieval/search.py`.
 - k8s: `k8s/README.md` (release effects, KEDA section), `k8s/overlays/prod/flux/`.
 - Terraform/CI: `infra/CI.md`, `infra/bootstrap/README.md`, `.github/workflows/`.
-- Process: `project/orchestration/README.md`, `codex-reviewer.md`.
+- Process: `project/orchestration/README.md`, `reviewer-brief.md`.
 
 ## Machine constraints
 
