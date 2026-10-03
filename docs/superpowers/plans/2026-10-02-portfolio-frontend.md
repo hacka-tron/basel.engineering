@@ -644,7 +644,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `project/MOBILE_DESIGN.md`, `docs/DESIGN.md` (§4.4), `docs/superpowers/specs/2026-10-02-portfolio-design.md` (§3, §5.5), `project/SNAPSHOT.md`, `project/BACKLOG.md`, `project/status/README.md`
-- Create: `project/status/2026-10-02-phone-details-sheet.md`
+- Create: `project/status/2026-10-02-1022-phone-details-sheet.md`
 
 **Interfaces:**
 - Consumes: Tasks 1 and 2.
@@ -683,7 +683,7 @@ In the spec, §3 item 3, append: "Delivered as two PRs: **3a** the shared sheet 
 
 - [ ] **Step 4: Status report**
 
-Create `project/status/2026-10-02-phone-details-sheet.md` in the README's shape (TL;DR · What changed for a visitor · How it works · Key design decisions & trade-offs · What review caught · Operational notes & risks · How to see it / verify it · Open items). The "How it works" diagram:
+Create `project/status/2026-10-02-1022-phone-details-sheet.md` in the README's shape (TL;DR · What changed for a visitor · How it works · Key design decisions & trade-offs · What review caught · Operational notes & risks · How to see it / verify it · Open items). The "How it works" diagram:
 
 ```mermaid
 flowchart LR
@@ -709,7 +709,7 @@ Then run Task 13's headless script (Step 2 there) for the Diagram rows only, at 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add project/MOBILE_DESIGN.md docs/DESIGN.md docs/superpowers/specs/2026-10-02-portfolio-design.md project/SNAPSHOT.md project/BACKLOG.md project/status/README.md project/status/2026-10-02-phone-details-sheet.md
+git add project/MOBILE_DESIGN.md docs/DESIGN.md docs/superpowers/specs/2026-10-02-portfolio-design.md project/SNAPSHOT.md project/BACKLOG.md project/status/README.md project/status/2026-10-02-1022-phone-details-sheet.md
 git commit -m "docs: phone diagram details sheet (PR 3a)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -3105,7 +3105,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `project/MOBILE_DESIGN.md`, `docs/DESIGN.md` (§4.1–4.4), `docs/superpowers/specs/2026-10-02-portfolio-design.md` (status line), `project/SNAPSHOT.md`, `project/BACKLOG.md`, `project/status/README.md`
-- Create: `project/status/2026-10-02-portfolio-frontend.md`
+- Create: `project/status/2026-10-02-1140-portfolio-frontend.md`
 
 **Interfaces:**
 - Consumes: Tasks 4 to 11.
@@ -3148,7 +3148,7 @@ In the spec's header, change "Next: implementation plan." to "Plan: `docs/superp
 
 - [ ] **Step 5: Status report**
 
-Create `project/status/2026-10-02-portfolio-frontend.md` per `project/status/README.md`. Diagram for "How it works":
+Create `project/status/2026-10-02-1140-portfolio-frontend.md` per `project/status/README.md`. Diagram for "How it works":
 
 ```mermaid
 flowchart LR
@@ -3174,7 +3174,7 @@ Outside this repo (no commit here): add to the matching guide in `~/Coding/templ
 - [ ] **Step 8: Commit**
 
 ```bash
-git add project/MOBILE_DESIGN.md docs/DESIGN.md docs/superpowers/specs/2026-10-02-portfolio-design.md project/SNAPSHOT.md project/BACKLOG.md project/status/README.md project/status/2026-10-02-portfolio-frontend.md
+git add project/MOBILE_DESIGN.md docs/DESIGN.md docs/superpowers/specs/2026-10-02-portfolio-design.md project/SNAPSHOT.md project/BACKLOG.md project/status/README.md project/status/2026-10-02-1140-portfolio-frontend.md
 git commit -m "docs: portfolio frontend (PR 3b), MOBILE_DESIGN owner decisions
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -3187,7 +3187,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Temporary, never committed: `corpus/portfolio/zz-verify-*.md`, `frontend/public/portfolio/zz-verify-*/`
 - Scratch, outside the repo: `<scratchpad>/cdp-check.mjs`, screenshots
-- Modify: `project/status/2026-10-02-portfolio-frontend.md` (measurements)
+- Modify: `project/status/2026-10-02-1140-portfolio-frontend.md` (measurements)
 
 **Interfaces:**
 - Consumes: everything.
@@ -3282,7 +3282,7 @@ cd frontend && GLASSBOX_API_PROXY=http://127.0.0.1:9 npx vite --config vite.phon
 
 - [ ] **Step 4: The headless driver**
 
-`$SCRATCH/cdp-check.mjs` (Node 22+ has `fetch` and `WebSocket` built in; same approach as `project/status/2026-10-01-diagram-deselect.md`):
+`$SCRATCH/cdp-check.mjs` (Node 22+ has `fetch` and `WebSocket` built in; same approach as `project/status/2026-10-01-0643-diagram-deselect.md`):
 
 ```js
 // node cdp-check.mjs <width> <height> <phone:0|1> <outDir>
@@ -3408,7 +3408,7 @@ Load `http://localhost:5242/phone-preview.html` (with the dead proxy) and check 
 
 - [ ] **Step 7: Record measurements**
 
-Strip heights (sheet top minus region top) at 320×568, 375×667, 393×852 for both sheets and at 1280×800 for the portfolio pane; compare with spec §5.5 (about 68, 88, 125, 134px). Toggle width at 360. Put them, the screenshot list and the result JSON summary in `project/status/2026-10-02-portfolio-frontend.md` under "How to see it / verify it".
+Strip heights (sheet top minus region top) at 320×568, 375×667, 393×852 for both sheets and at 1280×800 for the portfolio pane; compare with spec §5.5 (about 68, 88, 125, 134px). Toggle width at 360. Put them, the screenshot list and the result JSON summary in `project/status/2026-10-02-1140-portfolio-frontend.md` under "How to see it / verify it".
 
 - [ ] **Step 8: Remove the fixtures and stop the servers**
 
@@ -3424,7 +3424,7 @@ Expected: only the status report change is listed (no `zz-verify` paths). Stop t
 - [ ] **Step 9: Commit the measurements**
 
 ```bash
-git add project/status/2026-10-02-portfolio-frontend.md
+git add project/status/2026-10-02-1140-portfolio-frontend.md
 git commit -m "docs: portfolio frontend verification results
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

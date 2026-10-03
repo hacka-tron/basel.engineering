@@ -10,7 +10,7 @@ Hard rules for every phase below, restated for every implementer and reviewer di
 
 ## Owner decision, 2026-10-01: alarms and daily drive snapshots
 
-The owner chose a smaller option instead of phases 2 to 4 below. It was built in the `infra/alarms-snapshots` PR (status report `project/status/2026-10-01-alarms-snapshots.md`) and takes effect once the owner runs the Bootstrap workflow and approves the Terraform apply:
+The owner chose a smaller option instead of phases 2 to 4 below. It was built in the `infra/alarms-snapshots` PR (status report `project/status/2026-10-01-1938-alarms-snapshots.md`) and takes effect once the owner runs the Bootstrap workflow and approves the Terraform apply:
 
 - **Alarms.** `glassbox-node-recover` (`StatusCheckFailed_System`, 2 of 2 minutes, EC2 recover action) and `glassbox-node-reboot` (`StatusCheckFailed_Instance`, 3 of 3 minutes, EC2 reboot action), both emailing the `glassbox-alerts` SNS topic (`infra/modules/compute/alarms.tf`). The address is a plain Terraform value, because it is already public on the site. The owner has to click the AWS confirmation email once.
 - **Uptime probe.** `.github/workflows/uptime.yml` checks `https://basel.engineering/readyz` every 15 minutes, with no secrets and no AWS access; a failed run emails the owner through GitHub.
