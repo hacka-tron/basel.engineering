@@ -358,3 +358,100 @@ def test_runs_without_judge_have_no_judge_keys():
     )
     assert "judge" not in rows[0]
     assert "judge_count" not in run_answers.summarize(rows)["overall"]
+
+
+# ------------------------------------------------------------------ review round 1
+
+
+def test_multi_turn_judge_gets_the_standalone_rewrite_not_the_bare_follow_up():
+    cases = [
+        {
+            "id": "mt",
+            "corpus": "about_system",
+            "category": "multi_turn",
+            "question": "And the second one?",
+            "history": [
+                {"role": "user", "content": "Name two autoscalers."},
+                {"role": "assistant", "content": "KEDA and HPA."},
+            ],
+        }
+    ]
+    llm = ScriptedJudgeLLM(lambda s, p: '{"pass": true, "critique": "c"}')
+    rows = run(
+        run_answers.run_cases(
+            cases,
+            embedder=FakeEmbeddingProvider(),
+            llm=ScriptedJudgeLLM(lambda s, p: "What is the second autoscaler?"),
+            retrieve=_stub_retriever([]),
+            judge=Judge(llm),
+        )
+    )
+    row = rows[0]
+    asked = row["judge"]["question"]
+    assert asked == row["rewrite"] == "What is the second autoscaler?"
+    assert all(f"Question: {asked}" in prompt for _, prompt in llm.calls)
+    # Pool items carry the standalone question too.
+    row = {
+        **_row("mt", "ans", 0.5, category="multi_turn"),
+        "rewrite": "What is the second autoscaler?",
+    }
+    assert cands.thin_items([{**row, "category": "fact"}])[0]["question"] == row["rewrite"]
+
+
+def _verdict_row(name_pass):
+    v = lambda p: {"pass": p, "critique": "", "tokens_in": 1, "tokens_out": 1}  # noqa: E731
+    return {
+        "category": "fact",
+        "grades": {},
+        "judge": {"verdicts": {"faithfulness": v(name_pass), "relevance": v(True)}},
+    }
+
+
+def test_judge_errors_invalidate_the_rates():
+    answerable = [_verdict_row(True), _verdict_row(True)]
+    clean = run_answers.judge_metrics(answerable, answerable)
+    assert clean["judge_errors"] == 0 and clean["judge_faithfulness_rate"] == 1.0
+    broken = [_verdict_row(True), _verdict_row(None)]
+    bad = run_answers.judge_metrics(broken, broken)
+    assert bad["judge_errors"] == 1
+    assert bad["judge_faithfulness_rate"] is None and bad["judge_relevance_rate"] is None
+    assert bad["judge_faithfulness_rate_partial"] == 1.0
+
+
+def test_mismatched_answers_never_come_from_abstentions():
+    rows = [
+        _row("a", "real answer a", 1.0),
+        _row("b", "real answer b", 1.0),
+        _row("u1", "I do not know.", 1.0, category="unanswerable"),
+        _row("u2", "I do not know.", 1.0, category="unanswerable"),
+    ]
+    items = cands.mismatched_items(rows)
+    assert {i["case_id"] for i in items} == {"a", "b"}
+    assert all(i["answer_from"] in {"a", "b"} for i in items)
+
+
+def test_calibrate_reports_agreement_per_kind():
+    class V:
+        def __init__(self, passed):
+            self.passed, self.critique, self.error = passed, "", None
+
+    def item(i, kind, owner, judge):
+        return {
+            "id": i, "kind": kind, "split": "test", "reason": "", "question": "q", "answer": "a",
+            "labels": {"faithfulness": owner, "relevance": None},
+            "verdicts": {"faithfulness": V(judge), "relevance": V(True)},
+        }  # fmt: skip
+
+    judged = [item("m1", "mismatched", False, False), item("t1", "thin", False, True)]
+    by_kind = calibrate.report(judged, splits=("test",))["faithfulness"]["test_by_kind"]
+    assert by_kind["mismatched"]["tnr"] == 1.0 and by_kind["thin"]["tnr"] == 0.0
+
+
+def test_sheet_marks_splits_and_warns_about_test_items():
+    items = [_item("thin", f"c{i}") for i in range(20)]
+    sheet = cands.render_sheet(items)
+    assert "WARNING" in sheet.splitlines()[2] or "WARNING" in sheet[:400]
+    for it in items:
+        split = cands.assign_split(it["id"]).upper()
+        assert f"## {it['id']} [{split}]" in sheet
+    assert "[DEV]" in sheet and "[TEST]" in sheet

@@ -196,9 +196,13 @@ async def run_case(
             }
         )
         if judge is not None and chunks:
-            verdicts = await judge.evaluate(case["question"], source_dicts(chunks), answer)
+            # A multi_turn follow-up alone ("and the second one?") is meaningless to the
+            # judge: it gets the standalone rewrite when there is one.
+            judge_question = rewrite or case["question"]
+            verdicts = await judge.evaluate(judge_question, source_dicts(chunks), answer)
             row["judge"] = {
                 "model": judge.model_id,
+                "question": judge_question,
                 "verdicts": {name: v.to_dict() for name, v in verdicts.items()},
             }
     except Exception as exc:  # one broken case must not stop the run
@@ -222,7 +226,9 @@ def judge_metrics(graded: list[dict], answerable: list[dict]) -> dict:
 
     Faithfulness covers every judged answer. Relevance covers answerable cases only:
     a correct abstention on an unanswerable case would otherwise count as irrelevant.
-    Unusable judge replies are counted in `judge_errors` and left out of the rates.
+    Unusable judge replies are counted in `judge_errors`. Dropping them would inflate
+    the rates, so the rates are None (invalid) unless `judge_errors` is 0; the partial
+    figures stay available as `*_rate_partial` for debugging, never for a gate.
     """
     judged = [row for row in graded if row.get("judge")]
     if not judged:
@@ -235,11 +241,16 @@ def judge_metrics(graded: list[dict], answerable: list[dict]) -> dict:
         return _rate([v["pass"] for v in items if v["pass"] is not None])
 
     every = [v for name in ("faithfulness", "relevance") for v in verdicts(judged, name)]
+    errors = sum(v["pass"] is None for v in every)
+    faithfulness = rate(verdicts(judged, "faithfulness"))
+    relevance = rate(verdicts(answerable, "relevance"))
     return {
         "judge_count": len(judged),
-        "judge_faithfulness_rate": rate(verdicts(judged, "faithfulness")),
-        "judge_relevance_rate": rate(verdicts(answerable, "relevance")),
-        "judge_errors": sum(v["pass"] is None for v in every),
+        "judge_faithfulness_rate": faithfulness if errors == 0 else None,
+        "judge_relevance_rate": relevance if errors == 0 else None,
+        "judge_faithfulness_rate_partial": faithfulness if errors else None,
+        "judge_relevance_rate_partial": relevance if errors else None,
+        "judge_errors": errors,
         "judge_tokens_in": sum(v["tokens_in"] for v in every),
         "judge_tokens_out": sum(v["tokens_out"] for v in every),
     }

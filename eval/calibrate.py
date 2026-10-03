@@ -143,6 +143,18 @@ def pairs_for(judged: list[dict], judge_name: str, split: str) -> list[tuple[boo
     ]
 
 
+def pairs_by_kind(
+    judged: list[dict], judge_name: str, split: str
+) -> dict[str, list[tuple[bool, bool | None]]]:
+    out: dict[str, list[tuple[bool, bool | None]]] = {}
+    for item in judged:
+        if item["split"] == split and item["labels"][judge_name] is not None:
+            out.setdefault(item["kind"], []).append(
+                (item["labels"][judge_name], item["verdicts"][judge_name].passed)
+            )
+    return out
+
+
 def dev_disagreements(judged: list[dict], judge_name: str) -> list[dict]:
     """Dev-split items where the judge disagrees with the owner (few-shot candidates)."""
     return [
@@ -161,6 +173,11 @@ def report(judged: list[dict], *, splits: tuple[str, ...]) -> dict:
         entry: dict = {}
         if "test" in splits:
             entry["test"] = evaluate_agreement(pairs_for(judged, judge_name, "test"))
+            # Per kind, so an easy kind (mismatched answers) cannot hide a weak one.
+            entry["test_by_kind"] = {
+                kind: agreement(pairs)
+                for kind, pairs in sorted(pairs_by_kind(judged, judge_name, "test").items())
+            }
         if "dev" in splits:
             entry["dev"] = agreement(pairs_for(judged, judge_name, "dev"))
             entry["dev_disagreements"] = [

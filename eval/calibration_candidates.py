@@ -117,7 +117,8 @@ def make_item(kind: str, row: dict, *, answer: str, sources: list[dict], **extra
         "case_id": row["id"],
         "kind": kind,
         "category": row["category"],
-        "question": row["question"],
+        # Standalone question: for multi_turn cases the rewrite, never the bare follow-up.
+        "question": row.get("judge_question") or row.get("rewrite") or row["question"],
         "sources": sources,
         "answer": answer,
         "answer_hash": answer_hash(answer),
@@ -145,7 +146,15 @@ def mismatched_items(rows: list[dict]) -> list[dict]:
     pool = sorted((row for row in rows if usable(row)), key=lambda row: row["id"])
     items = []
     for row in pool:
-        others = [r for r in pool if r["corpus"] == row["corpus"] and r["id"] != row["id"]]
+        # Donor answers come from answerable categories only: an abstention paired with an
+        # answerable question is a trivially obvious relevance fail.
+        others = [
+            r
+            for r in pool
+            if r["corpus"] == row["corpus"]
+            and r["id"] != row["id"]
+            and r["category"] in ANSWERABLE_CATEGORIES
+        ]
         if row["category"] not in ANSWERABLE_CATEGORIES or not others:
             continue
         # Deterministic pick by hash, not "next in list", so the pairs are not adjacent.
@@ -194,6 +203,8 @@ async def _generate_items(
     for case in cases:
         if len(items) >= per_kind:
             break
+        if case.get("history"):
+            continue  # a bare follow-up is not a standalone question for the judge
         vector = (await embedder.embed([normalize_question(case["question"])]))[0]
         chunks = await retrieve(vector, case["corpus"], embedder.model_id)
         if not chunks:
@@ -287,14 +298,21 @@ def append_yaml_items(items: list[dict], path: Path = CALIBRATION_PATH) -> int:
     return len(fresh)
 
 
-def render_sheet(items: list[dict]) -> str:
+def render_sheet(
+    items: list[dict], *, seed: str = DEFAULT_SEED, dev_fraction: float = DEFAULT_DEV_FRACTION
+) -> str:
     out = [
         "# Calibration labelling sheet\n",
+        "> **WARNING: whoever iterates on the judge prompt (a person or an agent) must read "
+        "only the items marked DEV. Items marked TEST are the held-out score; reading their "
+        "texts while editing the prompt burns the test labels.**\n",
         "Label each item in `eval/calibration.yaml` (same id): `faithful` and `relevant` "
         "pass/fail, plus a short `reason`. See eval/README.md for the rules.\n",
     ]
     for item in items:
-        out.append(f"\n---\n\n## {item['id']}\n")
+        split = assign_split(item["id"], seed=seed, dev_fraction=dev_fraction).upper()
+        note = "" if split == "DEV" else " (held out: do not use for prompt iteration)"
+        out.append(f"\n---\n\n## {item['id']} [{split}]{note}\n")
         out.append(f"**Question:** {item['question']}\n")
         out.append("**Sources the answer was supposed to rely on:**\n")
         for source in item["sources"]:
@@ -305,8 +323,16 @@ def render_sheet(items: list[dict]) -> str:
 
 
 def write_sheet(items: list[dict], path: Path = SHEET_PATH) -> None:
+    data = read_yaml() if CALIBRATION_PATH.is_file() else {}
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_sheet(items), encoding="utf-8")
+    path.write_text(
+        render_sheet(
+            items,
+            seed=data.get("seed", DEFAULT_SEED),
+            dev_fraction=data.get("dev_fraction", DEFAULT_DEV_FRACTION),
+        ),
+        encoding="utf-8",
+    )
 
 
 def load_run(path: Path) -> list[dict]:
