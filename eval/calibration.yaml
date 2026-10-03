@@ -1,0 +1,18 @@
+# Owner labels for judge calibration (DESIGN-005 §5.3). Labels only: no questions,
+# answers or source text live here (the About Basel sources are private). The text is
+# in eval/runs/calibration-sheet.md, written by `python -m eval.calibration_candidates`.
+#
+# Fill in, for each item, by reading its entry in the sheet:
+#   faithful: pass | fail    pass = every claim in the answer is supported by the
+#                            sources shown (fail = anything unsupported or a planned
+#                            feature stated as working now). A refusal passes.
+#   relevant: pass | fail    pass = it addresses the question asked, even briefly;
+#                            fail = off topic, a different question, or a refusal.
+#   reason: one short line why, especially for every fail.
+# Leave a label as `null` to skip that judge for the item. Do not edit the other
+# fields: `split` (dev|test) is assigned once from a fixed seed, and `answer_hash`
+# ties your label to one exact answer text.
+version: 1
+seed: rag-judge-calibration-v1
+dev_fraction: 0.4
+items: []
