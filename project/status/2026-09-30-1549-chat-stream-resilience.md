@@ -1,4 +1,4 @@
-# Chat stream resilience: heartbeats, a Stop button that stops the server, stall recovery, friendly errors (2026-10-03 11:33 PT)
+# Chat stream resilience: heartbeats, a Stop button that stops the server, stall recovery, friendly errors (2026-09-30 15:49 PT)
 
 **PR:** [#48](https://github.com/hacka-tron/basel.engineering/pull/48) · **Branch:** `feature/chat-stream-resilience` · **Spec:** `docs/DESIGN-002-followups.md` §6.1–6.3, §7.4, §9.2–9.3 (implementation notes in §6.6 and §7.6)
 **Status:** In review (Codex round 1 findings fixed; owner's error-reply request added). Includes DB migration `0004`.
