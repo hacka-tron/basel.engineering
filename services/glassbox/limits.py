@@ -13,7 +13,7 @@ from fastapi import Request
 
 LOGGER = logging.getLogger(__name__)
 RATE_WINDOW_MS = 10 * 60 * 1000
-RATE_CAPACITY = 10
+RATE_CAPACITY = 20
 _LOCAL_SALT = os.urandom(32)
 _TOKEN_BUCKET_SCRIPT = """
 local data = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
