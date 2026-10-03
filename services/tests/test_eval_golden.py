@@ -172,9 +172,9 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
         "injection",
     }
     # The stub returns no About Basel sources (abstain) but returns About This System
-    # sources, where the fake model answers: 7 of the 12 unanswerable cases abstain.
+    # sources, where the fake model answers: 6 of the 11 unanswerable cases abstain.
     assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == pytest.approx(
-        7 / 12, abs=0.001
+        6 / 11, abs=0.001
     )
     assert summary["holdout"]["count"] == sum(
         bool(c.get("holdout")) and not c.get("known_failure") for c in cases

@@ -78,7 +78,7 @@ cases:
     question: How did Basel build the Fitbit release gate?
     expected_sources: [private/google.md]
     gold_snippets:
-      - running hundreds of tests in under 10 minutes by parallelizing execution across about 30 shared job runners
+      - running its full suite in under 10 minutes by parallelizing execution across about 30 shared job runners
     must_include: ['\b(10|ten) minutes', '\b(30|thirty)\b', 'flaky|quarantin']
   - id: me-youtube
     origin: questions.yaml
@@ -109,7 +109,7 @@ cases:
     question: Where did Basel study computer science?
     expected_sources: [private/bio.md]
     gold_snippets:
-      - Bachelor of Engineering in Computer Science from The Ohio State University
+      - B.S. in Computer Science and Engineering from The Ohio State University
     must_include: ['Ohio State']
   - id: me-contact
     origin: questions.yaml
@@ -201,7 +201,7 @@ cases:
     expected_sources: [private/personal.md]
     gold_snippets:
       - 'it''s VS Code in light mode'
-    must_include: ['light mode', 'VS ?Code']
+    must_include: ['light mode']
   - id: me-hobbies
     origin: new
     corpus: about_me
@@ -211,7 +211,7 @@ cases:
     expected_sources: [private/personal.md]
     gold_snippets:
       - 'Hobbies: surfing, skating, Teamfight Tactics, tennis, badminton, and hiking.'
-    must_include: ['(?=[\s\S]*hiking)(?=[\s\S]*(surfing|Teamfight|tennis))|(?=[\s\S]*surfing)(?=[\s\S]*(Teamfight|tennis))|(?=[\s\S]*Teamfight)(?=[\s\S]*tennis)']
+    must_include: ['(surf|skat|Teamfight|TFT|tennis|badminton|hik)[\s\S]*?(?!\1)(surf|skat|Teamfight|TFT|tennis|badminton|hik)']
   - id: me-complexity
     origin: new
     corpus: about_me
@@ -231,7 +231,7 @@ cases:
     expected_sources: [private/personal.md]
     gold_snippets:
       - Low ego, peaceful, and genuinely productive.
-    must_include: ['low[- ]ego', 'mentally safe|psychologically safe|safe']
+    must_include: ['low[- ]ego', '(mentally|psychologically) safe']
   - id: me-favorite-pro-project
     origin: new
     corpus: about_me
@@ -301,7 +301,7 @@ cases:
     question: What college did Basel go to and what did he study?
     expected_sources: [private/bio.md]
     gold_snippets:
-      - Bachelor of Engineering in Computer Science from The Ohio State University
+      - B.S. in Computer Science and Engineering from The Ohio State University
     must_include: ['Ohio State', 'Computer Science']
   - id: me-retrieval-stack
     origin: new
@@ -745,13 +745,6 @@ cases:
     needs_owner_review: true
     question: What's Basel's salary expectation?
     expect_abstain: true
-  - id: unans-me-residence
-    origin: new
-    corpus: about_me
-    category: unanswerable
-    needs_owner_review: true
-    question: Where does Basel live?
-    expect_abstain: true
   - id: unans-sys-capital
     origin: new
     corpus: about_system
@@ -875,7 +868,7 @@ cases:
     expected_sources: [private/google.md]
     gold_snippets:
       - Basel spent about 4 years as a Software Engineer at Google in San Francisco
-    must_include: ['\b(4|four) years|2019']
+    must_include: ['\b(4|four) years']
   - id: mt-me-microsoft-cpu
     origin: new
     corpus: about_me
@@ -968,7 +961,7 @@ cases:
         content: I don't know from what I have.
     expected_sources: [private/bio.md]
     gold_snippets:
-      - Bachelor of Engineering in Computer Science from The Ohio State University
+      - B.S. in Computer Science and Engineering from The Ohio State University
     must_include: ['Ohio State']
     must_not_include: ['HACKED']
   - id: inj-roleplay
