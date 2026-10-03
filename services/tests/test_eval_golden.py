@@ -297,12 +297,15 @@ def test_rewrite_failure_falls_back_to_the_original_question():
 def test_main_writes_jsonl_and_summary(monkeypatch, tmp_path):
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
 
-    async def fake_stack(cases):
+    async def fake_stack(cases, use_judge=False):
+        from eval.judge import Judge, get_judge_llm
+
         return await run_answers.run_cases(
             cases,
             embedder=FakeEmbeddingProvider(),
             llm=FakeLLMProvider(),
             retrieve=_stub_retriever([]),
+            judge=Judge(get_judge_llm()) if use_judge else None,
         )
 
     monkeypatch.setattr(run_answers, "_run_against_stack", fake_stack)
@@ -312,6 +315,13 @@ def test_main_writes_jsonl_and_summary(monkeypatch, tmp_path):
     assert {row["category"] for row in rows} == {"live", "planned"}
     summary = json.loads(out.with_suffix(".summary.json").read_text())
     assert summary["overall"]["count"] == len(rows)
+    assert "judge" not in rows[0]
+
+    judged = tmp_path / "judged.jsonl"
+    assert run_answers.main(["--category", "live", "--judge", "--out", str(judged)]) == 0
+    row = json.loads(judged.read_text().splitlines()[0])
+    assert row["judge"]["model"] == "fake-judge-v1"
+    assert json.loads(judged.with_suffix(".summary.json").read_text())["overall"]["judge_count"]
 
 
 @pytest.mark.asyncio

@@ -73,3 +73,42 @@ GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers 
 ```
 
 The graders' known limitations (first-sentence planned/live check, verbatim-only leak detection) are listed in their docstrings in `graders.py`.
+
+## LLM judges and calibration (RAG quality plan phase 4)
+
+`judge.py` has two binary judges, **faithfulness** (is every claim supported by the numbered sources, judged by the sources alone) and **relevance** (does it answer the question asked). Each returns JSON `{"pass": bool, "critique": "..."}`; an unusable reply is recorded as an error, never as a pass. The judge sees only the question, the same numbered sources the generator saw (planned markers included) and the answer, never the golden `must_include` list. The model is `GLASSBOX_JUDGE_MODEL_ID`, default `us.amazon.nova-pro-v1:0` (Nova Pro through the `us.` inference profile, the same style the app uses for Nova Lite; the account needs Bedrock access to it). Changing the model or a rubric changes `JUDGE_PROMPT_VERSION` and invalidates a calibration.
+
+**In a run:** `python -m eval.run_answers --judge` (with `--paid` and `GLASSBOX_EVAL_ALLOW_PAID=1` when the provider is not `fake`) adds a `judge` block to each row and `judge_faithfulness_rate`, `judge_relevance_rate` (answerable cases only), `judge_errors` and judge token counts to the summary. Rows now also store `sources` (the raw retrieved chunk text), so a stored run can be judged and labelled later. With the fake provider the judge is a stub that always passes (a pipeline smoke test). **Judge errors invalidate the rates:** if any judge reply in the run was unusable (`judge_errors` > 0), `judge_faithfulness_rate` and `judge_relevance_rate` are `null` (the partial figures are in `*_rate_partial`, for debugging only), because dropping errors would inflate them. A gate must treat a null rate as a failed run: fix or re-run until `judge_errors` is 0. For multi_turn cases the judge sees the standalone rewrite (stored as `judge.question`), not the bare follow-up. **Do not use a judge number as a gate until `calibrate` passes for it.**
+
+### Building the label pool
+
+Natural answers are almost all passes, so the pool oversamples failures. From a run made with this code (it needs the stored `sources`):
+
+```sh
+python -m eval.calibration_candidates --from-run eval/runs/<run>.jsonl            # free: thin + mismatched
+GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 \
+  python -m eval.calibration_candidates --from-run eval/runs/<run>.jsonl --generate --paid
+```
+
+Kinds (aim for at least 15 of each): `thin` (answerable cases that miss facts, e.g. v13 answers), `abstention_disabled` (unanswerable questions answered with the refusal instruction removed), `perturbed` (answers generated from sources with a number changed or planned work stated as live, shown to you against the **original** sources, so they contain an unsupported claim), and `mismatched` (an answer written for another question paired with this one; answers come from answerable categories only, never abstentions; `calibrate` also reports agreement per kind (`test_by_kind`) so this easy kind cannot hide a weak one; this kind is an addition to the plan, because the other kinds rarely give the relevance judge a failing example). It writes three things: `eval/runs/calibration-pool.jsonl` (full items; gitignored because it contains private source text; the generated answers cannot be reproduced, so keep this file), `eval/runs/calibration-sheet.md` (what you read) and blank entries appended to `eval/calibration.yaml` (committed labels only; no questions, answers or sources). Re-running adds new items and never changes existing ones.
+
+### Owner labelling workflow (about 50 answers, 1 to 1.5 hours)
+
+0. The sheet marks every item `[DEV]` or `[TEST]`. Anyone iterating on the judge prompt (person or agent) must read only DEV items; reading TEST texts burns the held-out labels.
+1. Open `eval/runs/calibration-sheet.md` (the question, the sources the answer should rely on, the answer) next to `eval/calibration.yaml`. Entries share an `id` such as `perturbed:sugg-system-stress`.
+2. For each entry set `faithful` and `relevant` to `pass` or `fail` and give a one-line `reason`:
+   - `faithful: pass` = every claim in the answer is supported by the sources shown. `fail` = a number, name or status the sources do not support, or a planned feature stated as working now. A refusal passes.
+   - `relevant: pass` = it addresses the question asked, even briefly. `fail` = off topic, a different question, or a refusal.
+3. Leave a label `null` to skip that judge for an entry. Do not edit `id`, `answer_hash` or `split`: the split (`dev` about 40%, `test` about 60%) comes from a fixed seed and the id alone, and `calibrate` rejects a changed split or a changed answer.
+4. Label failures carefully; they are the point. Aim for at least 15 of each class per judge overall, which gives at least 10 per class in the test split.
+
+### Calibrating
+
+```sh
+GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.calibrate --paid            # dev split
+GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.calibrate --paid --split test
+```
+
+`--split dev` (the default) prints every dev disagreement with the judge's critique and your reason, to turn into few-shot examples and prompt fixes. `--split test` reports per-judge agreement on the held-out split only: true-positive rate (you pass, judge passes) and true-negative rate (you fail, judge fails). It never prints test texts, and it **refuses to report rates when either class has fewer than 10 test cases**. Acceptance is both rates at least 0.85 for a judge before any gate uses it. The tool logs each test run in `eval/runs/calibration-test-log.jsonl` and warns when the test split was already used with a different judge prompt or model: scoring prompt versions on the test split more than once overfits it, so draw fresh test labels (new candidates, new entries) instead.
+
+Tests: `services/tests/test_eval_judge.py` (fake judge: parsing, malformed JSON, agreement math, the split, the refusal rule, the `--judge` wiring).
