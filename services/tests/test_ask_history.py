@@ -243,7 +243,8 @@ def test_follow_up_answer_prompt_has_history_question_and_untrusted_rule(harness
     assert "Conversation so far" in prompt
     assert "User: What did Basel do at YouTube?" in prompt
     assert "Assistant: At YouTube, Basel worked on the ingestion pipeline." in prompt
-    assert prompt.rstrip().endswith("Question: tell me more about that")
+    # The question comes after the history; only the style rules follow it (prompt v15).
+    assert "\nQuestion: tell me more about that\n\nHow to write the answer:" in prompt
     assert REWRITTEN not in prompt
     system = answer["system"].lower()
     assert "may be inaccurate" in system

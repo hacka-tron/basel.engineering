@@ -240,17 +240,17 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
     assert [done["abstained"] for done in dones] == [True, True]
 
 
-def test_normal_answer_is_cached_under_the_v13_prompt_version(monkeypatch):
+def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v14"
+    assert ask._PROMPT_VERSION == "v15"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
     assert cache.puts[0]["answer"] == "This is a fake response for local development."
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.calls == 1
-    assert all(model_id.endswith("|v14") for model_id in cache.model_ids)
+    assert all(model_id.endswith("|v15") for model_id in cache.model_ids)
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
@@ -262,8 +262,8 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
     llm = ScriptedLLM()
     cache, _, _, _ = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
-    # Same question, same models, older prompt version: the v14 entry is unreachable.
-    monkeypatch.setattr(ask, "_PROMPT_VERSION", "v13")
+    # Same question, same models, older prompt version: the v15 entry is unreachable.
+    monkeypatch.setattr(ask, "_PROMPT_VERSION", "v14")
     monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
     stream = events(
         TestClient(app).post(
@@ -271,7 +271,7 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
         )
     )
     assert next(data for name, data in stream if name == "done")["answer_cache"] == "miss"
-    assert cache.model_ids[-1].endswith("|v13")
+    assert cache.model_ids[-1].endswith("|v14")
 
 
 def test_grounding_rules_ask_for_the_exact_abstention_sentence():
@@ -279,7 +279,7 @@ def test_grounding_rules_ask_for_the_exact_abstention_sentence():
 
     assert f'exactly "{ABSTENTION_ANSWER}" and nothing else' in GROUNDING_RULES
     assert "Design prose alone is not evidence" not in GROUNDING_RULES
-    assert "services/, k8s/, or infra/" in GROUNDING_RULES
+    assert "labelled code, Kubernetes manifest or infrastructure" in GROUNDING_RULES
 
 
 def test_no_sources_refusal_is_flagged_in_the_query_log(monkeypatch):
@@ -298,3 +298,43 @@ def test_no_sources_refusal_is_flagged_in_the_query_log(monkeypatch):
     assert saved[0]["timings"]["abstained"] == 1
     assert saved[0]["timings"]["answer_cache_skipped"] == 1
     assert next(d for n, d in stream if n == "done")["abstained"] is True
+
+
+class FilteredLLM(FakeLLMProvider):
+    """Stops like Bedrock's content filter, optionally after some streamed text."""
+
+    def __init__(self, before=""):
+        self.before = before
+        self.calls = 0
+
+    async def generate(self, prompt, *, max_tokens, system=None):
+        from services.glassbox.providers.base import ContentFilteredError
+
+        self.calls += 1
+        if self.before:
+            yield self.before
+        raise ContentFilteredError("Bedrock generation stopped: content_filtered")
+
+
+def test_content_filter_stop_becomes_an_uncached_abstention(monkeypatch):
+    llm = FilteredLLM()
+    cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
+    for stream in streams:
+        assert not any(name == "error" for name, _ in stream)
+        tokens = "".join(data["text"] for name, data in stream if name == "token")
+        assert tokens == ABSTENTION_ANSWER
+    assert [done["abstained"] for done in dones] == [True, True]
+    assert cache.puts == [] and llm.calls == 2
+    for row in saved:
+        assert row["timings"]["content_filtered"] == 1
+        assert row["timings"]["answer_cache_skipped"] == 1
+
+
+def test_content_filter_after_partial_text_keeps_it_and_skips_the_cache(monkeypatch):
+    llm = FilteredLLM(before="The queue is a Redis Stream.")
+    cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
+    tokens = "".join(data["text"] for name, data in streams[0] if name == "token")
+    assert tokens == "The queue is a Redis Stream."
+    assert dones[0]["abstained"] is False
+    assert cache.puts == []
+    assert saved[0]["timings"]["content_filtered"] == 1
