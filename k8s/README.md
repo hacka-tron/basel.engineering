@@ -11,7 +11,7 @@ and is applied by a separate, dependent Flux Kustomization (see below).
 `.github/workflows/release.yml` builds and pushes a new `build-N` image on every
 merge to `main`. Flux's ImageUpdateAutomation (not the workflow) then commits
 the new tag into the `images:` blocks under `k8s/overlays/prod/` on the
-`deploy` branch. Once Flux is bootstrapped (status in `project/AGENT_HANDOFF.md`), it applies that
+`deploy` branch. Once Flux is bootstrapped (status in `project/BACKLOG.md`), it applies that
 overlay to the live cluster automatically — no manual step needed for a
 routine release.
 
