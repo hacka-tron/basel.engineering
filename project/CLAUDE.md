@@ -34,7 +34,7 @@ Details and the why are in `orchestration/README.md`.
 
 ## Status reports (owner preference)
 
-After each substantial feature or change, write or update a report in `project/status/` (`YYYY-MM-DD-<slug>.md`) and add it to the index in `project/status/README.md`. Write it when the PR opens, then update its status at merge and again at deploy. The reader is the owner, a technical boss who wants a strong grasp of the system: TL;DR, visitor-visible change, architecture with a small Mermaid diagram, design decisions and why, what review caught, operational risks, how to verify, open items. `project/status/README.md` has the format. Delegating the writing to a subagent is fine. Never put account IDs, IPs or tokens in a report.
+After each substantial feature or change, write or update a report in `project/status/` (`YYYY-MM-DD-HHMM-<slug>.md`, Pacific time first written; the H1 ends with `(YYYY-MM-DD HH:MM PT)`) and add it to the index in `project/status/README.md`. Write it when the PR opens, then update its status at merge and again at deploy. The reader is the owner, a technical boss who wants a strong grasp of the system: TL;DR, visitor-visible change, architecture with a small Mermaid diagram, design decisions and why, what review caught, operational risks, how to verify, open items. `project/status/README.md` has the format. Delegating the writing to a subagent is fine. Never put account IDs, IPs or tokens in a report.
 
 ## Commit discipline
 
