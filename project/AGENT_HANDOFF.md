@@ -10,7 +10,7 @@ Short and current: who is coordinating, what state things are in, what is open, 
 
 **Next action:** the owner adds real projects under `corpus/portfolio/` (non-draft) with images in `frontend/public/portfolio/<slug>/`; the topic appears on the next release. **How to add a project:** copy `corpus/portfolio/_example.md` to `corpus/portfolio/<slug>.md` (its comments explain every field; required `title`, `one_liner`, `kind` personal|freelance, `year`, `stack`; set `draft: false`; only literal `true`/`false`, no repeated fields, `https` links, screenshots as real files with `alt` and a quoted `aspect` like "16/10"), put images in `frontend/public/portfolio/<slug>/`, and check locally with `python -m services.glassbox.portfolio` and `cd frontend && npm run build` (both fail with a message naming the field). Corpus changes run full CI; once merged, the release shows the Portfolio topic, phone segment and "See portfolio →". Before real projects land, the owner decides the planned-marker prompt change (BACKLOG, "Open items from the portfolio backend": portfolio sources must not get `[PLANNED, not built yet]`); golden cases for Portfolio only after real projects. Other BACKLOG items are unchanged.
 
-**Known environment issue:** Docker Desktop on the owner's Mac is unresponsive, so local MySQL/Redis tests skip. Implementers must wait for CI's backend-tests before reporting.
+**Environment (2026-10-03):** Docker Desktop works again (force-restarted). The shared compose MySQL may lag Alembic head; agents use their own containers for DB tests (see `orchestration/rag-plan-brief.md` Gotchas).
 
 **Where to look**
 - Next actions: `project/BACKLOG.md` "> RESUME HERE"; owner-only decisions: its "Open decisions".
