@@ -21,13 +21,13 @@ The planned work (not built yet) is to build a small validation harness first, t
 
 | Step | What it does today | Where |
 |---|---|---|
-| Sources | `about_me`: 5 Markdown files (then in `corpus/about-me/`, now in the private repo) (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` (**761 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested (DESIGN.md §6.4 used to list `frontend/src/architecture.ts`; it now says the scanner skips `frontend/`). | `ingest/scanner.py:11`, `:77-95` |
+| Sources | `about_me`: 5 Markdown files (then in `corpus/about-me/`, now in the private repo) (1,674 words, **6 chunks**). `about_system`: every `.md/.tf/.yml/.yaml/.py/.ts/.tsx` under `infra/`, `k8s/`, `services/`, `docs/` except `services/tests/` and `docs/superpowers/plans/` (owner decision 2026-10-03; before it, **761 chunks**: tests 307, services 201, docs 90, infra 78, k8s 50, plans 35). `frontend/` is not ingested (owner decision). | `ingest/scanner.py` (`SYSTEM_DIRECTORIES`, `EXCLUDED_SYSTEM_PREFIXES`) |
 | Secrets | Path denylist plus AWS-key, private-key, provider-token (GitHub, Slack, Anthropic, OpenAI-style, Google, Stripe, JWT, Bearer) and high-entropy heuristics; 15 files quarantined locally (tracked tree, 2026-10-02). | `ingest/scanner.py:33-131` |
 | Chunking | Markdown: split on headings, then **merge consecutive sections until about 300 to 500 words**, sliding 450-word windows with 50-word overlap for long sections. Code: one chunk per top-level def/class (median 48 words; the largest is 2,405 words). Terraform: per top-level block. YAML: per document. | `ingest/chunkers/markdown.py:48-75`, `chunkers/code.py`, `chunkers/terraform.py`, `chunkers/yaml_doc.py` |
 | Chunk text | Embedded **raw**: no file path, document title or heading breadcrumb. A split window of a long section loses its heading. | `ingest/run.py:134-135` |
 | Embedding | Titan Text Embeddings V2, 512 dimensions, normalized question text. | `providers/bedrock.py`, `api/ask.py:515` |
-| Index | Redis Stack **7.2** (`redis-stack-server:7.2.0-v11`), `idx:chunks` HNSW cosine, fields `corpus` TAG, `model` TAG, `vector`. **No TEXT field**, so no lexical search; chunk text lives only in MySQL. | `ingest/redis_index.py:23-46`, `k8s/base/redis-statefulset.yaml:19` |
-| Index migration | `ensure_index` checks only whether the `model` attribute exists and returns early when it does, so it adds at most that one field to an existing index. | `ingest/redis_index.py:10-50` |
+| Index | Redis Stack **7.2** (`redis-stack-server:7.2.0-v11`), `idx:chunks` HNSW cosine, fields `corpus` TAG, `model` TAG, `kind` TAG (`doc`, `code`, `infra`, `manifest`, `test`; `search_chunks` takes an optional kind filter, unused by the worker), `vector`. **No TEXT field**, so no lexical search; chunk text lives only in MySQL. | `ingest/redis_index.py` (`EXPECTED_FIELDS`, `chunk_kind`), `k8s/base/redis-statefulset.yaml:19` |
+| Index migration | `ensure_index` compares an existing index against the full expected field list (`EXPECTED_FIELDS`) and adds each missing field with `FT.ALTER`. Model tags are backfilled from MySQL; reconcile rewrites any key whose `kind` is missing or wrong. | `ingest/redis_index.py`, `ingest/run.py` (`prepare_index`), `ingest/reconcile.py` |
 | Stale files | After a full scan, documents whose source file was deleted or renamed are listed per corpus and model and **logged only** (`GLASSBOX_INGEST_SWEEP=report`, the Job's setting since PR #101). Deleting them needs `apply`, which production does not use yet (an owner decision). `--clear --corpus X` wipes one corpus and model by hand. | `ingest/sweep.py`, `ingest/run.py` |
 | Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 now lists that light rerank (score threshold, dedupe by document) as unbuilt. | `retrieval/search.py:11-56`, `worker/main.py:240` |
 | Multi-turn | Follow-ups are rewritten into a standalone query by Nova Lite (60 tokens) and retrieval uses the rewrite; the answer prompt gets the original question plus up to 6 messages / 4,000 characters of history. | `api/ask.py:99-116`, `:480-507` |
@@ -136,7 +136,7 @@ Changes against today:
 5. **Prompt v15** (section 6).
 6. **Answer log**: store `answer` and `abstained` in `queries` (next Alembic revision) so live traffic can be sampled into the golden set and reviewed.
 
-New index fields (`kind`, `text`) need `ensure_index` restructured (its current behaviour is in the §2.1 "Index migration" row): it should compare the full expected schema and `FT.ALTER` each missing field.
+`ensure_index` already adds any missing expected field (§2.1 "Index migration"), so the `text` field is one more `EXPECTED_FIELDS` entry plus its backfill.
 
 Kept as they are (today's values are in §2.1): the embedding model and its dimensions, the generator model, the answer cache and its similarity threshold, the trace contract, the status marker (until doc-level status metadata replaces it), and the Redis version.
 
@@ -231,7 +231,7 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 1. **Paid eval runs:** approve about $0.03 per baseline run (no judge) for phases 3, 5, 7 and 8, run locally with your credentials or by an agent you authorize.
 2. **Judge model:** Nova Pro on Bedrock (about $0.50 per run with both judges), Claude Haiku (requires you to submit Anthropic's first-time-use form; agents won't), or offline Claude Code grading only (no Bedrock cost, not a gate).
 3. **Calibration labels:** about 1 to 1.5 hours of your time to label about 50 answers per judge pass/fail (failures are oversampled on purpose; section 5.3), possibly again if the held-out set has to be redrawn.
-4. **Corpus scope:** exclude `services/tests/` and `docs/superpowers/plans/` (recommended), or keep them down-weighted. Also: ingest `frontend/src/` (DESIGN.md §6.4 used to list `architecture.ts`; the scanner has never included it)?
+4. **Corpus scope:** decided 2026-10-03: exclude `services/tests/` and `docs/superpowers/plans/`; `frontend/src/` stays out.
 5. **Re-ingestion:** phases 6 to 8 each re-embed the corpus on the next deploy. Under $0.01 each, but they bump corpus versions and empty caches.
 6. **Answer logging:** store answer text in `queries` (phase 10). Visitor questions are already stored; answers add no new personal data, but it's your call.
 7. **CI paid-eval workflow:** a new OIDC role with `bedrock:InvokeModel` on two or three model ARNs, behind an approval environment (infra change via the Bootstrap workflow).

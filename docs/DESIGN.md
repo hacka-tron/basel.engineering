@@ -230,7 +230,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 - Not built yet: a nightly ingest CronJob.
 - **Sources:**
   - `about_me`: curated Markdown from the owner's private GitHub repo (bio, projects, and an export of the resume bullet bank), checked out at release time as `private/...`; the public `corpus/about-me/` copies were removed on 2026-10-02. Every `about_me` document passes the personal-data guard (§11, "Privacy") before chunking. See DD3 §1.2.
-  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `docs/` (`.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts`, `.tsx`). `frontend/` is not scanned.
+  - `about_system`: the repo itself, via an allowlist: `infra/`, `k8s/`, `services/`, `docs/` (`.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts`, `.tsx`), minus the test suite (`services/tests/`) and implementation plans (`docs/superpowers/plans/`), which crowded real sources out of the top 8 (owner decision, DESIGN-005 §9). `frontend/` is not scanned.
   - `portfolio`: Basel's other projects, one public Markdown file each in this repo, `corpus/portfolio/<slug>.md` (YAML front matter for the card fields, a Markdown body for the write-up; format and CI check in `services/glassbox/portfolio.py`, DD3 §1.3). Files with `draft: true`, hidden paths and symlinks are skipped. Each document is indexed as a short preface (title, one-liner, kind, year, stack, links) followed by the body, and passes the personal-data guard (§11, "Privacy") like About Basel.
 - **Denylist (always enforced):** `*.tfvars`, `*.tfstate*`, `.env*`, `**/secrets/**`, anything matching a secret-scanner pattern. The job fails if the scanner finds a match.
 - **Chunking:**
@@ -238,9 +238,9 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
   - Terraform: one chunk per top-level block (`resource`, `module`, `variable` group).
   - YAML: one chunk per document (`---`).
   - Python/TypeScript: one chunk per top-level function or class.
-  - Every chunk keeps `source_path`, `start_line`, `end_line`.
+  - Every chunk keeps `source_path`, `start_line`, `end_line`, and its Redis hash a `kind` tag from the path: `doc` (Markdown, About Basel, portfolio), `code` (Python/TypeScript), `infra` (Terraform), `manifest` (YAML) or `test`.
 - **Incremental:** skips documents only when both `content_hash` and the selected embedding model identity are unchanged (one query per run loads every document's hash and chunk models). A changed document's old Redis keys are deleted before its MySQL commit and the new ones written after it, never inside the transaction. Records an `ingestion_runs` row. Bumps the corpus version in Redis on success (invalidates the retrieval cache; cached answers are checked against their own source chunks instead, see 7.3).
-- **Stale documents:** after a complete scan, documents whose files are gone (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest (also removing orphan Redis chunk keys with no MySQL row). The sweep's outcome is stored in `ingestion_runs.notes`. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
+- **Stale documents:** after a complete scan, documents whose files are gone or now excluded (per corpus and embedding model) are logged by default (`GLASSBOX_INGEST_SWEEP=report`) and deleted only with `GLASSBOX_INGEST_SWEEP=apply` or `--sweep`; deletion is off in production. Guards: no sweep when a corpus scan found zero files, when a source directory with indexed documents produced no files, or when more than 30% of its documents would go (at most 2 are always allowed; `--force-sweep` overrides the directory and fraction guards only). `--dry-run` lists without writing; `--clear --corpus X [--model M] [--yes]` wipes one corpus and model for a clean re-ingest (also removing orphan Redis chunk keys with no MySQL row). The sweep's outcome is stored in `ingestion_runs.notes`. Details: `docs/architecture/deep-dive.md`, "Stale documents: report-only sweep and the --clear command".
 
 ### 6.5 Redis
 
@@ -332,7 +332,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 
 | Key / structure | Type | Purpose | TTL |
 |---|---|---|---|
-| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + hashes | KNN retrieval, filtered by `corpus` and hashed embedding-model tags; each hash also holds `content_sha` (SHA-256 hex of the chunk text) for answer-cache validation | none (rebuilt from MySQL) |
+| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + hashes | KNN retrieval, filtered by `corpus` and hashed embedding-model tags (optionally by the `kind` tag); each hash also holds `content_sha` (SHA-256 hex of the chunk text) for answer-cache validation. `ensure_index` adds any missing schema field with `FT.ALTER` | none (rebuilt from MySQL) |
 | `emb:{sha256(normalized_q)}` | string (packed vector) | Embedding cache | 7 days |
 | `ret:{corpus}:v{ver}:{sha}` | list of chunk IDs + scores | Retrieval cache | 1 hour |
 | `chunktxt:{id}` | hash | Chunk text/metadata cache (avoids MySQL round trip) | 1 day |
