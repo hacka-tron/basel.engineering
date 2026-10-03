@@ -27,7 +27,7 @@ def test_committed_golden_set_is_valid():
     # gold snippet occurs in one of its expected source files in this repo.
     cases = load_golden()
     counts = Counter(case["category"] for case in cases)
-    assert 65 <= len(cases) <= 80
+    assert 65 <= len(cases) <= 95
     assert counts["fact"] >= 35
     assert counts["planned"] >= 8
     assert counts["live"] >= 5
@@ -172,8 +172,10 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
         "injection",
     }
     # The stub returns no About Basel sources (abstain) but returns About This System
-    # sources, where the fake model answers: 5 of the 10 unanswerable cases abstain.
-    assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == 0.5
+    # sources, where the fake model answers: 6 of the 11 unanswerable cases abstain.
+    assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == pytest.approx(
+        6 / 11, abs=0.001
+    )
     assert summary["holdout"]["count"] == sum(
         bool(c.get("holdout")) and not c.get("known_failure") for c in cases
     )
@@ -197,7 +199,10 @@ def test_a_failing_case_is_recorded_and_the_run_continues():
 
 def test_known_failures_are_reported_apart_and_kept_out_of_rates():
     cases = [c for c in load_golden() if c["id"] in {"me-site-stack", "me-education"}]
-    assert next(c for c in cases if c["id"] == "me-site-stack")["known_failure"]
+    # No committed case is a known failure today, so mark one for this test.
+    next(c for c in cases if c["id"] == "me-site-stack")["known_failure"] = (
+        'BACKLOG "About Basel corpus error: RDS (owner sign-off)"'
+    )
     rows = asyncio.run(
         run_answers.run_cases(
             cases,

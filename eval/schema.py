@@ -62,7 +62,8 @@ PRIVATE_PREFIX = "private/"
 # The About Basel files in the private repo. Committed so CI still catches a typo in a
 # `private/...` expected source; extend it when the owner adds a file there.
 KNOWN_PRIVATE_SOURCES = frozenset(
-    f"{PRIVATE_PREFIX}{name}.md" for name in ("bio", "google", "microsoft", "projects", "skills")
+    f"{PRIVATE_PREFIX}{name}.md"
+    for name in ("bio", "google", "microsoft", "personal", "projects", "skills")
 )
 
 
