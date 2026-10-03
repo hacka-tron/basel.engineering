@@ -15,4 +15,524 @@
 version: 1
 seed: rag-judge-calibration-v1
 dev_fraction: 0.4
-items: []
+items:
+  - id: thin:me-current-role
+    case_id: me-current-role
+    kind: thin
+    answer_hash: 0ab9b8d695bc87ab  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: thin:me-release
+    case_id: me-release
+    kind: thin
+    answer_hash: 6947524c33976de9  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: thin:me-fitbit-gate
+    case_id: me-fitbit-gate
+    kind: thin
+    answer_hash: d6005c82ee5f4c70  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:me-education
+    case_id: me-education
+    kind: thin
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:me-favorite-pro-project
+    case_id: me-favorite-pro-project
+    kind: thin
+    answer_hash: 6d6d04a1bf4ec1d4  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: thin:system-vector
+    case_id: system-vector
+    kind: thin
+    answer_hash: 41059dff2cb6b506  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-worker
+    case_id: system-worker
+    kind: thin
+    answer_hash: 2bbc3d6d5f770b22  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-ingest
+    case_id: system-ingest
+    kind: thin
+    answer_hash: e43422b795d3d52d  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-chunk-markdown
+    case_id: system-chunk-markdown
+    kind: thin
+    answer_hash: a0b08acbed371c09  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: thin:system-providers
+    case_id: system-providers
+    kind: thin
+    answer_hash: 888447b5b5365c86  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-rate-limit
+    case_id: system-rate-limit
+    kind: thin
+    answer_hash: dc499170df2a99c3  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-budget
+    case_id: system-budget
+    kind: thin
+    answer_hash: 7ab0c334315bc750  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-edge
+    case_id: system-edge
+    kind: thin
+    answer_hash: 24bcb6f851a1d141  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:system-deploy
+    case_id: system-deploy
+    kind: thin
+    answer_hash: e9a49aaf58cf1531  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: thin:system-followups
+    case_id: system-followups
+    kind: thin
+    answer_hash: 8e24f611ac410616  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:sugg-me-platform-fit
+    case_id: sugg-me-platform-fit
+    kind: thin
+    answer_hash: f160312f06cb6dcc  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:sugg-system-caching
+    case_id: sugg-system-caching
+    kind: thin
+    answer_hash: 2c7594eab40aab76  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: thin:sugg-system-stress
+    case_id: sugg-system-stress
+    kind: thin
+    answer_hash: c01498aafc7ed080  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-me-salary
+    case_id: unans-me-salary
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-me-phone
+    case_id: unans-me-phone
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-me-amazon
+    case_id: unans-me-amazon
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-me-movie
+    case_id: unans-me-movie
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: abstention_disabled:unans-me-manager
+    case_id: unans-me-manager
+    kind: abstention_disabled
+    answer_hash: 406b11de266d804a  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-me-salary-expectation
+    case_id: unans-me-salary-expectation
+    kind: abstention_disabled
+    answer_hash: 75468bdac844ef97  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-sys-capital
+    case_id: unans-sys-capital
+    kind: abstention_disabled
+    answer_hash: 9ac14dccea23f6ba  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: abstention_disabled:unans-sys-sourdough
+    case_id: unans-sys-sourdough
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-sys-visitors
+    case_id: unans-sys-visitors
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: abstention_disabled:unans-sys-linked-list
+    case_id: unans-sys-linked-list
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: abstention_disabled:unans-sys-worldcup
+    case_id: unans-sys-worldcup
+    kind: abstention_disabled
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-current-role
+    case_id: me-current-role
+    kind: perturbed
+    answer_hash: 0ab9b8d695bc87ab  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-assets
+    case_id: me-assets
+    kind: perturbed
+    answer_hash: 312635fe4ae5eabe  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-outages
+    case_id: me-outages
+    kind: perturbed
+    answer_hash: d46e29ae8f8cfc43  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: perturbed:me-cpu
+    case_id: me-cpu
+    kind: perturbed
+    answer_hash: 53497026ac82c4cc  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-release
+    case_id: me-release
+    kind: perturbed
+    answer_hash: e0d0f52bdfb30090  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: perturbed:me-fitbit-gate
+    case_id: me-fitbit-gate
+    kind: perturbed
+    answer_hash: 218ac0259f538084  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-youtube
+    case_id: me-youtube
+    kind: perturbed
+    answer_hash: e15df4ebc65911dc  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-framework
+    case_id: me-framework
+    kind: perturbed
+    answer_hash: 96b6e5d59dda7ab8  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-education
+    case_id: me-education
+    kind: perturbed
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-contact
+    case_id: me-contact
+    kind: perturbed
+    answer_hash: 19fc0b076a062f43  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-background
+    case_id: me-background
+    kind: perturbed
+    answer_hash: 1b8052c446e764e8  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-goal-buddy
+    case_id: me-goal-buddy
+    kind: perturbed
+    answer_hash: e211cf8962d0525f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-cryptoking
+    case_id: me-cryptoking
+    kind: perturbed
+    answer_hash: 6bdd8290153ffcdb  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: perturbed:me-languages
+    case_id: me-languages
+    kind: perturbed
+    answer_hash: 755f555cef1421a3  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-observability
+    case_id: me-observability
+    kind: perturbed
+    answer_hash: f92443805ab3464c  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-origin
+    case_id: me-origin
+    kind: perturbed
+    answer_hash: 1934183964f038fa  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: perturbed:me-favorite-food
+    case_id: me-favorite-food
+    kind: perturbed
+    answer_hash: 0d8121e7bb806bf6  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: perturbed:me-light-dark
+    case_id: me-light-dark
+    kind: perturbed
+    answer_hash: a0ce2b913254d856  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:live-flux
+    case_id: live-flux
+    kind: mismatched
+    answer_hash: eaf6e269c2dfbd7d  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:live-follow-ups
+    case_id: live-follow-ups
+    kind: mismatched
+    answer_hash: c3dd031439b318d6  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:live-keda
+    case_id: live-keda
+    kind: mismatched
+    answer_hash: adb5b658b55d230c  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:live-stop
+    case_id: live-stop
+    kind: mismatched
+    answer_hash: 969423a462fc910f  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:live-terraform
+    case_id: live-terraform
+    kind: mismatched
+    answer_hash: d46c9eda26b92a78  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:live-zram
+    case_id: live-zram
+    kind: mismatched
+    answer_hash: a0b08acbed371c09  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: dev
+  - id: mismatched:me-ai-review
+    case_id: me-ai-review
+    kind: mismatched
+    answer_hash: 615c3a7f7702f117  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-assets
+    case_id: me-assets
+    kind: mismatched
+    answer_hash: b0df475cdcc622b8  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-azure-regions
+    case_id: me-azure-regions
+    kind: mismatched
+    answer_hash: 6d6d04a1bf4ec1d4  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-background
+    case_id: me-background
+    kind: mismatched
+    answer_hash: f45909342bc01cdb  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-college
+    case_id: me-college
+    kind: mismatched
+    answer_hash: cf82c33c92f4f3fa  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-complexity
+    case_id: me-complexity
+    kind: mismatched
+    answer_hash: fe3548b97a731098  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-contact
+    case_id: me-contact
+    kind: mismatched
+    answer_hash: 8c7f2d6c1307a1fb  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-cpu
+    case_id: me-cpu
+    kind: mismatched
+    answer_hash: cdd6ccb3505fb67a  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-cryptoking
+    case_id: me-cryptoking
+    kind: mismatched
+    answer_hash: ed7e36c21938b121  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-current-role
+    case_id: me-current-role
+    kind: mismatched
+    answer_hash: fe3548b97a731098  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-education
+    case_id: me-education
+    kind: mismatched
+    answer_hash: 0ab9b8d695bc87ab  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test
+  - id: mismatched:me-fav-languages
+    case_id: me-fav-languages
+    kind: mismatched
+    answer_hash: 07f17e8156b355a5  # pragma: allowlist secret
+    faithful: null   # pass | fail
+    relevant: null   # pass | fail
+    reason: ""
+    split: test

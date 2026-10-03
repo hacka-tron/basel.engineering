@@ -162,10 +162,17 @@ def _write(tmp_path, items, entries):
 
 
 def test_template_is_empty_and_append_keeps_existing_entries(tmp_path):
-    assert yaml.safe_load(cands.CALIBRATION_PATH.read_text())["items"] == []
+    committed = yaml.safe_load(cands.CALIBRATION_PATH.read_text())["items"]
+    # Committed entries hold ids, hashes and splits only (no text); labels may be filled.
+    assert all(
+        set(i)
+        == {"id", "case_id", "kind", "answer_hash", "faithful", "relevant", "reason", "split"}
+        for i in committed
+    )
     items = [_item("thin", "a"), _item("perturbed", "b")]
     cal = tmp_path / "calibration.yaml"
-    cal.write_text(cands.CALIBRATION_PATH.read_text())
+    header = cands.CALIBRATION_PATH.read_text().split("\nitems:")[0]
+    cal.write_text(header + "\nitems: []\n")
     assert cands.append_yaml_items(items[:1], cal) == 1
     cal.write_text(cal.read_text().replace("faithful: null", "faithful: pass"))
     assert cands.append_yaml_items(items, cal) == 1  # only the new one
