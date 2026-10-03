@@ -191,7 +191,6 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
               const stopped = message.role === 'assistant' && message.state === 'stopped'
               // A reply stopped before its first token keeps only the label.
               if (message.role === 'assistant' && !message.content && !pending && !stopped) return null
-              const showSources = message.role === 'assistant' && !pending && (message.sources?.length ?? 0) > 0
               return (
                 <div
                   key={message.id}
@@ -210,21 +209,6 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
                   </div>}
                   {stopped && <p className="px-1 text-[11px] leading-relaxed text-muted">Stopped</p>}
                   {message.id === retryId && <RetryButton retryAt={message.retryAt} onRetry={handleRetry} onReady={() => setRetryReadyReplyId(message.id)} />}
-                  {showSources && (
-                    <p className="break-words px-1 text-[11px] leading-relaxed text-muted">
-                      <span>Sources: </span>
-                      {message.sources!.map((source, index) => (
-                        <span key={source.source_path}>
-                          {index > 0 && ' · '}
-                          {source.url ? (
-                            <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-primary">{source.title}</a>
-                          ) : (
-                            <span title={source.source_path}>{source.title}</span>
-                          )}
-                        </span>
-                      ))}
-                    </p>
-                  )}
                   {/* Follow-ups show the standalone query retrieval actually used (DESIGN-002 §5.2). */}
                   {message.rewrittenQuery && !pending && (
                     <p className="break-words px-1 text-[11px] leading-relaxed text-muted">Searched for: {message.rewrittenQuery}</p>
