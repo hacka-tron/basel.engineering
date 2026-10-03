@@ -1,6 +1,6 @@
 # Corpus scope, the `kind` tag and the stale sweep on (RAG plan phase 6, part 2)
 
-**Status:** PR open, not merged. Branch `feature/rag-p6-scope`. Rebased onto main after PR #153 (deep-dive refresh) merged. Part 1 (the sweep and `--clear`) is [2026-10-01-rag-p6-stale-sweep.md](2026-10-01-rag-p6-stale-sweep.md).
+**Status:** PR [#157](https://github.com/hacka-tron/basel.engineering/pull/157) open, not merged. Branch `feature/rag-p6-scope`. Rebased onto main after PR #153 (deep-dive refresh) merged. Part 1 (the sweep and `--clear`) is [2026-10-01-rag-p6-stale-sweep.md](2026-10-01-rag-p6-stale-sweep.md).
 
 ## TL;DR
 
