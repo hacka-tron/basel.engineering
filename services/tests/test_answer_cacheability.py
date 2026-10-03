@@ -240,17 +240,17 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
     assert [done["abstained"] for done in dones] == [True, True]
 
 
-def test_normal_answer_is_cached_under_the_v13_prompt_version(monkeypatch):
+def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v14"
+    assert ask._PROMPT_VERSION == "v15"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
     assert cache.puts[0]["answer"] == "This is a fake response for local development."
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.calls == 1
-    assert all(model_id.endswith("|v14") for model_id in cache.model_ids)
+    assert all(model_id.endswith("|v15") for model_id in cache.model_ids)
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
@@ -262,8 +262,8 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
     llm = ScriptedLLM()
     cache, _, _, _ = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
-    # Same question, same models, older prompt version: the v14 entry is unreachable.
-    monkeypatch.setattr(ask, "_PROMPT_VERSION", "v13")
+    # Same question, same models, older prompt version: the v15 entry is unreachable.
+    monkeypatch.setattr(ask, "_PROMPT_VERSION", "v14")
     monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
     stream = events(
         TestClient(app).post(
@@ -271,7 +271,7 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
         )
     )
     assert next(data for name, data in stream if name == "done")["answer_cache"] == "miss"
-    assert cache.model_ids[-1].endswith("|v13")
+    assert cache.model_ids[-1].endswith("|v14")
 
 
 def test_grounding_rules_ask_for_the_exact_abstention_sentence():

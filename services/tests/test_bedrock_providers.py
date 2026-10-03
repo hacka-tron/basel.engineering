@@ -98,9 +98,23 @@ async def test_generate_uses_system_override_when_given():
 
 
 @pytest.mark.asyncio
-async def test_haiku_rejects_more_than_400_output_tokens():
-    with pytest.raises(ValueError, match="400"):
-        await anext(BedrockLLMProvider(client=StubClient()).generate("prompt", max_tokens=401))
+async def test_generate_rejects_more_than_500_output_tokens():
+    with pytest.raises(ValueError, match="500"):
+        await anext(BedrockLLMProvider(client=StubClient()).generate("prompt", max_tokens=501))
+
+
+@pytest.mark.asyncio
+async def test_generate_accepts_the_answer_cap_the_api_passes():
+    # The API's answer cap and the provider guard must not drift apart again: a cap
+    # above the guard passes the fake-provider run and fails every live answer.
+    from services.glassbox.api.ask import _ANSWER_MAX_TOKENS
+
+    assert _ANSWER_MAX_TOKENS == 500
+    client = StubClient()
+    provider = BedrockLLMProvider(client=client)
+    parts = [part async for part in provider.generate("q", max_tokens=_ANSWER_MAX_TOKENS)]
+    assert parts == ["Hello", " world"]
+    assert client.generation_requests[0]["inferenceConfig"]["maxTokens"] == 500
 
 
 def test_provider_factory_defaults_to_fake_and_rejects_unknown_mode(monkeypatch):

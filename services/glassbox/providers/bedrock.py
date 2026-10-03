@@ -12,6 +12,8 @@ from services.glassbox.providers.base import GROUNDING_RULES, EmbeddingProvider,
 
 DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 DEFAULT_LLM_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+# Output-token guard for generate(); api/ask.py _ANSWER_MAX_TOKENS must stay within it.
+MAX_OUTPUT_TOKENS = 500
 
 
 def _client(region: str):
@@ -101,8 +103,8 @@ class BedrockLLMProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream text deltas; ``usage`` receives Bedrock's token counts if the
         stream reaches its final metadata event (it does not when stopped early)."""
-        if not 1 <= max_tokens <= 400:
-            raise ValueError("max_tokens must be between 1 and 400")
+        if not 1 <= max_tokens <= MAX_OUTPUT_TOKENS:
+            raise ValueError(f"max_tokens must be between 1 and {MAX_OUTPUT_TOKENS}")
         # The call runs in a worker thread that cannot be interrupted. If the
         # client stops while it is still waiting for response headers, the
         # cancellation skips the `finally` below, so the stream that arrives
