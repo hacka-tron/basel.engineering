@@ -40,3 +40,4 @@ Order: 0 golden-set refresh, 1 phase 3 paid baseline, 2 phase 6 part 2 (corpus s
 - The markdown chunker splits at every heading and embeds only chunk text (no file path), so splitting files doesn't change retrieval; heading wording does.
 - Judge (phase 4, PR feature/rag-p4-judge): GLASSBOX_JUDGE_MODEL_ID defaults to us.amazon.nova-pro-v1:0. run_answers rows now store `sources`; calibration pool/sheet live in gitignored eval/runs/, labels in eval/calibration.yaml.
 - Local migrations: `docker compose exec api alembic` fails (no alembic.ini in the image); run `MYSQL_HOST=127.0.0.1 MYSQL_USER=glassbox MYSQL_PASSWORD=glassbox MYSQL_DATABASE=glassbox .venv/bin/alembic upgrade head` from the repo root.
+- Paid answer runs: set `BEDROCK_LLM_MODEL_ID=us.amazon.nova-lite-v1:0` (production model); the code default Haiku 4.5 is not enabled on the account. A full Titan ingest takes about 45 minutes (sequential embedding): run it in the background.

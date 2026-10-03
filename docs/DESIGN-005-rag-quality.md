@@ -7,10 +7,10 @@
 
 ## 1. Summary
 
-Glassbox's retrieval is decent (Titan recall@5 0.87 at the document level), but three things hold answer quality back, and none of them is the vector database:
+Glassbox's retrieval is decent (Titan recall@5 0.87 at the document level in the 2026-10-01 research; the phase 3 baseline on 2026-10-03 measured 0.851, see §2.2), but three things hold answer quality back, and none of them is the vector database:
 
 1. **The prompt asks for thin answers.** It says "Use two or three concise sentences" and "Do not list every detail unless the question asks for a list". The stress-test answer dropped the 512 MiB rule and the 5-minute cooldown even though both sit in one retrieved chunk (`docs/architecture/deep-dive.md`, section "Stress test and KEDA autoscaling"). That is the prompt doing what it was told.
-2. **The About This System corpus is 40% test code.** 307 of the 761 About This System chunks come from `services/tests/`, and they outrank the real sources: the rate-limit and budget questions in the eval set retrieve three test files and miss `DESIGN.md` and `ask.py` entirely. The six historical plan files under `docs/superpowers/plans/` add stale statements on top.
+2. **The About This System corpus is 40% test code.** 307 of the 761 About This System chunks come from `services/tests/`, and they outrank the real sources: the rate-limit and budget questions in the eval set retrieve three test files and miss `DESIGN.md` and `ask.py` entirely. The six historical plan files under `docs/superpowers/plans/` add stale statements on top. (Research finding of 2026-10-01; phase 6, PR #157, now excludes both directories.)
 3. **Nothing measured answers.** At the time of writing the eval scored retrieval only (document-level recall@5 and MRR, at k=5 while production uses k=8), it was manual, and the baseline predated most of the current corpus. Faithfulness, completeness (the thinness problem), abstentions, planned-versus-live correctness and multi-turn were not measured at all. Since then the golden set, free graders and k=8 retrieval metrics have shipped (section 2.3), but no paid answer run has happened yet.
 
 The planned work (not built yet) is to build a small validation harness first, then make cheap, measured changes in this order: the prompt, corpus hygiene, structure-aware chunks with heading breadcrumbs, and hybrid BM25 plus vector search with reciprocal-rank fusion. A paid reranker, LLM-generated contextual chunks, and a Redis or embedding-model upgrade are not worth it at this scale yet (section 7).
@@ -40,25 +40,43 @@ The planned work (not built yet) is to build a small validation harness first, t
 
 ### 2.2 What the Titan baseline shows
 
-`eval/baselines/amazon.titan-embed-text-v2_0.json` (recall@5 0.8667, MRR 0.6917; about_me 0.93/0.79, about_system 0.80/0.59). Its corpus fingerprint predates most of today's About This System content, so it is stale. Its misses are informative:
+Measured 2026-10-03 on `main` `ce1b410`: Titan v2 embeddings, local MySQL and Redis ingested with Titan (170 documents, 1,351 chunks), the 90-case golden set (67 retrieval cases), prompt v14 on Nova Lite. Stored in `eval/baselines/amazon.titan-embed-text-v2_0.json` (retrieval, v2 format) and `eval/baselines/answers-nova-lite-v14.json` (answers). Cost about $0.04. The baseline was taken before the corpus-scope change (#157, which drops `services/tests/` and `docs/superpowers/plans/` from the index) merged, so noise@8 is expected to fall afterwards; that is the intended effect, not a regression.
 
-- `system-rate-limit` and `system-budget` (rank 0): the top 3 are `services/tests/test_ask_endpoint.py` and `test_limits.py`.
-- `system-secrets` (rank 0): plan files and `run.py` beat `scanner.py`.
-- `system-sse`, `system-worker`, `system-ingest`, `system-providers`, `system-caches` (rank 2): a plan file or a test is ranked first.
-- `me-observability` (rank 0) and three about_me questions at rank 3 or 4. This matters little: About Basel has 6 chunks and the worker sends the top 8, so **every About Basel answer already sees the whole corpus**. Only the order changes.
+| Retrieval (k=8) | recall@5 | MRR@5 | recall@8 | chunk recall@8 | chunk MRR@8 | noise@8 |
+|---|---|---|---|---|---|---|
+| overall (67) | 0.851 | 0.706 | 0.910 | 0.731 | 0.553 | 0.127 |
+| about_me (33) | 0.909 | 0.864 | 0.970 | 0.970 | 0.736 | 0.000 |
+| about_system (34) | 0.794 | 0.553 | 0.853 | 0.500 | 0.374 | 0.250 |
 
-Document-level scoring is also lenient: `docs/DESIGN.md` counts as a hit whichever of its roughly 40 chunks comes back.
+By category, chunk recall@8: fact 0.846, live 0.500, planned 0.125 (noise@8 0.23). Planned cases mostly find the right file but not the section that says "planned".
+
+| Answers (v14, Nova Lite) | passed | fact_coverage | abstain on unanswerable | false abstain | status ok (planned/live) | median words |
+|---|---|---|---|---|---|---|
+| overall (90) | 63 (0.70) | 0.789 | 11/11 | 0.068 | 11/14 (0.786) | 13.5 |
+| about_me (46) | 38 (0.83) | 0.877 | 1.0 | 0.054 | n/a | 14 |
+| about_system (44) | 25 (0.57) | 0.698 | 1.0 | 0.081 | 0.786 | 12.5 |
+
+Per category pass rate: fact 0.65, planned 0.25 (live 5 of 6), multi_turn 0.88, injection 0.80, unanswerable 1.00. The stress-test case `sugg-system-stress` fails `fact_coverage` (0 of 2: no 512 MiB rule, no 5-minute cooldown), as expected. Median answers are 13.5 words, which is the thinness problem in numbers. Of the 27 failed cases, 5 are false abstentions (`I don't know`; one injection case abstained too), 3 have a wrong planned/live status (two of them abstentions) and the rest are thin answers missing required facts.
+
+What the retrieval misses show:
+
+- `system-rate-limit` and `system-budget` (rank 0): the top 3 are `services/tests/test_ask_endpoint.py` and `test_limits.py`; the top 8 for rate limit are six test chunks plus one DESIGN-002 chunk.
+- `system-secrets`: plan files, `run.py` and a test beat `scanner.py`.
+- Many about_system questions have a plan file or a test in the top 8 (noise@8 0.25).
+- About Basel has 6 documents but 15 chunks, so the worker's top 8 does **not** show the whole corpus: `me-education` retrieves 8 of 15 chunks, misses the one with the university, and the model correctly abstains from what it was shown.
+
+Document-level scoring is lenient: `docs/DESIGN.md` counts as a hit whichever of its roughly 40 chunks comes back. Chunk recall@8 is the stricter number.
 
 ### 2.3 What is and isn't validated
 
 | Property | Measured today? |
 |---|---|
-| Retrieval recall/MRR (document level, k=5) | Yes, manually, stale baseline (v1 format) |
-| Retrieval at production k=8, chunk-level hits, noise share (tests/plans in the top k) | Yes, manually since PR #95; no stored baseline in the new format yet |
+| Retrieval recall/MRR (document level, k=5) | Yes, v2 Titan baseline of 2026-10-03 (§2.2) |
+| Retrieval at production k=8, chunk-level hits, noise share (tests/plans in the top k) | Yes, manually since PR #95; stored v2 Titan baseline of 2026-10-03 (§2.2) |
 | Faithfulness (claims supported by the sources) | No (only ad-hoc live checks recorded in AGENT_HANDOFF) |
-| Completeness / key facts (the thinness problem) | Grader exists (`fact_coverage`, PR #97); no paid answer run yet |
-| Correct abstention on unanswerable questions; no false abstention | Grader and unanswerable cases exist (PR #97); no paid answer run yet |
-| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`); planned-versus-live golden cases with a free grader (PR #97); no paid answer run yet |
+| Completeness / key facts (the thinness problem) | Grader exists (`fact_coverage`, PR #97); v14 baseline 0.789 (§2.2) |
+| Correct abstention on unanswerable questions; no false abstention | Grader and unanswerable cases exist (PR #97); v14 baseline: abstains on 11/11, false abstain 6.8% (§2.2) |
+| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`); planned-versus-live golden cases with a free grader (PR #97); v14 baseline: live 5/6, planned 2/8 pass (§2.2) |
 | Multi-turn rewrite quality | Grader and multi-turn cases exist (PR #97); no paid run yet |
 | Live traffic | No (answers are not logged) |
 
@@ -183,7 +201,7 @@ The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbe
 | Run | Trigger | What | Paid? |
 |---|---|---|---|
 | **CI (every PR)** | `ci.yml`, existing MySQL/Redis services | Built: unit tests for the graders and the prompt contract, and dataset schema validation. Planned: a **lexical-only retrieval eval** against the real corpus (BM25 leg, deterministic, fake embeddings not used for scoring); hygiene assertions (no tests/plans indexed, no stale docs). Planned gates: dataset valid, lexical recall must not drop more than 5 points from its committed baseline, noise@8 = 0. | No |
-| **Paid eval (manual; planned, no paid run yet)** | `GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid` locally (both switches required) with owner credentials, later a `workflow_dispatch` "Eval · RAG quality" behind an approval environment | Titan retrieval eval plus Nova Lite answers for all ~70 cases, deterministic graders, optional judge. Writes `eval/runs/<date>-<prompt>-<git sha>.json` and updates `eval/baselines/answers-<model>.json` when asked. | Yes, about $0.03 without judge, about $0.50 with Nova Pro judge |
+| **Paid eval (manual; first run 2026-10-03, the phase 3 baseline in §2.2)** | `GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid` locally (both switches required) with owner credentials, later a `workflow_dispatch` "Eval · RAG quality" behind an approval environment | Titan retrieval eval plus Nova Lite answers for all ~70 cases, deterministic graders, optional judge. Writes `eval/runs/<date>-<prompt>-<git sha>.json` and updates `eval/baselines/answers-<model>.json` when asked. | Yes, about $0.03 without judge, about $0.50 with Nova Pro judge |
 | **Online (weekly, manual; planned)** | script over `queries` | Sample 20 live answers, run deterministic checks and optionally the judge; abstention rate and answer length trends; promote interesting questions into the golden set. | Optional |
 
 **Release gate for any retrieval or prompt change (planned)** (checked in its PR from a paid run attached to the PR): chunk-level recall@8 does not drop; `fact_coverage` ≥ 0.90 (and it must improve for the thinness fix); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; faithfulness pass ≥ 0.95 once the judge is calibrated.

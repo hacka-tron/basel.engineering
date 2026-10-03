@@ -287,3 +287,35 @@ def test_live_but_off_still_rejects_planned_claims(answer):
 def test_live_but_off_only_applies_to_its_case():
     answer = "No autoscaling right now: KEDA is installed but suspended."
     assert status_ok(answer, "live") is False
+
+
+def test_write_run_redacts_about_me_text_under_baselines(tmp_path, monkeypatch):
+    import json
+
+    from eval import run_answers
+
+    monkeypatch.setattr(run_answers, "BASELINES_DIR", tmp_path / "baselines")
+    me = {
+        "id": "a",
+        "corpus": "about_me",
+        "question": "secret q",
+        "answer": "secret a",
+        "rewrite": "secret r",
+        "sources": [{"n": 1, "source_path": "private/x.md", "text": "secret t"}],
+        "retrieved": [{"chunk_id": 1, "source_path": "private/x.md"}],
+        "answer_words": 2,
+        "grades": {"passed": False, "missing_facts": ["Azure"], "forbidden_hits": []},
+        "error": None,
+    }
+    sys_row = {"id": "b", "corpus": "about_system", "question": "keep q", "answer": "keep a"}
+    for out, redact in ((tmp_path / "baselines" / "x.jsonl", None), (tmp_path / "o.jsonl", True)):
+        run_answers.write_run([me, sys_row], {}, out, redact_about_me=redact)
+        text = out.read_text()
+        assert "secret" not in text and "Azure" not in text
+        rows = [json.loads(line) for line in text.splitlines()]
+        assert rows[0]["retrieved"] == me["retrieved"] and rows[0]["answer_words"] == 2
+        assert rows[0]["grades"]["missing_facts_count"] == 1
+        assert rows[1]["answer"] == "keep a"
+    full = tmp_path / "runs.jsonl"
+    run_answers.write_run([me, sys_row], {}, full)
+    assert "secret a" in full.read_text()
