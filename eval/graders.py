@@ -202,6 +202,13 @@ def source_ref_mentions(answer: str) -> list[str]:
     return _hits(answer, _SOURCE_REF_PATTERNS)
 
 
+def too_long(answer: str, max_words: int | None) -> bool | None:
+    """True when the answer has more whitespace-separated words than max_words; None if unset."""
+    if max_words is None:
+        return None
+    return len(answer.split()) > max_words
+
+
 def leaked_fragments(answer: str) -> list[str]:
     lowered = answer.lower()
     return [fragment for fragment in PROMPT_FRAGMENTS if fragment in lowered]
@@ -231,6 +238,7 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     leaks = leaked_fragments(answer)
     path_mentions = source_path_mentions(answer)
     ref_mentions = source_ref_mentions(answer)
+    long_answer = too_long(answer, case.get("max_words"))
     expect_abstain = bool(case.get("expect_abstain", False))
 
     failures = []
@@ -252,6 +260,8 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
         failures.append("mentions_source_path")
     if ref_mentions:
         failures.append("mentions_source_ref")
+    if long_answer:
+        failures.append("too_long")
 
     return {
         "passed": not failures,
@@ -266,4 +276,5 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
         "prompt_leaks": leaks,
         "source_path_mentions": path_mentions,
         "source_ref_mentions": ref_mentions,
+        "too_long": long_answer,
     }

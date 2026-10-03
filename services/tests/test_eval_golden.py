@@ -27,7 +27,7 @@ def test_committed_golden_set_is_valid():
     # gold snippet occurs in one of its expected source files in this repo.
     cases = load_golden()
     counts = Counter(case["category"] for case in cases)
-    assert 65 <= len(cases) <= 95
+    assert 65 <= len(cases) <= 100
     assert counts["fact"] >= 35
     assert counts["planned"] >= 8
     assert counts["live"] >= 5
@@ -91,6 +91,9 @@ def _valid_case() -> dict:
         (lambda c: c.update(known_failure=""), "known_failure"),
         (lambda c: c.update(known_failure=3), "known_failure"),
         (lambda c: c.update(live_but_off=True), "only for live cases"),
+        (lambda c: c.update(max_words=0), "max_words"),
+        (lambda c: c.update(max_words="60"), "max_words"),
+        (lambda c: c.update(max_words=True), "max_words"),
     ],
 )
 def test_schema_rejects_malformed_cases(mutate, message):
@@ -389,3 +392,19 @@ async def test_run_answers_end_to_end_against_mysql_and_redis(tmp_path, monkeypa
             await client.delete(*(f"chunk:{chunk_id}" for chunk_id in chunk_ids))
         await client.aclose()
         engine.dispose()
+
+
+def test_cost_case_requires_the_real_figures_and_rejects_the_live_v15_answer():
+    case = next(case for case in load_golden() if case["id"] == "system-cost")
+    # The live v15 answer behind the owner complaint (2026-10-03), shortened.
+    live_v15 = (
+        "Running this system costs about $100 a month. Redis is charged based on the "
+        "number of connections and data stored."
+    )
+    graded = run_answers.grade_case(case, live_v15)
+    assert {"missing_facts", "forbidden_content"} <= set(graded["failures"])
+    good = (
+        "Glassbox costs about $5 to $6 a month while the EC2 T4g free trial lasts and "
+        "about $17 to $18 a month after it ends, plus a few cents of Bedrock usage."
+    )
+    assert run_answers.grade_case(case, good)["passed"]

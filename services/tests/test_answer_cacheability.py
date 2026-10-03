@@ -243,14 +243,14 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
 def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v15"
+    assert ask._PROMPT_VERSION == "v16"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
     assert cache.puts[0]["answer"] == "This is a fake response for local development."
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.calls == 1
-    assert all(model_id.endswith("|v15") for model_id in cache.model_ids)
+    assert all(model_id.endswith("|v16") for model_id in cache.model_ids)
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
