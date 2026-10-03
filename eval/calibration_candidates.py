@@ -271,7 +271,7 @@ def yaml_block(item: dict, *, seed: str, dev_fraction: float) -> str:
         f"  - id: {item['id']}\n"
         f"    case_id: {item['case_id']}\n"
         f"    kind: {item['kind']}\n"
-        f"    answer_hash: {item['answer_hash']}\n"
+        f"    answer_hash: {item['answer_hash']}  # pragma: allowlist secret\n"
         "    faithful: null   # pass | fail\n"
         "    relevant: null   # pass | fail\n"
         '    reason: ""\n'

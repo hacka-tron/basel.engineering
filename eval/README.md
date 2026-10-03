@@ -86,6 +86,8 @@ The graders' known limitations (first-sentence planned/live check, verbatim-only
 
 ### Building the label pool
 
+`eval/calibration.yaml` ships as an empty template. Build the pool from a run of the prompt currently in production (v15 as of 2026-10-03): labels on answers from an older prompt are stale, since the answer hashes and the answers themselves change with the prompt. A 65-item pool built from v14 answers was generated on 2026-10-03 and deliberately not committed.
+
 Natural answers are almost all passes, so the pool oversamples failures. From a run made with this code (it needs the stored `sources`):
 
 ```sh
@@ -105,6 +107,20 @@ Kinds (aim for at least 15 of each): `thin` (answerable cases that miss facts, e
    - `relevant: pass` = it addresses the question asked, even briefly. `fail` = off topic, a different question, or a refusal.
 3. Leave a label `null` to skip that judge for an entry. Do not edit `id`, `answer_hash` or `split`: the split (`dev` about 40%, `test` about 60%) comes from a fixed seed and the id alone, and `calibrate` rejects a changed split or a changed answer.
 4. Label failures carefully; they are the point. Aim for at least 15 of each class per judge overall, which gives at least 10 per class in the test split.
+
+### Labelling page (preferred over the sheet)
+
+The sheet is about 1 MB; use the offline page instead (one HTML file, inline CSS/JS, no network, kind hidden):
+
+```sh
+python -m eval.label_page                                   # writes eval/runs/label.html (gitignored)
+open eval/runs/label.html                                   # label; keys f/F faithful pass/fail, r/R relevant, j/k next/prev
+# click "Export labels" -> ~/Downloads/calibration-labels.json
+python -m eval.import_labels ~/Downloads/calibration-labels.json   # merges only faithful/relevant/reason into eval/calibration.yaml
+GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.calibrate --paid   # then calibrate (below)
+```
+
+Sources are collapsed; numbers and capitalised names in the answer that appear in no source are highlighted (a hint, not a verdict). Labels autosave in the browser (localStorage); Export any time. The importer rejects unknown ids or a changed answer hash, never erases an existing label with a blank, and is idempotent. Tests: `services/tests/test_eval_label_page.py`.
 
 ### Calibrating
 
