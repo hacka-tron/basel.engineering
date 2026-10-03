@@ -325,9 +325,41 @@ def _token_counts(prompt: str, output: str, usage: dict) -> tuple[int, int]:
     )
 
 
-def _public_chunk(chunk: WorkerChunk) -> dict:
+_MD_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
+_GENERIC_LABEL = "About Basel"
+
+
+def about_me_label(text: str, title: str | None = None) -> str:
+    """A visitor-safe label for an About Basel chunk, in place of its private path.
+
+    The chunk's own Markdown heading (chunks start at a heading; a preamble chunk
+    may have it further down), else a document title that is not a file name, else
+    a generic label. RAG phase 7 adds a stored header field to use instead.
+    """
+    for line in text.splitlines():
+        match = _MD_HEADING.match(line.strip())
+        if match:
+            return match.group(1).strip()[:80]
+    if (
+        title
+        and "/" not in title
+        and not title.lower().endswith(".md")
+        and "private" not in title.lower()
+    ):
+        return title.strip()[:80]
+    return _GENERIC_LABEL
+
+
+def _public_chunk(chunk: WorkerChunk, corpus: str | None = None) -> dict:
+    """The chunk as the browser sees it. About Basel never exposes its private
+    source paths (owner, 2026-10-03): the path becomes a section label."""
     payload = chunk.model_dump(exclude={"text"}, exclude_none=True)
     payload["snippet"] = " ".join(chunk.text.split())[:180]
+    if corpus == "about_me":
+        label = about_me_label(chunk.text, chunk.title)
+        payload["source_path"] = label
+        payload["title"] = label
+        payload.pop("url", None)
     return payload
 
 
@@ -583,7 +615,7 @@ async def _stream(
                 LOGGER.warning("Cached answer for %s needed %d mask(s)", request_id, masked)
             yield frame(
                 "retrieval",
-                {"chunks": [_public_chunk(chunk) for chunk in chunks]},
+                {"chunks": [_public_chunk(chunk, request.corpus) for chunk in chunks]},
             )
             yield token_frame(answer)
             total_ms = elapsed_ms(request_start_ts)
@@ -660,7 +692,9 @@ async def _stream(
                     if event.request_id != request_id:
                         raise ValueError("worker trace request_id mismatch")
                     chunks = event.chunks
-                    retrieval_payload: dict = {"chunks": [_public_chunk(chunk) for chunk in chunks]}
+                    retrieval_payload: dict = {
+                        "chunks": [_public_chunk(chunk, request.corpus) for chunk in chunks]
+                    }
                     if rewritten_query:
                         retrieval_payload["rewritten_query"] = rewritten_query
                     yield frame("retrieval", retrieval_payload)
