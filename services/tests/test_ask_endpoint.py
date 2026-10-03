@@ -717,6 +717,7 @@ PRIVATE_CHUNK = {
         ("no heading here", "Resume", "Resume"),
         ("no heading here", "education.md", "About Basel"),
         ("no heading here", None, "About Basel"),
+        ("no heading here", "Private notes", "About Basel"),
     ],
 )
 def test_about_me_label(text, title, label):

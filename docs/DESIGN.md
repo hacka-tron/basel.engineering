@@ -67,7 +67,7 @@ Recruiters get a polished, memorable demo. Engineers get a working, inspectable 
 |      systems?                 |   [Embed cache]->[Vector search]->[MySQL]  |
 |                               |                     |                      |
 |   A: ...streamed answer...    |                   [LLM]                    |
-|      Sources: title, path     |                                            |
+|                               |                                            |
 |                               |   Retrieved chunks: file, score (0.87)     |
 |   [ ask anything...     ] ->  |                                            |
 +-------------------------------+--------------------------------------------+

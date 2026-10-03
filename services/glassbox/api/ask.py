@@ -340,7 +340,12 @@ def about_me_label(text: str, title: str | None = None) -> str:
         match = _MD_HEADING.match(line.strip())
         if match:
             return match.group(1).strip()[:80]
-    if title and "/" not in title and not title.lower().endswith(".md") and "private" not in title:
+    if (
+        title
+        and "/" not in title
+        and not title.lower().endswith(".md")
+        and "private" not in title.lower()
+    ):
         return title.strip()[:80]
     return _GENERIC_LABEL
 
