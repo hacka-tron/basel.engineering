@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { BUDGET_REPLIES, pickBudgetReply } from './budgetReplies.ts'
+import { BUDGET_REPLIES, SYSTEM_RETRIEVAL_ONLY_REPLY, pickBudgetReply, retrievalOnlyReply } from './budgetReplies.ts'
 
 test('there are 20 distinct, short replies', () => {
   assert.equal(BUDGET_REPLIES.length, 20)
@@ -16,8 +16,17 @@ test('no line makes a firm return promise', () => {
   for (const reply of BUDGET_REPLIES) assert.doesNotMatch(reply, /\b(back|return|returns|ready) (tomorrow|at|by|in)\b(?!-ish)|\bwill be back\b/i, reply)
 })
 
-test('every reply points to the sources', () => {
-  for (const reply of BUDGET_REPLIES) assert.match(reply, /\bsources\b/i, reply)
+test('no reply points to a sources list (none is shown)', () => {
+  for (const reply of BUDGET_REPLIES) assert.doesNotMatch(reply, /\b(sources?|below)\b/i, reply)
+})
+
+test('retrieval_only: About This System points to the chunk list; the others get a playful reply', () => {
+  assert.equal(retrievalOnlyReply('system', null, () => 0), SYSTEM_RETRIEVAL_ONLY_REPLY)
+  assert.match(SYSTEM_RETRIEVAL_ONLY_REPLY, /Retrieved chunks/)
+  for (const topic of ['basel', 'portfolio'] as const) {
+    assert.equal(retrievalOnlyReply(topic, null, () => 0), BUDGET_REPLIES[0])
+    assert.ok(BUDGET_REPLIES.includes(retrievalOnlyReply(topic)))
+  }
 })
 
 test('no precise reset times or amounts, and no blaming the visitor', () => {
