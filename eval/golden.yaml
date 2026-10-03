@@ -602,11 +602,11 @@ cases:
     corpus: about_system
     category: planned
     holdout: true
-    notes: Since #101 the stale sweep exists but runs report-only in production; deletion stays off until the owner sets GLASSBOX_INGEST_SWEEP=apply, so the honest answer is still "no, they stay in the index".
+    notes: The stale sweep (#101) runs in apply mode in production since the corpus-scope change (owner decision 2026-10-03), so the honest answer is "yes, on the next release's ingest run, behind the zero-file, directory and 30% guards"; report mode would only log them.
     question: Are files deleted from the repository removed from the search index?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - 'it only logs: files deleted from the repository, or now excluded from the scan, stay in the index'
+      - 'makes it delete them; production uses `apply`'
     must_include: ['prun|remov|delet|stale|stay in the index']
   - id: planned-eval-ci
     origin: new
