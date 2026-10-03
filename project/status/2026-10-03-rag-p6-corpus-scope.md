@@ -4,11 +4,11 @@
 
 ## TL;DR
 
-About This System no longer indexes the test suite (`services/tests/`) or the dated implementation plans (`docs/superpowers/plans/`). Before this change they were 342 of 761 chunks (tests 307, plans 35) and crowded real sources out of the top 8. Frontend source stays out. Each chunk hash in Redis also gets a `kind` tag (`doc`, `code`, `infra`, `manifest`, `test`), and retrieval can filter on it, though the worker doesn't use the filter yet (phase 8's hybrid ranking may). `ensure_index` now adds every missing field to an existing index, so phase 8's `text` field is a one-line change. The stale sweep stays in `report` mode: the switch to `apply` was split out into a stacked follow-up PR (`feature/sweep-apply`) that waits until the owner has checked this release's ingest log.
+About This System no longer indexes the test suite (`services/tests/`) or the dated implementation plans (`docs/superpowers/plans/`). Before this change they were 342 of 761 chunks (tests 307, plans 35) and crowded real sources out of the top 8. Frontend source stays out. Each chunk hash in Redis also gets a `kind` tag (`doc`, `code`, `infra`, `manifest`, `test`), and retrieval can filter on it, though the worker doesn't use the filter yet (phase 8's hybrid ranking may). `ensure_index` now adds every missing field to an existing index, so phase 8's `text` field is a one-line change. The stale sweep switch from `report` to `apply` (`feature/sweep-apply`, stacked on #157) is in this branch; merge it only after #157 is released and the owner has checked that release's ingest log.
 
 ## What changed for a visitor
 
-After the release, About This System answers stop citing test files and plan documents. They come from the design docs and the real code instead. Nothing changes until the sweep runs in `apply` mode (the follow-up PR), because until then the old test and plan chunks stay in the index (report mode only logs them).
+After the release, About This System answers stop citing test files and plan documents. They come from the design docs and the real code instead. Nothing changes until the sweep runs in `apply` mode (this branch), because until then the old test and plan chunks stay in the index (report mode only logs them).
 
 ## How it works
 
@@ -19,7 +19,7 @@ flowchart LR
     P[prepare_index] -->|FT.ALTER each missing field| X[(idx:chunks)]
     I --> R[reconcile: rewrite keys whose kind is missing]
     R --> W{sweep}
-    W -->|report, production| D[log excluded + deleted files as would delete]
+    W -->|apply| D[delete excluded + deleted files' rows and keys]
 ```
 
 - `ingest/scanner.py`: `EXCLUDED_SYSTEM_PREFIXES`. An excluded file is "unseen", so the stale sweep treats it like a deleted file.
@@ -35,7 +35,7 @@ flowchart LR
 
 ## Operational notes and risks
 
-- **The 30% guard (measured).** A fake-provider ingest of origin/main followed by `--dry-run` from this branch: about_system would delete 49 of 168 documents (29.2%, under the 30% guard): `services/tests/` 41 (including an empty `__init__.py` with 0 chunks), `docs/superpowers/plans/` 8; about_me 0 of 6; portfolio 0 of 0. Without the empty file it is 48 of 167 (28.7%). Close to the limit, so a few more tests before the apply release could trip the guard; then raise `GLASSBOX_INGEST_SWEEP_MAX_FRACTION` for one release or run `--force-sweep`. In report mode (this PR) nothing is deleted either way.
+- **The 30% guard (measured).** A fake-provider ingest of origin/main followed by `--dry-run` from this branch: about_system would delete 49 of 168 documents (29.2%, under the 30% guard): `services/tests/` 41 (including an empty `__init__.py` with 0 chunks), `docs/superpowers/plans/` 8; about_me 0 of 6; portfolio 0 of 0. Without the empty file it is 48 of 167 (28.7%). Close to the limit, so a few more tests before the apply release could trip the guard; then raise `GLASSBOX_INGEST_SWEEP_MAX_FRACTION` for one release or run `--force-sweep`.
 - On deploy: `FT.ALTER ... ADD kind TAG` (instant), a reconcile rewrite of every key, and a corpus-version bump. The retrieval cache empties and the answer cache is unaffected. No embedding calls.
 
 ## How to see it / verify it
@@ -45,6 +45,6 @@ flowchart LR
 
 ## Open items
 
-- **Sweep stays in report mode.** The `apply` switch is a separate stacked PR (`feature/sweep-apply`, base `feature/rag-p6-scope`); merge it only after this PR is released and the owner has checked that release's ingest log for "would delete" lines and any `STALE SWEEP REFUSED` banner.
+- **Merge order:** #157 first and released; the owner checks that release's ingest log for `would delete` lines and any `STALE SWEEP REFUSED` banner; then this PR (retarget to main after #157 merges). The BACKLOG item is closed here.
 - **noise@8 (fake provider, fresh MySQL 8.0 and Redis Stack, PR branch ingested): 0.0** overall and in every category. Fake recall numbers are not quality signals.
 - Paid retrieval eval (about $0.0001; plan acceptance): chunk recall@8 not lower than phase 3. Not run here.
