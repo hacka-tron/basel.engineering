@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from eval.graders import ANSWERABLE_CATEGORIES, CATEGORIES, grade_case
+from eval.judge import Judge, get_judge_llm, source_dicts
 from eval.schema import load_golden
 from services.glassbox.api.ask import (
     _ANSWER_MAX_TOKENS,
@@ -105,7 +106,12 @@ def stack_retriever(redis_client, session_factory) -> Retriever:
 
 
 async def run_case(
-    case: dict, *, embedder: EmbeddingProvider, llm: LLMProvider, retrieve: Retriever
+    case: dict,
+    *,
+    embedder: EmbeddingProvider,
+    llm: LLMProvider,
+    retrieve: Retriever,
+    judge: Judge | None = None,
 ) -> dict:
     """Answer one golden case the way /api/ask would, then grade it."""
     row: dict = {
@@ -176,6 +182,8 @@ async def run_case(
                     }
                     for c in chunks
                 ],
+                # Raw chunk text, so a stored run can be judged or labelled later.
+                "sources": source_dicts(chunks),
                 "answer": answer,
                 "answer_words": len(answer.split()),
                 "tokens_in": tokens_in,
@@ -187,6 +195,16 @@ async def run_case(
                 "error": None,
             }
         )
+        if judge is not None and chunks:
+            # A multi_turn follow-up alone ("and the second one?") is meaningless to the
+            # judge: it gets the standalone rewrite when there is one.
+            judge_question = rewrite or case["question"]
+            verdicts = await judge.evaluate(judge_question, source_dicts(chunks), answer)
+            row["judge"] = {
+                "model": judge.model_id,
+                "question": judge_question,
+                "verdicts": {name: v.to_dict() for name, v in verdicts.items()},
+            }
     except Exception as exc:  # one broken case must not stop the run
         row.update(
             {
@@ -201,6 +219,41 @@ async def run_case(
 
 def _rate(values: list[bool]) -> float | None:
     return round(sum(values) / len(values), 4) if values else None
+
+
+def judge_metrics(graded: list[dict], answerable: list[dict]) -> dict:
+    """Judge pass rates (only present when the run used --judge).
+
+    Faithfulness covers every judged answer. Relevance covers answerable cases only:
+    a correct abstention on an unanswerable case would otherwise count as irrelevant.
+    Unusable judge replies are counted in `judge_errors`. Dropping them would inflate
+    the rates, so the rates are None (invalid) unless `judge_errors` is 0; the partial
+    figures stay available as `*_rate_partial` for debugging, never for a gate.
+    """
+    judged = [row for row in graded if row.get("judge")]
+    if not judged:
+        return {}
+
+    def verdicts(rows: list[dict], name: str) -> list[dict]:
+        return [row["judge"]["verdicts"][name] for row in rows if row.get("judge")]
+
+    def rate(items: list[dict]) -> float | None:
+        return _rate([v["pass"] for v in items if v["pass"] is not None])
+
+    every = [v for name in ("faithfulness", "relevance") for v in verdicts(judged, name)]
+    errors = sum(v["pass"] is None for v in every)
+    faithfulness = rate(verdicts(judged, "faithfulness"))
+    relevance = rate(verdicts(answerable, "relevance"))
+    return {
+        "judge_count": len(judged),
+        "judge_faithfulness_rate": faithfulness if errors == 0 else None,
+        "judge_relevance_rate": relevance if errors == 0 else None,
+        "judge_faithfulness_rate_partial": faithfulness if errors else None,
+        "judge_relevance_rate_partial": relevance if errors else None,
+        "judge_errors": errors,
+        "judge_tokens_in": sum(v["tokens_in"] for v in every),
+        "judge_tokens_out": sum(v["tokens_out"] for v in every),
+    }
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -235,6 +288,7 @@ def summarize(rows: list[dict]) -> dict:
                 ]
             ),
             "median_answer_words": statistics.median(words) if words else None,
+            **judge_metrics(graded, answerable),
         }
 
     # Known failures (a BACKLOG item, e.g. a corpus fix awaiting the owner) are
@@ -259,12 +313,20 @@ def summarize(rows: list[dict]) -> dict:
 
 
 async def run_cases(
-    cases: list[dict], *, embedder: EmbeddingProvider, llm: LLMProvider, retrieve: Retriever
+    cases: list[dict],
+    *,
+    embedder: EmbeddingProvider,
+    llm: LLMProvider,
+    retrieve: Retriever,
+    judge: Judge | None = None,
 ) -> list[dict]:
-    return [await run_case(case, embedder=embedder, llm=llm, retrieve=retrieve) for case in cases]
+    return [
+        await run_case(case, embedder=embedder, llm=llm, retrieve=retrieve, judge=judge)
+        for case in cases
+    ]
 
 
-async def _run_against_stack(cases: list[dict]) -> list[dict]:
+async def _run_against_stack(cases: list[dict], *, use_judge: bool = False) -> list[dict]:
     import redis.asyncio as redis
     from sqlalchemy.orm import sessionmaker
 
@@ -279,6 +341,7 @@ async def _run_against_stack(cases: list[dict]) -> list[dict]:
             embedder=get_embedding_provider(),
             llm=get_llm_provider(),
             retrieve=stack_retriever(client, sessionmaker(bind=engine)),
+            judge=Judge(get_judge_llm()) if use_judge else None,
         )
     finally:
         await client.aclose()
@@ -316,6 +379,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--category", help="comma-separated categories")
     parser.add_argument("--max-cases", type=int)
     parser.add_argument("--paid", action="store_true", help="allow a non-fake (paid) provider")
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        help="also run the faithfulness and relevance LLM judges (eval/judge.py; paid unless fake)",
+    )
     parser.add_argument("--out", type=Path, help="JSONL output path (default eval/runs/)")
     args = parser.parse_args(argv)
     check_paid_allowed(args.paid)
@@ -325,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         categories=args.category.split(",") if args.category else None,
         max_cases=args.max_cases,
     )
-    rows = asyncio.run(_run_against_stack(cases))
+    rows = asyncio.run(_run_against_stack(cases, use_judge=args.judge))
     summary = summarize(rows)
     path = write_run(rows, summary, args.out)
     print(json.dumps(summary, indent=2))
