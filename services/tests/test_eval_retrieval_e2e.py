@@ -13,6 +13,7 @@ from eval import run_eval
 from services.glassbox.db.models import Base, Document, IngestionRun
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.session import create_db_engine
+from services.glassbox.ingest import scanner
 from services.glassbox.ingest.run import ingest
 
 
@@ -58,6 +59,9 @@ async def test_evaluate_scores_k8_chunk_level_and_noise_against_real_index(
     with engine.connect() as connection:
         existing_run_ids = set(connection.scalars(select(IngestionRun.id)))
     redis_keys = []
+    # The scanner now skips services/tests/; noise@8 exists to catch such files
+    # still indexed from before the exclusion, so index one as an old scan would.
+    monkeypatch.setattr(scanner, "EXCLUDED_SYSTEM_PREFIXES", ())
     try:
         await ingest(tmp_path, engine=engine, redis_client=client)
         with Session(engine) as session:

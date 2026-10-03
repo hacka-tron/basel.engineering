@@ -606,7 +606,7 @@ cases:
     question: Are files deleted from the repository removed from the search index?
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - 'it only logs: files deleted from the repository stay in the index'
+      - 'it only logs: files deleted from the repository, or now excluded from the scan, stay in the index'
     must_include: ['prun|remov|delet|stale|stay in the index']
   - id: planned-eval-ci
     origin: new
