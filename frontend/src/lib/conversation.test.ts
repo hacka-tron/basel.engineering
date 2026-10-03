@@ -135,7 +135,7 @@ test('a budget reply is shown and saved, but its whole turn is left out of histo
     { id: 'u0', role: 'user', content: 'Who is Basel?', createdAt: now },
     { id: 'a0', role: 'assistant', content: 'An engineer.', state: 'done', createdAt: now },
     { id: 'u1', role: 'user', content: 'What did Basel build?', createdAt: now },
-    { id: 'a1', role: 'assistant', content: quirky, state: 'retrieval_only', budget: true, sources: [{ source_path: 'a.md', title: 'A' }], createdAt: now },
+    { id: 'a1', role: 'assistant', content: quirky, state: 'retrieval_only', budget: true, createdAt: now },
     { id: 'u2', role: 'user', content: 'Tell me more', createdAt: now },
     { id: 'e2', role: 'assistant', content: BUDGET_REPLIES[1], state: 'error', budget: true, createdAt: now },
     { id: 'u3', role: 'user', content: 'And his hobbies?', createdAt: now },
@@ -269,5 +269,22 @@ test('the Portfolio conversation is saved and restored like the others', () => {
   withStorage({ 'glassbox:conv:v1:portfolio': serialized }, () => {
     assert.deepEqual(loadConversation('portfolio', now).map((message) => message.id), ['u1', 'a1'])
     assert.deepEqual(loadConversation('about_me', now), [])
+  })
+})
+
+test('sources saved by older versions are dropped on load and never written back', () => {
+  const old = JSON.stringify({
+    version: 1,
+    updatedAt: now,
+    messages: [
+      { id: 'u', role: 'user', content: 'Hi', createdAt: now },
+      { id: 'a', role: 'assistant', content: 'Hello.', state: 'done', sources: [{ source_path: 'private/x.md', title: 'X' }], createdAt: now },
+    ],
+  })
+  withStorage({ 'glassbox:conv:v1:about_me': old }, () => {
+    const restored = loadConversation('about_me', now)
+    assert.equal(restored.length, 2)
+    assert.equal('sources' in restored[1], false)
+    assert.doesNotMatch(serializeConversation(restored, now)!, /private\/x\.md/)
   })
 })

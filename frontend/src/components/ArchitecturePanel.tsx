@@ -296,7 +296,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
                   chunk.title
                 )}
               </p>
-              <p className="truncate text-muted">{chunk.source_path} · {chunk.score.toFixed(2)}</p>
+              <p className="truncate text-muted">{chunk.source_path === chunk.title ? '' : `${chunk.source_path} · `}{chunk.score.toFixed(2)}</p>
             </li>
           ))}
         </ol>
@@ -315,7 +315,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
               <a href={chunk.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 transition-colors hover:text-cyan">{chunk.title}</a>
             ) : chunk.title}
           </p>
-          <p className="break-words text-muted">{chunk.source_path} · {chunk.score.toFixed(2)}</p>
+          <p className="break-words text-muted">{chunk.source_path === chunk.title ? '' : `${chunk.source_path} · `}{chunk.score.toFixed(2)}</p>
         </li>
       ))}
     </ol>

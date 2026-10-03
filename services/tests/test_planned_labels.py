@@ -541,7 +541,7 @@ def test_grounding_rules_treat_the_question_as_data():
         ("k8s/base/api.yaml", "Kubernetes manifest"),
         ("infra/modules/compute/main.tf", "infrastructure (Terraform)"),
         ("docs/DESIGN.md", "design document"),
-        ("private/bio.md", "About Basel"),
+        ("private/bio.md", "About Basel (t)"),
         ("corpus/portfolio/x.md", "portfolio project"),
         ("README.md", "document"),
     ],
@@ -570,7 +570,19 @@ def test_about_basel_prompt_never_contains_a_private_path():
     ]
     prompt = _prompt("What is Basel's favorite food?", chunks)
     assert "private/" not in prompt
-    assert "[1] About Basel: Favorite food: X." in prompt
+    assert "[1] About Basel (Personal): Favorite food: X." in prompt
+    heading = "## Basel's favorite food\nMolokhia."
+    chunk = WorkerChunk(
+        n=1,
+        chunk_id=3,
+        text=heading,
+        source_path="private/personal.md",
+        title="personal.md",
+        score=0.9,
+    )
+    assert "[1] About Basel (Basel's favorite food): ## Basel's favorite food" in _prompt(
+        "q?", [chunk]
+    )
 
 
 def test_grounding_rules_abstain_on_general_requests():

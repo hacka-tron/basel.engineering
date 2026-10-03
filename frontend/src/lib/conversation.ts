@@ -7,8 +7,6 @@ import { CANONICAL_IDK } from './idkReplies.ts'
 
 export type ApiCorpus = 'about_me' | 'about_system' | 'portfolio'
 
-export type MessageSource = { source_path: string; title: string; url?: string }
-
 export type SettledState = 'done' | 'stopped' | 'retrieval_only'
 
 export type ChatMessage = {
@@ -19,7 +17,6 @@ export type ChatMessage = {
   // friendly failure reply (lib/errorReplies.ts) or text cut off by a failure:
   // saved so a reload shows the same chat, but never sent back as history.
   state?: 'pending' | 'error' | SettledState
-  sources?: MessageSource[]
   // The shown text is a playful stand-in for the server's abstention (lib/idkReplies.ts).
   // History sends the canonical sentence instead. Optional, so older saves load unchanged.
   idk?: boolean
@@ -45,7 +42,6 @@ type StoredConversation = {
     role: 'user' | 'assistant'
     content: string
     state?: StoredState
-    sources?: MessageSource[]
     idk?: boolean
     budget?: boolean
     createdAt: number
@@ -108,13 +104,6 @@ function isHistoryTurn(message: ChatMessage, next: ChatMessage | undefined): boo
     && !(message.state === 'stopped' && !message.content.trim())
 }
 
-function isSource(value: unknown): value is MessageSource {
-  if (!value || typeof value !== 'object') return false
-  const source = value as Record<string, unknown>
-  return typeof source.source_path === 'string' && typeof source.title === 'string'
-    && (source.url === undefined || typeof source.url === 'string')
-}
-
 function parseStored(raw: string, now: number): ChatMessage[] | null {
   const data: unknown = JSON.parse(raw)
   if (!data || typeof data !== 'object') return null
@@ -129,7 +118,6 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
     if (typeof message.id !== 'string' || typeof message.content !== 'string' || typeof message.createdAt !== 'number') return null
     if (message.role !== 'user' && message.role !== 'assistant') return null
     if (message.state !== undefined && (typeof message.state !== 'string' || !STORED_STATES.has(message.state))) return null
-    if (message.sources !== undefined && (!Array.isArray(message.sources) || !message.sources.every(isSource))) return null
     if (message.idk !== undefined && typeof message.idk !== 'boolean') return null
     if (message.budget !== undefined && typeof message.budget !== 'boolean') return null
     // Only assistant replies carry these flags; a user message never does.
@@ -142,7 +130,6 @@ function parseStored(raw: string, now: number): ChatMessage[] | null {
       role: message.role,
       content: message.content,
       state: message.state as StoredState | undefined,
-      sources: message.sources as MessageSource[] | undefined,
       ...(assistant && message.idk === true ? { idk: true } : {}),
       ...(budget ? { budget: true } : {}),
       createdAt: message.createdAt,
@@ -185,12 +172,11 @@ export function serializeConversation(messages: ChatMessage[], now = Date.now())
   const stored: StoredConversation = {
     version: 1,
     updatedAt: now,
-    messages: settled.map(({ id, role, content, state, sources, idk, budget, createdAt }) => ({
+    messages: settled.map(({ id, role, content, state, idk, budget, createdAt }) => ({
       id,
       role,
       content,
       ...(role === 'assistant' && state && STORED_STATES.has(state) ? { state: state as StoredState } : {}),
-      ...(sources && sources.length > 0 ? { sources } : {}),
       ...(role === 'assistant' && idk ? { idk: true } : {}),
       ...(role === 'assistant' && budget ? { budget: true } : {}),
       createdAt,
