@@ -3,6 +3,7 @@
 How work is split between models on this project, how every change passes the review gate, and how PRs get merged. Claude (the orchestrator) fills in templates here instead of re-deriving boilerplate. Generic version of this guide: `~/Coding/template/agent-orchestration.md`.
 
 - `reviewer-brief.md` — the review-gate dispatch template (Opus subagent by default, Codex optional) and the Codex CLI form.
+- `rag-plan-brief.md` — shared context for every RAG-plan agent (owner decisions, environment, rules, gotchas); point dispatches at it instead of restating.
 - `reviewer-primer.md` — what every reviewer reads first (system map, hard rules, known traps, per-area checklist).
 - Legacy, kept for history: `project/archive/CODEX.md` (Codex as implementer) and `project/archive/gemini-reviewer.md` (Gemini via `agy`).
 
