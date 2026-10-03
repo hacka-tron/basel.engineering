@@ -108,6 +108,14 @@ class MemoryRedis:
         self.subscription = MemoryPubsub(self)
         self.enqueued = None
         self.cache = {}
+        self.chunk = {
+            "n": 1,
+            "chunk_id": 42,
+            "text": "Basel builds software.",
+            "source_path": "about/basel.md",
+            "title": "Basel",
+            "score": 0.8,
+        }
 
     async def get(self, key):
         return self.cache.get(key)
@@ -166,16 +174,7 @@ class MemoryRedis:
         elif self.outcome == "empty":
             payload["chunks"] = []
         else:
-            payload["chunks"] = [
-                {
-                    "n": 1,
-                    "chunk_id": 42,
-                    "text": "Basel builds software.",
-                    "source_path": "about/basel.md",
-                    "title": "Basel",
-                    "score": 0.8,
-                }
-            ]
+            payload["chunks"] = [self.chunk]
         await self.subscription.messages.put({"data": json.dumps(payload).encode()})
 
     async def aclose(self):
@@ -698,3 +697,70 @@ def test_retrieval_timeout_emits_error_without_hanging(monkeypatch):
     assert stream[-1][1]["code"] == "internal"
     assert "retrieval" in stream[-1][1]["message"].lower()
     assert all(name != "done" for name, _ in stream)
+
+
+PRIVATE_CHUNK = {
+    "n": 1,
+    "chunk_id": 42,
+    "text": "## Basel's education\nBasel studied computer science.",
+    "source_path": "private/education.md",
+    "title": "education.md",
+    "score": 0.8,
+}
+
+
+@pytest.mark.parametrize(
+    ("text", "title", "label"),
+    [
+        ("## Basel's education\nBody", "x", "Basel's education"),
+        ("intro line\n\n### Work history ###\nBody", "x", "Work history"),
+        ("no heading here", "Resume", "Resume"),
+        ("no heading here", "education.md", "About Basel"),
+        ("no heading here", None, "About Basel"),
+    ],
+)
+def test_about_me_label(text, title, label):
+    from services.glassbox.api.ask import about_me_label
+
+    assert about_me_label(text, title) == label
+
+
+def test_about_me_sse_never_contains_private_paths_live_or_cached(monkeypatch):
+    from services.glassbox.api import ask
+
+    class MemoryAnswerCache:
+        def __init__(self):
+            self.values = {}
+
+        async def get(self, corpus, model_id, vector):
+            return self.values.get((corpus, model_id, struct.pack("512f", *vector)))
+
+        async def put(self, corpus, model_id, vector, payload):
+            self.values[(corpus, model_id, struct.pack("512f", *vector))] = payload
+
+    redis_client = MemoryRedis()
+    redis_client.chunk = PRIVATE_CHUNK
+    cache = MemoryAnswerCache()
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask.redis, "from_url", lambda url: redis_client)
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: None)
+    http = TestClient(app)
+    body = {"question": "Where did Basel study?", "corpus": "about_me"}
+    live = http.post("/api/ask", json=body)
+    hit = http.post("/api/ask", json=body)
+    assert next(d for n, d in events(hit) if n == "done")["answer_cache"] == "hit"
+    # The cache keeps the raw chunks; only what leaves the API is mapped.
+    assert "private/education.md" in json.dumps(next(iter(cache.values.values()))["chunks"])
+    for response in (live, hit):
+        assert "private/" not in response.text
+        chunk = next(d for n, d in events(response) if n == "retrieval")["chunks"][0]
+        assert chunk["source_path"] == chunk["title"] == "Basel's education"
+
+
+def test_other_corpora_keep_real_paths():
+    from services.glassbox.api.ask import WorkerChunk, _public_chunk
+
+    chunk = WorkerChunk.model_validate(PRIVATE_CHUNK)
+    assert _public_chunk(chunk, "about_system")["source_path"] == "private/education.md"
+    assert _public_chunk(chunk, "portfolio")["source_path"] == "private/education.md"
