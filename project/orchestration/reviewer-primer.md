@@ -87,7 +87,7 @@ Workflows (`.github/workflows/`):
 
 ## Where to read more
 
-- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`), `project/AGENT_HANDOFF.md` (current state; older checkpoints, including the Task 5 Flux lessons, are in `project/archive/`), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
+- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`), `project/BACKLOG.md` (current state; older checkpoints, including the Task 5 Flux lessons, are in `project/archive/`), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
 - Design: `docs/DESIGN.md` (4 UX, 5 architecture, 8 SSE contract, 9 k8s and memory budget, 10 Terraform, 12 CI/CD), `docs/DESIGN-002-followups.md` (chat, resilience), `docs/DESIGN-003-ingestion.md` (planned), `docs/architecture/deep-dive.md`.
 - Frontend: `project/MOBILE_DESIGN.md`, `frontend/src/index.css` (token pitfalls).
 - Backend: `services/glassbox/api/ask.py`, `trace.py`, `limits.py`, `worker/main.py`, `retrieval/search.py`.
