@@ -39,3 +39,4 @@ Order: 0 golden-set refresh, 1 phase 3 paid baseline, 2 phase 6 part 2 (corpus s
 - Edit this brief through a process-doc PR (`project/**` only, no review round needed).
 - The markdown chunker splits at every heading and embeds only chunk text (no file path), so splitting files doesn't change retrieval; heading wording does.
 - Judge (phase 4, PR feature/rag-p4-judge): GLASSBOX_JUDGE_MODEL_ID defaults to us.amazon.nova-pro-v1:0. run_answers rows now store `sources`; calibration pool/sheet live in gitignored eval/runs/, labels in eval/calibration.yaml.
+- Local migrations: `docker compose exec api alembic` fails (no alembic.ini in the image); run `MYSQL_HOST=127.0.0.1 MYSQL_USER=glassbox MYSQL_PASSWORD=glassbox MYSQL_DATABASE=glassbox .venv/bin/alembic upgrade head` from the repo root.
