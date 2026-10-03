@@ -192,6 +192,27 @@ cases:
     gold_snippets:
       - 'Favorite food: Egyptian molokhia.'
     must_include: ['molokhia']
+  - id: me-favorite-color
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: What is Basel's favorite color?
+    expected_sources: [private/personal.md]
+    gold_snippets:
+      - 'Favorite color: green.'
+    must_include: ['green']
+  - id: me-favorite-personal-project
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: What is Basel's favorite personal project?
+    expected_sources: [private/personal.md]
+    gold_snippets:
+      - because it was built entirely by me
+    # Owner rule (2026-10-03): an answer about his portfolio site says the visitor is on it.
+    must_include: ['portfolio', "you'?re on|you are on|this (site|portfolio)"]
   - id: me-light-dark
     origin: new
     corpus: about_me
