@@ -117,7 +117,7 @@ DD1 §14 is the current cost model. CloudFront/S3 were already near-$0 in the or
 | MySQL (in-cluster, not RDS) | $0 |
 | Cloudflare (DNS + proxy + TLS) | $0 |
 | Bedrock embeddings | pennies |
-| Bedrock LLM (capped at 100 answers/day) | ~$1–5, worst case ~$15 |
+| Bedrock LLM on Nova Lite (capped at 500 answers/day) | cents in practice, worst case ~$4.50 |
 | **Baseline total** | **~$5 to $6 + LLM during the EC2 trial, ~$17 to $18 + LLM after** |
 
 Same credit/runway math as DD1 §14 applies — and it's tied directly to the Free-vs-Paid decision flagged in section 4.

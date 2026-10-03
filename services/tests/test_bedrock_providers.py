@@ -98,9 +98,23 @@ async def test_generate_uses_system_override_when_given():
 
 
 @pytest.mark.asyncio
-async def test_haiku_rejects_more_than_400_output_tokens():
-    with pytest.raises(ValueError, match="400"):
-        await anext(BedrockLLMProvider(client=StubClient()).generate("prompt", max_tokens=401))
+async def test_generate_rejects_more_than_600_output_tokens():
+    with pytest.raises(ValueError, match="600"):
+        await anext(BedrockLLMProvider(client=StubClient()).generate("prompt", max_tokens=601))
+
+
+@pytest.mark.asyncio
+async def test_generate_accepts_the_answer_cap_the_api_passes():
+    # The API's answer cap and the provider guard must not drift apart again: a cap
+    # above the guard passes the fake-provider run and fails every live answer.
+    from services.glassbox.api.ask import _ANSWER_MAX_TOKENS
+
+    assert _ANSWER_MAX_TOKENS == 600
+    client = StubClient()
+    provider = BedrockLLMProvider(client=client)
+    parts = [part async for part in provider.generate("q", max_tokens=_ANSWER_MAX_TOKENS)]
+    assert parts == ["Hello", " world"]
+    assert client.generation_requests[0]["inferenceConfig"]["maxTokens"] == 600
 
 
 def test_provider_factory_defaults_to_fake_and_rejects_unknown_mode(monkeypatch):
@@ -184,3 +198,57 @@ async def test_generate_reports_measured_usage_from_stream_metadata():
     assert parts == ["Hello", " world"]
     assert usage == {"inputTokens": 5, "outputTokens": 2}
     assert provider.reports_usage
+
+
+class ScriptedStreamClient:
+    """converse_stream returns the given text deltas, then the given stop reason."""
+
+    def __init__(self, deltas, stop_reason):
+        self.deltas = deltas
+        self.stop_reason = stop_reason
+
+    def converse_stream(self, **kwargs):
+        events = [{"messageStart": {"role": "assistant"}}]
+        events += [{"contentBlockDelta": {"delta": {"text": d}}} for d in self.deltas]
+        events.append({"messageStop": {"stopReason": self.stop_reason}})
+        return {"stream": iter(events)}
+
+
+async def _collect(provider):
+    parts = []
+    async for part in provider.generate("q", max_tokens=50):
+        parts.append(part)
+    return parts
+
+
+@pytest.mark.asyncio
+async def test_content_filter_stop_raises_typed_error_and_hides_the_notice():
+    from services.glassbox.providers.base import ContentFilteredError
+
+    client = ScriptedStreamClient(
+        [" - The generated text has ", "been blocked by our content filters."],
+        "content_filtered",
+    )
+    shown = []
+    with pytest.raises(ContentFilteredError):
+        async for part in BedrockLLMProvider(client=client).generate("q", max_tokens=50):
+            shown.append(part)
+    assert shown == []
+
+
+@pytest.mark.asyncio
+async def test_answer_starting_like_the_notice_is_released_in_full():
+    client = ScriptedStreamClient(["The ", "gateway ", "is Traefik."], "end_turn")
+    assert "".join(await _collect(BedrockLLMProvider(client=client))) == "The gateway is Traefik."
+    short = ScriptedStreamClient(["The"], "end_turn")
+    assert await _collect(BedrockLLMProvider(client=short)) == ["The"]
+
+
+@pytest.mark.asyncio
+async def test_other_stop_reasons_still_raise_runtime_error():
+    from services.glassbox.providers.base import ContentFilteredError
+
+    client = ScriptedStreamClient(["Hi"], "guardrail_intervened")
+    with pytest.raises(RuntimeError) as caught:
+        await _collect(BedrockLLMProvider(client=client))
+    assert not isinstance(caught.value, ContentFilteredError)

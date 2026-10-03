@@ -172,7 +172,7 @@ def mismatched_items(rows: list[dict]) -> list[dict]:
 
 
 _ABSTAIN_SENTENCE = re.compile(
-    r"Only if they do not answer it at all, reply with exactly \".*?\" and nothing else\. "
+    r"Only if they do not answer it at all, reply with exactly \".*?\" and nothing else\. ?"
 )
 
 

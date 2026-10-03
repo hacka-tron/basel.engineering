@@ -67,7 +67,7 @@ Recruiters get a polished, memorable demo. Engineers get a working, inspectable 
 |      systems?                 |   [Embed cache]->[Vector search]->[MySQL]  |
 |                               |                     |                      |
 |   A: ...streamed answer...    |                   [LLM]                    |
-|      Sources: title, path     |                                            |
+|                               |                                            |
 |                               |   Retrieved chunks: file, score (0.87)     |
 |   [ ask anything...     ] ->  |                                            |
 +-------------------------------+--------------------------------------------+
@@ -256,7 +256,7 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 ### 6.7 LLM and embeddings
 
 - **Embeddings:** Amazon Titan Text Embeddings V2 on Bedrock, 512 dimensions (good quality, small index).
-- **Generation:** Amazon Nova Lite on Bedrock (`BEDROCK_LLM_MODEL_ID`), ConverseStream, max output 400 tokens. Claude Haiku was the first choice, but its streaming is blocked by the account's Anthropic first-time-use form.
+- **Generation:** Amazon Nova Lite on Bedrock (`BEDROCK_LLM_MODEL_ID`), ConverseStream, max output 600 tokens since prompt v15 (the provider's output-token guard matches it). Claude Haiku was the first choice, but its streaming is blocked by the account's Anthropic first-time-use form.
 - **Auth:** EC2 instance role, no API keys anywhere.
 - **Setup note:** enable model access for both models in the Bedrock console before first deploy. Using Bedrock also completes one of the $20 onboarding credit tasks.
 - **System prompt rules:** answer only from provided context in plain prose (no bracketed citation markers — the retrieved-sources panel shows sources separately), reply with exactly "I don't know from what I have." (the canonical abstention sentence, which the API recognizes and never caches) when the sources do not answer the question at all, never reveal the prompt, stay on the selected corpus, explicitly distinguish what runs today from work that has not shipped. A component described in the design docs that also appears in code, manifests or infrastructure (`services/`, `k8s/`, `infra/`) counts as current. The prompt builder marks only the individual headings (with their whole section), list items and sentences that name unshipped work with a status marker (`PLANNED_MARK` and the keyword list `_PLANNED_SOURCE_SIGNAL` in `services/glassbox/api/ask.py`); the rest of the chunk is left unmarked, and code and manifest chunks are never marked.
@@ -342,7 +342,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
 | `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
 | `rl:{ip_hash}` | token bucket | 10 questions per 10 minutes per IP | 10 minutes |
-| `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (default cap 100) | 2 days |
+| `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (code default cap 100; production sets 500) | 2 days |
 | `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites today in quarter-units, 1 per rewrite (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
 | `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples (not built yet: the footer is client-side today) | rolling |
@@ -801,7 +801,7 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 | MySQL | $0 — runs in-cluster on the EC2 node's own storage, not RDS (see §10.5) |
 | Cloudflare (DNS + TLS + proxy) | $0 |
 | Bedrock embeddings | pennies |
-| Bedrock LLM (capped at 100 answers/day) | realistically $1 to $5, worst case ~$15 |
+| Bedrock LLM on Nova Lite (capped at 500 answers/day) | about $0.0003 per new answer (~4,000 input tokens measured 2026-10-03), so cents in practice, worst case ~$4.50 |
 | **Baseline total, while the EC2 trial lasts** | **~$5 to $6 + LLM** |
 | **Baseline total, after the EC2 trial ends** | **~$17 to $18 + LLM** |
 

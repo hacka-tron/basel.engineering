@@ -29,7 +29,7 @@ export const architectureNodes: ArchitectureNode[] = [
 
 export function questionForComponent(id: NodeId): string {
   const component = architectureNodes.find((node) => node.id === id)!
-  return `How does the ${component.data.label} component (${component.data.implementation}) work in the current Glassbox system? Explain its role in a request and cite the relevant sources.`
+  return `How does the ${component.data.label} component (${component.data.implementation}) work in the current Glassbox system? Explain its role in a request.`
 }
 
 export const architectureEdges: ArchitectureEdge[] = [

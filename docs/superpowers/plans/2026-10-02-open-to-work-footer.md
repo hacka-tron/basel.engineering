@@ -65,7 +65,7 @@ The five inputs most likely to bite a visitor that the spec implies but does not
 | `frontend/src/components/StatsBar.tsx` | Modify | Footer `relative`; renders `<OpenToWork />`; latency shows `short` below `sm`. |
 | `project/MOBILE_DESIGN.md` | Modify | Layout bullet and Owner decisions line for the footer item and the phone latency reading. |
 | `project/SNAPSHOT.md` | Modify | Desktop and mobile frontend descriptions mention the item. |
-| `project/status/2026-10-02-open-to-work-footer.md` | Create | Owner-facing status report. |
+| `project/status/2026-10-02-1013-open-to-work-footer.md` | Create | Owner-facing status report. |
 | `project/status/README.md` | Modify | Index row. |
 
 Scratch only (never committed): `$SCRATCH/open-to-work/footer-check.mjs` and its screenshots, where `$SCRATCH` is the session scratchpad directory.
@@ -925,7 +925,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `project/MOBILE_DESIGN.md`
 - Modify: `project/SNAPSHOT.md`
-- Create: `project/status/2026-10-02-open-to-work-footer.md`
+- Create: `project/status/2026-10-02-1013-open-to-work-footer.md`
 - Modify: `project/status/README.md`
 
 **Interfaces:**
@@ -969,7 +969,7 @@ with
 footer "Open to work" dot (label from 360px, left out below 300px) and "+" New chat on the right beside the capacity icon, latency in at most 5 characters (`1.8s`)
 ```
 
-- [ ] **Step 4: Create `project/status/2026-10-02-open-to-work-footer.md`**
+- [ ] **Step 4: Create `project/status/2026-10-02-1013-open-to-work-footer.md`**
 
 ````markdown
 # Footer "Open to work" callout
@@ -1044,7 +1044,7 @@ Headless Chrome against the phone preview server, footer numbers set to realisti
 - [ ] **Step 6: Commit**
 
 ```bash
-git add project/MOBILE_DESIGN.md project/SNAPSHOT.md project/status/2026-10-02-open-to-work-footer.md project/status/README.md
+git add project/MOBILE_DESIGN.md project/SNAPSHOT.md project/status/2026-10-02-1013-open-to-work-footer.md project/status/README.md
 git commit -m "docs: Open to work footer in MOBILE_DESIGN, SNAPSHOT and a status report
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1056,7 +1056,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create (scratch, not committed): `$SCRATCH/open-to-work/footer-check.mjs`
-- Modify: `project/status/2026-10-02-open-to-work-footer.md` (Measurements section)
+- Modify: `project/status/2026-10-02-1013-open-to-work-footer.md` (Measurements section)
 
 **Interfaces:**
 - Consumes: the DOM shape produced by Tasks 2 and 4:
@@ -1246,7 +1246,7 @@ Expected: exit code 0, every `problems` cell empty, 40 screenshots plus 7 `*-fal
 - [ ] **Step 8: Commit**
 
 ```bash
-git add project/status/2026-10-02-open-to-work-footer.md
+git add project/status/2026-10-02-1013-open-to-work-footer.md
 git commit -m "docs: Open to work footer measurements
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1256,7 +1256,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 7: PR and review gate
 
-**Files:** `project/status/2026-10-02-open-to-work-footer.md` and `project/status/README.md` (PR number, review record).
+**Files:** `project/status/2026-10-02-1013-open-to-work-footer.md` and `project/status/README.md` (PR number, review record).
 
 **Interfaces:** follows `project/orchestration/README.md` "What checked in means" and "Merging".
 

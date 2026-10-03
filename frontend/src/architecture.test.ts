@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { architectureEdges, architectureNodes, PORTRAIT_ROW_PITCH, portraitEdges, portraitNodes } from './architecture.ts'
+import { architectureEdges, architectureNodes, PORTRAIT_ROW_PITCH, portraitEdges, portraitNodes, questionForComponent } from './architecture.ts'
 
 const NODE_WIDTH = 124
 
@@ -35,5 +35,13 @@ test('portrait edges keep the same connections and only flow right or down', () 
       assert.equal(edge.targetHandle, 'top', edge.id)
       assert.ok(target.y >= source.y + PORTRAIT_ROW_PITCH, edge.id)
     }
+  }
+})
+
+test('component questions do not ask the model to cite sources (the UI lists them)', () => {
+  for (const node of architectureNodes) {
+    const question = questionForComponent(node.id)
+    assert.ok(question.endsWith('Explain its role in a request.'))
+    assert.ok(!/cite/i.test(question))
   }
 })

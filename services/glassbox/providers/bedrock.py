@@ -8,10 +8,25 @@ from collections.abc import AsyncIterator
 import boto3
 from botocore.config import Config
 
-from services.glassbox.providers.base import GROUNDING_RULES, EmbeddingProvider, LLMProvider
+from services.glassbox.providers.base import (
+    GROUNDING_RULES,
+    ContentFilteredError,
+    EmbeddingProvider,
+    LLMProvider,
+)
 
 DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 DEFAULT_LLM_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+# Output-token guard for generate(); api/ask.py _ANSWER_MAX_TOKENS must stay within it.
+MAX_OUTPUT_TOKENS = 600
+# Text Nova streams before a content_filtered stop (seen 2026-10-03).
+_FILTER_NOTICE = "The generated text has been blocked by our content filters."
+
+
+def _could_be_filter_notice(text: str) -> bool:
+    """True while ``text`` is still a prefix of Nova's filter notice (or vice versa)."""
+    candidate = text.lstrip(" -\n")
+    return _FILTER_NOTICE.startswith(candidate) or candidate.startswith(_FILTER_NOTICE)
 
 
 def _client(region: str):
@@ -101,8 +116,8 @@ class BedrockLLMProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream text deltas; ``usage`` receives Bedrock's token counts if the
         stream reaches its final metadata event (it does not when stopped early)."""
-        if not 1 <= max_tokens <= 400:
-            raise ValueError("max_tokens must be between 1 and 400")
+        if not 1 <= max_tokens <= MAX_OUTPUT_TOKENS:
+            raise ValueError(f"max_tokens must be between 1 and {MAX_OUTPUT_TOKENS}")
         # The call runs in a worker thread that cannot be interrupted. If the
         # client stops while it is still waiting for response headers, the
         # cancellation skips the `finally` below, so the stream that arrives
@@ -124,6 +139,7 @@ class BedrockLLMProvider(LLMProvider):
             raise
         stream = response["stream"]
         iterator = iter(stream)
+        held: str | None = ""  # None once the opening text is known not to be the notice
         try:
             while True:
                 found, event = await asyncio.to_thread(_next_event, iterator)
@@ -131,6 +147,13 @@ class BedrockLLMProvider(LLMProvider):
                     break
                 if "contentBlockDelta" in event:
                     part = event["contentBlockDelta"].get("delta", {}).get("text")
+                    if part and held is not None:
+                        # Hold back the opening text while it could still be Nova's
+                        # filter notice, so a filtered answer never shows it.
+                        held += part
+                        if _could_be_filter_notice(held):
+                            continue
+                        part, held = held, None
                     if part:
                         yield part
                 elif "metadata" in event and usage is not None:
@@ -144,8 +167,12 @@ class BedrockLLMProvider(LLMProvider):
                     )
                 elif "messageStop" in event:
                     reason = event["messageStop"].get("stopReason")
+                    if reason == "content_filtered":
+                        raise ContentFilteredError("Bedrock generation stopped: content_filtered")
                     if reason not in {"end_turn", "max_tokens", "stop_sequence"}:
                         raise RuntimeError(f"Bedrock generation stopped: {reason}")
+            if held:
+                yield held
         finally:
             closer = getattr(stream, "close", None)
             if closer is not None:

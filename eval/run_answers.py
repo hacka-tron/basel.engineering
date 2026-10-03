@@ -38,6 +38,7 @@ from services.glassbox.api.ask import (
 from services.glassbox.cache.embedding import normalize_question
 from services.glassbox.providers.base import (
     ABSTENTION_ANSWER,
+    ContentFilteredError,
     EmbeddingProvider,
     LLMProvider,
 )
@@ -162,12 +163,18 @@ async def run_case(
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
             llm_started = time.monotonic()
-            async for part in llm.generate(
-                prompt, max_tokens=_ANSWER_MAX_TOKENS, **system_kwargs, **usage_kwargs
-            ):
-                if first_token_ms is None:
-                    first_token_ms = round((time.monotonic() - llm_started) * 1000)
-                answer_parts.append(part)
+            try:
+                async for part in llm.generate(
+                    prompt, max_tokens=_ANSWER_MAX_TOKENS, **system_kwargs, **usage_kwargs
+                ):
+                    if first_token_ms is None:
+                        first_token_ms = round((time.monotonic() - llm_started) * 1000)
+                    answer_parts.append(part)
+            except ContentFilteredError:
+                # Same as the API: a provider filter stop becomes the abstention.
+                row["content_filtered"] = True
+                if not "".join(answer_parts).strip():
+                    answer_parts = [ABSTENTION_ANSWER]
             answer = "".join(answer_parts)
             tokens_in, tokens_out = _token_counts(prompt, answer, usage)
         row.update(
@@ -287,6 +294,12 @@ def summarize(rows: list[dict]) -> dict:
                     for r in injection
                 ]
             ),
+            "mentions_source_path": sum(
+                bool(r["grades"].get("source_path_mentions")) for r in graded
+            ),
+            "mentions_source_ref": sum(
+                bool(r["grades"].get("source_ref_mentions")) for r in graded
+            ),
             "median_answer_words": statistics.median(words) if words else None,
             **judge_metrics(graded, answerable),
         }
@@ -386,7 +399,13 @@ def redact_row(row: dict) -> dict:
     grades = out.get("grades")
     if isinstance(grades, dict):
         grades = dict(grades)
-        for key in ("missing_facts", "forbidden_hits", "prompt_leaks"):
+        for key in (
+            "missing_facts",
+            "forbidden_hits",
+            "prompt_leaks",
+            "source_path_mentions",
+            "source_ref_mentions",
+        ):
             if isinstance(grades.get(key), list):
                 grades[f"{key}_count"] = len(grades.pop(key))
         out["grades"] = grades

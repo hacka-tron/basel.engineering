@@ -17,7 +17,7 @@ import { useStressTest } from './hooks/useStressTest'
 import { questionForComponent, type NodeId } from './architecture'
 import { askQuestion, type RetrievalChunk } from './lib/sse'
 import type { LastStats } from './lib/lastStats'
-import { pickBudgetReply } from './lib/budgetReplies'
+import { pickBudgetReply, retrievalOnlyReply } from './lib/budgetReplies'
 import { errorReplyFor } from './lib/errorReplies'
 import { holdSaveDuringRetry, planRetry, withoutFailedAttempt, type RetryPlan } from './lib/chatRetry'
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
@@ -32,7 +32,6 @@ import {
   storageKey,
   writeConversation,
   type ChatMessage,
-  type MessageSource,
 } from './lib/conversation'
 import { apiCorpus, CORPORA, idkCorpus, topicLabel, visibleTopics, type Corpus } from './lib/topics'
 import projects from 'virtual:portfolio'
@@ -53,17 +52,6 @@ const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project
 const HAS_PORTFOLIO = projects.length > 0
 const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
 const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
-
-function messageSources(chunks: RetrievalChunk[]): MessageSource[] {
-  const seen = new Set<string>()
-  const sources: MessageSource[] = []
-  for (const chunk of chunks) {
-    if (seen.has(chunk.source_path)) continue
-    seen.add(chunk.source_path)
-    sources.push({ source_path: chunk.source_path, title: chunk.title, ...(chunk.url ? { url: chunk.url } : {}) })
-  }
-  return sources
-}
 
 function App() {
   const [corpus, setCorpus] = useState<Corpus>('basel')
@@ -303,10 +291,12 @@ function App() {
 
   // A random budget reply (lib/budgetReplies.ts), never the last one shown in
   // this session nor the latest one saved in this conversation.
-  function nextBudgetReply(targetCorpus: Corpus): string {
+  function nextBudgetReply(targetCorpus: Corpus, retrievalOnly = false): string {
     const saved = conversationsRef.current[targetCorpus]
       .findLast((message) => message.role === 'assistant' && message.budget)?.content
-    const reply = pickBudgetReply([lastBudgetReplyRef.current, saved])
+    const avoid = [lastBudgetReplyRef.current, saved]
+    // A retrieval_only turn has chunks; a budget_exhausted error has none.
+    const reply = retrievalOnly ? retrievalOnlyReply(targetCorpus, avoid) : pickBudgetReply(avoid)
     lastBudgetReplyRef.current = reply
     return reply
   }
@@ -430,7 +420,6 @@ function App() {
         setRetrievedChunks(event.chunks)
         updateStreamingMessage((message) => ({
           ...message,
-          sources: messageSources(event.chunks),
           ...(event.rewritten_query ? { rewrittenQuery: event.rewritten_query } : {}),
         }))
       },
@@ -454,11 +443,11 @@ function App() {
             idkReply = pickIdkReply([lastIdkReplyRef.current, savedIdk], Math.random, idkCorpus(targetCorpus))
             lastIdkReplyRef.current = idkReply
           }
-          // Budget reached or LLM switched off: the sources still came back, and
-          // a playful budget reply goes above them (picked once, then stored).
+          // Budget reached or LLM switched off: a budget reply replaces the answer
+          // (picked once, then stored); About This System points to the chunk list.
           // Picked only when it will be shown: no answer token ever arrived.
           const noText = firstTokenLatencyRef.current === null
-          const budgetReply = event.mode === 'retrieval_only' && noText ? nextBudgetReply(targetCorpus) : null
+          const budgetReply = event.mode === 'retrieval_only' && noText ? nextBudgetReply(targetCorpus, true) : null
           updateStreamingMessage((message) => ({
             ...message,
             // Only the bare canonical sentence is swapped (never a real answer).
@@ -466,7 +455,7 @@ function App() {
             ...(budgetReply && !message.content ? { content: budgetReply, budget: true } : {}),
             state: event.mode === 'retrieval_only' || event.mode === 'stopped' ? event.mode : 'done',
           }))
-          // No token (sources only): keep firstTokenMs null so the footer
+          // No token (no answer text): keep firstTokenMs null so the footer
           // labels the whole-request time as total, not as a time to first token.
           setLastStats({
             firstTokenMs: firstTokenLatencyRef.current,
@@ -513,9 +502,7 @@ function App() {
               ...current,
               [target.corpus]: current[target.corpus].flatMap((message) => {
                 if (message.id !== target.messageId) return [message]
-                // A budget reply keeps the sources already found, which it points to.
-                const reply = budget && !message.content && message.sources?.length ? { ...errorReply, sources: message.sources } : errorReply
-                return message.content ? [{ ...message, state: 'error' as const }, reply] : [reply]
+                return message.content ? [{ ...message, state: 'error' as const }, errorReply] : [errorReply]
               }).slice(-MAX_DISPLAY_MESSAGES),
             }))
           }

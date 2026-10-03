@@ -60,7 +60,7 @@
 | `services/glassbox/warm.py` | Modify | `CORPORA` from `corpora.py`. |
 | `frontend/src/suggested-questions.json` | Modify | `portfolio` key with the spec's three questions. |
 | `docs/DESIGN.md`, `docs/DESIGN-003-ingestion.md`, `docs/architecture/deep-dive.md` | Modify | Corpora, schema, warm-up count, privacy, new DD3 §1.3. |
-| `project/status/2026-10-02-portfolio-backend.md`, `project/status/README.md`, `project/SNAPSHOT.md`, `project/BACKLOG.md` | Create/Modify | Owner report and session memory. |
+| `project/status/2026-10-02-1024-portfolio-backend.md`, `project/status/README.md`, `project/SNAPSHOT.md`, `project/BACKLOG.md` | Create/Modify | Owner report and session memory. |
 | Tests | Create: `services/tests/test_corpora.py`, `test_portfolio.py`, `test_portfolio_scanner.py`, `test_portfolio_ingest.py`, `test_portfolio_migration.py`. Modify: `test_ingest_sweep.py`, `test_ask_endpoint.py`, `test_db_models.py`, `test_ingest_run.py`, `test_warm.py`, `test_eval_golden.py`, `test_planned_labels.py`. | |
 
 **Where the shared validator lives (decision):** in Python, `services/glassbox/portfolio.py`, because the ingest Job needs it inside the image and CI already runs Python. CI runs it as an ordinary pytest test (`test_every_portfolio_file_in_the_repo_is_valid`) in the required `backend-tests` job, so no new workflow or job is needed, and any change under `corpus/` or `frontend/` already triggers that job (`.github/scripts/ci-code-changed.sh`). PR 3's frontend gets its own TypeScript parser (spec §7); the rules are written out in the module docstring and in DESIGN-003 §1.3 so the two can be kept in step.
@@ -2046,7 +2046,7 @@ git commit -m "docs: portfolio as the third corpus (DESIGN, DD3 §1.3, deep dive
 ### Task 8: Status report, SNAPSHOT and BACKLOG
 
 **Files:**
-- Create: `project/status/2026-10-02-portfolio-backend.md`
+- Create: `project/status/2026-10-02-1024-portfolio-backend.md`
 - Modify: `project/status/README.md` (index row), `project/SNAPSHOT.md`, `project/BACKLOG.md`
 
 **Interfaces:**
@@ -2055,7 +2055,7 @@ git commit -m "docs: portfolio as the third corpus (DESIGN, DD3 §1.3, deep dive
 
 - [ ] **Step 1: Write the status report**
 
-Create `project/status/2026-10-02-portfolio-backend.md` following `project/status/README.md` (TL;DR, what changed for a visitor, how it works with a small Mermaid diagram, key decisions and trade-offs, what review caught, operational notes and risks, how to verify, open items; about 1-2 pages; no account IDs, IPs or tokens). Content to cover:
+Create `project/status/2026-10-02-1024-portfolio-backend.md` following `project/status/README.md` (TL;DR, what changed for a visitor, how it works with a small Mermaid diagram, key decisions and trade-offs, what review caught, operational notes and risks, how to verify, open items; about 1-2 pages; no account IDs, IPs or tokens). Content to cover:
 
 - **TL;DR:** `portfolio` is a third corpus in the backend: content format, CI check, ingest, sweep, retrieval, API, MySQL (`0007`), warm-up. One draft example; nothing indexed yet. Visitors see no change until PR 3.
 - **Visitor-visible change:** none.
@@ -2109,7 +2109,7 @@ Add a row to the top of the index table in `project/status/README.md`:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add project/status/2026-10-02-portfolio-backend.md project/status/README.md project/SNAPSHOT.md project/BACKLOG.md
+git add project/status/2026-10-02-1024-portfolio-backend.md project/status/README.md project/SNAPSHOT.md project/BACKLOG.md
 git commit -m "docs(project): portfolio backend status report, SNAPSHOT and BACKLOG"
 ```
 

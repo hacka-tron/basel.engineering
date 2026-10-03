@@ -231,7 +231,7 @@ def test_grade_result_is_json_serializable():
         ("planned-metrics", "As of now, Glassbox has no Prometheus endpoint."),
         (
             "planned-metrics",
-            "According to the deep dive, there is no Prometheus /metrics endpoint.",
+            "According to the design, there is no Prometheus /metrics endpoint.",
         ),
         (
             "planned-drive",
@@ -319,3 +319,56 @@ def test_write_run_redacts_about_me_text_under_baselines(tmp_path, monkeypatch):
     full = tmp_path / "runs.jsonl"
     run_answers.write_run([me, sys_row], {}, full)
     assert "secret a" in full.read_text()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "This is described in docs/architecture/deep-dive.md and docs/DESIGN.md.",
+        "The limiter lives in `services/glassbox/limits.py`.",
+        "See the deep dive for details.",
+        "DESIGN-005 covers the gate.",
+        "The workflow release.yml bakes it in.",
+        "It runs in the keda namespace, as described in the Kubernetes manifest.",
+    ],
+)
+def test_source_path_mentions_are_flagged(answer):
+    from eval.graders import grade_case, source_path_mentions
+
+    assert source_path_mentions(answer)
+    case = {"id": "x", "category": "fact", "corpus": "about_system"}
+    assert "mentions_source_path" in grade_case(case, answer)["failures"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "This process is described in sources 1, 2, 5, and 6.",
+        "The queue is a Redis Stream [2].",
+        "According to the sources, the cap is 500.",
+        "As described in the sources, it scales to 3.",
+        "Source 3 says the TTL is 24 hours.",
+    ],
+)
+def test_source_ref_mentions_are_flagged(answer):
+    from eval.graders import grade_case, source_ref_mentions
+
+    assert source_ref_mentions(answer)
+    case = {"id": "x", "category": "fact", "corpus": "about_system"}
+    assert "mentions_source_ref" in grade_case(case, answer)["failures"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Jobs go to the Redis Stream retrieval:jobs; the cap is GLASSBOX_DAILY_LLM_CAP.",
+        "Files ending in .tfvars or .env are refused.",
+        "basel.engineering runs on k3s with Node.js tooling and 10 questions per 10 minutes.",
+        "The retrieval worker reads the queue and the daily budget blocks new answers.",
+    ],
+)
+def test_mechanism_identifiers_are_not_source_mentions(answer):
+    from eval.graders import source_path_mentions, source_ref_mentions
+
+    assert source_path_mentions(answer) == []
+    assert source_ref_mentions(answer) == []
