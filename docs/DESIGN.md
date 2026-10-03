@@ -342,7 +342,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
 | `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
 | `rl:{ip_hash}` | token bucket | 10 questions per 10 minutes per IP | 10 minutes |
-| `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (default cap 100) | 2 days |
+| `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (code default cap 100; production sets 500) | 2 days |
 | `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites today in quarter-units, 1 per rewrite (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
 | `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples (not built yet: the footer is client-side today) | rolling |
@@ -801,7 +801,7 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 | MySQL | $0 — runs in-cluster on the EC2 node's own storage, not RDS (see §10.5) |
 | Cloudflare (DNS + TLS + proxy) | $0 |
 | Bedrock embeddings | pennies |
-| Bedrock LLM (capped at 100 answers/day) | realistically $1 to $5, worst case ~$15 |
+| Bedrock LLM on Nova Lite (capped at 500 answers/day) | about $0.0003 per new answer (~4,000 input tokens measured 2026-10-03), so cents in practice, worst case ~$4.50 |
 | **Baseline total, while the EC2 trial lasts** | **~$5 to $6 + LLM** |
 | **Baseline total, after the EC2 trial ends** | **~$17 to $18 + LLM** |
 
