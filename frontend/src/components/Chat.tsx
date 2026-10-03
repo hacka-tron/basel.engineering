@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../lib/conversation'
 import type { Corpus } from '../lib/topics'
+import { searchedForText } from '../lib/searchedFor'
 import { DESKTOP_QUERY } from '../lib/layout'
 import { askButtonMode, lastSentQuestion, shouldRecallQuestion } from '../lib/askInput'
 import { planRetry, retryableReplyId, retryWaitSeconds } from '../lib/chatRetry'
@@ -209,9 +210,9 @@ function Chat({ corpus, messages, isStreaming, onAsk, onStop, onRetry, onNewChat
                   </div>}
                   {stopped && <p className="px-1 text-[11px] leading-relaxed text-muted">Stopped</p>}
                   {message.id === retryId && <RetryButton retryAt={message.retryAt} onRetry={handleRetry} onReady={() => setRetryReadyReplyId(message.id)} />}
-                  {/* Follow-ups show the standalone query retrieval actually used (DESIGN-002 §5.2). */}
-                  {message.rewrittenQuery && !pending && (
-                    <p className="break-words px-1 text-[11px] leading-relaxed text-muted">Searched for: {message.rewrittenQuery}</p>
+                  {/* Follow-ups show the standalone query retrieval actually used (DESIGN-002 §5.2), in About This System only. */}
+                  {!pending && searchedForText(corpus, message.rewrittenQuery) && (
+                    <p className="break-words px-1 text-[11px] leading-relaxed text-muted">Searched for: {searchedForText(corpus, message.rewrittenQuery)}</p>
                   )}
                 </div>
               )
