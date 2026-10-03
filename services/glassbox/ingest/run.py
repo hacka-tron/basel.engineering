@@ -203,10 +203,12 @@ async def prepare_index(sessions, redis_client) -> None:
     which expire by TTL) if it still exists; a no-op afterwards.
     """
     await drop_legacy_index(redis_client)
-    index_changed = await ensure_index(redis_client)
+    added = await ensure_index(redis_client)
     # Retry the backfill if an earlier run stopped after FT.ALTER but before
     # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
-    if index_changed or not await redis_client.get("idx:chunks:model-tags-ready"):
+    # A newly added ``kind`` needs nothing here: reconcile, at the end of the
+    # run, rewrites every key whose ``kind`` differs from its row.
+    if "model" in added or not await redis_client.get("idx:chunks:model-tags-ready"):
         with sessions() as session:
             rows = session.execute(select(DbChunk.id, DbChunk.embedding_model)).all()
         await backfill_model_tags(redis_client, rows)
