@@ -58,18 +58,18 @@ By category, chunk recall@8: fact 0.846, live 0.500, planned 0.125 (noise@8 0.23
 
 Per category pass rate: fact 0.65, planned 0.25 (live 5 of 6), multi_turn 0.88, injection 0.80, unanswerable 1.00. The stress-test case `sugg-system-stress` fails `fact_coverage` (0 of 2: no 512 MiB rule, no 5-minute cooldown), as expected. Median answers are 13.5 words, which is the thinness problem in numbers. Of the 27 failed cases, 5 are false abstentions (`I don't know`; one injection case abstained too), 3 have a wrong planned/live status (two of them abstentions) and the rest are thin answers missing required facts.
 
-**Prompt v15 before/after (plan phase 5, 2026-10-03).** Measured on a fresh Titan index of `main` `4d554b4` (after the corpus-scope change: 125 documents, 648 chunks), so v14 was re-run on the same index rather than compared with the table above. Nova Lite, 90 cases each, no judge (owner decision); faithfulness was reviewed offline by reading every answer against its stored sources. Cost of both runs plus prompt smoke tests and the ingest: about $0.13. Per-case results: `eval/baselines/answers-nova-lite-v15.json` (About Basel text redacted).
+**Prompt v15 before/after (plan phase 5, 2026-10-03, second pass).** Measured on a fresh Titan index of `main` `827fb60` (125 documents, 648 chunks) with 92 golden cases (two new: favorite color, and the favorite personal project, which must say the visitor is on the portfolio). v14 was re-run on the same index, and both runs were re-graded with the v15 graders, which add `mentions_source_path` and `mentions_source_ref` failures. Nova Lite, no judge (owner decision); faithfulness was reviewed offline by reading every answer against its stored sources. Per-case results: `eval/baselines/answers-nova-lite-v15.json` (About Basel text redacted). Spend for the second pass was about $0.20 (pass 1: about $0.13).
 
-| Answers, same index | passed | fact_coverage | abstain on unanswerable | false abstain | planned/live status | median words | unsupported claims |
-|---|---|---|---|---|---|---|---|
-| v14 overall (90) | 64 (0.71) | 0.801 | 11/11 | 0.068 | 11/14 | 13 | 3 |
-| v15 overall (90) | 75 (0.83) | 0.905 | 11/11 | 0.014 | 12/14 | 43 | 7 |
-| v14 about_me (46) | 37 (0.80) | 0.877 | 1.0 | 0.054 | n/a | 13 | 0 |
-| v15 about_me (46) | 41 (0.89) | 0.941 | 1.0 | 0.027 | n/a | 20 | 1 |
-| v14 about_system (44) | 27 (0.61) | 0.722 | 1.0 | 0.081 | 0.786 | 13 | 3 |
-| v15 about_system (44) | 34 (0.77) | 0.869 | 1.0 | 0.000 | 0.857 | 64.5 | 6 |
+| Answers, same index | passed | fact_coverage | abstain on unanswerable | false abstain | planned/live status | file-path mentions | source-number mentions | median words | unsupported claims |
+|---|---|---|---|---|---|---|---|---|---|
+| v14 overall (92) | 64 (0.70) | 0.798 | 11/11 | 0.066 | 11/14 | 2 | 0 | 14 | 3 |
+| v15 overall (92) | 68 (0.74) | 0.869 | 11/11 | 0.013 | 12/14 | 5 | 0 | 41.5 | 5 |
+| v14 about_me (48) | 39 (0.81) | 0.861 | 1.0 | 0.051 | n/a | 0 | 0 | 13 | 0 |
+| v15 about_me (48) | 42 (0.88) | 0.910 | 1.0 | 0.026 | n/a | 0 | 0 | 23 | 1 |
+| v14 about_system (44) | 25 (0.57) | 0.729 | 1.0 | 0.081 | 0.786 | 2 | 0 | 15 | 3 |
+| v15 about_system (44) | 26 (0.59) | 0.824 | 1.0 | 0.000 | 0.857 | 5 | 0 | 64 | 4 |
 
-v15 per category: fact 43/52, planned 4/8, live 6/6, multi_turn 8/8, injection 3/5 (v14: 36, 2, 5, 6, 4), unanswerable 11/11. The stress-test case passes (512 MiB and the 5-minute cooldown both named). Holdout pass rate 0.87 (v14 0.73). Regressions: `inj-pwned` ends in a Bedrock `content_filtered` stop instead of an abstention (every voice variant tried did this; the visitor would see Nova's "blocked by our content filters" text and an error), and two answers hit the 500-token cap. The new unsupported claims are about_system details in much longer answers (an invented Terraform file path for MySQL, "the site is not built yet", a mislabelled list); one About Basel answer adds "quite devoted" from the voice example. The voice itself showed in only 1 of 90 answers.
+v15 per category: fact 39/54, planned 3/8, live 3/6 (all three fail only on copied file paths), multi_turn 8/8, injection 4/5, unanswerable 11/11 (v14: 34, 3, 5, 7, 4, 11). Run-to-run variance is large on Nova Lite: four full v15 runs of near-final prompts passed 65 to 70 of 92, and the stress-test case passed in about half of them (it names the 5-minute cooldown but often drops the 512 MiB rule). `inj-pwned` now abstains. A Bedrock `content_filtered` stop would also become the abstention. Still missing: the portfolio self-reference (0 of 5 runs) and a lighter tone on casual questions (only the favorite-color answer, which copies the prompt example). Every file-path mention copies a path that appears inside the chunk text; source labels no longer show paths.
 
 What the retrieval misses show:
 
@@ -86,11 +86,11 @@ Document-level scoring is lenient: `docs/DESIGN.md` counts as a hit whichever of
 |---|---|
 | Retrieval recall/MRR (document level, k=5) | Yes, v2 Titan baseline of 2026-10-03 (§2.2) |
 | Retrieval at production k=8, chunk-level hits, noise share (tests/plans in the top k) | Yes, manually since PR #95; stored v2 Titan baseline of 2026-10-03 (§2.2) |
-| Faithfulness (claims supported by the sources) | No judge yet; offline manual review of the v14 and v15 runs (§2.2): 3 vs 7 unsupported claims in 90 answers |
-| Completeness / key facts (the thinness problem) | Grader exists (`fact_coverage`, PR #97); v14 baseline 0.789; same-index v14 0.801, v15 0.905 (§2.2) |
-| Correct abstention on unanswerable questions; no false abstention | Grader and unanswerable cases exist (PR #97); v14 baseline: abstains on 11/11, false abstain 6.8%; v15: 11/11, 1.4% (§2.2) |
-| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`); planned-versus-live golden cases with a free grader (PR #97); v14 baseline: live 5/6, planned 2/8 pass; v15: live 6/6, planned 4/8 (§2.2) |
-| Multi-turn rewrite quality | Grader and multi-turn cases exist (PR #97); paid runs since 2026-10-03: v14 6/8, v15 8/8 (§2.2) |
+| Faithfulness (claims supported by the sources) | No judge yet; offline manual review of the v14 and v15 runs (§2.2): 3 vs 5 unsupported claims in 92 answers |
+| Completeness / key facts (the thinness problem) | Grader exists (`fact_coverage`, PR #97); v14 baseline 0.789; same-index v14 0.798, v15 0.869 (§2.2) |
+| Correct abstention on unanswerable questions; no false abstention | Grader and unanswerable cases exist (PR #97); v14 baseline: abstains on 11/11, false abstain 6.8%; v15: 11/11, 1.3% (§2.2) |
+| Planned-versus-live correctness | Unit tests for the marker (`test_planned_labels.py`); planned-versus-live golden cases with a free grader (PR #97); v14 baseline: live 5/6, planned 2/8 pass; v15 status correct 12/14 (§2.2) |
+| Multi-turn rewrite quality | Grader and multi-turn cases exist (PR #97); paid runs since 2026-10-03: v14 7/8, v15 8/8 (§2.2) |
 | Live traffic | No (answers are not logged) |
 
 ## 3. Research findings, weighed against this project

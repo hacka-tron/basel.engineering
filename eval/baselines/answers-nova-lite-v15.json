@@ -2,26 +2,28 @@
   "prompt_version": "v15",
   "llm_model": "us.amazon.nova-lite-v1:0",
   "embedding_model": "amazon.titan-embed-text-v2:0",
-  "git_sha": "4d554b4+feature/rag-p5-prompt-v15",
+  "git_sha": "2d73cde",
   "date": "2026-10-03",
   "summary": {
     "overall": {
-      "count": 90,
-      "passed": 75,
-      "pass_rate": 0.8333,
-      "errors": 1,
-      "fact_coverage": 0.9054,
+      "count": 92,
+      "passed": 68,
+      "pass_rate": 0.7391,
+      "errors": 0,
+      "fact_coverage": 0.8687,
       "abstain_rate_unanswerable": 1.0,
-      "false_abstain_rate": 0.0135,
+      "false_abstain_rate": 0.0132,
       "status_ok_rate": 0.8571,
       "rewrite_ok_rate": 1.0,
       "injection_ok_rate": 1.0,
-      "median_answer_words": 43
+      "mentions_source_path": 5,
+      "mentions_source_ref": 0,
+      "median_answer_words": 41.5
     },
     "holdout": {
       "count": 15,
-      "passed": 13,
-      "pass_rate": 0.8667,
+      "passed": 12,
+      "pass_rate": 0.8,
       "errors": 0,
       "fact_coverage": 0.9556,
       "abstain_rate_unanswerable": 1.0,
@@ -29,39 +31,45 @@
       "status_ok_rate": 0.6667,
       "rewrite_ok_rate": 1.0,
       "injection_ok_rate": 1.0,
-      "median_answer_words": 38
+      "mentions_source_path": 1,
+      "mentions_source_ref": 0,
+      "median_answer_words": 21
     },
     "by_category": {
       "fact": {
-        "count": 52,
-        "passed": 43,
-        "pass_rate": 0.8269,
+        "count": 54,
+        "passed": 39,
+        "pass_rate": 0.7222,
         "errors": 0,
-        "fact_coverage": 0.8958,
+        "fact_coverage": 0.8503,
         "abstain_rate_unanswerable": null,
-        "false_abstain_rate": 0.0192,
+        "false_abstain_rate": 0.0185,
         "status_ok_rate": null,
         "rewrite_ok_rate": null,
         "injection_ok_rate": null,
-        "median_answer_words": 52.0
+        "mentions_source_path": 1,
+        "mentions_source_ref": 0,
+        "median_answer_words": 57.0
       },
       "injection": {
         "count": 5,
-        "passed": 3,
-        "pass_rate": 0.6,
-        "errors": 1,
-        "fact_coverage": 0.75,
+        "passed": 4,
+        "pass_rate": 0.8,
+        "errors": 0,
+        "fact_coverage": 0.8,
         "abstain_rate_unanswerable": null,
         "false_abstain_rate": null,
         "status_ok_rate": null,
         "rewrite_ok_rate": null,
         "injection_ok_rate": 1.0,
-        "median_answer_words": 7.0
+        "mentions_source_path": 0,
+        "mentions_source_ref": 0,
+        "median_answer_words": 7
       },
       "live": {
         "count": 6,
-        "passed": 6,
-        "pass_rate": 1.0,
+        "passed": 3,
+        "pass_rate": 0.5,
         "errors": 0,
         "fact_coverage": 1.0,
         "abstain_rate_unanswerable": null,
@@ -69,7 +77,9 @@
         "status_ok_rate": 1.0,
         "rewrite_ok_rate": null,
         "injection_ok_rate": null,
-        "median_answer_words": 92.0
+        "mentions_source_path": 3,
+        "mentions_source_ref": 0,
+        "median_answer_words": 81.5
       },
       "multi_turn": {
         "count": 8,
@@ -82,20 +92,24 @@
         "status_ok_rate": null,
         "rewrite_ok_rate": 1.0,
         "injection_ok_rate": null,
-        "median_answer_words": 37.0
+        "mentions_source_path": 0,
+        "mentions_source_ref": 0,
+        "median_answer_words": 28.5
       },
       "planned": {
         "count": 8,
-        "passed": 4,
-        "pass_rate": 0.5,
+        "passed": 3,
+        "pass_rate": 0.375,
         "errors": 0,
-        "fact_coverage": 0.75,
+        "fact_coverage": 0.625,
         "abstain_rate_unanswerable": null,
         "false_abstain_rate": 0.0,
         "status_ok_rate": 0.75,
         "rewrite_ok_rate": null,
         "injection_ok_rate": null,
-        "median_answer_words": 34.5
+        "mentions_source_path": 1,
+        "mentions_source_ref": 0,
+        "median_answer_words": 20.0
       },
       "unanswerable": {
         "count": 11,
@@ -108,54 +122,69 @@
         "status_ok_rate": null,
         "rewrite_ok_rate": null,
         "injection_ok_rate": null,
+        "mentions_source_path": 0,
+        "mentions_source_ref": 0,
         "median_answer_words": 7
       }
     },
     "failed": [
       "inj-history",
-      "inj-pwned",
+      "live-flux",
+      "live-terraform",
+      "live-zram",
+      "me-ai-review",
       "me-education",
+      "me-favorite-personal-project",
       "me-fitbit-gate",
-      "me-release",
+      "me-framework",
       "planned-asg",
+      "planned-eval-ci",
       "planned-live-facts",
       "planned-nightly-ingest",
       "planned-prune",
       "sugg-system-caching",
+      "sugg-system-stress",
       "system-budget",
+      "system-deploy",
       "system-edge",
       "system-followups",
       "system-ingest",
+      "system-providers",
+      "system-vector",
       "system-worker"
     ],
     "known_failures": []
   },
   "by_corpus": {
     "about_me": {
-      "count": 46,
-      "passed": 41,
-      "pass_rate": 0.8913,
-      "errors": 1,
-      "fact_coverage": 0.9407,
+      "count": 48,
+      "passed": 42,
+      "pass_rate": 0.875,
+      "errors": 0,
+      "fact_coverage": 0.9097,
       "abstain_rate_unanswerable": 1.0,
-      "false_abstain_rate": 0.027,
+      "false_abstain_rate": 0.0256,
       "status_ok_rate": null,
       "rewrite_ok_rate": 1.0,
       "injection_ok_rate": 1.0,
-      "median_answer_words": 20
+      "mentions_source_path": 0,
+      "mentions_source_ref": 0,
+      "median_answer_words": 23.0
     },
     "about_system": {
       "count": 44,
-      "passed": 34,
-      "pass_rate": 0.7727,
+      "passed": 26,
+      "pass_rate": 0.5909,
       "errors": 0,
-      "fact_coverage": 0.8693,
+      "fact_coverage": 0.8239,
       "abstain_rate_unanswerable": 1.0,
       "false_abstain_rate": 0.0,
       "status_ok_rate": 0.8571,
       "rewrite_ok_rate": 1.0,
       "injection_ok_rate": 1.0,
-      "median_answer_words": 64.5
+      "mentions_source_path": 5,
+      "mentions_source_ref": 0,
+      "median_answer_words": 64.0
     }
   },
   "cases": [
@@ -175,9 +204,9 @@
         "private/google.md",
         "private/personal.md"
       ],
-      "answer_words": 387,
-      "tokens_in": 4097,
-      "tokens_out": 500,
+      "answer_words": 36,
+      "tokens_in": 4457,
+      "tokens_out": 56,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -199,9 +228,9 @@
         "private/projects.md",
         "private/bio.md"
       ],
-      "answer_words": 30,
-      "tokens_in": 4138,
-      "tokens_out": 44,
+      "answer_words": 13,
+      "tokens_in": 4491,
+      "tokens_out": 19,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -224,7 +253,7 @@
         "private/projects.md"
       ],
       "answer_words": 59,
-      "tokens_in": 4356,
+      "tokens_in": 4714,
       "tokens_out": 71,
       "passed": true,
       "failures": [],
@@ -248,7 +277,7 @@
         "private/projects.md"
       ],
       "answer_words": 17,
-      "tokens_in": 3806,
+      "tokens_in": 4170,
       "tokens_out": 24,
       "passed": true,
       "failures": [],
@@ -271,16 +300,13 @@
         "private/personal.md",
         "private/skills.md"
       ],
-      "answer_words": 37,
-      "tokens_in": 4099,
-      "tokens_out": 42,
-      "passed": false,
-      "failures": [
-        "missing_facts"
-      ],
-      "fact_coverage": 0.6667,
-      "abstained": false,
-      "missing_facts_count": 1
+      "answer_words": 62,
+      "tokens_in": 4459,
+      "tokens_out": 73,
+      "passed": true,
+      "failures": [],
+      "fact_coverage": 1.0,
+      "abstained": false
     },
     {
       "id": "me-fitbit-gate",
@@ -298,9 +324,9 @@
         "private/skills.md",
         "private/projects.md"
       ],
-      "answer_words": 89,
-      "tokens_in": 4280,
-      "tokens_out": 125,
+      "answer_words": 90,
+      "tokens_in": 4642,
+      "tokens_out": 122,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -325,9 +351,9 @@
         "private/bio.md",
         "private/skills.md"
       ],
-      "answer_words": 63,
-      "tokens_in": 4145,
-      "tokens_out": 88,
+      "answer_words": 12,
+      "tokens_in": 4514,
+      "tokens_out": 19,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -349,13 +375,16 @@
         "private/projects.md",
         "private/microsoft.md"
       ],
-      "answer_words": 18,
-      "tokens_in": 4181,
-      "tokens_out": 36,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer_words": 55,
+      "tokens_in": 4550,
+      "tokens_out": 100,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.5,
+      "abstained": false,
+      "missing_facts_count": 1
     },
     {
       "id": "me-education",
@@ -374,7 +403,7 @@
         "private/personal.md"
       ],
       "answer_words": 7,
-      "tokens_in": 4227,
+      "tokens_in": 4587,
       "tokens_out": 11,
       "passed": false,
       "failures": [
@@ -402,7 +431,7 @@
         "private/projects.md"
       ],
       "answer_words": 8,
-      "tokens_in": 4068,
+      "tokens_in": 4427,
       "tokens_out": 21,
       "passed": true,
       "failures": [],
@@ -425,9 +454,9 @@
         "private/personal.md",
         "private/bio.md"
       ],
-      "answer_words": 20,
-      "tokens_in": 3972,
-      "tokens_out": 26,
+      "answer_words": 24,
+      "tokens_in": 4330,
+      "tokens_out": 31,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -449,9 +478,9 @@
         "private/google.md",
         "private/bio.md"
       ],
-      "answer_words": 36,
-      "tokens_in": 3353,
-      "tokens_out": 52,
+      "answer_words": 41,
+      "tokens_in": 3717,
+      "tokens_out": 59,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -473,9 +502,9 @@
         "private/skills.md",
         "private/personal.md"
       ],
-      "answer_words": 20,
-      "tokens_in": 4012,
-      "tokens_out": 32,
+      "answer_words": 21,
+      "tokens_in": 4368,
+      "tokens_out": 33,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -498,7 +527,7 @@
         "private/projects.md"
       ],
       "answer_words": 13,
-      "tokens_in": 3901,
+      "tokens_in": 4260,
       "tokens_out": 27,
       "passed": true,
       "failures": [],
@@ -521,9 +550,9 @@
         "private/projects.md",
         "private/projects.md"
       ],
-      "answer_words": 41,
-      "tokens_in": 4173,
-      "tokens_out": 61,
+      "answer_words": 45,
+      "tokens_in": 4534,
+      "tokens_out": 66,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -545,9 +574,9 @@
         "private/bio.md",
         "private/personal.md"
       ],
-      "answer_words": 14,
-      "tokens_in": 4219,
-      "tokens_out": 16,
+      "answer_words": 68,
+      "tokens_in": 4579,
+      "tokens_out": 82,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -569,13 +598,64 @@
         "private/skills.md",
         "private/projects.md"
       ],
-      "answer_words": 11,
-      "tokens_in": 3893,
-      "tokens_out": 21,
+      "answer_words": 6,
+      "tokens_in": 4252,
+      "tokens_out": 13,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
       "abstained": false
+    },
+    {
+      "id": "me-favorite-color",
+      "category": "fact",
+      "corpus": "about_me",
+      "holdout": false,
+      "rewrite": null,
+      "retrieved": [
+        "private/personal.md",
+        "private/personal.md",
+        "private/microsoft.md",
+        "private/skills.md",
+        "private/bio.md",
+        "private/bio.md",
+        "private/skills.md",
+        "private/google.md"
+      ],
+      "answer_words": 10,
+      "tokens_in": 4222,
+      "tokens_out": 16,
+      "passed": true,
+      "failures": [],
+      "fact_coverage": 1.0,
+      "abstained": false
+    },
+    {
+      "id": "me-favorite-personal-project",
+      "category": "fact",
+      "corpus": "about_me",
+      "holdout": false,
+      "rewrite": null,
+      "retrieved": [
+        "private/personal.md",
+        "private/personal.md",
+        "private/projects.md",
+        "private/microsoft.md",
+        "private/skills.md",
+        "private/bio.md",
+        "private/skills.md",
+        "private/personal.md"
+      ],
+      "answer_words": 46,
+      "tokens_in": 4298,
+      "tokens_out": 58,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.5,
+      "abstained": false,
+      "missing_facts_count": 1
     },
     {
       "id": "me-light-dark",
@@ -594,7 +674,7 @@
         "private/bio.md"
       ],
       "answer_words": 51,
-      "tokens_in": 3903,
+      "tokens_in": 4262,
       "tokens_out": 64,
       "passed": true,
       "failures": [],
@@ -617,9 +697,9 @@
         "private/personal.md",
         "private/bio.md"
       ],
-      "answer_words": 11,
-      "tokens_in": 3932,
-      "tokens_out": 21,
+      "answer_words": 8,
+      "tokens_in": 4296,
+      "tokens_out": 16,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -641,9 +721,9 @@
         "private/personal.md",
         "private/google.md"
       ],
-      "answer_words": 43,
-      "tokens_in": 4223,
-      "tokens_out": 47,
+      "answer_words": 47,
+      "tokens_in": 4583,
+      "tokens_out": 56,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -665,9 +745,9 @@
         "private/projects.md",
         "private/microsoft.md"
       ],
-      "answer_words": 22,
-      "tokens_in": 4166,
-      "tokens_out": 27,
+      "answer_words": 25,
+      "tokens_in": 4533,
+      "tokens_out": 31,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -689,9 +769,9 @@
         "private/projects.md",
         "private/bio.md"
       ],
-      "answer_words": 77,
-      "tokens_in": 3903,
-      "tokens_out": 93,
+      "answer_words": 118,
+      "tokens_in": 4262,
+      "tokens_out": 140,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -714,7 +794,7 @@
         "private/personal.md"
       ],
       "answer_words": 17,
-      "tokens_in": 4257,
+      "tokens_in": 4619,
       "tokens_out": 24,
       "passed": true,
       "failures": [],
@@ -737,9 +817,9 @@
         "private/skills.md",
         "private/personal.md"
       ],
-      "answer_words": 52,
-      "tokens_in": 4181,
-      "tokens_out": 70,
+      "answer_words": 42,
+      "tokens_in": 4540,
+      "tokens_out": 57,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -761,13 +841,16 @@
         "private/projects.md",
         "private/personal.md"
       ],
-      "answer_words": 48,
-      "tokens_in": 4299,
-      "tokens_out": 60,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer_words": 38,
+      "tokens_in": 4655,
+      "tokens_out": 49,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.0,
+      "abstained": false,
+      "missing_facts_count": 1
     },
     {
       "id": "me-selenium",
@@ -785,9 +868,9 @@
         "private/microsoft.md",
         "private/bio.md"
       ],
-      "answer_words": 50,
-      "tokens_in": 4112,
-      "tokens_out": 86,
+      "answer_words": 37,
+      "tokens_in": 4480,
+      "tokens_out": 60,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -809,9 +892,9 @@
         "private/google.md",
         "private/microsoft.md"
       ],
-      "answer_words": 120,
-      "tokens_in": 4174,
-      "tokens_out": 169,
+      "answer_words": 135,
+      "tokens_in": 4543,
+      "tokens_out": 189,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -833,9 +916,9 @@
         "private/bio.md",
         "private/bio.md"
       ],
-      "answer_words": 15,
-      "tokens_in": 3869,
-      "tokens_out": 20,
+      "answer_words": 26,
+      "tokens_in": 4226,
+      "tokens_out": 37,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -857,9 +940,9 @@
         "private/bio.md",
         "private/bio.md"
       ],
-      "answer_words": 30,
-      "tokens_in": 4000,
-      "tokens_out": 44,
+      "answer_words": 55,
+      "tokens_in": 4352,
+      "tokens_out": 75,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -882,10 +965,10 @@
         "services/glassbox/warm.py",
         "docs/DESIGN-002-followups.md"
       ],
-      "answer": "The ask endpoint streams five SSE events: stage, retrieval, token, done, and error. Each event type has specific details: stage events include request_id, seq, node, status, t_ms, and optionally duration_ms and cache; retrieval events include ranked chunks with number, chunk ID, source path, title, similarity score, line range, snippet, and optionally rewritten_query; token events include a piece of answer text; done events include total_ms, mode, answer_cache, abstained, tokens_in, and tokens_out; error events include code, message, and retry_after_s. The API sends a heartbeat every 15 seconds to keep the connection active through proxies during slow stages.",
-      "answer_words": 95,
-      "tokens_in": 5159,
-      "tokens_out": 156,
+      "answer": "The ask endpoint streams five event types: `stage`, `retrieval`, `token`, `done`, and `error`. Each event has specific fields that provide details about the request processing. For example, the `stage` event includes `request_id`, `seq`, `node`, `status`, `t_ms`, and optionally `duration_ms` and `cache`. The `retrieval` event carries the ranked chunks with their metadata, and the `token` event sends a piece of the answer text. The `done` event reports the total processing time, mode, and cache status, while the `error` event provides error codes and messages.",
+      "answer_words": 83,
+      "tokens_in": 5423,
+      "tokens_out": 139,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -908,14 +991,19 @@
         "services/glassbox/ingest/run.py",
         "services/glassbox/cache/retrieval.py"
       ],
-      "answer": "Redis performs vector search over document chunks by using the Redis Search module. It indexes the chunks in a Redis hash with a vector field, and then uses the FT.SEARCH command to find the nearest neighbors based on cosine similarity. The search results are returned in ascending order of distance, with a limit of top_k results. The search is filtered by corpus and optionally by kind. The search is performed using a packed vector representation of the embedding, which is a list of 512 float32 values. The search results include the chunk ID and the cosine similarity score.",
-      "answer_words": 98,
-      "tokens_in": 4180,
-      "tokens_out": 117,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer": "Redis performs vector search over document chunks using a Redis Search index. The search function takes an embedding vector, corpus, model ID, and optional kind filter, and returns the top K chunk IDs and cosine similarities in nearest-first order. The search index is named \"idx:chunks\" and uses the HNSW algorithm with a cosine distance metric. The index includes fields for corpus, model, kind, and the 512-dimensional vector. The search function checks that the embedding vector has the correct number of dimensions and that the corpus is known. It then executes a FT.SEARCH command on the Redis Search index, sorting the results by distance in ascending order and returning the top K matches. The function returns a list of dictionaries, each containing a chunk ID and a score.",
+      "answer_words": 127,
+      "tokens_in": 4419,
+      "tokens_out": 159,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.6667,
+      "abstained": false,
+      "missing_facts": [
+        "KNN|nearest[- ]neighbou?r"
+      ]
     },
     {
       "id": "system-worker",
@@ -934,10 +1022,10 @@
         "services/glassbox/worker/main.py",
         "k8s/overlays/prod/keda-scaling/kustomization.yaml"
       ],
-      "answer": "The retrieval worker consumes queued jobs by reading and settling one new job at a time from a Redis stream. It blocks for up to 3000 milliseconds if no jobs are available. The retrieval worker processes synthetic jobs with a fixed delay and real jobs by performing vector search and MySQL lookups. It publishes trace events to Redis pub/sub for real jobs.",
-      "answer_words": 62,
-      "tokens_in": 4149,
-      "tokens_out": 75,
+      "answer": "The retrieval worker consumes queued jobs by reading and settling one new job at a time from a Redis stream. It blocks for up to 3000 milliseconds to read a job, and if it finds one, it processes it. If the job is synthetic, it simulates work with a fixed delay. If it is a real job, it performs a vector search, retrieves chunks from MySQL, and publishes trace events to Redis pub/sub. If the job fails, it publishes an error event.",
+      "answer_words": 82,
+      "tokens_in": 4383,
+      "tokens_out": 104,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -967,10 +1055,10 @@
         "services/glassbox/ingest/sweep.py",
         "services/glassbox/ingest/reconcile.py"
       ],
-      "answer": "The MySQL tables that store documents and chunks are `documents` and `chunks`. The `documents` table stores one row per ingested file, unique on (`corpus`, `source_path`). It stores the corpus, the source path, a title, a SHA-256 `content_hash` of the file, and `updated_at`. The `chunks` table stores one row per chunk, unique on (`document_id`, `ordinal`), and deleted with its document. It stores the chunk text, `start_line` and `end_line`, a word-based `token_count`, the embedding as a BLOB of packed float32 values, and `embedding_model`, the ID of the model that produced the vector.",
-      "answer_words": 90,
-      "tokens_in": 4864,
-      "tokens_out": 159,
+      "answer": "The MySQL tables that store documents and chunks are `documents` and `chunks`. The `documents` table stores one row per ingested file, unique on (`corpus`, `source_path`), and it holds the corpus, source path, title, content hash, and `updated_at`. The `chunks` table stores one row per chunk, unique on (`document_id`, `ordinal`), and it holds the chunk text, `start_line` and `end_line`, a word-based `token_count`, the embedding as a BLOB of packed float32 values, and `embedding_model`, the ID of the model that produced the vector.",
+      "answer_words": 81,
+      "tokens_in": 5099,
+      "tokens_out": 142,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -993,13 +1081,14 @@
         "docs/architecture/deep-dive.md",
         "k8s/overlays/prod/ingest/ingest-job.yaml"
       ],
-      "answer": "Source files are scanned and ingested into Glassbox by the ingestion pipeline. The scanner (`services/glassbox/ingest/scanner.py`) builds three corpora, listed once in `services/glassbox/corpora.py`: `about_me`, `about_system`, and `portfolio`. The scanner scans every Markdown file under `about-me/` in Basel's private About Basel repository, files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`, except tests (`services/tests/`) and plans (`docs/superpowers/plans/`), and one Markdown file per project, `corpus/portfolio/<slug>.md`. Any leading `---` front matter is stripped before chunking. A file that fails validation is skipped and reported, and its last good version keeps serving. Each run writes an `ingestion_runs` row with its status and counts, and prints `docs_changed`, `chunks_written` and every skipped file with its reason. A file that fails chunking or embedding is skipped and reported, and the run continues.",
-      "answer_words": 133,
-      "tokens_in": 6251,
-      "tokens_out": 261,
+      "answer": "Source files are scanned and ingested into Glassbox by the ingestion pipeline. The scanner in the ingestion pipeline scans files under `infra/`, `k8s/`, `services/` and `docs/` with the extensions `.md`, `.tf`, `.yml`, `.yaml`, `.py`, `.ts` or `.tsx`, except tests (`services/tests/`) and plans (`docs/superpowers/plans/`). The scanner filters files before anything is embedded and skips files with certain paths and content secrets. The scanner also scans every Markdown file under `about-me/` in Basel's private About Basel repository. The scanner strips any leading `---` front matter before chunking. The scanner then passes the documents to the chunkers, which split the documents into chunks based on file extension. The chunks are then embedded and stored in Redis and MySQL.",
+      "answer_words": 115,
+      "tokens_in": 6500,
+      "tokens_out": 183,
       "passed": false,
       "failures": [
-        "missing_facts"
+        "missing_facts",
+        "mentions_source_path"
       ],
       "fact_coverage": 0.6667,
       "abstained": false,
@@ -1024,10 +1113,10 @@
         "services/glassbox/ingest/run.py",
         "services/glassbox/ingest/run.py"
       ],
-      "answer": "Ingestion avoids indexing secrets by filtering files before anything is embedded. Paths with a component named `secrets`, starting with `secrets.` or `.env`, ending in `.tfvars`, or containing `.tfstate` are refused, whatever their extension. The check is case-insensitive. Each file is scanned line by line and quarantined if a line contains an AWS access key ID pattern, a PEM private key header, a provider token format, an assignment whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character.",
-      "answer_words": 90,
-      "tokens_in": 6448,
-      "tokens_out": 126,
+      "answer": "Ingestion avoids indexing secrets by filtering files before they are embedded. Any path with a component named `secrets`, starting with `secrets.` or `.env`, ending in `.tfvars`, or containing `.tfstate` is refused, whatever its extension. The check is case-insensitive. Each file is scanned line by line and quarantined if a line contains an AWS access key ID pattern, a PEM private key header, a provider token format, or an assignment whose value is 33 or more characters from a base64-like alphabet and has a Shannon entropy of at least 4 bits per character. A quarantined file does not stop the run. Other files continue, and the skipped path and reason are printed.",
+      "answer_words": 111,
+      "tokens_in": 6705,
+      "tokens_out": 150,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1050,10 +1139,10 @@
         "services/glassbox/db/models.py",
         "services/glassbox/ingest/chunkers/terraform.py"
       ],
-      "answer": "Markdown files are split into chunks by headings, merging short sections and splitting long ones. The chunker splits Markdown by headings, merging short sections and splitting long ones. It splits at headings, and merges sections shorter than 300 words. It splits sections longer than 500 words into chunks of 450 words, with a 50-word overlap between chunks.",
-      "answer_words": 57,
-      "tokens_in": 3131,
-      "tokens_out": 86,
+      "answer": "Markdown files are split into chunks by headings. Short sections are merged and long ones are split. Sections shorter than 300 words are merged with the next section if the combined word count is less than 500. Sections longer than 500 words are split into chunks of approximately 450 words each, with the last chunk being smaller if necessary.",
+      "answer_words": 59,
+      "tokens_in": 3354,
+      "tokens_out": 79,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1076,10 +1165,10 @@
         "k8s/README.md",
         "services/glassbox/ingest/chunkers/yaml_doc.py"
       ],
-      "answer": "Terraform blocks are chunked by the `chunk_terraform` function in the `services/glassbox/ingest/chunkers/terraform.py` file. This function splits Terraform files into top-level blocks by counting every `{`/`}` character in the text, without stripping string literals or comments first. An unbalanced brace inside a string value or a `#`/`//` comment will throw off block detection for the rest of the file. The function returns one chunk for each top-level Terraform block.",
-      "answer_words": 67,
-      "tokens_in": 3167,
-      "tokens_out": 110,
+      "answer": "Terraform blocks are chunked by splitting the file into top-level blocks. The function chunk_terraform returns one chunk for each top-level Terraform block. It identifies block boundaries by counting every `{`/`}` character in the text, without stripping string literals or comments first. An unbalanced brace inside a string value or a `#`/`//` comment will throw off block detection for the rest of the file.",
+      "answer_words": 63,
+      "tokens_in": 3405,
+      "tokens_out": 88,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1102,14 +1191,19 @@
         "services/glassbox/providers/factory.py",
         "services/glassbox/providers/base.py"
       ],
-      "answer": "Embedding and language model providers are swapped by checking the environment variable \"_mode\" in the factory function. If the mode is set to \"fake\", the fake providers are returned. Otherwise, the BedrockEmbeddingProvider is returned with the specified model ID and region. This is implemented in the get_embedding_provider function in the factory.py file.",
-      "answer_words": 52,
-      "tokens_in": 1818,
-      "tokens_out": 73,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer": "Embedding and language model providers are swapped by setting an environment variable. The `get_embedding_provider` function checks the value of `_mode()`, and if it is \"fake\", it returns an instance of `FakeEmbeddingProvider`. Otherwise, it returns an instance of `_bedrock_embedding`, which is a BedrockEmbeddingProvider. The BedrockEmbeddingProvider is initialized with the model ID and region specified in the environment variables `BEDROCK_EMBEDDING_MODEL_ID` and `AWS_REGION`, respectively.",
+      "answer_words": 61,
+      "tokens_in": 2073,
+      "tokens_out": 111,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.75,
+      "abstained": false,
+      "missing_facts": [
+        "factory|GLASSBOX_PROVIDER"
+      ]
     },
     {
       "id": "system-caches",
@@ -1128,10 +1222,10 @@
         "services/glassbox/ingest/reconcile.py",
         "docs/architecture/deep-dive.md"
       ],
-      "answer": "Glassbox uses four Redis cache layers: embedding, retrieval, chunk and semantic answer caches. The embedding cache has a 7-day TTL and stores exact matches on the embedding model ID plus the normalized question. The semantic answer cache is an HNSW index of previous question vectors, stored with its answer and cited chunks for 24 hours. The retrieval cache holds ranked chunk IDs and scores for a query vector and embedding model, with a 1-hour TTL. The chunk cache stores each chunk's text, source path, title and line range, with a 1-day TTL.",
-      "answer_words": 92,
-      "tokens_in": 6884,
-      "tokens_out": 125,
+      "answer": "Glassbox uses four Redis cache layers: embedding, retrieval, chunk and semantic answer caches. The embedding cache has a 7-day TTL and stores embeddings for exact matches on the embedding model ID and normalized question. The semantic answer cache is an HNSW index of previous question vectors, each stored with its answer and cited chunks for 24 hours. The retrieval cache stores ranked chunk IDs and scores for a query vector and embedding model, with a 1-hour TTL. The chunk cache stores each chunk's text, source path, title and line range, with a 1-day TTL.",
+      "answer_words": 94,
+      "tokens_in": 7158,
+      "tokens_out": 127,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1150,14 +1244,14 @@
         "services/glassbox/limits.py",
         "services/glassbox/api/ask.py",
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN-002-followups.md",
         "docs/architecture/deep-dive.md",
+        "docs/DESIGN-002-followups.md",
         "services/glassbox/warm.py"
       ],
-      "answer": "When a visitor reaches the question rate limit, they receive an error event with code `rate_limited` and `retry_after_s`. The SSE stream sends this error, and the frontend displays \"Try again in N seconds.\" The rate limit is 10 questions per 10 minutes, keyed by a salted HMAC hash of the client IP. IPv6 visitors are keyed by their /64. The limit is implemented as a Redis token bucket stored in `rl:{client_hash}`. The client hash is an HMAC-SHA256 of the client IP with a secret salt, generated by Terraform and stored as an SSM SecureString parameter. The API refuses to start without a salt of at least 32 characters. Forwarding headers count only when the direct peer is inside the configured trusted proxy range, where the API uses Cloudflare's `CF-Connecting-IP`, falling back to the rightmost untrusted `X-Forwarded-For` hop. Otherwise, it uses the TCP peer address.",
-      "answer_words": 144,
-      "tokens_in": 8936,
-      "tokens_out": 218,
+      "answer": "When a visitor reaches the question rate limit, they receive an error event with code `rate_limited` and `retry_after_s`. The API allows 10 questions per 10 minutes per visitor, keyed by a salted HMAC hash of the client IP. IPv6 visitors are keyed by their /64. When the bucket is empty, the SSE stream sends an `error` event with code `rate_limited` and `retry_after_s`, and the frontend shows \"Try again in N seconds.\"",
+      "answer_words": 71,
+      "tokens_in": 9195,
+      "tokens_out": 113,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1182,7 +1276,7 @@
       ],
       "answer": "When the daily LLM budget is exhausted, the request still runs retrieval and ends with done.mode = \"retrieval_only\". The visitor sees the retrieved sources and the message \"Sources retrieved — no generated answer for this request.\" A follow-up whose rewrite cannot be afforded falls back to retrieving with the original question.",
       "answer_words": 51,
-      "tokens_in": 3712,
+      "tokens_in": 3992,
       "tokens_out": 68,
       "passed": false,
       "failures": [
@@ -1211,10 +1305,10 @@
         "infra/modules/edge/main.tf",
         "docs/architecture/deep-dive.md"
       ],
-      "answer": "Glassbox uses Cloudflare for its edge to provide DNS, TLS and proxying. Cloudflare hosts DNS for basel.engineering and terminates TLS for visitors, connecting to the origin over HTTPS in \"Full\" mode against Traefik's self-signed certificate. The origin security group allows ports 80 and 443 only from Cloudflare's published IP ranges, and origin protection relies on that allowlist. Cloudflare API tokens are scoped to the zone and live only in GitHub environment secrets, separately for plan (read) and apply (edit).",
-      "answer_words": 79,
-      "tokens_in": 4966,
-      "tokens_out": 114,
+      "answer": "Glassbox uses Cloudflare for its edge to manage DNS, provide TLS termination, and proxy traffic to the EC2 node. Cloudflare's DNS management ensures the domain points correctly, TLS termination secures the connection from visitors, and proxying forwards traffic to Traefik on the EC2 node. This setup allows Cloudflare to bypass caching for API responses and SSE streams, ensuring real-time data delivery without buffering.",
+      "answer_words": 63,
+      "tokens_in": 5240,
+      "tokens_out": 85,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -1243,14 +1337,19 @@
         "docs/architecture/deep-dive.md",
         "docs/DESIGN-002-followups.md"
       ],
-      "answer": "The site is planned to deploy on a single EC2 instance running k3s. The instance is a `t4g.small` with 2 vCPU burstable and 2 GiB RAM, ARM architecture. The deployment pipeline uses Flux GitOps, image automation, and ordered Kustomizations. The site is currently not built yet.",
-      "answer_words": 46,
-      "tokens_in": 6566,
-      "tokens_out": 72,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer": "The site is planned to deploy on EC2 and k3s as a single-node server on a `t4g.small` instance, with ARM architecture, 2 vCPU burstable, and 2 GiB RAM. The k3s cluster runs on this EC2 instance, and the manifests use nothing k3s-specific except the `local-path` storage class, so they run on EKS unchanged. The design notes how it would change for production, with a trade-off of one node meaning no HA. Acceptable for a portfolio; the design notes how it would change for production (section 20).",
+      "answer_words": 86,
+      "tokens_in": 6832,
+      "tokens_out": 131,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.6667,
+      "abstained": false,
+      "missing_facts": [
+        "Flux|GitOps|Terraform"
+      ]
     },
     {
       "id": "system-followups",
@@ -1269,10 +1368,10 @@
         "docs/DESIGN-002-followups.md",
         "docs/DESIGN-002-followups.md"
       ],
-      "answer": "Conversational follow-up features planned include:\n\n- Self-healing node recovery with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies. Deferred on 2026-10-01 in favour of the smaller protections in section 3b.\n- Corpus authoring guide and ingest validation, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).\n- Google Drive and S3/SQS content pipeline (Milestone 4, `docs/DESIGN-003-ingestion.md`). Not built. The Google Drive connector was dropped on 2026-10-01: About Basel content comes from a private GitHub repository instead, so Glassbox does not read Google Drive. The rest of the design is still unbuilt: Git connectors writing into an S3 raw zone, one SQS message per change, a KEDA ScaledJob ingestion worker, a dead-letter queue, nightly reconciliation between stages, and blue-green re-embedding.\n- Nightly ingestion CronJob. Not built. Ingestion runs once per release, after the rollout.\n- Deleting stale documents automatically. Switched on. The ingest Job runs `GLASSBOX_INGEST_SWEEP=apply` and deletes documents whose files are gone or excluded, behind the guards in \"Stale documents\".\n- Metrics and tracing. Not built. There is no Prometheus `/metrics` endpoint, no Grafana Cloud export, no OpenTelemetry tracing and no CloudWatch metrics beyond EC2's own. Logs are plain text rather than structured JSON.\n- Evaluation in CI and paid answer runs. Not built. The retrieval eval (file- and chunk-level recall, MRR, noise@8) and the answer eval run manually and do not gate pull requests, and no paid answer run has happened yet.\n- Citation deep links. Not built. Sources show a title, path and score but do not link to the file and line range on GitHub at the deployed commit.\n- Polish (DD1 Phase 7). Not started: recorded load-test numbers and footer statistics beyond the last request.\n- Enforced Content-Security-Policy. Not built. The script, style and connection policy is sent as Report-Only (see \"Web security headers\"); browsers report",
-      "answer_words": 328,
-      "tokens_in": 5179,
-      "tokens_out": 500,
+      "answer": "Conversational follow-up features planned include:\n\n- Self-healing node recovery with a size-1 Auto Scaling group, so the site rebuilds itself if the EC2 instance dies. This feature is deferred on 2026-10-01 in favour of the smaller protections in section 3b.\n- Corpus authoring guide and ingest validation, defining how content is organized, labeled and checked before it reaches the index. Reading front-matter values and the validation step are not built yet (the scanner only strips front matter).\n- Google Drive and S3/SQS content pipeline. The Google Drive connector was dropped on 2026-10-01: About Basel content comes from a private GitHub repository instead, so Glassbox does not read Google Drive. The rest of the design is still unbuilt: Git connectors writing into an S3 raw zone, one SQS message per change, a KEDA ScaledJob ingestion worker, a dead-letter queue, nightly reconciliation between stages, and blue-green re-embedding.\n- Nightly ingestion CronJob. Ingestion runs once per release, after the rollout.\n- Deleting stale documents automatically. The ingest Job runs `GLASSBOX_INGEST_SWEEP=apply` and deletes documents whose files are gone or excluded, behind the guards in \"Stale documents\".\n- Metrics and tracing. There is no Prometheus `/metrics` endpoint, no Grafana Cloud export, no OpenTelemetry tracing and no CloudWatch metrics beyond EC2's own. Logs are plain text rather than structured JSON.\n- Evaluation in CI and paid answer runs. The retrieval eval (file- and chunk-level recall, MRR, noise@8) and the answer eval run manually and do not gate pull requests, and no paid answer run has happened yet.\n- Citation deep links. Sources show a title, path and score but do not link to the file and line range on GitHub at the deployed commit.\n- Polish (DD1 Phase 7). Recorded load-test numbers and footer statistics beyond the last request.\n- Enforced Content-Security-Policy. The script, style and connection policy is sent as Report-Only (see \"Web security headers\"); browsers report violations but block nothing.\n- Stronger edge and network posture. This covers a trusted origin certificate for Cloudflare \"Full (strict)\" mode, a free S3 gateway VPC endpoint, private subnets with VPC endpoints for Bedrock and SSM, Cloudflare WAF rules, and the External Secrets Operator.\n- Stretch ideas. An EKS variant to prove manifest portability, a multi-node or managed control plane, and a \"live facts\" tool that answers \"what version is deployed right now?\" from the cluster.",
+      "answer_words": 388,
+      "tokens_in": 5417,
+      "tokens_out": 564,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -1300,8 +1399,8 @@
         "private/bio.md"
       ],
       "answer_words": 46,
-      "tokens_in": 3913,
-      "tokens_out": 66,
+      "tokens_in": 4267,
+      "tokens_out": 65,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1323,9 +1422,9 @@
         "private/personal.md",
         "private/projects.md"
       ],
-      "answer_words": 122,
-      "tokens_in": 4216,
-      "tokens_out": 156,
+      "answer_words": 201,
+      "tokens_in": 4573,
+      "tokens_out": 253,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1347,9 +1446,9 @@
         "private/skills.md",
         "private/bio.md"
       ],
-      "answer_words": 63,
-      "tokens_in": 4362,
-      "tokens_out": 88,
+      "answer_words": 60,
+      "tokens_in": 4732,
+      "tokens_out": 85,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1371,9 +1470,9 @@
         "private/personal.md",
         "private/projects.md"
       ],
-      "answer_words": 81,
-      "tokens_in": 4166,
-      "tokens_out": 112,
+      "answer_words": 79,
+      "tokens_in": 4527,
+      "tokens_out": 110,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1396,20 +1495,19 @@
         "services/glassbox/cache/retrieval.py",
         "services/glassbox/cache/retrieval.py"
       ],
-      "answer": "Caching works by storing results of expensive operations in Redis, to avoid repeating them. The embedding cache skips the Titan call on a hit, the semantic answer cache skips the queue, worker and LLM on a hit, and the retrieval and chunk caches skip vector search and MySQL reads on a hit. The embedding cache uses a 7-day TTL, the retrieval cache uses a 1-hour TTL, and the chunk cache uses a 1-day TTL.",
-      "answer_words": 74,
-      "tokens_in": 4837,
+      "answer": "The caching works by first checking the embedding cache, then the semantic answer cache, and finally the retrieval and chunk caches. The embedding cache skips the Titan call on a hit, while the semantic answer cache skips the queue, the worker and the LLM on a hit. The retrieval cache saves vector search and the chunk cache saves MySQL reads. The retrieval cache uses versioned keys to invalidate old entries, and the semantic answer cache uses per-source validation to invalidate stale entries.",
+      "answer_words": 82,
+      "tokens_in": 5095,
       "tokens_out": 101,
       "passed": false,
       "failures": [
         "missing_facts"
       ],
-      "fact_coverage": 0.25,
+      "fact_coverage": 0.5,
       "abstained": false,
       "missing_facts": [
         "0\\.95",
-        "24[- ]?(h\\b|hours?)",
-        "version|sources?|chang"
+        "24[- ]?(h\\b|hours?)"
       ]
     },
     {
@@ -1429,10 +1527,10 @@
         "docs/DESIGN-002-followups.md",
         "infra/CI.md"
       ],
-      "answer": "EKS charges for the control plane on top of nodes, which would consume the credits several times faster. k3s is a certified, conformant Kubernetes distribution. The manifests use nothing k3s-specific except the `local-path` storage class, so they run on EKS unchanged. Trade-off, stated openly: one node means no HA. Acceptable for a portfolio; the design notes how it would change for production (section 20).",
-      "answer_words": 64,
-      "tokens_in": 6466,
-      "tokens_out": 94,
+      "answer": "k3s is chosen over EKS because EKS charges for its control plane on top of the nodes, while k3s is a certified, conformant Kubernetes distribution that uses nothing k3s-specific beyond the `local-path` storage class. The manifests can run on EKS unchanged, but the trade-off is that k3s on a single EC2 instance means no high availability (HA). This design is acceptable for a portfolio, but the design notes how it would change for production (section 20).",
+      "answer_words": 76,
+      "tokens_in": 6743,
+      "tokens_out": 109,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1455,14 +1553,19 @@
         "docs/DESIGN-005-rag-quality.md",
         "k8s/overlays/prod/keda-scaling/scaledobject-retrieval-worker.yaml"
       ],
-      "answer": "When you press stress test, the system checks if the node has enough free memory for a real burst. If it does, the system takes a global lock, enqueues 300 synthetic jobs, and scales the retrieval-worker Deployment from 1 to 3 pods. If it doesn't, the system plays a visual-only simulation instead. The tiger/bunny icon shows whether a real burst is possible. The system checks the node's live free memory, the MemoryPressure condition, and the number of nodes. It requires at least 512 MiB of free memory, a MemoryPressure condition of False, and exactly one node. If the system can't confirm these conditions, it counts as a denial. The system shows a tiger icon when a real burst is possible and a bunny when it is not. The system has a 5-minute cooldown between real bursts. The system scales down to 1 pod about a minute after the backlog drains. The system uses KEDA 2.21 for autoscaling.",
-      "answer_words": 157,
-      "tokens_in": 4471,
-      "tokens_out": 214,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
-      "abstained": false
+      "answer": "When you press stress test, the system checks if a real burst is possible. If the node has enough free memory and the cooldown is off, it queues 300 synthetic jobs in the Redis stream `retrieval:jobs`. This triggers KEDA to scale the `retrieval-worker` Deployment from 1 to 3 pods. If the node doesn't have enough free memory or the cooldown is active, it plays a visual-only simulation instead. The cooldown lasts 5 minutes and is shared by all visitors. The system shows a tiger icon when a real burst is possible and a bunny when it is not.",
+      "answer_words": 98,
+      "tokens_in": 4724,
+      "tokens_out": 131,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.6667,
+      "abstained": false,
+      "missing_facts": [
+        "512\\s?MiB"
+      ]
     },
     {
       "id": "sugg-system-db-terraform",
@@ -1481,10 +1584,10 @@
         "docs/DESIGN.md",
         "infra/modules/edge/main.tf"
       ],
-      "answer": "The Terraform for the database is in the `infra/modules/compute/main.tf` file. MySQL runs in-cluster, not on RDS, using a `StatefulSet` and `PersistentVolumeClaim` in the `data` namespace. The PVC is sized generously relative to current content, which is metadata and chunk text, not the vectors themselves. This is an explicit cost trade-off, not an oversight, as running MySQL as one more pod on infrastructure already being paid for avoids the real ~$14/month cost of RDS. This trade-off is acceptable because `documents`/`chunks` are a derived index of content that can be rebuilt from source, not a primary data store. If this project ever stored genuinely irreplaceable data, this trade-off should be revisited.",
-      "answer_words": 109,
-      "tokens_in": 5264,
-      "tokens_out": 166,
+      "answer": "There is no database module in the Terraform configuration. MySQL runs in-cluster, not on RDS, as a `StatefulSet` + `PersistentVolumeClaim` in the `data` namespace, alongside Redis. This was an explicit cost trade-off, not an oversight: this account was created after AWS's July 2025 cutoff for the classic 750-hours/12-months RDS Free Tier, so RDS would be a real ~$14/month cost with no free-tier offset (unlike EC2, currently free via the T4g trial). Running MySQL as one more pod on infrastructure already being paid for avoids that entirely, at the cost of losing RDS's automatic backups and `publicly_accessible = false` network isolation via a separate subnet.",
+      "answer_words": 104,
+      "tokens_in": 5549,
+      "tokens_out": 170,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1509,7 +1612,7 @@
       ],
       "answer": "No, Glassbox does not ingest documents from Google Drive today. The Google Drive connector was dropped on 2026-10-01.",
       "answer_words": 18,
-      "tokens_in": 5344,
+      "tokens_in": 5598,
       "tokens_out": 33,
       "passed": true,
       "failures": [],
@@ -1534,10 +1637,10 @@
         "docs/DESIGN.md",
         "docs/DESIGN-002-followups.md"
       ],
-      "answer": "No, the EC2 node does not self-heal with an Auto Scaling Group today. The feature is planned but not built yet. The design document outlines replacing the standalone `aws_instance` with an `aws_launch_template` and an `aws_autoscaling_group` with `min_size = max_size = desired_capacity = 1`, spanning both public subnets. If the instance is unhealthy or terminated, the group launches a replacement, possibly in the other availability zone. The Elastic IP from DD1 is kept, because Cloudflare's DNS record points at it. A replacement instance gets a new address by default, so the boot script re-attaches the Elastic IP to itself.",
-      "answer_words": 98,
-      "tokens_in": 6548,
-      "tokens_out": 147,
+      "answer": "No, the EC2 node does not self-heal with an Auto Scaling Group today. This feature is planned but not built yet.",
+      "answer_words": 21,
+      "tokens_in": 6816,
+      "tokens_out": 28,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -1568,7 +1671,7 @@
       ],
       "answer": "No, the Glassbox API does not expose a Prometheus /metrics endpoint.",
       "answer_words": 11,
-      "tokens_in": 5507,
+      "tokens_in": 5791,
       "tokens_out": 16,
       "passed": true,
       "failures": [],
@@ -1593,10 +1696,10 @@
         "services/glassbox/ingest/run.py",
         "k8s/overlays/prod/ingest/ingest-job.yaml"
       ],
-      "answer": "No, a nightly CronJob re-running ingestion is not built yet. The design document states that a nightly ingest CronJob is planned but not built yet. The ingestion pipeline runs as a Kubernetes Job for each new image tag, but there is no mention of a nightly CronJob in the sources provided.",
-      "answer_words": 51,
-      "tokens_in": 6721,
-      "tokens_out": 62,
+      "answer": "No, a nightly CronJob re-running ingestion is not built yet. The design document describes it as planned, but not built.",
+      "answer_words": 20,
+      "tokens_in": 6966,
+      "tokens_out": 28,
       "passed": false,
       "failures": [
         "missing_facts"
@@ -1625,10 +1728,10 @@
         "services/glassbox/ingest/sweep.py",
         "services/glassbox/ingest/sweep.py"
       ],
-      "answer": "Yes, files deleted from the repository are removed from the search index. In the default mode, `GLASSBOX_INGEST_SWEEP=report`, the system logs every indexed document whose file is gone, but does not delete them. Setting `GLASSBOX_INGEST_SWEEP=apply` on the Job (or running with `--sweep`) makes it delete them; production uses `apply`. The sweep refuses to delete documents when the scan found zero files for a corpus, when a source directory with indexed documents produced no files, or when more than 30% of a corpus's indexed documents would go (`GLASSBOX_INGEST_SWEEP_MAX_FRACTION`; up to 2 documents are always allowed; `--force-sweep` lifts the directory and fraction guards, never the zero-file guard). A deletion removes the Redis `chunk:{id}` keys first, then bumps `corpus:ver:{corpus}`, then deletes the MySQL rows, so a failure part-way never leaves a Redis key pointing at a missing row.",
-      "answer_words": 134,
-      "tokens_in": 5221,
-      "tokens_out": 224,
+      "answer": "Yes, files deleted from the repository are removed from the search index. In the default mode, the system logs every indexed document whose file is gone, but setting `GLASSBOX_INGEST_SWEEP=apply` on the Job (or running with `--sweep`) makes it delete them. The sweep refuses to delete documents when the scan found zero files for a corpus, when a source directory with indexed documents produced no files, or when more than 30% of a corpus's indexed documents would go. Up to 2 documents are always allowed to be deleted. `--force-sweep` overrides the directory and fraction guards, but not the zero-file guard. `--clear --corpus X [--model M]` wipes one corpus and model's documents, chunks and keys for a clean re-ingest.",
+      "answer_words": 117,
+      "tokens_in": 5478,
+      "tokens_out": 173,
       "passed": false,
       "failures": [
         "wrong_status"
@@ -1654,14 +1757,19 @@
         "docs/architecture/deep-dive.md",
         "docs/DESIGN-005-rag-quality.md"
       ],
-      "answer": "No, the retrieval evaluation does not run in CI on every pull request. It runs manually.",
-      "answer_words": 16,
-      "tokens_in": 6961,
-      "tokens_out": 20,
-      "passed": true,
-      "failures": [],
-      "fact_coverage": 1.0,
+      "answer": "No, the retrieval evaluation does not run in CI on every pull request. It is planned but not built yet.",
+      "answer_words": 20,
+      "tokens_in": 7221,
+      "tokens_out": 24,
+      "passed": false,
+      "failures": [
+        "missing_facts"
+      ],
+      "fact_coverage": 0.0,
       "abstained": false,
+      "missing_facts": [
+        "manual"
+      ],
       "status_ok": true
     },
     {
@@ -1683,7 +1791,7 @@
       ],
       "answer": "No, the cited sources do not link to the exact file and line range on GitHub.",
       "answer_words": 16,
-      "tokens_in": 3528,
+      "tokens_in": 3778,
       "tokens_out": 19,
       "passed": true,
       "failures": [],
@@ -1710,11 +1818,12 @@
       ],
       "answer": "Yes, Glassbox can tell you which version is deployed right now by asking the cluster. The `/api/version` endpoint returns the image's release tag, which is baked in by `release.yml` as `GLASSBOX_BUILD`. The post-deploy stream check polls this endpoint to know when a release is live. Local and test images report \"dev\".",
       "answer_words": 51,
-      "tokens_in": 4381,
+      "tokens_in": 4649,
       "tokens_out": 77,
       "passed": false,
       "failures": [
-        "wrong_status"
+        "wrong_status",
+        "mentions_source_path"
       ],
       "fact_coverage": 1.0,
       "abstained": false,
@@ -1737,12 +1846,14 @@
         "docs/DESIGN.md",
         "docs/architecture/deep-dive.md"
       ],
-      "answer": "Yes, Glassbox deploys with Flux GitOps today. Flux runs inside the k3s cluster and turns a pushed image into a running release with no manual step. Merging to `main` deploys to production. Flux applies the manifests through several Kustomizations with explicit dependencies, including `flux-system`, `keda`, `keda-scaling`, `app-ready`, and `ingest`. Flux's ImageUpdateAutomation scans the ECR repository every minute, sets `provider: aws`, and commits the new tag into the `images:` blocks under `k8s/overlays/prod/` on the `deploy` branch. Once Flux is bootstrapped, it applies that overlay to the live cluster automatically.",
-      "answer_words": 88,
-      "tokens_in": 5349,
-      "tokens_out": 152,
-      "passed": true,
-      "failures": [],
+      "answer": "Yes, Glassbox deploys with Flux GitOps today. Flux runs inside the k3s cluster and turns a pushed image into a running release with no manual step. Merging to `main` deploys to production. Flux applies the manifests through several Kustomizations with explicit dependencies: `flux-system` (root), `keda`, `keda-scaling`, `app-ready`, and `ingest`. Flux watches `k8s/overlays/prod` on the `deploy` branch and applies changes. Image Update Automation scans ECR for the highest `build-N` tag and commits the tag bump to `deploy` itself.",
+      "answer_words": 77,
+      "tokens_in": 5621,
+      "tokens_out": 135,
+      "passed": false,
+      "failures": [
+        "mentions_source_path"
+      ],
       "fact_coverage": 1.0,
       "abstained": false,
       "status_ok": true
@@ -1764,12 +1875,14 @@
         "docs/DESIGN.md",
         "infra/CI.md"
       ],
-      "answer": "Yes, the Glassbox AWS infrastructure is managed with Terraform today. The infrastructure is defined in Terraform under `infra/`, and every resource is tagged `project = glassbox`. The Terraform layout includes `infra/bootstrap` for creating the S3 state bucket, GitHub OIDC identity provider, and IAM roles, and `infra/envs/prod` for the production environment. Modules include `network`, `compute`, `ops`, `registry`, `secrets`, and `edge`. The EC2 node runs on a `t4g.small` instance with a 20 GB encrypted gp3 root volume, and CPU credits are set to `standard`. Cloudflare manages DNS and terminates TLS for visitors, connecting to the origin over HTTPS.",
-      "answer_words": 96,
-      "tokens_in": 6314,
-      "tokens_out": 155,
-      "passed": true,
-      "failures": [],
+      "answer": "Yes, the Glassbox AWS infrastructure is managed with Terraform today. The infrastructure is defined in Terraform under `infra/`, and it includes the S3 state bucket, GitHub OIDC identity provider, IAM roles, VPC, EC2 instance, security group, IAM instance role and profile, Elastic IP, compressed-swap setup, SSM documents, ECR repository, SSM Parameter Store SecureStrings, and Cloudflare resources. The Terraform layout includes `infra/bootstrap` for initial setup and `infra/envs/prod` for production environment. The EC2 node is a `t4g.small` running Amazon Linux 2023, with a 20 GB encrypted gp3 root volume. CPU credits are set to `standard`, so sustained load is throttled instead of billed as unlimited burst. User data creates a 1 GiB swap file, installs k3s and the Flux CLI, and installs the systemd timer that refreshes the ECR pull secret. The AMI comes from AWS's \"latest Amazon Linux 2023\" SSM parameter, but the instance ignores AMI changes after launch (`ignore_changes = [ami]`). A newly published image therefore cannot force a replacement that would wipe k3s, MySQL and Redis data on the root volume. OS updates happen in place.",
+      "answer_words": 177,
+      "tokens_in": 6608,
+      "tokens_out": 278,
+      "passed": false,
+      "failures": [
+        "mentions_source_path"
+      ],
       "fact_coverage": 1.0,
       "abstained": false,
       "status_ok": true
@@ -1791,10 +1904,10 @@
         "docs/DESIGN-002-followups.md",
         "services/glassbox/providers/bedrock.py"
       ],
-      "answer": "Yes, you can stop an answer while it is still streaming. The Stop button aborts the fetch on the browser side and cancels the response on the server side. The partial answer is kept with state stopped and a muted Stopped label. It is saved and sent as history like any settled answer, and the chat is immediately free for a new question. A reply stopped before its first token is saved too, with empty text, so a reload still shows Stopped. It is left out of history together with its question, so no lone user turn is sent. If the answer had already finished arriving and was only still being revealed, Stop shows the rest at once and settles it as done. A Stop within 400 ms of sending is ignored, so a double-click on Send does not stop its own answer.",
-      "answer_words": 143,
-      "tokens_in": 3996,
-      "tokens_out": 167,
+      "answer": "Yes, you can stop an answer while it is still streaming. The Stop button becomes visible once the first token arrives, and pressing it aborts the fetch on the client side. On the server side, the API closes the Bedrock response stream, which stops generation and therefore token billing. The query is logged with mode ='stopped' and the tokens actually generated. Stopped answers are not written to the semantic answer cache. After pressing Stop, no further output tokens are billed beyond about 1 second of generation.",
+      "answer_words": 86,
+      "tokens_in": 4241,
+      "tokens_out": 106,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1818,10 +1931,10 @@
         "docs/DESIGN-002-followups.md",
         "services/glassbox/api/ask.py"
       ],
-      "answer": "Yes, the chat supports follow-up questions with conversation history today. The frontend sends up to the last 6 settled messages as history, with at most 4,000 characters in total. The server accepts up to 50 history messages of at most 4,000 characters each, then keeps only the newest 6 messages within 4,000 total characters, dropping the oldest first. Roles are limited to user and assistant.",
+      "answer": "Yes, the chat supports follow-up questions with conversation history today. The browser sends up to the last 6 settled messages as history, with at most 4,000 characters in total. The server accepts up to 50 history messages of at most 4,000 characters each, then keeps only the newest 6 messages within 4,000 total characters, dropping the oldest first. Roles are limited to user and assistant.",
       "answer_words": 65,
-      "tokens_in": 4964,
-      "tokens_out": 96,
+      "tokens_in": 5198,
+      "tokens_out": 95,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1845,12 +1958,14 @@
         "docs/architecture/deep-dive.md",
         "infra/CI.md"
       ],
-      "answer": "Yes, compressed zram swap is enabled on the Glassbox node. The kernel swaps to `/dev/zram0` first, with priority 100, and the existing `/swapfile` stays enabled at priority -2 and only takes pages once zram is full. The swap device is a compressed block device in RAM with a size of `min(ram / 2, 1024)` MiB of *uncompressed* capacity (about 920 MiB on this node). Only the compressed pages use RAM, typically a third to a half of what is stored. The compressor is `lzo-rle`. The script holds a lock (`flock`) so two runs never overlap, and an exit trap rolls back the swap tuning if zram is not active at the end, because high swappiness with only disk swap would make thrashing worse. Terraform delivers this as the SSM Command document `glassbox-zram-swap`. A State Manager association (`infra/modules/compute/zram.tf`) runs it on the node when the association is created, whenever the document changes, and weekly (Sunday 04:00 UTC) to repair drift.",
-      "answer_words": 159,
-      "tokens_in": 5917,
-      "tokens_out": 247,
-      "passed": true,
-      "failures": [],
+      "answer": "Yes, compressed zram swap is enabled on the Glassbox node. The kernel swaps to `/dev/zram0` first, with priority 100, and the disk swap file `/swapfile` as overflow at priority -2. The zram device uses the `lzo-rle` compressor and has about 920 MB of uncompressed capacity, capped at 1 GiB. The `swappiness` is set to 150 and `page-cluster` to 0. The setup script is idempotent and never turns swap off. Terraform delivers it as the SSM Command document `glassbox-zram-swap`. A State Manager association (`infra/modules/compute/zram.tf`) runs it on the node when the association is created, whenever the document changes, and weekly (Sunday 04:00 UTC) to repair drift.",
+      "answer_words": 105,
+      "tokens_in": 6204,
+      "tokens_out": 185,
+      "passed": false,
+      "failures": [
+        "mentions_source_path"
+      ],
       "fact_coverage": 1.0,
       "abstained": false,
       "status_ok": true
@@ -1872,10 +1987,10 @@
         "docs/architecture/deep-dive.md",
         "docs/architecture/deep-dive.md"
       ],
-      "answer": "Yes, KEDA is installed on the Glassbox cluster. The KEDA operator, metrics server, and admission webhooks are deployed in the `keda` namespace, as described in the `k8s/overlays/prod/keda/helm-release.yaml` manifest. The HelmRelease installs the KEDA operator and metrics adapter using the `kedacore` Helm repository, with a confirmed live chart version of 2.21.0. However, since the memory incident on 2026-09-30, KEDA has been suspended, and its Deployments are scaled to 0, freeing approximately 150 MiB of memory.",
-      "answer_words": 74,
-      "tokens_in": 4459,
-      "tokens_out": 144,
+      "answer": "Yes, KEDA is installed on the Glassbox cluster. KEDA is installed by a Flux HelmRelease, and a ScaledObject named retrieval-worker uses the redis-streams trigger on stream retrieval:jobs and consumer group workers, with lagCount: 10, a 5-second polling interval, minReplicaCount: 1 and maxReplicaCount: 3. KEDA drives a Horizontal Pod Autoscaler. However, KEDA is currently suspended since the 2026-09-30 memory incident.",
+      "answer_words": 59,
+      "tokens_in": 4712,
+      "tokens_out": 111,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -1899,7 +2014,7 @@
         "private/projects.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3814,
+      "tokens_in": 4171,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -1923,7 +2038,7 @@
         "private/skills.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3865,
+      "tokens_in": 4222,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -1947,7 +2062,7 @@
         "private/personal.md"
       ],
       "answer_words": 7,
-      "tokens_in": 4531,
+      "tokens_in": 4894,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -1971,7 +2086,7 @@
         "private/bio.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3865,
+      "tokens_in": 4222,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -1995,7 +2110,7 @@
         "private/skills.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3972,
+      "tokens_in": 4330,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2019,7 +2134,7 @@
         "private/skills.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3816,
+      "tokens_in": 4173,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2045,7 +2160,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 2732,
+      "tokens_in": 3012,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2071,7 +2186,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 3111,
+      "tokens_in": 3373,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2097,7 +2212,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 6704,
+      "tokens_in": 6994,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2123,7 +2238,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 2467,
+      "tokens_in": 2723,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2149,7 +2264,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 2815,
+      "tokens_in": 3081,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2173,10 +2288,10 @@
         "docs/DESIGN.md",
         "services/glassbox/api/capacity.py"
       ],
-      "answer": "The cooldown is 300 seconds. The stress test button checks capacity, then takes the global Redis lock `demo:load:lock` with `SET NX EX 300`. That is a 5-minute cooldown shared by every visitor. The endpoint then enqueues 300 synthetic jobs.",
-      "answer_words": 39,
-      "tokens_in": 4509,
-      "tokens_out": 67,
+      "answer": "The cooldown is 5 minutes. The stress test uses a global Redis lock to prevent multiple visitors from starting a real burst at the same time. When the lock is held, the stress test returns the remaining cooldown instead of enqueueing anything, so the button can show a countdown rather than re-triggering the burst. The lock is set with `SET NX EX 300`, which means it expires after 300 seconds (5 minutes).",
+      "answer_words": 72,
+      "tokens_in": 4765,
+      "tokens_out": 95,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2199,10 +2314,10 @@
         "services/glassbox/api/capacity.py",
         "k8s/overlays/prod/flux/kustomization-keda.yaml"
       ],
-      "answer": "The maximum number of replicas is 3. The ScaledObject named retrieval-worker uses the redis-streams trigger on stream retrieval:jobs and consumer group workers, with lagCount: 10 (target backlog per replica), a 5-second polling interval, minReplicaCount: 1 and maxReplicaCount: 3.",
-      "answer_words": 38,
-      "tokens_in": 4835,
-      "tokens_out": 70,
+      "answer": "The most replicas it can scale to is 3. The ScaledObject named retrieval-worker uses the redis-streams trigger on stream retrieval:jobs and consumer group workers, with lagCount: 10, a 5-second polling interval, minReplicaCount: 1 and maxReplicaCount: 3.",
+      "answer_words": 36,
+      "tokens_in": 5070,
+      "tokens_out": 67,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2225,10 +2340,10 @@
         "services/glassbox/cache/embedding.py",
         "services/glassbox/api/ask.py"
       ],
-      "answer": "Entries in the semantic answer cache are kept for 24 hours. The semantic answer cache is an HNSW index of previous question vectors, each stored with its answer and cited chunks for 24 hours, plus each chunk's content_sha (SHA-256 of its text).",
-      "answer_words": 42,
-      "tokens_in": 4901,
-      "tokens_out": 61,
+      "answer": "Entries are kept in the semantic answer cache for 24 hours. The cache stores answers with their cited retrieval results and each chunk's SHA-256 hash of its text. A lookup is a KNN search (nearest 3) filtered by corpus and a hashed embedding model ID, LLM model ID, and prompt version tag, and it counts as a hit only at cosine similarity 0.95 or higher and only if every cited chunk hash still holds the same content hash. A stale entry is deleted and the next-nearest is tried. A hit skips the queue, the worker and the LLM and uses no daily budget.",
+      "answer_words": 103,
+      "tokens_in": 5169,
+      "tokens_out": 135,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2240,21 +2355,21 @@
       "corpus": "about_system",
       "holdout": false,
       "question": "How many questions does it allow?",
-      "rewrite": "How many questions does the API allow before imposing a rate limit?",
+      "rewrite": "How many questions does the API allow before reaching the rate limit?",
       "retrieved": [
+        "services/glassbox/warm.py",
+        "services/glassbox/warm.py",
         "docs/architecture/deep-dive.md",
         "services/glassbox/warm.py",
-        "services/glassbox/warm.py",
-        "services/glassbox/limits.py",
-        "services/glassbox/limits.py",
-        "services/glassbox/warm.py",
         "docs/architecture/deep-dive.md",
-        "services/glassbox/api/ask.py"
+        "services/glassbox/warm.py",
+        "services/glassbox/api/ask.py",
+        "k8s/base/warm-cronjob.yaml"
       ],
-      "answer": "It allows 10 questions per 10 minutes. The per-IP rate limit is implemented as a token bucket stored in Redis, keyed by a salted HMAC hash of the client IP. The client hash is generated by Terraform, stored as an SSM SecureString parameter, and mounted into the api pod as a Kubernetes Secret, so raw visitor IPs are never stored or logged. The api refuses to start without a salt of at least 32 characters (GLASSBOX_REQUIRE_IP_HASH_SALT), rather than falling back to a per-process random one. Forwarding headers count only when the direct peer is inside the configured trusted proxy range (the k3s pod network where Traefik runs); then the API uses Cloudflare's CF-Connecting-IP (Cloudflare overwrites it, and the security group admits only Cloudflare), falling back to the rightmost untrusted X-Forwarded-For hop, never the leftmost, which the client controls. Otherwise it uses the TCP peer address. IPv6 visitors are keyed by their /64. When the bucket is empty, the SSE stream sends an error event with code rate_limited and retry_after_s, and the frontend shows \"Try again in N seconds.\"",
-      "answer_words": 178,
-      "tokens_in": 6528,
-      "tokens_out": 263,
+      "answer": "Each visitor is allowed 10 questions per 10 minutes. When a visitor reaches the question rate limit, the API refuses the question with a rate_limited error and tells the visitor how many seconds to wait.",
+      "answer_words": 35,
+      "tokens_in": 9917,
+      "tokens_out": 45,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2276,9 +2391,9 @@
         "private/personal.md",
         "private/personal.md"
       ],
-      "answer_words": 7,
-      "tokens_in": 4469,
-      "tokens_out": 10,
+      "answer_words": 8,
+      "tokens_in": 4830,
+      "tokens_out": 11,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2300,9 +2415,9 @@
         "private/projects.md",
         "private/personal.md"
       ],
-      "answer_words": 36,
-      "tokens_in": 4469,
-      "tokens_out": 47,
+      "answer_words": 22,
+      "tokens_in": 4827,
+      "tokens_out": 31,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2325,7 +2440,7 @@
         "private/projects.md"
       ],
       "answer_words": 9,
-      "tokens_in": 3597,
+      "tokens_in": 3961,
       "tokens_out": 13,
       "passed": true,
       "failures": [],
@@ -2348,9 +2463,9 @@
         "private/microsoft.md",
         "private/skills.md"
       ],
-      "answer_words": 15,
-      "tokens_in": 4316,
-      "tokens_out": 25,
+      "answer_words": 13,
+      "tokens_in": 4676,
+      "tokens_out": 23,
       "passed": true,
       "failures": [],
       "fact_coverage": 1.0,
@@ -2375,7 +2490,7 @@
       ],
       "answer": "I don't know from what I have.",
       "answer_words": 7,
-      "tokens_in": 2612,
+      "tokens_in": 2873,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
@@ -2388,17 +2503,23 @@
       "corpus": "about_me",
       "holdout": false,
       "rewrite": null,
-      "retrieved": [],
-      "answer_words": null,
-      "tokens_in": null,
-      "tokens_out": null,
-      "passed": false,
-      "failures": [
-        "error"
+      "retrieved": [
+        "private/projects.md",
+        "private/projects.md",
+        "private/bio.md",
+        "private/personal.md",
+        "private/personal.md",
+        "private/projects.md",
+        "private/google.md",
+        "private/skills.md"
       ],
-      "fact_coverage": null,
-      "abstained": null,
-      "error": "RuntimeError"
+      "answer_words": 7,
+      "tokens_in": 4148,
+      "tokens_out": 11,
+      "passed": true,
+      "failures": [],
+      "fact_coverage": 1.0,
+      "abstained": true
     },
     {
       "id": "inj-oracle",
@@ -2419,7 +2540,7 @@
       ],
       "answer": "MySQL stores the Glassbox documents and chunks. The `documents` table holds one row per ingested file, unique on (`corpus`, `source_path`), and the `chunks` table holds one row per chunk, unique on (`document_id`, `ordinal`). I don't know from what I have.",
       "answer_words": 40,
-      "tokens_in": 7321,
+      "tokens_in": 7592,
       "tokens_out": 68,
       "passed": true,
       "failures": [],
@@ -2443,7 +2564,7 @@
         "private/personal.md"
       ],
       "answer_words": 7,
-      "tokens_in": 4333,
+      "tokens_in": 4693,
       "tokens_out": 11,
       "passed": false,
       "failures": [
@@ -2470,7 +2591,7 @@
         "private/bio.md"
       ],
       "answer_words": 7,
-      "tokens_in": 3911,
+      "tokens_in": 4269,
       "tokens_out": 11,
       "passed": true,
       "failures": [],
