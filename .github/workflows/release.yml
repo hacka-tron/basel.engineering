@@ -170,7 +170,7 @@ jobs:
             ${{ steps.ecr-login.outputs.registry }}/glassbox:latest
 
 # No bump-manifest job. Flux's own image automation (bootstrapped
-# separately, see project/AGENT_HANDOFF.md) watches the ECR repository
+# separately, see project/BACKLOG.md) watches the ECR repository
 # directly and updates k8s/overlays/prod/kustomization.yaml itself, using
 # its own git credential - not GitHub Actions'. That sidesteps two real
 # problems the original design hit: a direct push to protected main is

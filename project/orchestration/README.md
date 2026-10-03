@@ -52,7 +52,7 @@ Agents merge **without asking** once the review is APPROVED and CI is green (own
 
 ## Coordinator handoff
 
-`project/AGENT_HANDOFF.md` holds only the current coordinator, the current state, open PRs and where to look; older checkpoints are in `project/archive/`. On a coordinator switch (or a session ending low on tokens), the outgoing agent commits, pushes and rewrites the handoff: branch/worktree/commit, tests actually run, open PRs with review state, blockers and the next action.
+There is no separate handoff doc (owner, 2026-10-03: one agent, no coordinator switches; the last one is archived in `project/archive/`). At session end, or when ending low on tokens, commit and push, then update `project/BACKLOG.md` "> RESUME HERE" (state, open PRs, next action, blockers) and `project/SNAPSHOT.md` (what now exists).
 
 ## History
 

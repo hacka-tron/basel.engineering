@@ -1,6 +1,6 @@
 # SNAPSHOT
 
-Architecture and repo-state blueprint. Read this first when starting a new session: it should make scanning the repo unnecessary for orientation. It is a snapshot, not a changelog: overwrite stale sections. History lives in `project/status/` and `project/archive/` (old handoff checkpoints); `project/AGENT_HANDOFF.md` is the short current handoff.
+Architecture and repo-state blueprint. Read this first when starting a new session: it should make scanning the repo unnecessary for orientation. It is a snapshot, not a changelog: overwrite stale sections. History lives in `project/status/` and `project/archive/` (old handoff checkpoints); `project/BACKLOG.md` "> RESUME HERE".
 
 **Last updated:** 2026-10-03 (prompt v15, corpus scope, cap 500, no per-answer sources, eval harness state)
 
