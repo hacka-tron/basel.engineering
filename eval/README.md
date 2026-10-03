@@ -32,7 +32,11 @@ Baselines are separate by embedding model (`baselines/<model>.json`) and record 
 - (v2 baselines) chunk-level recall@8 drops at all (no tolerance; DESIGN-005 §5.4 says it must not drop);
 - (v2 baselines) noise@8 rises more than 5 points.
 
-The committed `baselines/fake-v1.json` and `baselines/amazon.titan-embed-text-v2_0.json` are still in the v1 format. They parse unchanged and are gated on recall@5 and their case ids only. Their corpus fingerprints are stale, so the next run against either needs a reviewed `--write-baseline`, which writes the v2 fields. The Titan refresh is a paid run (RAG quality plan phase 3).
+The committed `baselines/fake-v1.json` is still in the v1 format. It parses unchanged and is gated on recall@5 and its case ids only; its corpus fingerprint is stale, so the next run against it needs a reviewed `--write-baseline`, which writes the v2 fields. `baselines/amazon.titan-embed-text-v2_0.json` is v2 (refreshed 2026-10-03, RAG quality plan phase 3).
+
+### Privacy of committed answer files
+
+The About Basel corpus is private. `run_answers.write_run` always redacts `about_me` rows when the output path is under `eval/baselines/` (question, rewrite, answer, raw `sources`, judge critiques and matched-fact patterns are dropped or turned into counts; ids, grades, metrics, word counts and retrieved paths/chunk ids stay). Pass `--redact-about-me` to redact any other output. The default output in the gitignored `eval/runs/` keeps full text for local review. `about_system` rows are never redacted.
 
 ## Running it
 

@@ -361,11 +361,68 @@ def _git_sha() -> str:
         return "nogit"
 
 
-def write_run(rows: list[dict], summary: dict, out: Path | None = None) -> Path:
+BASELINES_DIR = HERE / "baselines"
+REDACTED = "[redacted: private corpus]"
+
+
+def _is_committed_path(out: Path) -> bool:
+    return BASELINES_DIR in out.resolve().parents
+
+
+def redact_row(row: dict) -> dict:
+    """Copy of a row without free text that can restate the private About Basel corpus.
+
+    Drops question, rewrite, answer, raw `sources` text and judge critiques; keeps ids,
+    grades (matched patterns become counts), metrics, word counts and retrieved paths
+    and chunk ids. Only about_me rows are touched.
+    """
+    if row.get("corpus") != "about_me":
+        return row
+    out = {k: v for k, v in row.items() if k not in ("question", "answer", "sources")}
+    if out.get("rewrite") is not None:
+        out["rewrite"] = REDACTED
+    if out.get("error"):
+        out["error"] = str(out["error"]).split(":", 1)[0]
+    grades = out.get("grades")
+    if isinstance(grades, dict):
+        grades = dict(grades)
+        for key in ("missing_facts", "forbidden_hits", "prompt_leaks"):
+            if isinstance(grades.get(key), list):
+                grades[f"{key}_count"] = len(grades.pop(key))
+        out["grades"] = grades
+    elif "missing_facts" in out:  # flattened baseline rows
+        out["missing_facts_count"] = len(out.pop("missing_facts"))
+    judge = out.get("judge")
+    if isinstance(judge, dict):
+        out["judge"] = {
+            "model": judge.get("model"),
+            "verdicts": {
+                name: {k: v for k, v in verdict.items() if k != "critique"}
+                for name, verdict in judge.get("verdicts", {}).items()
+            },
+        }
+    return out
+
+
+def write_run(
+    rows: list[dict],
+    summary: dict,
+    out: Path | None = None,
+    *,
+    redact_about_me: bool | None = None,
+) -> Path:
+    """Write rows (JSONL) and a summary.
+
+    Files under eval/baselines/ are committed, so about_me free text is always
+    redacted there. The default eval/runs/ output (gitignored) keeps full text for
+    local review; pass redact_about_me=True (CLI --redact-about-me) to redact elsewhere.
+    """
     if out is None:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         out = RUNS_DIR / f"{stamp}-{_PROMPT_VERSION}-{_git_sha()}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
+    if redact_about_me or (redact_about_me is None and _is_committed_path(out)):
+        rows = [redact_row(row) for row in rows]
     with out.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -384,6 +441,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run the faithfulness and relevance LLM judges (eval/judge.py; paid unless fake)",
     )
+    parser.add_argument(
+        "--redact-about-me",
+        action="store_true",
+        help="strip about_me free text from the output (always on under eval/baselines/)",
+    )
     parser.add_argument("--out", type=Path, help="JSONL output path (default eval/runs/)")
     args = parser.parse_args(argv)
     check_paid_allowed(args.paid)
@@ -395,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     rows = asyncio.run(_run_against_stack(cases, use_judge=args.judge))
     summary = summarize(rows)
-    path = write_run(rows, summary, args.out)
+    path = write_run(rows, summary, args.out, redact_about_me=args.redact_about_me or None)
     print(json.dumps(summary, indent=2))
     print(f"wrote {path}")
     return 0

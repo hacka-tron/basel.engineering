@@ -11,6 +11,7 @@ Briefings for the project owner. After each substantial feature or change, the a
 
 | Date | Report | Summary | Status |
 |---|---|---|---|
+| 2026-10-03 | [RAG phase 3: paid baseline of v14](2026-10-03-rag-p3-baseline.md) | Titan v2 retrieval baseline refreshed (chunk recall@8 0.73, noise@8 0.127) and first paid answer run of prompt v14 on Nova Lite (pass 0.70, fact coverage 0.79, median 13.5 words); numbers in DESIGN-005 §2.2. | PR open |
 | 2026-10-03 | [Golden set refresh](2026-10-03-golden-refresh.md) | RAG plan step 0: 12 stale gold snippets fixed against the resynced private About Basel files, 14 new About Basel cases and 2 unanswerable cases (91 total), `personal.md` registered; zero unreachable snippets. | PR open |
 | 2026-10-03 | [RAG phase 4: LLM judges and calibration](2026-10-03-rag-judge.md) — branch `feature/rag-p4-judge` | Faithfulness and relevance judges on Nova Pro, `run_answers --judge`, a label-pool builder, `calibration.yaml` labels and `calibrate` (test-split agreement, dev disagreements, refusal under 10 per class). No paid run yet. | PR open |
 | 2026-10-03 | [Deep dive refresh after the portfolio feature](2026-10-03-deep-dive-refresh.md) | `docs/architecture/deep-dive.md` brought up to date (three corpora, Alembic 0006/0007, Portfolio topic, phone details sheet, Open to work, personal-data guard, CI changes gate, Ops · Reindex, applied alarms, Redis keys); still one file, one chunk per section (42 sections, at most 499 words). | PR open |

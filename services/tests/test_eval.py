@@ -192,7 +192,7 @@ def test_regression_refuses_a_different_question_set():
     assert "Question set changed" in regression_reason(result, _v2())
 
 
-@pytest.mark.parametrize("name", ["fake-v1.json", "amazon.titan-embed-text-v2_0.json"])
+@pytest.mark.parametrize("name", ["fake-v1.json"])
 def test_committed_v1_baselines_still_parse_and_gate_on_recall_at_5(name):
     baseline = json.loads((BASELINE_DIR / name).read_text())
     assert "question_set_fingerprint" not in baseline
@@ -209,6 +209,13 @@ def test_committed_v1_baselines_still_parse_and_gate_on_recall_at_5(name):
     result["overall"]["recall_at_5"] += 0.06
     result["cases"].append({"id": "new-golden-case"})
     assert "Question set changed" in regression_reason(result, baseline)
+
+
+def test_committed_titan_baseline_is_v2_and_gates_on_chunk_recall():
+    baseline = json.loads((BASELINE_DIR / "amazon.titan-embed-text-v2_0.json").read_text())
+    assert "question_set_fingerprint" in baseline
+    assert baseline["overall"]["chunk_recall_at_8"] is not None
+    assert baseline["overall"]["noise_at_8"] is not None
 
 
 def test_loader_accepts_golden_cases_and_skips_non_retrieval_cases(tmp_path: Path):
