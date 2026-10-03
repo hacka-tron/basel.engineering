@@ -86,6 +86,8 @@ The graders' known limitations (first-sentence planned/live check, verbatim-only
 
 ### Building the label pool
 
+`eval/calibration.yaml` ships as an empty template. Build the pool from a run of the prompt currently in production (v15 as of 2026-10-03): labels on answers from an older prompt are stale, since the answer hashes and the answers themselves change with the prompt. A 65-item pool built from v14 answers was generated on 2026-10-03 and deliberately not committed.
+
 Natural answers are almost all passes, so the pool oversamples failures. From a run made with this code (it needs the stored `sources`):
 
 ```sh
