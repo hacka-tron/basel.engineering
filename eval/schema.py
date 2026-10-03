@@ -30,6 +30,7 @@ _CASE_KEYS = frozenset(
         "notes",
         "live_but_off",
         "known_failure",
+        "max_words",
     }
 )
 _ORIGINS = frozenset({"questions.yaml", "suggested", "new"})
@@ -105,6 +106,12 @@ def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
                 re.compile(pattern, re.IGNORECASE)
             except (re.error, TypeError) as exc:
                 _fail(case_id, f"{key} pattern {pattern!r} does not compile: {exc}")
+
+    max_words = case.get("max_words")
+    if max_words is not None and (
+        isinstance(max_words, bool) or not isinstance(max_words, int) or max_words < 1
+    ):
+        _fail(case_id, "max_words must be a positive integer")
 
     sources = case.get("expected_sources", [])
     for source in sources:

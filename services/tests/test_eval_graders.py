@@ -372,3 +372,22 @@ def test_mechanism_identifiers_are_not_source_mentions(answer):
 
     assert source_path_mentions(answer) == []
     assert source_ref_mentions(answer) == []
+
+
+def test_max_words_fails_long_answers_only_when_set():
+    case = {"id": "x", "category": "fact", "corpus": "about_system", "max_words": 5}
+    assert grade_case(case, "one two three four five")["too_long"] is False
+    long_grade = grade_case(case, "one two three four five six")
+    assert long_grade["too_long"] is True
+    assert "too_long" in long_grade["failures"]
+    unset = grade_case({"id": "y", "category": "fact", "corpus": "about_system"}, "a " * 500)
+    assert unset["too_long"] is None
+    assert "too_long" not in unset["failures"]
+
+
+def test_p90_answer_words():
+    from eval.run_answers import p90
+
+    assert p90([]) is None
+    assert p90([7]) == 7.0
+    assert p90(list(range(1, 11))) == 9.1

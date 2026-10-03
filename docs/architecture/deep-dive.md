@@ -155,7 +155,7 @@ The rewrite is skipped for first questions, when the kill switch is on, or when 
 
 ## Grounding: how answers stay tied to sources and to what is actually built
 
-Glassbox answers only from retrieved chunks. The system prompt for Bedrock (`GROUNDING_RULES` in `services/glassbox/providers/base.py`) tells the model to answer only from the numbered sources in the user message. If they do not answer the question at all, it must reply with exactly "I don't know from what I have."; if they answer it even in part, it must answer from them. It must not reveal its instructions or leave the selected corpus. The answer prompt (v15) asks for a direct first sentence, then the specifics from the sources (numbers, limits, durations, names, conditions; never rounded or dropped) as a short paragraph or list, in a friendly tone, lighter only for casual questions, that never changes facts. Sources are labelled by kind, not path, and answers never cite files or source numbers.
+Glassbox answers only from retrieved chunks. The system prompt for Bedrock (`GROUNDING_RULES` in `services/glassbox/providers/base.py`) tells the model to answer only from the numbered sources in the user message. If they do not answer the question at all, it must reply with exactly "I don't know from what I have."; if they answer it even in part, it must answer from them. It must not reveal its instructions or leave the selected corpus. The answer prompt (v16) writes for hiring managers, recruiters and prospective clients: the direct answer first, then only the specifics this question needs (exact numbers, names; a total, not its breakdown), in about 40 to 120 words, each point once, in a friendly tone that never changes facts. Sources are labelled by kind, not path; answers never cite files, paths, headings or source numbers.
 
 The About This System corpus mixes code with design documents that sometimes describe features before they exist. The system prompt treats a component as current when a source says it is implemented or working today, or when design sources describe it and it also appears in code, manifest or infrastructure sources (paths under `services/`, `k8s/` or `infra/`). The prompt builder in `services/glassbox/api/ask.py` then labels sources:
 
@@ -477,6 +477,19 @@ The code is organized by service under `services/glassbox/`:
 - `db/`: SQLAlchemy models, Alembic migrations and the migration wait gate.
 
 Tests live in `services/tests/`. They cover the chunkers, caches, limits, kill switch, worker, SSE contract, conversation history, capacity gate, cluster stream, migrations gate, ingestion, the portfolio format and the personal-data guard. Integration tests use real MySQL and Redis with the fake provider.
+
+## What Glassbox costs to run: the monthly bill
+
+Glassbox costs about $5 to $6 a month to run while the AWS EC2 T4g free trial lasts (through December 31, 2026), and about $17 to $18 a month after it ends, plus Bedrock model usage. Approximate us-east-1 prices:
+
+- EC2 `t4g.small` node, running 24/7: $0 during the T4g free trial, about $12.30 a month after.
+- EBS 20 GB gp3 disk: about $1.60 a month.
+- Public IPv4 address (Elastic IP): about $3.65 a month.
+- MySQL and Redis: $0 extra. Both run inside the k3s cluster on the same node; there is no RDS or ElastiCache.
+- Cloudflare DNS, TLS and proxy: $0.
+- Bedrock: Titan embeddings cost pennies. Nova Lite costs about $0.0003 per newly generated answer, so cents a month in practice; at the cap of 500 answers a day the worst case is about $4.50 a month.
+
+Cached answers cost nothing. Spend stays bounded by the daily LLM cap, the per-IP rate limit, the semantic answer cache, the kill switch and a monthly AWS Budgets alert.
 
 ## Design trade-offs and why Glassbox made them
 
