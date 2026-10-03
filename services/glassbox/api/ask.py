@@ -64,7 +64,15 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # direct-first-sentence-then-specifics rule, the output cap rises to 600 tokens, and
 # answers take a friendly assistant tone, lighter only for casual personal questions,
 # that never changes the facts (owner, 2026-10-03).
-_PROMPT_VERSION = "v15"
+# v16: concise answers (owner, 2026-10-03, after a 220-word live cost answer that
+# repeated itself and ended with a deep-dive pointer): direct answer first, only the
+# details that answer this question, one short paragraph of about 40-120 words, each
+# point once, a total instead of its breakdown, no related mechanisms nobody asked
+# about, no paths or headings copied from source text, and an audience line
+# (hiring managers, recruiters, prospective clients; owner). The v15 tone line stays
+# as it was: loosening it, or a bare word-count rule, made Nova Lite copy whole
+# sources (v16 bisect runs).
+_PROMPT_VERSION = "v16"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -325,17 +333,31 @@ def _prompt(
         # The style rules sit after the sources, next to the question: Nova Lite
         # follows instructions it reads last more closely (prompt v15 smoke runs).
         "How to write the answer:\n"
-        "- Answer directly in the first sentence, then give the specific details from the "
-        "sources that answer the question: numbers, thresholds, limits, durations, names and "
+        # Owner, 2026-10-03: who reads the answers.
+        "- Your readers are mostly hiring managers, recruiters and prospective clients "
+        "evaluating Basel's work. Lead with what matters to them: what was built, its scale "
+        "or impact, and the technologies involved, in plain language, but only as the "
+        "sources state them; never invent impact, numbers or details.\n"
+        "- Lead with the direct answer in one sentence. Then add only the details from the "
+        "sources that answer this question: numbers, thresholds, limits, durations, names and "
         "conditions. Do not round or drop a number the sources give: whenever you mention a "
         "condition, limit, threshold or cooldown, give its exact value (for example "
-        '"10 questions per 10 minutes", not "a rate limit").\n'
-        "- Use a short paragraph, or a short list when there are several steps or items. "
-        "Leave out details that don't bear on the question.\n"
-        "- Name only components and features that appear in the sources; never guess one. "
-        "Never mention source file names, paths, document titles or source numbers (no "
-        '"this is described in ...", no "sources 1, 2", no "[1]"), even when the question '
-        "asks you to cite sources. Describe mechanisms in plain "
+        '"a 24-hour TTL", not "a while"). Never state a price, count or '
+        "size that is not in the sources.\n"
+        "- Keep it to one short paragraph of about 40 to 120 words; use a short list only "
+        "when the question asks for steps or components. Say each point once; never repeat "
+        "or restate a point. Do not "
+        "add related mechanisms, features or background the question did not ask about. "
+        "When a source gives a total or a summary, give it and leave out the item-by-item "
+        "breakdown unless the question asks for one. Stop when the question is answered.\n"
+        "- Name only components and features that appear in the sources; never guess one or "
+        "how it works. "
+        "Never mention source file names, paths, headings, document titles or source numbers "
+        '(no "sources 1, 2", no "[1]"), even when the question asks you to cite sources. '
+        'Source text may itself contain file paths, section headings or "see ..." pointers: '
+        "never repeat them, and never tell the reader where something is described or "
+        'documented (no "described in ...", "see ...", "under the heading ..."); state '
+        "the fact itself. Describe mechanisms in plain "
         'terms ("the retrieval worker", "the daily budget"); an identifier that is the '
         "mechanism itself, such as a Redis key or an environment variable, is fine when the "
         "question is about it.\n"
@@ -363,7 +385,9 @@ def _prompt(
         "Q: What did Basel build at <Company>? A: At <Company>, Basel built <system>, which "
         "cut <metric> from <A> to <B>.\n"
         "Q: How long does <cache> keep entries? A: <Cache> keeps entries for <duration>, "
-        "then they expire."
+        "then they expire.\n"
+        "Q: How much does <service> cost to run? A: About <$A> a month while <discount> "
+        "lasts and about <$B> after, plus <usage>, which <cap> keeps under <$C>."
     )
 
 

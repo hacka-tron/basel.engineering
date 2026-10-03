@@ -263,6 +263,15 @@ def judge_metrics(graded: list[dict], answerable: list[dict]) -> dict:
     }
 
 
+def p90(values: list[int]) -> float | None:
+    """The 90th percentile (inclusive method); None for no values."""
+    if not values:
+        return None
+    if len(values) == 1:
+        return float(values[0])
+    return round(statistics.quantiles(values, n=10, method="inclusive")[-1], 1)
+
+
 def summarize(rows: list[dict]) -> dict:
     """Per-category and overall numbers (DESIGN-005 §5.2)."""
 
@@ -301,6 +310,7 @@ def summarize(rows: list[dict]) -> dict:
                 bool(r["grades"].get("source_ref_mentions")) for r in graded
             ),
             "median_answer_words": statistics.median(words) if words else None,
+            "p90_answer_words": p90(words),
             **judge_metrics(graded, answerable),
         }
 
