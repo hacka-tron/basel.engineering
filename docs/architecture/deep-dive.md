@@ -50,7 +50,7 @@ When a visitor asks a question, the browser sends `POST /api/ask` with a JSON bo
 The API then runs these steps in order, emitting `stage` events so the diagram can follow along:
 
 1. **API start.** The API emits `stage api start` at `t_ms` 0.
-2. **Rate limit.** A Redis token bucket keyed by a salted HMAC hash of the client IP allows 10 questions per 10 minutes. A refused request gets an `error` event with code `rate_limited` and `retry_after_s`.
+2. **Rate limit.** A Redis token bucket keyed by a salted HMAC hash of the client IP allows 20 questions per 10 minutes. A refused request gets an `error` event with code `rate_limited` and `retry_after_s`.
 3. **Follow-up rewrite (follow-ups only).** If the request carries history, the kill switch is off, and the daily budget can cover one rewrite unit, the API asks Nova Lite on Bedrock to rewrite the follow-up into a standalone search query (at most 60 output tokens). This shows up as the `rewrite` stage. If the rewrite fails or is skipped, retrieval uses the original question.
 4. **Embedding cache.** The API normalizes the retrieval query (collapsed whitespace, case-folded) and looks it up in the Redis embedding cache, keyed by the embedding model ID plus the normalized text. The `embed_cache` stage reports `hit` or `miss`.
 5. **Embedding.** On a miss, the API calls Amazon Titan Text Embeddings V2 on Bedrock for a 512-dimensional normalized vector (the `embed` stage) and caches it for 7 days. The API, not the worker, computes the question embedding.

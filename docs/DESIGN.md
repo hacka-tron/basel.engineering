@@ -341,7 +341,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 | `retrieval:jobs` (group `workers`) | Stream | Job queue | trimmed with `MAXLEN ~ 10000` |
 | `trace:{request_id}` | pub/sub channel | Trace events worker to API | n/a |
 | `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
-| `rl:{ip_hash}` | token bucket | 10 questions per 10 minutes per IP | 10 minutes |
+| `rl:{ip_hash}` | token bucket | 20 questions per 10 minutes per IP | 10 minutes |
 | `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (code default cap 100; production sets 500) | 2 days |
 | `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites today in quarter-units, 1 per rewrite (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
