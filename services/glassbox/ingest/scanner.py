@@ -23,6 +23,12 @@ from services.glassbox.portfolio import PORTFOLIO_DIR, is_draft, portfolio_files
 
 SUPPORTED_EXTENSIONS = frozenset({".md", ".tf", ".yml", ".yaml", ".py", ".ts", ".tsx"})
 SYSTEM_DIRECTORIES = ("infra", "k8s", "services", "docs")
+# About This System leaves out the test suite and dated implementation plans
+# (owner decision, DESIGN-005 §9 item 4): their chunks crowded real sources out
+# of the top 8 without answering visitor questions. Frontend source is not
+# scanned at all. An excluded file counts as unseen, so the stale sweep lists
+# (and in apply mode deletes) its earlier rows and keys.
+EXCLUDED_SYSTEM_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
 # The owner's private About Basel repo (hacka-tron/basel.engineering-docs),
 # checked out at corpus/about-me-private/ by release.yml before the image build
 # when the release has its deploy key (absent otherwise). Only Markdown under
@@ -96,6 +102,11 @@ def denied_path(path: Path) -> bool:
     )
 
 
+def excluded_system_path(source_path: str) -> bool:
+    """True for an About This System path outside the corpus scope."""
+    return source_path.startswith(EXCLUDED_SYSTEM_PREFIXES)
+
+
 def _high_entropy(value: str) -> bool:
     frequencies = {character: value.count(character) for character in set(value)}
     return (
@@ -161,12 +172,14 @@ def scan_sources(root: Path) -> Iterator[SourceFile]:
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*")):
+            relative = path.relative_to(root)
             if (
                 path.is_file()
                 and not path.is_symlink()
-                and (path.suffix in SUPPORTED_EXTENSIONS or denied_path(path.relative_to(root)))
+                and not excluded_system_path(relative.as_posix())
+                and (path.suffix in SUPPORTED_EXTENSIONS or denied_path(relative))
             ):
-                yield SourceFile("about_system", path.relative_to(root).as_posix(), path)
+                yield SourceFile("about_system", relative.as_posix(), path)
 
 
 def _private_sources(root: Path) -> Iterator[SourceFile]:

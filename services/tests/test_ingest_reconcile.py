@@ -9,7 +9,7 @@ from services.glassbox.cache.answer import _model_tag
 from services.glassbox.ingest import reconcile as rec
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest.reconcile import ScopeRow, plan_reconcile
-from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields
+from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields, chunk_kind
 
 MODEL = "titan"
 TAG = _model_tag(MODEL)
@@ -28,6 +28,7 @@ def _stored(row: ScopeRow, **overrides):
         document_id=str(row.document_id),
         source_path=row.source_path,
         content_sha=row.content_sha,
+        kind=chunk_kind(row.corpus, row.source_path),
     )
     fields.update(overrides)
     return tuple(fields[name] for name in rec._COMPARED)
@@ -502,7 +503,7 @@ async def test_prepare_index_drops_the_legacy_answer_index(monkeypatch):
 
     async def fake_ensure(client):
         calls.append("ensure idx:chunks")
-        return False
+        return frozenset()
 
     class TagsReady:
         async def get(self, key):
