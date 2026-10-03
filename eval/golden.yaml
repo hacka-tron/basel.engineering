@@ -28,8 +28,8 @@ cases:
     question: What does Basel work on at Microsoft?
     expected_sources: [private/microsoft.md]
     gold_snippets:
-      - catalog over 35 million virtual containers and physical assets globally
-    must_include: ['Azure', '35\s?million']
+      - catalog about 100 million virtual containers and physical assets globally
+    must_include: ['Azure', '100\s?million']
   - id: me-assets
     origin: questions.yaml
     corpus: about_me
@@ -38,8 +38,8 @@ cases:
     question: How many assets does Basel's Azure service catalog?
     expected_sources: [private/microsoft.md]
     gold_snippets:
-      - catalog over 35 million virtual containers and physical assets globally
-    must_include: ['35\s?million']
+      - catalog about 100 million virtual containers and physical assets globally
+    must_include: ['100\s?million']
   - id: me-outages
     origin: questions.yaml
     corpus: about_me
@@ -441,9 +441,9 @@ cases:
     question: What happens when a visitor reaches the question rate limit?
     expected_sources: [docs/DESIGN.md, services/glassbox/api/ask.py]
     gold_snippets:
-      - 10 questions per 10 minutes per IP
+      - 20 questions per 10 minutes per IP
       - Too many questions. Please try again soon.
-    must_include: ['\b(10|ten)\b', '\b(10|ten) minutes', 'retry|try again|wait|seconds']
+    must_include: ['\b(20|twenty)\b', '\b(10|ten) minutes', 'retry|try again|wait|seconds']
   - id: system-budget
     origin: questions.yaml
     corpus: about_system
@@ -543,7 +543,7 @@ cases:
     expected_sources: [private/microsoft.md, private/bio.md]
     gold_snippets:
       - Basel designed distributed rate-limiting and deny-list controls to manage data access
-    must_include: ['rate[- ]limit', 'Azure|Microsoft', '35 million|outage']
+    must_include: ['rate[- ]limit', 'Azure|Microsoft', '100 million|outage']
   - id: sugg-me-youtube
     origin: suggested
     corpus: about_me
@@ -907,8 +907,8 @@ cases:
     rewrite_must_include: ['rate[- ]?limit']
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
-      - allows 10 questions per 10 minutes
-    must_include: ['\b(10|ten)\b', '\b(10|ten) minutes']
+      - allows 20 questions per 10 minutes
+    must_include: ['\b(20|twenty)\b', '\b(10|ten) minutes']
   - id: mt-me-google-years
     origin: new
     corpus: about_me
