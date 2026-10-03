@@ -70,7 +70,7 @@ CSP_REPORT_PATH = "/api/csp-report"
 CSP_REPORT_GROUP = "csp"
 
 # Audited against the production build in headless Chrome (status report
-# project/status/2026-10-01-csp-report-only.md): with this policy the page,
+# project/status/2026-10-01-1603-csp-report-only.md): with this policy the page,
 # the chat (SSE over fetch), the cluster stream (EventSource), React Flow and
 # the self-hosted fonts produce zero violations.
 CSP_REPORT_ONLY_DIRECTIVES: tuple[str, ...] = (
