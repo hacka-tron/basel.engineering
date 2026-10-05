@@ -13,9 +13,10 @@ embedding model it compares id sets and one hash per key:
 
 * **repair**: a MySQL chunk with no Redis key gets its key written from the row.
 * **rewrite**: a key whose corpus, model tag, document id, source path,
-  ``content_sha`` (SHA-256 of ``chunks.text``) or ``kind`` tag differs from its row
-  is rewritten. Keys written before ``content_sha`` or ``kind`` existed are
-  rewritten once, which back-fills the field.
+  ``content_sha`` (SHA-256 of ``chunks.text``), ``kind`` tag or ``text_v`` (the
+  version of the BM25 ``text`` field, ``redis_index.TEXT_VERSION``) differs from its
+  row is rewritten. Keys written before ``content_sha``, ``kind`` or ``text``
+  existed are rewritten once, which back-fills the field.
 * **remove**: a key tagged with this model whose id has no MySQL row (in this
   model) is deleted, along with its ``chunktxt:{id}`` text cache.
 
@@ -60,7 +61,12 @@ from sqlalchemy.orm import sessionmaker
 from services.glassbox.cache.answer import _model_tag
 from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.models import Document
-from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields, chunk_kind
+from services.glassbox.ingest.redis_index import (
+    TEXT_VERSION,
+    chunk_content_sha,
+    chunk_fields,
+    chunk_kind,
+)
 from services.glassbox.ingest.sweep import CORPORA
 from services.glassbox.retrieval.search import VECTOR_DIMENSIONS
 
@@ -79,7 +85,9 @@ ALWAYS_ALLOWED_ORPHANS = 2
 # Keys tagged with this model but no corpus field are reported under this name.
 UNKNOWN_CORPUS = "unknown"
 # The fields compared against MySQL, in HMGET order.
-_COMPARED = ("corpus", "model", "document_id", "source_path", "content_sha", "kind")
+# ``text`` itself is not read back: ``content_sha`` covers the chunk text and
+# ``text_v`` the format of the indexed copy.
+_COMPARED = ("corpus", "model", "document_id", "source_path", "content_sha", "kind", "text_v")
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,7 @@ class ScopeRow:
             self.source_path,
             self.content_sha,
             chunk_kind(self.corpus, self.source_path),
+            TEXT_VERSION,
         )
 
 

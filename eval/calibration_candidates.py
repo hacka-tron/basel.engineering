@@ -208,7 +208,7 @@ async def _generate_items(
         if case.get("history"):
             continue  # a bare follow-up is not a standalone question for the judge
         vector = (await embedder.embed([normalize_question(case["question"])]))[0]
-        chunks = await retrieve(vector, case["corpus"], embedder.model_id)
+        chunks = await retrieve(vector, case["question"], case["corpus"], embedder.model_id)
         if not chunks:
             continue
         shown = source_dicts(chunks)

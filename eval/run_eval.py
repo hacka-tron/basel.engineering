@@ -29,15 +29,20 @@ from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.ingest.redis_index import INDEX_NAME as CHUNK_INDEX_NAME
 from services.glassbox.providers.factory import get_embedding_provider
-from services.glassbox.retrieval.search import search_chunks
+from services.glassbox.retrieval.search import hybrid_search
 
 HERE = Path(__file__).resolve().parent
 GOLDEN_PATH = HERE / "golden.yaml"
 QUESTIONS_PATH = HERE / "questions.yaml"
 BASELINE_DIR = HERE / "baselines"
 
-# Matches the retrieval worker's KNN size (services/glassbox/worker/main.py).
+# Metrics are scored within the top 8: About This System's production size
+# (``retrieval.search.RETRIEVAL_CONFIGS``); About Basel returns 6, so @8 is @6 there.
 PRODUCTION_TOP_K = 8
+# The fused result (what the worker serves) is the headline; each leg is also
+# scored on its own top 8 (``legs`` in the result) to show what fusion adds.
+LEGS = ("vector", "lexical")
+LEG_CASE_KEYS = ("hit_at_8", "reciprocal_rank_at_8", "chunk_hit", "chunk_reciprocal_rank")
 CONTINUITY_K = 5
 # Sources that should never ground an answer: test code and implementation plans.
 NOISE_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
@@ -257,6 +262,7 @@ async def evaluate(questions: list[dict]) -> dict:
         ).hexdigest()
         versions = {corpus: await RedisRetrievalCache(client).version(corpus) for corpus in CORPORA}
         cases = []
+        leg_cases: dict[str, dict] = {}
         unreachable = []
         for item in questions:
             missing = [
@@ -275,11 +281,22 @@ async def evaluate(questions: list[dict]) -> dict:
                 # The snippet straddles a chunk boundary or the text moved: no chunk can hit.
                 unreachable.append(item["id"])
             vector = (await provider.embed([normalize_question(item["question"])]))[0]
-            matches = await search_chunks(
-                client, vector, item["corpus"], provider.model_id, top_k=PRODUCTION_TOP_K
+            legs: dict = {}
+            matches = await hybrid_search(
+                client, vector, item["question"], item["corpus"], provider.model_id, legs=legs
             )
-            retrieved = [(match["chunk_id"], *by_chunk[match["chunk_id"]]) for match in matches]
-            cases.append(score_retrieval(item, retrieved))
+            case = score_retrieval(item, _triples(matches, by_chunk))
+            case["legs"] = {
+                leg: score_retrieval(item, _triples(legs[leg][:PRODUCTION_TOP_K], by_chunk))
+                for leg in LEGS
+            }
+            leg_cases[item["id"]] = case["legs"]
+            # Stored per case: each leg's scores only (the summaries use the full rows).
+            case["legs"] = {
+                leg: {key: row[key] for key in LEG_CASE_KEYS} for leg, row in case["legs"].items()
+            }
+            case["dual_experience_slots"] = len(legs["slots"])
+            cases.append(case)
         return {
             "eval_version": 2,
             "top_k": PRODUCTION_TOP_K,
@@ -291,11 +308,18 @@ async def evaluate(questions: list[dict]) -> dict:
             "noise_prefixes": list(NOISE_PREFIXES),
             "unreachable_gold_snippets": unreachable,
             **summarize(cases),
+            "legs": {
+                leg: summarize([leg_cases[case["id"]][leg] for case in cases]) for leg in LEGS
+            },
             "cases": cases,
         }
     finally:
         await client.aclose()
         engine.dispose()
+
+
+def _triples(matches: list[dict], by_chunk: dict) -> list[tuple[int, str, str]]:
+    return [(match["chunk_id"], *by_chunk[match["chunk_id"]]) for match in matches]
 
 
 def baseline_path(model_id: str) -> Path:
@@ -361,6 +385,8 @@ def main() -> int:
         for key in ("embedding_model", "top_k", "overall", "by_corpus", "by_category")
     }
     print(json.dumps(summary, indent=2))
+    for leg, legs_summary in result["legs"].items():
+        print(f"{leg} leg alone:", json.dumps(legs_summary["by_corpus"]))
     cases = result["cases"]
     print("misses@5:", ", ".join(case["id"] for case in cases if not case["hit"]))
     print("misses@8:", ", ".join(case["id"] for case in cases if not case["hit_at_8"]))

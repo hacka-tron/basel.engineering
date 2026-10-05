@@ -122,7 +122,7 @@ const defaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: 'var(--color-muted)' },
 }
 // Portrait rows sit closer together than the default 20px step offset allows
-// for, which made the Vector Search -> MySQL arrow loop back on itself.
+// for, which made the Hybrid Search (vector_search) -> MySQL arrow loop back on itself.
 const portraitEdgeOptions = { ...defaultEdgeOptions, pathOptions: { offset: 8 } }
 
 function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], selectedNode, answerText, onInspect, onDeselect, workerPods, backlog, fitMinZoom, portrait = false, onContinueInChat }: ArchitecturePanelProps) {

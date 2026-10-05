@@ -117,7 +117,7 @@ class RecordingRedis:
 async def test_search_uses_existing_index_and_converts_distance_to_similarity():
     client = RecordingRedis()
     matches = await search_chunks(client, [0.25] * 512, "about_me", "fake-v1")
-    assert matches == [{"chunk_id": 42, "score": 0.75}]
+    assert matches == [{"chunk_id": 42, "score": 0.75, "source_path": ""}]
     assert client.command[:3] == (
         "FT.SEARCH",
         "idx:chunks",
@@ -311,7 +311,7 @@ async def test_worker_events_use_redis_sequence_and_request_start(monkeypatch):
     async def fake_search(*args, **kwargs):
         return []
 
-    monkeypatch.setattr(worker, "search_chunks", fake_search)
+    monkeypatch.setattr(worker, "hybrid_search", fake_search)
     monkeypatch.setattr(worker, "_load_chunks", lambda session_factory, matches: [])
     monkeypatch.setattr(worker.time, "time", lambda: 1005.0)
     client = RecordingRedis(
@@ -352,7 +352,7 @@ async def test_repeat_worker_job_uses_retrieval_and_chunk_caches(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(worker_module, "search_chunks", counted_search)
+    monkeypatch.setattr(worker_module, "hybrid_search", counted_search)
     monkeypatch.setattr(worker_module, "_load_chunks", counted_load)
     client = RecordingRedis(
         {
@@ -369,6 +369,57 @@ async def test_repeat_worker_job_uses_retrieval_and_chunk_caches(monkeypatch):
     second = [payload for _, payload in client.events[-5:]]
     assert [e["cache"] for e in second if e.get("cache")] == ["hit", "hit"]
     assert second[-1]["chunks"][0]["score"] == 0.8
+
+
+@pytest.mark.asyncio
+async def test_worker_does_not_cache_a_vector_only_fallback(monkeypatch):
+    async def fallback_search(redis_client, embedding, question, corpus, model_id, legs):
+        legs["fallback"] = True
+        return [{"chunk_id": 42, "score": 0.8, "source_path": "x"}]
+
+    monkeypatch.setattr(worker_module, "hybrid_search", fallback_search)
+    monkeypatch.setattr(worker_module, "_load_chunks", lambda session_factory, matches: [])
+    client = RecordingRedis(
+        {
+            b"request_id": b"fallback-request",
+            b"request_start_ts": b"1000000",
+            b"corpus": b"about_me",
+            b"embedding_model": b"fake-v1",
+            b"embedding": struct.pack("512f", *([0.25] * 512)),
+            b"question": b"Have you used Redis?",
+        }
+    )
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert not [key for key in client.values if key.startswith("ret:")]
+
+
+@pytest.mark.asyncio
+async def test_worker_runs_hybrid_search_on_the_job_question(monkeypatch):
+    seen = []
+
+    async def recorded_search(redis_client, embedding, question, corpus, model_id, legs):
+        seen.append((question, corpus, model_id))
+        legs["fallback"] = False
+        return [{"chunk_id": 42, "score": 0.8, "source_path": "x", "rrf": 0.1, "ranks": [1, 1]}]
+
+    monkeypatch.setattr(worker_module, "hybrid_search", recorded_search)
+    monkeypatch.setattr(worker_module, "_load_chunks", lambda session_factory, matches: [])
+    fields = {
+        b"request_id": b"hybrid-request",
+        b"request_start_ts": b"1000000",
+        b"corpus": b"about_me",
+        b"embedding_model": b"fake-v1",
+        b"embedding": struct.pack("512f", *([0.25] * 512)),
+    }
+    client = RecordingRedis({**fields, b"question": b"Have you used Redis?"})
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert seen == [("Have you used Redis?", "about_me", "fake-v1")]
+    # Only id and score are cached; the key carries the mode and the question's terms.
+    ((key, value),) = ((k, v) for k, v in client.values.items() if k.startswith("ret:"))
+    assert value == '[{"chunk_id": 42, "score": 0.8}]'
+    other = RecordingRedis({**fields, b"question": b"Have you used Kafka?"})
+    assert await process_one_message(other, None, consumer_name="test-worker", block_ms=1)
+    assert [k for k in other.values if k.startswith("ret:")] != [key]
 
 
 @pytest.mark.asyncio

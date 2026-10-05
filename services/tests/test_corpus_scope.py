@@ -129,9 +129,9 @@ def test_chunk_fields_carry_kind():
 
 def test_reconcile_rewrites_a_key_written_before_kind_existed():
     row = ScopeRow(7, "about_system", 1, "infra/main.tf", chunk_content_sha("t"))
-    old = ("about_system", _model_tag("m"), "1", "infra/main.tf", row.content_sha, None)
+    old = ("about_system", _model_tag("m"), "1", "infra/main.tf", row.content_sha, None, "1")
     assert plan_reconcile("m", [row], {7: old})["about_system"].rewritten == [7]
-    current = (*old[:-1], "infra")
+    current = (*old[:-2], "infra", "1")
     assert plan_reconcile("m", [row], {7: current})["about_system"].rewritten == []
 
 
@@ -172,7 +172,7 @@ def test_index_field_names_reads_bytes_and_str(as_bytes):
 
 @pytest.mark.asyncio
 async def test_ensure_index_adds_only_kind_to_an_index_with_model():
-    client = _FakeIndexClient(["corpus", "model", "vector"])
+    client = _FakeIndexClient(["corpus", "model", "vector", "text"])
     assert await ensure_index(client) == frozenset({"kind"})
     assert ("FT.ALTER", "idx:chunks", "SCHEMA", "ADD", "kind", "TAG") in client.commands
     client.commands.clear()
@@ -182,17 +182,16 @@ async def test_ensure_index_adds_only_kind_to_an_index_with_model():
 
 @pytest.mark.asyncio
 async def test_ensure_index_adds_every_missing_field():
-    """An index from before the model tag gets both ``model`` and ``kind``."""
+    """An index from before the model tag gets ``model``, ``kind`` and ``text``."""
     client = _FakeIndexClient(["corpus", "vector"])
-    assert await ensure_index(client) == frozenset({"model", "kind"})
+    assert await ensure_index(client) == frozenset({"model", "kind", "text"})
     altered = [command[4] for command in client.commands if command[0] == "FT.ALTER"]
-    assert altered == ["model", "kind"]
+    assert altered == ["model", "kind", "text"]
 
 
 @pytest.mark.asyncio
-async def test_ensure_index_adds_a_future_field(monkeypatch):
+async def test_ensure_index_adds_text_to_an_index_with_model_and_kind():
     """Phase 8's ``text`` field is one more EXPECTED_FIELDS entry, added the same way."""
-    monkeypatch.setattr(redis_index, "EXPECTED_FIELDS", (*EXPECTED_FIELDS, ("text", ("TEXT",))))
     client = _FakeIndexClient(["corpus", "model", "kind", "vector"])
     assert await ensure_index(client) == frozenset({"text"})
     assert ("FT.ALTER", "idx:chunks", "SCHEMA", "ADD", "text", "TEXT") in client.commands
@@ -260,7 +259,7 @@ async def test_ensure_index_ft_alter_on_real_redis_adds_kind_and_filter_works(mo
             "FT.CREATE", name, "ON", "HASH", "PREFIX", "1", prefix, "SCHEMA",
             "corpus", "TAG", "model", "TAG", "vector", *redis_index.VECTOR_SCHEMA,
         )  # fmt: skip
-        assert await ensure_index(client) == frozenset({"kind"})
+        assert await ensure_index(client) == frozenset({"kind", "text"})
         assert "kind" in index_field_names(await client.execute_command("FT.INFO", name))
         assert await ensure_index(client) == frozenset()
         for chunk_id, path in ((1, "docs/a.md"), (2, "infra/main.tf")):

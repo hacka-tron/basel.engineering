@@ -62,7 +62,7 @@ LIVE_UNITS = [
     ("docs/DESIGN-004-action-plan.md", "| 5 (done) | KEDA, synthetic load endpoint"),
     ("docs/DESIGN-004-action-plan.md", "| M2 |"),
     # DESIGN-005: the current-state pipeline map must stay unmarked.
-    ("docs/DESIGN-005-rag-quality.md", "| Retrieval | KNN **top 8**"),
+    ("docs/DESIGN-005-rag-quality.md", "| Retrieval | **Hybrid** (phase 8"),
     ("docs/DESIGN-005-rag-quality.md", "| Prompt | Numbered sources"),
     ("docs/DESIGN-005-rag-quality.md", "Section 2 describes the system as it runs today."),
     # DESIGN-005 §3.4/§3.5 headings are neutral: their already-built facts stay unmarked.
@@ -170,6 +170,12 @@ LIVE_UNITS = [
     ("docs/DESIGN-002-followups.md", "| Phase 6: CI/CD | Post-deploy streaming check"),
     ("docs/DESIGN.md", "`stream-check.yml` waits until `/api/version`"),
     ("docs/architecture/deep-dive.md", "## Post-deploy streaming check through Cloudflare"),
+    # Hybrid search shipped in RAG plan phase 8.
+    ("docs/architecture/deep-dive.md", "## Hybrid search: BM25 plus vectors"),
+    ("docs/architecture/deep-dive.md", "3. **Hybrid search.** The worker checks"),
+    ("docs/DESIGN.md", "then hybrid search in Redis"),
+    ("docs/DESIGN-005-rag-quality.md", "4. **Hybrid retrieval** in `retrieval/search.py` (built"),
+    ("docs/DESIGN-005-rag-quality.md", "### 3.2 Hybrid search (built in plan phase 8)"),
 ]
 
 # (path, text inside a unit that describes work not built yet)
@@ -181,12 +187,9 @@ PLANNED_UNITS = [
     # Heading marks cover their section: bullets under DESIGN.md's stretch ideas.
     ("docs/DESIGN.md", "- **EKS for an afternoon:**"),
     ("docs/DESIGN.md", "- **Live facts tool:**"),
-    ("docs/DESIGN.md", "- **Hybrid search:**"),
-    # DESIGN-005 and its plan describe unbuilt RAG work (hybrid retrieval, etc.).
-    ("docs/DESIGN-005-rag-quality.md", "### 3.2 Hybrid search (planned choice, not built yet)"),
-    ("docs/DESIGN-005-rag-quality.md", "4. **Hybrid retrieval** in `retrieval/search.py`"),
+    # DESIGN-005 and its plan describe unbuilt RAG work (breadcrumb chunks, answer log).
+    ("docs/DESIGN-005-rag-quality.md", "2. **Chunking** (not built yet, plan phase 7)"),
     ("docs/DESIGN-005-rag-quality.md", "6. **Answer log**"),
-    ("docs/DESIGN-005-rag-quality.md", "plus a per-document cap (at most 2 or 3 chunks"),
     ("docs/DESIGN-005-rag-quality.md", "6. **Answer logging:**"),
     (
         "docs/superpowers/plans/2026-10-01-rag-quality.md",
@@ -239,7 +242,7 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "Not built yet: citation chips that open a popover"),
     ("docs/DESIGN.md", "A static fallback card with resume and GitHub links"),
     ("docs/DESIGN.md", "- Not built yet: `GET /api/stats`"),
-    ("docs/DESIGN.md", "- Not built yet: a light rerank"),
+    ("docs/DESIGN.md", "- Not built: a score threshold or a reranker"),
     ("docs/DESIGN.md", "- Not built yet: a nightly ingest CronJob."),
     ("docs/DESIGN.md", "A nightly CronJob is not built yet"),
     ("docs/DESIGN.md", "- **Metrics (not built yet):**"),
@@ -259,7 +262,6 @@ PLANNED_UNITS = [
     ("docs/DESIGN-003-ingestion.md", "### 8.2 Processing one message (planned)"),
     ("docs/DESIGN-003-ingestion.md", "## 5. Google Drive connector (dropped"),
     ("docs/DESIGN-004-action-plan.md", "load test numbers recorded are not started"),
-    ("docs/DESIGN-005-rag-quality.md", "| Retrieval, lexical leg (planned with hybrid search) |"),
     ("docs/DESIGN-005-rag-quality.md", "| Answer: faithfulness (planned) |"),
     ("docs/DESIGN-005-rag-quality.md", "### 5.3 Judge design (planned)"),
     ("docs/architecture/deep-dive.md", "**Deleting stale documents automatically.**"),

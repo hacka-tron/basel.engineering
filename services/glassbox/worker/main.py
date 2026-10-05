@@ -21,7 +21,13 @@ from services.glassbox.cache.retrieval import (
 )
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import get_session_factory
-from services.glassbox.retrieval.search import VECTOR_DIMENSIONS, search_chunks
+from services.glassbox.retrieval.search import (
+    RETRIEVAL_MODE,
+    VECTOR_DIMENSIONS,
+    hybrid_search,
+    lexical_terms,
+    tech_question_terms,
+)
 from services.glassbox.trace import elapsed_ms, next_seq
 
 STREAM_NAME = "retrieval:jobs"
@@ -232,15 +238,37 @@ async def process_one_message(
         retrieval_cache: RetrievalCache = RedisRetrievalCache(redis_client)
         chunk_cache: ChunkCache = RedisChunkCache(redis_client)
         version = await retrieval_cache.version(corpus)
-        retrieval_key = retrieval_cache.key(corpus, version, embedding_model, embedding)
+        question = _field(fields, "question") or b""
+        if isinstance(question, bytes):
+            question = question.decode(errors="replace")
+        # The lexical leg and the dual-experience slots depend on the question's
+        # terms, not only on its embedding: both go into the cache key.
+        cache_query = "\0".join(
+            (
+                RETRIEVAL_MODE,
+                " ".join(lexical_terms(question)),
+                " ".join(tech_question_terms(question)),
+            )
+        )
+        retrieval_key = retrieval_cache.key(
+            corpus, version, embedding_model, embedding, query=cache_query
+        )
 
         vector_started = time.monotonic()
         await stage("vector_search", "start")
         matches = await retrieval_cache.get(retrieval_key)
         retrieval_hit = matches is not None
         if matches is None:
-            matches = await search_chunks(redis_client, embedding, corpus, embedding_model, top_k=8)
-            await retrieval_cache.put(retrieval_key, matches)
+            legs: dict = {}
+            matches = [
+                {"chunk_id": match["chunk_id"], "score": match["score"]}
+                for match in await hybrid_search(
+                    redis_client, embedding, question, corpus, embedding_model, legs=legs
+                )
+            ]
+            # A vector-only fallback (BM25 query failed) must not fill the hybrid key.
+            if not legs.get("fallback"):
+                await retrieval_cache.put(retrieval_key, matches)
         await stage(
             "vector_search",
             "end",

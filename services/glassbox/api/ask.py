@@ -48,6 +48,7 @@ from services.glassbox.providers.base import (
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
+from services.glassbox.retrieval.search import tech_question_terms
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
 
@@ -191,7 +192,7 @@ def answer_route(chunks: list, corpus: str, question: str = "") -> str:
     """
     if corpus != "about_me" or not chunks:
         return STRICT_ROUTE
-    if _WORK_QUESTION.search(question):
+    if _WORK_QUESTION.search(question) or tech_question_terms(question):
         return STRICT_ROUTE
     top = min(chunks, key=lambda chunk: chunk.n)  # n is the retrieval rank, 1 = best
     if _casual_chunk(top):
