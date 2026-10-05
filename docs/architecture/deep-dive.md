@@ -201,18 +201,37 @@ The API itself, not Cloudflare, adds security headers to its responses (all but 
 
 ## Data stores: MySQL tables and what they hold
 
-MySQL 8.0 is the Glassbox source of truth. It runs in the Kubernetes cluster as the `mysql` StatefulSet in the `data` namespace, with a 4 GiB persistent volume on the node's `local-path` storage. It is not Amazon RDS. Alembic migrations in `services/glassbox/db/migrations` define the schema (revisions `0001_initial_schema` through `0007_portfolio_corpus`; the newest are `0005_query_ttft_ms`, `0006_ingestion_run_notes` and `0007_portfolio_corpus`, which appended `portfolio` to both `corpus` ENUM columns in place), and SQLAlchemy models live in `services/glassbox/db/models.py`.
+MySQL 8.0 is the Glassbox source of truth. It runs in the Kubernetes cluster as the `mysql` StatefulSet in the `data` namespace, with a 4 GiB persistent volume on the node's `local-path` storage. It is not Amazon RDS. Alembic migrations in `services/glassbox/db/migrations` define the schema (revisions `0001_initial_schema` through `0008_query_answer_log`; the newest are `0007_portfolio_corpus`, which appended `portfolio` to both `corpus` ENUM columns in place, and `0008_query_answer_log`, which added the answer log columns), and SQLAlchemy models live in `services/glassbox/db/models.py`.
 
 MySQL tables:
 
 - **`documents`**: one row per ingested file, unique on (`corpus`, `source_path`). It stores the corpus (`about_me`, `about_system` or `portfolio`, one list kept in `services/glassbox/corpora.py`), the source path, a title taken from the first Markdown heading (or the file name), a SHA-256 `content_hash` of the file, and `updated_at`.
 - **`chunks`**: one row per chunk, unique on (`document_id`, `ordinal`), and deleted with its document. It stores the chunk text, `start_line` and `end_line`, a word-based `token_count`, the embedding as a BLOB of packed float32 values, and `embedding_model`, the ID of the model that produced the vector. Storing the model ID per chunk is what lets ingestion re-embed when the model changes.
 - **`ingestion_runs`**: one row per ingest run with start and finish times, `docs_changed`, `chunks_written`, a status of `running`, `succeeded` or `failed`, and a JSON `notes` column with the stale sweep's mode, counts and refusal reasons.
-- **`queries`**: the query log, one row per `/api/ask` request. It records the request ID, corpus (same three values), question, `cache_status` (`answer_hit` or `miss`), `mode` (`full`, `retrieval_only` or `stopped`), the retrieved chunk IDs, per-stage timings in milliseconds (JSON, including `abstained` and `answer_cache_skipped` flags), total milliseconds, tokens in and out (measured for completed Bedrock answers, estimated otherwise), `turn_index`, `rewritten_query`, `ttft_ms` and `created_at`. `ttft_ms` is the server-side time to first token: milliseconds from request receipt to the first streamed answer text, including answer-cache hits, and empty when no answer text was sent (`retrieval_only`, or stopped before the first token). It stores no IP addresses. Writing the query log is best-effort: a failed insert is logged and dropped, so it never turns a generated answer into an error.
+- **`queries`**: the query log and answer log, one row per `/api/ask` request that got past the rate limiter. Its columns, privacy rules and retention are in "Answer log: what each question and answer records" below.
 
 Vector search does not happen in MySQL. MySQL keeps the embeddings so the data is complete and auditable, while similarity search runs in Redis. `documents` and `chunks` are a derived index of content checked into the Git repository, so losing the MySQL volume means re-running ingestion rather than losing data. The `queries` table is the only data that cannot be rebuilt, and it is statistics rather than core functionality.
 
 MySQL is tuned for the 2 GiB node: `innodb_buffer_pool_size` of 96 MB, `performance_schema` off, `max_connections` 20, and a small table cache. The pod has a 350 MiB memory limit. The api, retrieval-worker, migrate and ingest pods get the database password from a Kubernetes Secret, which a bootstrap script fills from AWS SSM Parameter Store.
+
+## Answer log: what each question and answer records
+
+The `queries` table in MySQL is Glassbox's query log and answer log (`services/glassbox/answer_log.py`). Every `/api/ask` request that passes the rate limiter writes one row; a rate-limited request writes none.
+
+**What a row holds:**
+
+- The request ID, corpus, question, `turn_index` and, for follow-ups, `rewritten_query` (the standalone query retrieval used).
+- `answer`: the answer text exactly as streamed (after the answer-time phone and ID mask), also for answer-cache hits and the partial text of a stopped answer. Empty for `retrieval_only` (kill switch or daily budget) rows.
+- `abstained`: true when the answer is the exact "I don't have that in my memory" abstention, matching the `done` event; empty for stopped and retrieval-only rows.
+- `answer_route` (`strict` or `casual`), `llm_model_id` and `prompt_version` (for example `v18`), set when the model wrote the answer, either now or for the cached copy a hit replays.
+- `cache_status`: `miss`, `answer_hit`, or `coalesced` (an identical question was already being answered, and this request waited for and replayed that answer). `mode`: `full`, `retrieval_only` or `stopped`.
+- The retrieved chunk IDs (the sources the answer was given), per-stage timings in milliseconds (JSON, with flags such as `abstained`, `answer_cache_skipped` and failed answer checks), `total_ms`, `ttft_ms` (server-side time to the first streamed answer text, cache hits included), tokens in and out, and `created_at`.
+
+**Privacy.** No IP address and no client identity is stored: the salted IP hash used for rate limiting stays in Redis with a TTL. Before a row is written, emails, phone numbers and government ID numbers in the question, the rewrite and the answer are replaced with `[redacted]`, using the same detector as the personal-data guard. Rows older than 90 days (`GLASSBOX_QUERY_LOG_RETENTION_DAYS`) are deleted by a batched delete of at most 1,000 rows that runs after a write, at most once an hour per API process, so no extra job is needed.
+
+**Never in the way of an answer.** The insert runs in a background thread. The API sends the `done` event first and only waits for the write before closing the stream. A failed insert or purge is logged and counted, never sent to the visitor.
+
+**Answer-cache hit rate.** Only first questions consult the answer cache, so the daily hit rate is the share of `turn_index = 0` rows whose `cache_status` is `answer_hit` or `coalesced` (the query is in `eval/README.md`).
 
 ## Data stores: Redis keys, streams, channels and vector indexes
 

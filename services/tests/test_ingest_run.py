@@ -116,7 +116,7 @@ def test_architecture_deep_dive_is_ingested_into_about_system():
     # section is split or merged, and unbuilt work stays in its own last chunk.
     chunks = chunker_for_path(Path(deep_dive))(scanned.content, deep_dive)
     sections = [line for line in scanned.content.splitlines() if line.startswith("## ")]
-    assert len(chunks) == len(sections) == 44
+    assert len(chunks) == len(sections) == 45
     assert chunks[0].text.startswith("# Glassbox architecture deep dive")
     for chunk, heading in zip(chunks[1:], sections[1:], strict=True):
         assert chunk.text.startswith(heading)

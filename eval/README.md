@@ -134,3 +134,21 @@ GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.calibrate --
 `--split dev` (the default) prints every dev disagreement with the judge's critique and your reason, to turn into few-shot examples and prompt fixes. `--split test` reports per-judge agreement on the held-out split only: true-positive rate (you pass, judge passes) and true-negative rate (you fail, judge fails). It never prints test texts, and it **refuses to report rates when either class has fewer than 10 test cases**. Acceptance is both rates at least 0.85 for a judge before any gate uses it. The tool logs each test run in `eval/runs/calibration-test-log.jsonl` and warns when the test split was already used with a different judge prompt or model: scoring prompt versions on the test split more than once overfits it, so draw fresh test labels (new candidates, new entries) instead.
 
 Tests: `services/tests/test_eval_judge.py` (fake judge: parsing, malformed JSON, agreement math, the split, the refusal rule, the `--judge` wiring).
+
+## Live answer log and the answer-cache hit rate (RAG plan phase 10)
+
+Production writes every answered question to MySQL `queries` (masked question, answer, abstention flag, route, model ID, prompt version, cache status; see the deep dive's "Answer log" section and DESIGN-005 §5.6). The daily answer-cache hit rate over the last 30 days, run against a read-only connection (the same SQL is `CACHE_HIT_RATE_SQL` in `services/glassbox/answer_log.py`, and a test runs it on the migrated schema):
+
+```sql
+SELECT DATE(created_at) AS day,
+       COUNT(*) AS first_questions,
+       SUM(cache_status = 'answer_hit') AS hits,
+       SUM(cache_status = 'coalesced') AS coalesced,
+       ROUND(SUM(cache_status IN ('answer_hit', 'coalesced')) / COUNT(*), 3) AS hit_rate
+  FROM queries
+ WHERE turn_index = 0 AND created_at >= NOW() - INTERVAL 30 DAY
+ GROUP BY DATE(created_at)
+ ORDER BY day;
+```
+
+Only first questions (`turn_index = 0`) consult the answer cache; follow-ups skip it. Rows from before migration 0008 have no `coalesced` status (those requests were logged as `answer_hit`). Rows older than 90 days are purged.

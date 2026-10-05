@@ -237,13 +237,23 @@ The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbe
 |---|---|---|---|
 | **CI (every PR)** | `ci.yml`, existing MySQL/Redis services | Built: unit tests for the graders and the prompt contract, and dataset schema validation. Planned: a **lexical-only retrieval eval** against the real corpus (BM25 leg, deterministic, fake embeddings not used for scoring); hygiene assertions (no tests/plans indexed, no stale docs). Planned gates: dataset valid, lexical recall must not drop more than 5 points from its committed baseline, noise@8 = 0. | No |
 | **Paid eval (manual; first run 2026-10-03, the phase 3 baseline in §2.2)** | `GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid` locally (both switches required) with owner credentials, later a `workflow_dispatch` "Eval · RAG quality" behind an approval environment | Titan retrieval eval plus Nova Lite answers for all ~70 cases, deterministic graders, optional judge. Writes `eval/runs/<date>-<prompt>-<git sha>.json` and updates `eval/baselines/answers-<model>.json` when asked. | Yes, about $0.03 without judge, about $0.50 with Nova Pro judge |
-| **Online (weekly, manual; planned)** | script over `queries` | Sample 20 live answers, run deterministic checks and optionally the judge; abstention rate and answer length trends; promote interesting questions into the golden set. | Optional |
+| **Online (weekly, manual; sampling script planned)** | script over `queries` (§5.6) | Sample 20 live answers, run deterministic checks and optionally the judge; abstention rate and answer length trends; promote interesting questions into the golden set. | Optional |
 
 **Release gate for any retrieval or prompt change (planned)** (checked in its PR from a paid run attached to the PR): chunk-level recall@8 does not drop; `fact_coverage` ≥ 0.90 (and it must improve for the thinness fix); unanswerable abstain = 100%; false-abstain ≤ 5%; planned/live = 100%; faithfulness pass ≥ 0.95 once the judge is calibrated.
 
 ### 5.5 Cost estimate (planned runs)
 
 Per full paid run of about 70 cases: question embeddings about 1k tokens (negligible); about 70 answers at about 3.5k input and 250 output tokens is about 245k input and 18k output tokens on Nova Lite, about **$0.02**; 8 rewrites, negligible; Nova Pro judge on 2 metrics, about 70 × 2 × 4k = 560k input tokens, about **$0.50**. A full re-embed of the cleaned corpus is about 80k tokens on Titan V2 at about $0.02/M, **under $0.01**. Paid runs should happen once per retrieval or prompt PR, so a few dollars a month at most. They run outside the live daily budget, because they call Bedrock directly and do not go through `/api/ask`.
+
+### 5.6 Answer log for online review (built, RAG plan phase 10)
+
+The owner approved answer logging on 2026-10-03 (§9 item 6). Each `/api/ask` row in `queries` now also stores the answer text as streamed, whether it was the exact abstention, the answer route (strict or casual), the LLM model ID and the prompt version, and `cache_status` gained `coalesced` for a request that waited for an identical in-flight question and replayed its answer (migration `0008_query_answer_log`; `services/glassbox/answer_log.py`). Cache hits store the replayed answer; stopped answers store the partial text; retrieval-only rows store none.
+
+Privacy choices: no IP or client hash is stored (the salted HMAC stays in Redis for rate limiting only); emails, phone numbers and government IDs the visitor typed are masked with the personal-data guard's detector before the question, rewrite and answer are written; rows are deleted after 90 days by a batched delete that runs after a write at most once an hour per API process. A delete on write was chosen over a scheduled job because it needs no new CronJob, credentials or Terraform, and with no traffic nothing new is stored either.
+
+The write runs in a background thread after the `done` event, and failures are logged and counted, so logging cannot fail or slow an answer.
+
+The answer-cache hit rate per day is computable from the log: hits plus coalesced over first questions (follow-ups skip the cache). The query is in `eval/README.md`. Adding it to Ops · Diagnose needs a Terraform apply of the ops module and is a follow-up.
 
 ## 6. How this fixes answer thinness (planned)
 
@@ -286,7 +296,7 @@ Per full paid run of about 70 cases: question embeddings about 1k tokens (neglig
 3. **Calibration labels:** about 1 to 1.5 hours of your time to label about 50 answers per judge pass/fail (failures are oversampled on purpose; section 5.3), possibly again if the held-out set has to be redrawn.
 4. **Corpus scope:** decided 2026-10-03: exclude `services/tests/` and `docs/superpowers/plans/`; `frontend/src/` stays out.
 5. **Re-ingestion:** phases 6 to 8 each re-embed the corpus on the next deploy. Under $0.01 each, but they bump corpus versions and empty caches.
-6. **Answer logging:** store answer text in `queries` (phase 10). Visitor questions are already stored; answers add no new personal data, but it's your call.
+6. **Answer logging:** decided 2026-10-03: yes; built in phase 10 (§5.6).
 7. **CI paid-eval workflow:** a new OIDC role with `bedrock:InvokeModel` on two or three model ARNs, behind an approval environment (infra change via the Bootstrap workflow).
 8. **Answer length/style:** confirm that "direct first sentence plus specifics, short list when needed" is the tone you want, and that bracketed citations stay out of the answer text.
 9. **About Basel facts:** review the `must_include` lists for the About Basel cases (they encode claims about you).

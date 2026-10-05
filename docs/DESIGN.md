@@ -313,7 +313,7 @@ CREATE TABLE queries (
   request_id       CHAR(26) NOT NULL,     -- ULID
   corpus           ENUM('about_me','about_system','portfolio') NOT NULL,  -- 'portfolio': 0007
   question         VARCHAR(1000) NOT NULL,
-  cache_status     ENUM('answer_hit','miss') NOT NULL,
+  cache_status     ENUM('answer_hit','miss','coalesced') NOT NULL,  -- 'coalesced': 0008
   mode             ENUM('full','retrieval_only','stopped') NOT NULL,  -- 'stopped': 0004
   turn_index       TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0003; 0 = first question
   rewritten_query  VARCHAR(1000) NULL,                   -- 0003; the query retrieval used
@@ -324,13 +324,18 @@ CREATE TABLE queries (
   tokens_in        INT,
   tokens_out       INT,
   created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  answer           TEXT NULL,         -- 0008 answer log (DESIGN-005 §5.6): answer as streamed, masked
+  abstained        BOOLEAN NULL,      -- 0008; matches the done event's abstained
+  answer_route     VARCHAR(16) NULL,  -- 0008; strict or casual
+  llm_model_id     VARCHAR(128) NULL, -- 0008
+  prompt_version   VARCHAR(16) NULL,  -- 0008
   KEY idx_created (created_at)
 );
 ```
 
-The schema above is the result of Alembic revisions `0001` to `0006` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
+The schema above is the result of Alembic revisions `0001` to `0008` (`services/glassbox/db/migrations/versions/`). Schema migrations are managed with Alembic and run by the `migrate` Kubernetes Job (`alembic upgrade head`). The `api` and `retrieval-worker` pods each have a `wait-for-migrations` initContainer that blocks, read-only, until the database's Alembic revision equals the image's head, so new code never starts against an older schema (it fails after 5 minutes with a clear log line rather than hanging).
 
-Privacy: questions are logged without IP addresses. Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
+Privacy: questions and answers are logged without IP addresses or any client identity, with emails, phone numbers and government IDs masked, and rows are deleted after 90 days (DESIGN-005 §5.6). Rate limiting uses a salted hash of the IP held only in Redis with a TTL.
 
 ### 7.2 Redis key map
 
