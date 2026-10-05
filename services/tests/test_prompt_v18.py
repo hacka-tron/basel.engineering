@@ -25,7 +25,7 @@ from services.glassbox.providers.base import ABSTENTION_ANSWER
 FIXTURE = """
 description: synthetic
 items:
-  - id: rec-tech-redis
+  - id: rec-tech-kafka
     category: Technology
     question: Have you used Widgets?
     answer: Yes, I used Widgets at Acme for gizmos, and in my personal project Foo for bars.

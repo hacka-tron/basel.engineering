@@ -40,11 +40,14 @@ APPROVED_EXAMPLES_PATH = (
 APPROVED_EXAMPLES_ENV = "GLASSBOX_APPROVED_EXAMPLES_PATH"
 
 # The strict prompt (work, skills, this system) gets one example of each answer
-# shape the owner asked for: a dual-experience tech answer, a work-only tech answer
-# (so the dual example does not teach an invented second side; v17 Gotcha), a
-# production "No, but..." answer, an impact answer and a logistics answer.
+# shape the owner asked for: a work-only tech answer, a production "No, but..."
+# answer, an impact answer and a logistics answer. The owner's two-sided tech answer
+# (work and a personal project) is left out on purpose: on the v18 fresh index any
+# two-sided example (the Redis one or the rate-limiter one) made Nova Lite invent a
+# work side for a personal project ("at <Company> ... <personal project>") and
+# misattribute a metric, in both runs, the v17 Gotcha. Two-sided answers still come
+# from the dual-experience rule in the prompt (ablation, 2026-10-04).
 STRICT_EXAMPLE_IDS = (
-    "rec-tech-redis",
     "rec-tech-kafka",
     "rec-tech-k8s-prod",
     "rec-impact-1",
