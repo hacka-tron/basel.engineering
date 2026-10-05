@@ -136,6 +136,16 @@ async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
         )
 
 
+def lexical_text(text: str) -> str:
+    """The ``text`` field: the chunk text with every whitespace run made one space.
+
+    RediSearch 7.2 does not split TEXT on newlines: ``alpha\nbeta`` is indexed as
+    the single token ``alphabeta``, so the last word of every line would be glued
+    to the first word of the next and never match.
+    """
+    return " ".join(text.split())
+
+
 def chunk_fields(
     corpus: str, model_id: str, vector: bytes, source_path: str, document_id: int, text: str
 ) -> dict:
@@ -153,7 +163,7 @@ def chunk_fields(
         "source_path": source_path,
         "document_id": document_id,
         "content_sha": chunk_content_sha(text),
-        "text": text,
+        "text": lexical_text(text),
         "text_v": TEXT_VERSION,
     }
 

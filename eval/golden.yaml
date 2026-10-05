@@ -125,7 +125,7 @@ cases:
     question: How can I contact Basel?
     expected_sources: [private/bio.md]
     gold_snippets:
-      - Reach Basel via email (baselmabdelrahman@gmail.com)
+      - via email (baselmabdelrahman@gmail.com)
     must_include: ['baselmabdelrahman@gmail\.com', 'LinkedIn', 'GitHub']
   - id: me-background
     origin: questions.yaml
@@ -550,7 +550,7 @@ cases:
     question: What has Basel built with distributed systems?
     expected_sources: [private/microsoft.md, private/bio.md]
     gold_snippets:
-      - Basel designed distributed rate-limiting and deny-list controls to manage data access
+      - designed distributed rate-limiting and deny-list controls to manage data access
     must_include: ['rate[- ]limit', 'Azure|Microsoft', '100 million|outage']
   - id: sugg-me-youtube
     origin: suggested

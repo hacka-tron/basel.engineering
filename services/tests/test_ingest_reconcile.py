@@ -9,7 +9,12 @@ from services.glassbox.cache.answer import _model_tag
 from services.glassbox.ingest import reconcile as rec
 from services.glassbox.ingest import run as ingest_run
 from services.glassbox.ingest.reconcile import ScopeRow, plan_reconcile
-from services.glassbox.ingest.redis_index import chunk_content_sha, chunk_fields, chunk_kind
+from services.glassbox.ingest.redis_index import (
+    TEXT_VERSION,
+    chunk_content_sha,
+    chunk_fields,
+    chunk_kind,
+)
 
 MODEL = "titan"
 TAG = _model_tag(MODEL)
@@ -29,6 +34,7 @@ def _stored(row: ScopeRow, **overrides):
         source_path=row.source_path,
         content_sha=row.content_sha,
         kind=chunk_kind(row.corpus, row.source_path),
+        text_v=TEXT_VERSION,
     )
     fields.update(overrides)
     return tuple(fields[name] for name in rec._COMPARED)
@@ -66,6 +72,8 @@ def test_other_models_keys_are_out_of_scope():
         {"source_path": "corpus/about-me/other.md"},
         {"corpus": "about_system"},
         {"model": _model_tag("old-model")},
+        {"text_v": None},  # written before phase 8's text field: back-filled
+        {"text_v": "0"},  # an older text format
     ],
 )
 def test_key_that_disagrees_with_its_row_is_rewritten(overrides):
