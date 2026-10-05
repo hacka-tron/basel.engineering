@@ -127,6 +127,9 @@ def select_examples(data: object) -> ExampleSet:
         question, answer = _clean(item.get("question")), _clean(item.get("answer"))
         if not question or not answer:
             continue
+        if item.get("draft") is True:
+            # v19 review: an answer awaiting the owner's sign-off never goes live.
+            continue
         category = item.get("category")
         route = (
             "casual"

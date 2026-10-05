@@ -42,6 +42,12 @@ items:
     question: Are you bored?
     answer: Synthetic playful reply two.
     few_shot: true
+  - id: rec-playful-draft
+    category: Playful & off-topic
+    question: Are you lonely?
+    answer: Unsigned draft reply.
+    few_shot: true
+    draft: true
   - id: rec-tech
     category: Technology
     question: Have you used Widgets?
@@ -206,7 +212,8 @@ def test_approved_playful_examples_are_used_only_for_playful_questions(approved)
         "Synthetic playful reply one.",
         "Synthetic playful reply two.",
     ]
-    # Playful items never fill the strict or casual sets.
+    # Drafts awaiting sign-off are never used; playful items never fill other sets.
+    assert all("Unsigned" not in e.answer for e in examples.playful)
     assert all("Synthetic" not in e.answer for e in examples.strict + examples.casual)
     playful = _prompt("Do you love me?", WORK_CHUNKS, None, CASUAL_ROUTE)
     assert "Synthetic playful reply one." in playful
