@@ -173,7 +173,7 @@ async def run_case(
             chunks = await retrieve(vector, case["corpus"], embedder.model_id)
         usage: dict = {}
         first_token_ms = None
-        route = answer_route(chunks, case["corpus"])
+        route = answer_route(chunks, case["corpus"], case["question"])
         row["route"] = route
         if not chunks:
             # Same as the API: no sources means the canonical abstention, no LLM call.

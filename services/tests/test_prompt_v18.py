@@ -190,6 +190,31 @@ def test_work_top_chunks_route_strict_even_with_personal_chunks_lower_down():
     assert answer_route(chunks + [_chunk(4, CASUAL_TEXT)] * 5, "about_me") == STRICT_ROUTE
 
 
+def test_a_casual_question_routes_casual_when_the_fun_chunk_is_lower_down():
+    chunks = [_chunk(1, WORK_TEXT), _chunk(2, WORK_TEXT), _chunk(7, CASUAL_TEXT)]
+    assert answer_route(chunks, "about_me", "Coffee or tea?") == CASUAL_ROUTE
+    assert answer_route(chunks, "about_me", "What kind of music do you listen to?") == CASUAL_ROUTE
+    # No casual chunk retrieved: the cue alone is not enough (no facts to be playful with).
+    assert answer_route(chunks[:2], "about_me", "Coffee or tea?") == STRICT_ROUTE
+    # A question without a cue keeps the strict prompt.
+    assert answer_route(chunks, "about_me", "How did you cut outages?") == STRICT_ROUTE
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What kind of role are you looking for next?",
+        "Which programming languages does Basel use?",
+        "What's your working style like?",
+        "What is Basel's favorite professional project?",
+        "Have you used Redis in production?",
+    ],
+)
+def test_work_questions_stay_strict_even_with_a_fun_top_chunk(question):
+    chunks = [_chunk(1, CASUAL_TEXT), _chunk(2, CASUAL_TEXT)]
+    assert answer_route(chunks, "about_me", question) == STRICT_ROUTE
+
+
 def test_about_this_system_and_non_private_chunks_are_always_strict():
     chunks = [_chunk(n, CASUAL_TEXT) for n in (1, 2, 3)]
     assert answer_route(chunks, "about_system") == STRICT_ROUTE

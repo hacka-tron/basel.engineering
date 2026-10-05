@@ -297,7 +297,7 @@ def test_the_casual_route_is_part_of_the_cache_key_and_the_trace(monkeypatch):
     from it, and the route name (only) shows in the trace."""
     from services.glassbox.api import ask
 
-    monkeypatch.setattr(ask, "answer_route", lambda chunks, corpus: ask.CASUAL_ROUTE)
+    monkeypatch.setattr(ask, "answer_route", lambda chunks, corpus, question="": ask.CASUAL_ROUTE)
     llm = TemperatureLLM()
     cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts_model_ids) == 1

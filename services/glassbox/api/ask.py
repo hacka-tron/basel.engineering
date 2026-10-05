@@ -133,6 +133,22 @@ _SECTION_SPLIT = re.compile(r"(?m)^(?=#{1,6}\s)")
 # tried first: no threshold separated the fun questions from work questions whose
 # second chunk happened to be the fun-facts one (team culture, outages).
 CASUAL_ROUTE_THRESHOLD = 0.5
+# Tie-breaker for casual questions whose best chunk is not the fun-facts one (fix
+# round: coffee or tea, music and sports retrieved it at rank 2-7, below work
+# chunks that share words like "team" or "tools"). A short casual-question cue
+# routes casual only when a mostly casual chunk was retrieved at all, so the
+# answer still has the facts, and never for a work question.
+_CASUAL_QUESTION = re.compile(
+    r"\b(?:favou?rite|coffee|tea|music|songs?|bands?|sports?|teams? do you (?:follow|support)"
+    r"|games?|gaming|hobb(?:y|ies)|movies?|anime|food|travel\w*|vacation"
+    r"|fun|free time|weekends?|not coding|dark mode|light mode|pets?)\b",
+    re.IGNORECASE,
+)
+_WORK_QUESTION = re.compile(
+    r"\b(?:professional|production|work(?:ed|ing)?|job|employer|company|team culture"
+    r"|salary|pay|rate|hire|roles?|skills?|experience|use[sd]?|style)\b",
+    re.IGNORECASE,
+)
 
 
 def casual_share(text: str) -> float:
@@ -147,17 +163,33 @@ def casual_share(text: str) -> float:
     return casual / total if total else 0.0
 
 
-def answer_route(chunks: list, corpus: str) -> str:
-    """``casual`` when the best-matching About Basel chunk is mostly personal or fun.
+def _casual_chunk(chunk) -> bool:
+    return (
+        chunk.source_path.startswith("private/")
+        and casual_share(chunk.text) >= CASUAL_ROUTE_THRESHOLD
+    )
 
-    Work, skills and About This System questions keep the strict prompt. Only the
-    route name is ever logged or traced.
+
+def answer_route(chunks: list, corpus: str, question: str = "") -> str:
+    """``casual`` for personal and fun About Basel questions, else ``strict``.
+
+    A question with work words (role, skills, experience, use, working style...)
+    is strict. Otherwise casual when the best-matching About Basel chunk is mostly
+    personal or fun, or when the question is a casual one (short cue list) and a
+    mostly casual chunk was retrieved anywhere in the top 8. Work, skills and About This
+    System questions keep the strict prompt. Only the route name is ever logged or
+    traced.
     """
     if corpus != "about_me" or not chunks:
         return STRICT_ROUTE
+    if _WORK_QUESTION.search(question):
+        return STRICT_ROUTE
     top = min(chunks, key=lambda chunk: chunk.n)  # n is the retrieval rank, 1 = best
-    score = casual_share(top.text) if top.source_path.startswith("private/") else 0.0
-    return CASUAL_ROUTE if score >= CASUAL_ROUTE_THRESHOLD else STRICT_ROUTE
+    if _casual_chunk(top):
+        return CASUAL_ROUTE
+    if _CASUAL_QUESTION.search(question) and any(_casual_chunk(chunk) for chunk in chunks):
+        return CASUAL_ROUTE
+    return STRICT_ROUTE
 
 
 def route_temperature(route: str) -> dict:
@@ -1152,7 +1184,7 @@ async def _stream(
             return
 
         # Prompt v18 tone routing: casual (personal, fun) or strict, from the chunks.
-        route = answer_route(chunks, request.corpus)
+        route = answer_route(chunks, request.corpus, request.question)
         if route == CASUAL_ROUTE:
             timings["answer_route_casual"] = 1
         LOGGER.info("Answer route for %s: %s", request_id, route)

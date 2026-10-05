@@ -39,19 +39,23 @@ APPROVED_EXAMPLES_PATH = (
 # Tests point this at a synthetic fixture; production never sets it.
 APPROVED_EXAMPLES_ENV = "GLASSBOX_APPROVED_EXAMPLES_PATH"
 
-# The strict prompt (work, skills, this system) gets one example of each answer
-# shape the owner asked for: a work-only tech answer, a production "No, but..."
-# answer, an impact answer and a logistics answer. The owner's two-sided tech answer
-# (work and a personal project) is left out on purpose: on the v18 fresh index any
-# two-sided example (the Redis one or the rate-limiter one) made Nova Lite invent a
-# work side for a personal project ("at <Company> ... <personal project>") and
-# misattribute a metric, in both runs, the v17 Gotcha. Two-sided answers still come
-# from the dual-experience rule in the prompt (ablation, 2026-10-04).
+# The strict prompt (work, skills, this system) gets four of the owner's answer
+# shapes: a work-only tech answer, a production "No, but..." answer, an impact
+# answer, and a light, honest deflection (why leaving), which keeps the owner's
+# joke that v18's first cut dropped. Left out on purpose:
+# - the two-sided tech answer (work and a personal project): on the v18 fresh index
+#   any two-sided example made Nova Lite invent a work side for a personal project
+#   and misattribute a metric, in both runs (the v17 Gotcha); two-sided answers come
+#   from the dual-experience rule instead;
+# - the freelance answer: the longest one, it pushed list-like system answers to
+#   copy whole sources (one follow-ups answer went from 20 to 406 words); the
+#   freelance question is answered from the corpus, which has the same wording.
+# (Ablations, 2026-10-04/05.)
 STRICT_EXAMPLE_IDS = (
     "rec-tech-kafka",
     "rec-tech-k8s-prod",
     "rec-impact-1",
-    "rec-logistics-freelance",
+    "rec-adv-employer",
 )
 # The casual prompt gets four fun answers. Favorite color and favorite food are
 # deliberately left out, so the eval can check that unseen casual questions take
