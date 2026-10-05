@@ -16,25 +16,25 @@
   "unreachable_gold_snippets": [],
   "overall": {
     "count": 82,
-    "recall_at_5": 0.9146,
-    "mrr": 0.7622,
+    "recall_at_5": 0.8902,
+    "mrr": 0.7022,
     "recall_at_8": 0.9634,
-    "mrr_at_8": 0.7695,
+    "mrr_at_8": 0.7136,
     "chunk_count": 82,
     "chunk_recall_at_8": 0.8049,
-    "chunk_mrr_at_8": 0.61,
+    "chunk_mrr_at_8": 0.5514,
     "noise_at_8": 0.0
   },
   "by_corpus": {
     "about_me": {
       "count": 42,
-      "recall_at_5": 1.0,
-      "mrr": 0.877,
+      "recall_at_5": 0.9524,
+      "mrr": 0.7599,
       "recall_at_8": 1.0,
-      "mrr_at_8": 0.877,
+      "mrr_at_8": 0.7679,
       "chunk_count": 42,
       "chunk_recall_at_8": 0.9762,
-      "chunk_mrr_at_8": 0.8222,
+      "chunk_mrr_at_8": 0.7079,
       "noise_at_8": 0.0
     },
     "about_system": {
@@ -52,13 +52,13 @@
   "by_category": {
     "fact": {
       "count": 67,
-      "recall_at_5": 0.9403,
-      "mrr": 0.7724,
+      "recall_at_5": 0.9104,
+      "mrr": 0.699,
       "recall_at_8": 0.9851,
-      "mrr_at_8": 0.7795,
+      "mrr_at_8": 0.7111,
       "chunk_count": 67,
       "chunk_recall_at_8": 0.8806,
-      "chunk_mrr_at_8": 0.6945,
+      "chunk_mrr_at_8": 0.6229,
       "noise_at_8": 0.0
     },
     "injection": {
@@ -337,23 +337,15 @@
         "private/projects.md"
       ],
       "retrieved_sources": [
-        "private/microsoft.md",
-        "private/projects.md",
         "private/skills.md",
         "private/projects.md",
-        "private/skills.md"
+        "private/skills.md",
+        "private/google.md",
+        "private/microsoft.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
         {
           "chunk_id": 16,
           "source": "private/skills.md"
@@ -369,12 +361,20 @@
         {
           "chunk_id": 4,
           "source": "private/google.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -402,23 +402,15 @@
         "private/projects.md"
       ],
       "retrieved_sources": [
+        "private/skills.md",
+        "private/skills.md",
         "private/google.md",
-        "private/projects.md",
-        "private/skills.md",
-        "private/skills.md",
+        "private/personal.md",
         "private/google.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
-        {
-          "chunk_id": 4,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
         {
           "chunk_id": 15,
           "source": "private/skills.md"
@@ -434,12 +426,20 @@
         {
           "chunk_id": 11,
           "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.3333333333333333,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.2,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -467,23 +467,15 @@
         "private/projects.md"
       ],
       "retrieved_sources": [
-        "private/google.md",
-        "private/projects.md",
         "private/skills.md",
         "private/projects.md",
+        "private/google.md",
+        "private/skills.md",
         "private/google.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
-        {
-          "chunk_id": 5,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
         {
           "chunk_id": 16,
           "source": "private/skills.md"
@@ -499,12 +491,20 @@
         {
           "chunk_id": 17,
           "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 5,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -531,19 +531,15 @@
         "private/microsoft.md"
       ],
       "retrieved_sources": [
-        "private/microsoft.md",
         "private/skills.md",
         "private/skills.md",
         "private/projects.md",
-        "private/google.md"
+        "private/google.md",
+        "private/projects.md"
       ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
+      "hit": 0,
+      "reciprocal_rank": 0.0,
       "retrieved_at_8": [
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
         {
           "chunk_id": 16,
           "source": "private/skills.md"
@@ -563,12 +559,16 @@
         {
           "chunk_id": 12,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.16666666666666666,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.16666666666666666,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -596,19 +596,15 @@
         "private/microsoft.md"
       ],
       "retrieved_sources": [
-        "private/google.md",
         "private/skills.md",
         "private/google.md",
         "private/bio.md",
-        "private/bio.md"
+        "private/bio.md",
+        "private/personal.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
-        {
-          "chunk_id": 4,
-          "source": "private/google.md"
-        },
         {
           "chunk_id": 16,
           "source": "private/skills.md"
@@ -628,12 +624,16 @@
         {
           "chunk_id": 10,
           "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -660,19 +660,15 @@
         "private/projects.md"
       ],
       "retrieved_sources": [
-        "private/projects.md",
         "private/skills.md",
         "private/skills.md",
         "private/microsoft.md",
-        "private/projects.md"
+        "private/projects.md",
+        "private/microsoft.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.25,
       "retrieved_at_8": [
-        {
-          "chunk_id": 13,
-          "source": "private/projects.md"
-        },
         {
           "chunk_id": 16,
           "source": "private/skills.md"
@@ -692,12 +688,16 @@
         {
           "chunk_id": 6,
           "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.25,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.16666666666666666,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
@@ -724,19 +724,15 @@
         "private/projects.md"
       ],
       "retrieved_sources": [
-        "private/projects.md",
         "private/skills.md",
         "private/microsoft.md",
         "private/microsoft.md",
-        "private/personal.md"
+        "private/personal.md",
+        "private/bio.md"
       ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
+      "hit": 0,
+      "reciprocal_rank": 0.0,
       "retrieved_at_8": [
-        {
-          "chunk_id": 13,
-          "source": "private/projects.md"
-        },
         {
           "chunk_id": 15,
           "source": "private/skills.md"
@@ -756,12 +752,16 @@
         {
           "chunk_id": 1,
           "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.16666666666666666,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.16666666666666666,
       "noise_count": 0,
       "retrieved_count": 6,
       "legs": {
