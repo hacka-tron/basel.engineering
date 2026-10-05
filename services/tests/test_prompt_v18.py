@@ -100,7 +100,7 @@ def test_approved_examples_replace_the_work_placeholders_verbatim(approved):
     assert "Q: Have you used Widgets in production? A: No, but I used them" in strict
     assert "<Project>" not in strict  # the work placeholders are gone...
     assert "I don't have <Language> in my memory." in strict  # ...the fixed ones stay
-    assert "Do you know Sprockets?" not in strict  # few_shot: false is never a shot
+    assert "Do you know Sprockets?" not in strict  # an unlisted few_shot: false item
     assert "Tabs or spaces?" not in strict  # casual examples stay out of the strict prompt
 
 
@@ -132,6 +132,16 @@ def test_listed_ids_come_first_and_other_few_shots_fill_the_set():
     examples = fewshot.select_examples(data)
     assert [e.question for e in examples.strict] == ["Q2", "Q1"]
     assert examples.casual == ()
+
+
+def test_a_listed_id_is_used_even_without_the_few_shot_flag():
+    data = {
+        "items": [
+            {"id": "rec-adv-employer", "category": "Role fit", "question": "Q", "answer": "A"},
+            {"id": "x", "category": "Projects", "question": "Qx", "answer": "Ax"},
+        ]
+    }
+    assert [e.question for e in fewshot.select_examples(data).strict] == ["Q"]
 
 
 def test_each_route_is_capped():

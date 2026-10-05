@@ -8,10 +8,10 @@ carries that file at `corpus/about-me-private/examples/approved-answers.yaml`
 reads only `about-me/*.md`, so the examples are never indexed as corpus.
 
 Each prompt takes a few examples, chosen by id (`STRICT_EXAMPLE_IDS`,
-`CASUAL_EXAMPLE_IDS`) among the items marked `few_shot: true`. A listed id that
-is missing or no longer marked falls back to the remaining `few_shot` items of the
-same route (casual = the "Casual & personal" category), so a renamed id still
-yields a full set. Without the file (CI, local development, a build without the
+`CASUAL_EXAMPLE_IDS`); any approved item can be listed. A listed id that is
+missing is replaced by the remaining `few_shot: true` items of the same route
+(casual = the "Casual & personal" category), so a renamed id still yields a full
+set. Without the file (CI, local development, a build without the
 private repo) or with an unusable one, the prompts use the v17 placeholder
 examples, which carry no About Basel facts.
 
@@ -107,20 +107,26 @@ def _items(data: object) -> list[dict]:
 
 def select_examples(data: object) -> ExampleSet:
     """Pick the strict and casual examples from the parsed approved-answers file."""
-    eligible: dict[str, tuple[str, Example]] = {}
+    # Every approved item can be listed by id (an explicit choice); only items marked
+    # `few_shot: true` fill a set that is short of listed ids.
+    approved: dict[str, tuple[str, Example, bool]] = {}
     for item in _items(data):
         question, answer = _clean(item.get("question")), _clean(item.get("answer"))
-        if item.get("few_shot") is not True or not question or not answer:
+        if not question or not answer:
             continue
         route = "casual" if item.get("category") == CASUAL_CATEGORY else "strict"
-        eligible[str(item.get("id"))] = (route, Example(question, answer))
+        approved[str(item.get("id"))] = (
+            route,
+            Example(question, answer),
+            item.get("few_shot") is True,
+        )
 
     def pick(route: str, ids: tuple[str, ...]) -> tuple[Example, ...]:
-        chosen = [eligible[i][1] for i in ids if i in eligible and eligible[i][0] == route]
-        for item_id, (item_route, example) in eligible.items():
+        chosen = [approved[i][1] for i in ids if i in approved]
+        for item_id, (item_route, example, few_shot) in approved.items():
             if len(chosen) >= _LIMITS[route]:
                 break
-            if item_route == route and item_id not in ids:
+            if few_shot and item_route == route and item_id not in ids:
                 chosen.append(example)
         return tuple(chosen[: _LIMITS[route]])
 
