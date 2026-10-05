@@ -191,6 +191,7 @@ def test_dual_slots_skip_a_side_the_data_lacks():
         ("Do you know .NET?", "csharp"),
         ("Have you built anything with Node.js?", "javascript"),
         ("Any React-Native experience?", "react"),
+        ("Do you write Go?", "golang"),
     ],
 )
 def test_tech_questions_fire(question, first_term):
@@ -334,7 +335,7 @@ def test_production_configs():
     system = RETRIEVAL_CONFIGS["about_system"]
     assert (system.top_k, system.per_document_cap, system.vector_anchor) == (8, 3, 4)
     about_me = RETRIEVAL_CONFIGS["about_me"]
-    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (6, 2, True)
+    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (8, 2, True)
 
 
 @pytest.mark.asyncio
@@ -482,3 +483,17 @@ def _prefixed_rows(prefix):
         return original(renamed)
 
     return rows
+
+
+def test_a_named_technology_keeps_the_strict_route():
+    """Hybrid search can rank a fun-facts chunk first for "Do you write Go?" (BM25 on
+    "write" and "go"); the tech detector keeps such questions strict (prompt v18)."""
+    from types import SimpleNamespace
+
+    from services.glassbox.api.ask import CASUAL_ROUTE, STRICT_ROUTE, answer_route
+
+    fun = SimpleNamespace(
+        n=1, source_path="private/personal.md", text="## Fun facts\nI like hiking."
+    )
+    assert answer_route([fun], "about_me", "Do you write Go?") == STRICT_ROUTE
+    assert answer_route([fun], "about_me", "What do you do for fun?") == CASUAL_ROUTE

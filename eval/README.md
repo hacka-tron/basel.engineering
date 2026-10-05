@@ -1,6 +1,6 @@
 # Retrieval evaluation
 
-`run_eval.py` embeds each question with the selected provider and calls the same hybrid search as the retrieval worker (`retrieval.search.hybrid_search` with the production `RETRIEVAL_CONFIGS`: 8 chunks for About This System, 6 for About Basel). It also scores each leg alone on its own top 8 (`legs` in the result: the vector leg is the pre-phase-8 retrieval, the lexical leg is BM25 only), so a run shows what fusion adds. It answers "did retrieval put the right material in front of the model, and how much junk came with it?" Answer quality is a separate eval (`eval/golden.yaml` answer checks, RAG quality plan phase 1).
+`run_eval.py` embeds each question with the selected provider and calls the same hybrid search as the retrieval worker (`retrieval.search.hybrid_search` with the production `RETRIEVAL_CONFIGS`: 8 chunks per question). It also scores each leg alone on its own top 8 (`legs` in the result: the vector leg is the pre-phase-8 retrieval, the lexical leg is BM25 only), so a run shows what fusion adds. It answers "did retrieval put the right material in front of the model, and how much junk came with it?" Answer quality is a separate eval (`eval/golden.yaml` answer checks, RAG quality plan phase 1).
 
 ## Dataset
 

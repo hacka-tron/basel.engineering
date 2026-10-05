@@ -49,14 +49,17 @@ class RetrievalConfig:
     lexical_candidates: int | None = None
 
 
-# About Basel is small (17 chunks): 6 chunks, at most 2 per file, and the
-# dual-experience slots. About This System keeps 8 chunks, at most 3 per file, the
+# About Basel is small (17 chunks): 8 chunks, at most 2 per file, and the
+# dual-experience slots. Not 6: prompt v18's casual tie-breaker (api/ask.py
+# answer_route) needs the fun-facts chunk anywhere in the set, and for "Coffee or
+# tea?" it is vector rank 7. Retrieval metrics were the same at 6 and 8.
+# About This System keeps 8 chunks, at most 3 per file, the
 # vector leg's top 4 always among them, and a 10-chunk BM25 pool: common words
 # ("google drive ingest") otherwise let planned-work sections crowd out the vector
 # leg's best hit (the "Drive was dropped" chunk, vector rank 3).
 _SYSTEM = RetrievalConfig(top_k=8, per_document_cap=3, vector_anchor=4, lexical_candidates=10)
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
-    "about_me": RetrievalConfig(top_k=6, per_document_cap=2, dual_experience=True),
+    "about_me": RetrievalConfig(top_k=8, per_document_cap=2, dual_experience=True),
     "about_system": _SYSTEM,
     "portfolio": _SYSTEM,
 }
@@ -389,7 +392,8 @@ _GO = re.compile(r"(?<=\s)Go(?![\w-])")
 # production/work framing ("Kubernetes in production?").
 _EXPERIENCE_CUE = re.compile(
     r"\b(use[ds]?|using|worked|work with|experience[ds]?|familiar|know|knows|proficient|"
-    r"skilled|comfortable|built|build|run|ran|deploy(?:ed)?|written|wrote|code[ds]? in|"
+    r"skilled|comfortable|built|build|run|ran|deploy(?:ed)?|write|writes|written|wrote|"
+    r"code[ds]? in|"
     r"program(?:med)? in|production|professionally|at work|on the job|expert(?:ise)?|"
     r"skills?)\b"
 )
