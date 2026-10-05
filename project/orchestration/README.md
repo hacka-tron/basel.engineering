@@ -25,7 +25,8 @@ How work is split between models on this project, how every change passes the re
 - **Every dispatch restates the hard rules** (implementer and reviewer, every time; subagents don't inherit standing instructions):
   - never read, open or copy any `terraform.tfstate`, `*.tfstate.backup`, `*.tfvars` or plan file;
   - no `terraform apply`, no AWS/SSM/`kubectl` writes against the live system, no GitHub environment or secret changes;
-  - never run `git stash`.
+  - never run `git stash`;
+  - pytest only against your own throwaway MySQL/Redis containers, with `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` exported for every run (including `-x`, `-k` and single-test runs): without them the tests default to 3306/6379, the owner's shared local compose stack (`services/tests/stack_ports.py`), and leave test rows in it.
   Live changes happen only through the Terraform, Bootstrap and "Ops · ..." workflows after the owner's approval click; give the owner the click, never commands.
 - **Track expensive work and turn repeats into instructions** (owner, 2026-10-04; applies to all execution work). Log costly loops, workflows and paid runs in `orchestration/token-log.md`, one line each with the fix, and check it before similar work. When work repeats, write it down once: a brief (like `rag-plan-brief.md`), a playbook, or a helper script; and point dispatches at it instead of re-explaining. Resume the same implementer for fix rounds and the same reviewer for round 2 (they keep context). Pick the cheapest model that fits: Sonnet for mechanical work and verification loops, Opus for judgment and review.
 - **Unique scratch file names** (`pr<n>-body.md`, `pr<n>-review-r1-prompt.md`): parallel agents share the scratchpad.
