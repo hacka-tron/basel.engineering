@@ -95,7 +95,9 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # services/glassbox/sources_line.py); flirty or off-topic personal questions ("Do you
 # love me?") take the casual route and get a warm, funny persona reply with no
 # invented facts instead of the abstention.
-_PROMPT_VERSION = "v19"
+# v20 (owner, 2026-10-05): golden checks recalibrated to the core fact, and one
+# targeted fix per real-miss pattern that survived ablation (see the v20 status report).
+_PROMPT_VERSION = "v20"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -636,6 +638,12 @@ _PRODUCTION_EXAMPLE = (
 # approved set has no example for (absent tech, a partial answer, system answers).
 _STRICT_FIXED_EXAMPLES = (
     "Q: Does Basel write <Language>? (not in the sources) A: I don't have <Language> in my memory.",
+    # v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
+    # Abdel-Rahman" (third person, no premise, no contact); this example restores the
+    # owner's approved shape (replay: flips rec-casual-real, probe set 18/18 twice).
+    "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
+    "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
+    "is at <email>.",
     "Q: When did Basel start at <Company>? A: I don't have that in my memory, but at "
     "<Company> I built <system>.",
     "Q: How long does <cache> keep entries? A: <Cache> keeps entries for <duration>, "

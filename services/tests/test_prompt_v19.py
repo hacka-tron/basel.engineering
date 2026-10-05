@@ -249,7 +249,7 @@ def test_overlay_maps_playful_items():
 
 
 def test_prompt_version_is_v19():
-    assert ask._PROMPT_VERSION == "v19"
+    assert ask._PROMPT_VERSION == "v20"
 
 
 def test_about_this_system_answers_may_use_three_sentences():
