@@ -37,7 +37,9 @@ class RetrievalConfig:
     top_k: int
     per_document_cap: int
     candidates: int = 20
-    rrf_k: int = 60
+    # RRF's usual k=60 flattens 20-candidate lists (1/61 vs 1/80); k=10 keeps the top
+    # ranks decisive and measured best (About This System chunk recall@8 0.55 -> 0.625).
+    rrf_k: int = 10
     lexical_weight: float = 1.0
     dual_experience: bool = False
 

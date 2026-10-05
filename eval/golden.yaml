@@ -35,6 +35,76 @@ cases:
     gold_snippets:
       - catalog about 100 million virtual containers and physical assets globally
     must_include: ['Azure', '100\s?million']
+  # ---------------------------------- dual experience (RAG plan phase 8, owner rule)
+  # "Have you used X?": name every side the data has (work and personal project),
+  # never invent a missing one; personal-only use in production gets "No, but...".
+  # Gold snippets are only the technology name (this repo holds no About Basel text).
+  - id: me-tech-redis
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you used Redis?
+    expected_sources: [private/microsoft.md, private/projects.md]
+    gold_snippets: [Redis]  # the technology name only: no About Basel text here
+    must_include: ['Microsoft|Azure', 'basel\.engineering|Glassbox|personal project']
+  - id: me-tech-python
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you used Python?
+    expected_sources: [private/google.md, private/projects.md]
+    gold_snippets: [Python]  # the technology name only: no About Basel text here
+    must_include: ['Google|Fitbit|YouTube', 'project']
+  - id: me-tech-react
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you used React?
+    expected_sources: [private/google.md, private/projects.md]
+    gold_snippets: [React]  # the technology name only: no About Basel text here
+    must_include: ['Google|Fitbit|YouTube', 'project']
+  - id: me-tech-kafka
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you used Kafka?
+    expected_sources: [private/microsoft.md]
+    gold_snippets: [Kafka]  # the technology name only: no About Basel text here
+    must_include: ['Microsoft|Azure']
+    must_not_include: ['personal project']
+  - id: me-tech-grpc
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you worked with gRPC?
+    expected_sources: [private/google.md, private/microsoft.md]
+    gold_snippets: [gRPC]  # the technology name only: no About Basel text here
+    must_include: ['Google|Fitbit|YouTube|Microsoft|Azure']
+    must_not_include: ['personal project']
+  - id: me-tech-kubernetes
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Have you used Kubernetes?
+    expected_sources: [private/projects.md]
+    gold_snippets: [Kubernetes]  # the technology name only: no About Basel text here
+    must_include: ['basel\.engineering|Glassbox|personal project|k3s']
+    must_not_include: ['at (Microsoft|Google)']
+  - id: me-tech-k8s-production
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Kubernetes in production?
+    expected_sources: [private/projects.md]
+    gold_snippets: [Kubernetes]  # the technology name only: no About Basel text here
+    must_include: ['\bNo\b', 'basel\.engineering|Glassbox|personal project']
   - id: me-assets
     origin: questions.yaml
     corpus: about_me
@@ -593,6 +663,34 @@ cases:
       - EKS charges for the control plane on top of nodes
       - EKS charges for its control plane on top of the nodes
     must_include: ['control plane', 'cost|charge|cheap|credit|price', 'conformant|certified|unchanged|portab|could move']
+  # ------------------------------------------- exact identifiers (RAG plan phase 8)
+  # Hybrid search's BM25 leg exists for these: the embedding alone ranks them poorly.
+  # The gold snippet is the identifier itself: any chunk of an expected file naming it
+  # answers the lookup (plan acceptance: retrieved at rank 3 or better).
+  - id: sys-id-demo-lock
+    origin: new
+    corpus: about_system
+    category: fact
+    question: What is demo:load:lock used for?
+    expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN.md, services/glassbox/api/capacity.py]
+    gold_snippets: ['demo:load:lock']
+    must_include: ['cooldown', '5[- ]minute|300']
+  - id: sys-id-planned-signal
+    origin: new
+    corpus: about_system
+    category: fact
+    question: What does _PLANNED_SOURCE_SIGNAL do?
+    expected_sources: [services/glassbox/api/ask.py, docs/architecture/deep-dive.md, docs/DESIGN.md]
+    gold_snippets: [_PLANNED_SOURCE_SIGNAL]
+    must_include: ['planned|unbuilt|not (yet )?built|status']
+  - id: sys-id-retrieval-jobs
+    origin: new
+    corpus: about_system
+    category: fact
+    question: What is retrieval:jobs?
+    expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN.md, services/glassbox/worker/main.py, k8s/overlays/prod/keda-scaling/scaledobject-retrieval-worker.yaml]
+    gold_snippets: ['retrieval:jobs']
+    must_include: ['stream', 'queue|jobs?|workers?']
   - id: sugg-system-stress
     origin: suggested
     corpus: about_system
