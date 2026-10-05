@@ -98,7 +98,7 @@ def test_approved_examples_replace_the_work_placeholders_verbatim(approved):
         "personal project Foo for bars." in strict
     )
     assert "Q: Have you used Widgets in production? A: No, but I used them" in strict
-    assert "<Project>" not in strict  # the work placeholders are gone...
+    assert "<Company>, I built <system>" not in strict  # the work placeholders are gone...
     assert "I don't have <Language> in my memory." in strict  # ...the fixed ones stay
     assert "Do you know Sprockets?" not in strict  # an unlisted few_shot: false item
     assert "Tabs or spaces?" not in strict  # casual examples stay out of the strict prompt

@@ -624,6 +624,14 @@ _PLAYFUL_PLACEHOLDER_EXAMPLES = (
     "Q: <a flirty or playful personal question> A: <a warm, funny line about being a "
     "mind uploaded into this site>! <an offer to talk about my work or hobbies instead>.",
 )
+# v19 review round 2: "Kubernetes in production?" with personal-only use. With one-topic
+# chunks the project's k3s section ranks first and Nova Lite answered "Yes, I've used
+# Kubernetes in production" from it; this example, first in the block next to the
+# absent-tech one, restores the owner's "No, but..." shape.
+_PRODUCTION_EXAMPLE = (
+    "Q: <Tech> in production? (only personal-project use in the sources) A: No, but I "
+    "used it extensively in my personal project <Project>, for <purpose>."
+)
 # Examples every strict prompt keeps, approved set or not: they teach behaviors the
 # approved set has no example for (absent tech, a partial answer, system answers).
 _STRICT_FIXED_EXAMPLES = (
@@ -661,7 +669,7 @@ def _example_lines(route: str, playful: bool = False) -> str:
         # side for a personal project on "Any React experience?"; first, both are
         # fixed (3 of 3 smoke runs each).
         absent, *rest = _STRICT_FIXED_EXAMPLES
-        lines = [absent, *approved, *rest]
+        lines = [absent, _PRODUCTION_EXAMPLE, *approved, *rest]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 

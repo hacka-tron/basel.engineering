@@ -266,3 +266,11 @@ def test_about_this_system_answers_may_use_three_sentences():
     case = {"category": "fact", "corpus": "about_system"}
     assert grade_case(case, answer)["too_long"] is False
     assert grade_case({**case, "corpus": "about_me"}, answer)["too_long"] is True
+
+
+def test_the_short_production_example_follows_the_absent_tech_one(approved):
+    strict = _prompt("Kubernetes in production?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    absent = strict.index("I don't have <Language> in my memory.")
+    production = strict.index("Q: <Tech> in production?")
+    approved_line = strict.index("Q: Have you used Widgets?")
+    assert absent < production < approved_line
