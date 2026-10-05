@@ -17,6 +17,15 @@ import re
 # for. Lists (languages, SSE events) stay well under it; copied sources run to
 # 200-460 words.
 ANSWER_WORD_CAP = 90
+# Owner, 2026-10-05 (prompt v19): About This System answers ("how does X work?") may
+# use up to three sentences; About Basel stays at one or two.
+ANSWER_WORD_CAPS = {"about_system": 130}
+
+
+def word_cap(corpus: str | None) -> int:
+    """The post-generation word cap for a corpus."""
+    return ANSWER_WORD_CAPS.get(corpus or "", ANSWER_WORD_CAP)
+
 
 # "Basel" as a name, not inside basel.engineering or an email address; "he/his/him"
 # (in an About Basel answer they almost always mean Basel); and the assistant
@@ -47,6 +56,6 @@ def answer_check_failures(answer: str, corpus: str) -> list[str]:
     failures = []
     if corpus == "about_me" and third_person_hits(answer):
         failures.append("third_person")
-    if word_count(answer) > ANSWER_WORD_CAP:
+    if word_count(answer) > word_cap(corpus):
         failures.append("too_long")
     return failures

@@ -38,14 +38,17 @@ test('a variety of replies is used over many picks', () => {
   assert.ok(seen.size >= 15, `only ${seen.size} distinct replies`)
 })
 
-test('no reply blames the visitor, insults Basel, or claims a fact', () => {
+test('no reply blames the visitor, insults me, or claims a fact', () => {
   const blame = /\b(you asked|you've asked|your fault|you should have|you didn't|you broke|you sent|stupid|useless|lazy|incompetent|hate|promised|says he'll|supposed to|still waiting|should have)\b/i
   for (const reply of [...IDK_REPLIES, ...IDK_SYSTEM_REPLIES]) assert.doesNotMatch(reply, blame, reply)
 })
 
-test('some replies playfully mention Basel and some do not', () => {
-  const about = IDK_REPLIES.filter((reply) => reply.includes('Basel')).length
-  assert.ok(about >= 10 && about <= 17, `${about} mention Basel`)
+test('replies are first person: never Basel in the third person, some about the upload', () => {
+  for (const reply of [...IDK_REPLIES, ...IDK_SYSTEM_REPLIES]) {
+    assert.doesNotMatch(reply, /\b(Basel|he|his|him)\b/i, reply)
+  }
+  const persona = IDK_REPLIES.filter((reply) => /\b(upload\w*|real me|my memory)\b/i.test(reply)).length
+  assert.ok(persona >= 10 && persona <= 17, `${persona} mention the upload or my memory`)
 })
 
 test('the canonical sentence matches the server abstention', () => {

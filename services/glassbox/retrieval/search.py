@@ -49,17 +49,25 @@ class RetrievalConfig:
     lexical_candidates: int | None = None
 
 
-# About Basel is small (17 chunks): 8 chunks, at most 2 per file, and the
-# dual-experience slots. Not 6: prompt v18's casual tie-breaker (api/ask.py
-# answer_route) needs the fun-facts chunk anywhere in the set, and for "Coffee or
-# tea?" it is vector rank 7. Retrieval metrics were the same at 6 and 8.
+# About Basel (prompt v19): about 85 one-topic chunks (one per section, about 70
+# words each), 8 of them plus the dual-experience slots, no per-file cap (8 = top_k)
+# and the vector leg's top 4 always kept. With the v18 cap of 2 per file a broad
+# question ("What did you work on at YouTube?") lost the answering section of a
+# file whose 2 slots were taken; on the same index chunk recall@8 went 0.90 -> 0.96
+# and MRR 0.70 -> 0.71 (main's 19 merged chunks: 0.94 and 0.66), at about 560
+# source words per prompt instead of about 2,500.
 # About This System keeps 8 chunks, at most 3 per file, the
 # vector leg's top 4 always among them, and a 10-chunk BM25 pool: common words
 # ("google drive ingest") otherwise let planned-work sections crowd out the vector
 # leg's best hit (the "Drive was dropped" chunk, vector rank 3).
-_SYSTEM = RetrievalConfig(top_k=8, per_document_cap=3, vector_anchor=4, lexical_candidates=10)
+_SYSTEM = RetrievalConfig(
+    top_k=8,
+    per_document_cap=3,
+    vector_anchor=4,
+    lexical_candidates=10,
+)
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
-    "about_me": RetrievalConfig(top_k=8, per_document_cap=2, dual_experience=True),
+    "about_me": RetrievalConfig(top_k=8, per_document_cap=8, vector_anchor=4, dual_experience=True),
     "about_system": _SYSTEM,
     "portfolio": _SYSTEM,
 }
@@ -401,6 +409,18 @@ _EXPERIENCE_CUE = re.compile(
 _SHORT_QUESTION_WORDS = 3
 
 
+def named_technologies(question: str) -> list[str]:
+    """The known technologies (``TECH_ALIASES`` names) a question mentions, any phrasing."""
+    text = question.casefold()
+    return [
+        name
+        for name, pattern in _ALIAS_PATTERNS.items()
+        if pattern.search(text)
+        or (name in _EXTRA_SPELLINGS and _EXTRA_SPELLINGS[name].search(text))
+        or (name == "golang" and _GO.search(question))
+    ]
+
+
 def tech_question_terms(question: str) -> list[str]:
     """The lexical terms of the technologies a "have you used X?" question names, or [].
 
@@ -409,13 +429,7 @@ def tech_question_terms(question: str) -> list[str]:
     "Where do you work?" or "What do you do for fun?" names none.
     """
     text = question.casefold()
-    named = [
-        name
-        for name, pattern in _ALIAS_PATTERNS.items()
-        if pattern.search(text)
-        or (name in _EXTRA_SPELLINGS and _EXTRA_SPELLINGS[name].search(text))
-        or (name == "golang" and _GO.search(question))
-    ]
+    named = named_technologies(question)
     if not named:
         return []
     if not _EXPERIENCE_CUE.search(text) and len(text.split()) > _SHORT_QUESTION_WORDS:
