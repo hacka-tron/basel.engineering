@@ -179,6 +179,12 @@ def test_mostly_personal_top_chunks_route_casual():
     assert answer_route(chunks + [_chunk(4, WORK_TEXT)] * 5, "about_me") == CASUAL_ROUTE
 
 
+def test_the_best_ranked_chunk_decides_not_the_list_order():
+    chunks = [_chunk(2, WORK_TEXT), _chunk(1, CASUAL_TEXT)]
+    assert answer_route(chunks, "about_me") == CASUAL_ROUTE
+    assert answer_route([_chunk(1, MIXED_TEXT), _chunk(2, CASUAL_TEXT)], "about_me") == STRICT_ROUTE
+
+
 def test_work_top_chunks_route_strict_even_with_personal_chunks_lower_down():
     chunks = [_chunk(1, WORK_TEXT), _chunk(2, WORK_TEXT), _chunk(3, CASUAL_TEXT)]
     assert answer_route(chunks + [_chunk(4, CASUAL_TEXT)] * 5, "about_me") == STRICT_ROUTE

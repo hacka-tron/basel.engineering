@@ -125,11 +125,14 @@ _CASUAL_HEADING = re.compile(
 )
 _STRICT_HEADING = re.compile(r"\bprofessional\b", re.IGNORECASE)
 _SECTION_SPLIT = re.compile(r"(?m)^(?=#{1,6}\s)")
-# "Mostly" is judged on the top three chunks, weighted by rank: retrieval returns 8
-# of about 18 About Basel chunks, so the tail is always mixed, and the chunker merges
-# short sections, so a chunk is scored by the share of its words under casual headings.
-_ROUTE_RANK_WEIGHTS = (3, 2, 1)
-CASUAL_ROUTE_THRESHOLD = 0.4
+# "Mostly" is judged on the best-matching chunk. The About Basel corpus is about 17
+# chunks and retrieval returns 8, so the retrieved set always mixes topics, and the
+# chunker merges short sections, so one chunk holds several. A chunk is scored by
+# the share of its words under casual headings, and the route is casual when the top
+# chunk is mostly casual. On the fresh v18 index a rank-weighted top-3 score was
+# tried first: no threshold separated the fun questions from work questions whose
+# second chunk happened to be the fun-facts one (team culture, outages).
+CASUAL_ROUTE_THRESHOLD = 0.5
 
 
 def casual_share(text: str) -> float:
@@ -145,19 +148,15 @@ def casual_share(text: str) -> float:
 
 
 def answer_route(chunks: list, corpus: str) -> str:
-    """``casual`` when the top About Basel chunks are mostly personal or fun sections.
+    """``casual`` when the best-matching About Basel chunk is mostly personal or fun.
 
     Work, skills and About This System questions keep the strict prompt. Only the
     route name is ever logged or traced.
     """
     if corpus != "about_me" or not chunks:
         return STRICT_ROUTE
-    top = chunks[: len(_ROUTE_RANK_WEIGHTS)]
-    weights = _ROUTE_RANK_WEIGHTS[: len(top)]
-    score = sum(
-        weight * (casual_share(chunk.text) if chunk.source_path.startswith("private/") else 0.0)
-        for weight, chunk in zip(weights, top, strict=True)
-    ) / sum(weights)
+    top = min(chunks, key=lambda chunk: chunk.n)  # n is the retrieval rank, 1 = best
+    score = casual_share(top.text) if top.source_path.startswith("private/") else 0.0
     return CASUAL_ROUTE if score >= CASUAL_ROUTE_THRESHOLD else STRICT_ROUTE
 
 
