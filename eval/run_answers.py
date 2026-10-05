@@ -45,6 +45,7 @@ from services.glassbox.providers.base import (
     EmbeddingProvider,
     LLMProvider,
 )
+from services.glassbox.sources_line import strip_sources_lines
 
 HERE = Path(__file__).resolve().parent
 RUNS_DIR = HERE / "runs"
@@ -180,7 +181,7 @@ async def run_case(
             # Same as the API: no sources means the canonical abstention, no LLM call.
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
-            prompt = _prompt(case["question"], chunks, history, route)
+            prompt = _prompt(case["question"], chunks, history, route, case["corpus"])
             system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
@@ -201,8 +202,14 @@ async def run_case(
                 row["content_filtered"] = True
                 if not "".join(answer_parts).strip():
                     answer_parts = [ABSTENTION_ANSWER]
-            answer = "".join(answer_parts)
-            tokens_in, tokens_out = _token_counts(prompt, answer, usage)
+            raw_answer = "".join(answer_parts)
+            # Same as the API (prompt v19): a "Sources: ..." line the model wrote is
+            # dropped before anything is sent; the row records that it happened.
+            answer = strip_sources_lines(raw_answer)
+            row["sources_line_dropped"] = answer != raw_answer
+            if row["sources_line_dropped"] and not answer.strip():
+                answer = ABSTENTION_ANSWER  # same as the API
+            tokens_in, tokens_out = _token_counts(prompt, raw_answer, usage)
         row.update(
             {
                 "rewrite": rewrite,

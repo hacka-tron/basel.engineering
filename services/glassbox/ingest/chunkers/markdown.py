@@ -7,10 +7,19 @@ from services.glassbox.ingest.chunkers.base import Chunk
 
 _HEADING = re.compile(r"^#{1,6} ")
 _WORD = re.compile(r"\S+")
+# An H2-or-deeper heading: text before the first one is a document's preamble.
+_SUBHEADING = re.compile(r"^#{2,6} ", re.MULTILINE)
 
 
-def chunk_markdown(text: str, source_path: str) -> list[Chunk]:
-    """Chunk Markdown by headings, merging short sections and splitting long ones."""
+def chunk_markdown(text: str, source_path: str, *, merge_short: bool = True) -> list[Chunk]:
+    """Chunk Markdown by headings, merging short sections and splitting long ones.
+
+    ``merge_short=False`` (the About Basel corpus, prompt v19) keeps every section
+    its own chunk, so a question pulls the one-topic section that answers it rather
+    than a chunk of several neighbouring topics (owner, 2026-10-05: "either movie or
+    show"). Only a document's preamble (text before the first heading below H1,
+    e.g. the H1 title and its intro) still merges into the section after it.
+    """
     if not text or not text.strip():
         return []
 
@@ -65,6 +74,9 @@ def chunk_markdown(text: str, source_path: str) -> list[Chunk]:
             continue
 
         while count < 300 and index + 1 < len(sections):
+            # One-topic mode: only the preamble (no subheading yet) merges forward.
+            if not merge_short and _SUBHEADING.search(text[start:end]):
+                break
             next_count = word_counts[index + 1]
             if count + next_count > 500:
                 break

@@ -85,3 +85,35 @@ def test_line_ranges_for_separate_sections():
     chunks = chunk_markdown(text, "path.md")
 
     assert [(chunk.start_line, chunk.end_line) for chunk in chunks] == [(1, 3), (4, 5)]
+
+
+def test_one_topic_mode_keeps_each_section_its_own_chunk():
+    # Prompt v19 (About Basel): short sections are not merged, so "favorite show"
+    # retrieves the shows section alone, not a chunk that also holds the movie.
+    text = (
+        "# Title\n\nAn intro line.\n\n"
+        "## Favorite movie\n\nA movie line.\n\n"
+        "## Favorite shows\n\nA shows line.\n\n"
+        "## Music\n\nA music line.\n"
+    )
+    merged = chunk_markdown(text, "private/personal.md")
+    assert len(merged) == 1
+    chunks = chunk_markdown(text, "private/personal.md", merge_short=False)
+    assert [chunk.text.strip().splitlines()[0] for chunk in chunks] == [
+        "# Title",  # the preamble merges into the first section
+        "## Favorite shows",
+        "## Music",
+    ]
+    assert "## Favorite movie" in chunks[0].text
+    assert "shows" not in chunks[0].text
+
+
+def test_one_topic_mode_still_splits_long_sections():
+    text = "## Long\n\n" + "word " * 900
+    assert len(chunk_markdown(text, "private/x.md", merge_short=False)) > 1
+
+
+def test_the_ingest_chunks_about_basel_one_topic_per_section():
+    from services.glassbox.ingest import run
+
+    assert run.ONE_TOPIC_CORPORA == frozenset({"about_me"})

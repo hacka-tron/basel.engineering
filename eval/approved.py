@@ -12,6 +12,8 @@ Each item becomes a golden-style case with its `golden` checks (`must_include`,
   is `unanswerable` with `expect_abstain`; every other item is `fact`. The file's
   own `expect_abstain` flag marks deflections (pay, availability: "email me"),
   which are answers, not abstentions, so it is not copied as is.
+- An item of the "Playful & off-topic" category (prompt v19) is `playful`: no
+  source answers it, but it must get a persona reply, not the abstention.
 - An item whose approved answer is a denial ("No, ...") accepts the memory
   phrasing as well (`abstain_ok`): factuality and caching win over the wording.
 - Every case is graded against its own approved answer first. An item whose
@@ -27,6 +29,7 @@ from pathlib import Path
 import yaml
 
 from eval.graders import grade_case
+from services.glassbox.fewshot import PLAYFUL_CATEGORY
 from services.glassbox.providers.base import is_abstention
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -43,7 +46,13 @@ def approved_case(item: dict) -> dict:
         "id": str(item["id"]),
         "origin": ORIGIN,
         "corpus": "about_me",
-        "category": "unanswerable" if abstains else "fact",
+        "category": (
+            "unanswerable"
+            if abstains
+            else "playful"
+            if item.get("category") == PLAYFUL_CATEGORY
+            else "fact"
+        ),
         "question": str(item["question"]),
         "needs_owner_review": True,
         "must_include": list(golden.get("must_include") or []),

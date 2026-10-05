@@ -51,23 +51,63 @@ APPROVED_EXAMPLES_ENV = "GLASSBOX_APPROVED_EXAMPLES_PATH"
 #   copy whole sources (one follow-ups answer went from 20 to 406 words); the
 #   freelance question is answered from the corpus, which has the same wording.
 # (Ablations, 2026-10-04/05.)
+#
+# v19 sign-off round 3: the personal-project Kubernetes answer, right after the
+# production one, but only for a question that names Kubernetes (STRICT_EXAMPLE_TOPICS).
+# Without it, "Have you worked with / used Kubernetes?" copied the nearest example:
+# the work-only Kafka answer's employer ("Yes, I've used Kubernetes in production. At
+# <Company>...", an invented claim) or the production answer's wording. Placed before
+# the production example it cost "Kubernetes in production?" its "No"; in every strict
+# prompt it made "Terraform?" answer from the "learning right now" section instead of
+# the project (0/6, against 6/6 without it). Stored-retrieval ablations, 2026-10-05.
 STRICT_EXAMPLE_IDS = (
     "rec-tech-kafka",
     "rec-tech-k8s-prod",
+    "rec-tech-kubernetes",
     "rec-impact-1",
     "rec-adv-employer",
+    "rec-adv-salary",
 )
+# Examples used only when the question matches the pattern (case-insensitive).
+# v20: the pay answer joins pay questions only. "What do you make at <Company>?" was
+# read as what I build there (a list of systems, 2/2 replays); with the pay answer
+# next to the question it answers the pay deflection (4/4), and "Kubernetes in
+# production?" keeps its "No" because other questions never see it. As a placeholder
+# for every question it changed nothing for pay and cost the production "No".
+STRICT_EXAMPLE_TOPICS = {
+    "rec-tech-kubernetes": r"\b(kubernetes|k8s|k3s)\b",
+    # Review r1: not "rate limit(er)" or "make ... in your free time"; also "What's your
+    # pay?" and "How much are you paid?".
+    "rec-adv-salary": (
+        r"\b(salary|salaries|compensation|earnings|pay range|get paid|are you paid"
+        r"|hourly rate|day rate)\b"
+        r"|\byour (pay|rate)\b(?!\s*limit)"
+        r"|^(?!.*\bfree time\b).*\b(what|how much) do you (make|earn)\b"
+    ),
+}
 # The casual prompt gets four fun answers. Favorite color and favorite food are
 # deliberately left out, so the eval can check that unseen casual questions take
-# the approved tone without copying an example.
+# the approved tone without copying an example. v19: the favorite-show answer
+# replaces the combined "movie or anime" one (owner, 2026-10-05: one topic per
+# answer; a show question was answered with the movie).
 CASUAL_EXAMPLE_IDS = (
     "rec-fun-lightmode",
     "rec-fun-coffee",
-    "rec-fun-movie",
+    "rec-fun-show",
     "rec-casual-fun",
 )
 CASUAL_CATEGORY = "Casual & personal"
-_LIMITS = {"strict": len(STRICT_EXAMPLE_IDS), "casual": len(CASUAL_EXAMPLE_IDS)}
+# Prompt v19: playful replies to flirty or off-topic personal questions ("Do you love
+# me?"), added to the casual prompt only for those questions (api/ask.py
+# playful_question). Their own category, so they never fill the strict or casual
+# sets; any `few_shot: true` item of the category fills a short set.
+PLAYFUL_EXAMPLE_IDS = ("rec-playful-love", "rec-playful-marry")
+PLAYFUL_CATEGORY = "Playful & off-topic"
+_LIMITS = {
+    "strict": len(STRICT_EXAMPLE_IDS),
+    "casual": len(CASUAL_EXAMPLE_IDS),
+    "playful": len(PLAYFUL_EXAMPLE_IDS),
+}
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -75,6 +115,11 @@ _WHITESPACE = re.compile(r"\s+")
 class Example:
     question: str
     answer: str
+    # A regex: the example is used only for questions it matches (None: always).
+    topic: str | None = None
+
+    def fits(self, question: str) -> bool:
+        return self.topic is None or re.search(self.topic, question, re.IGNORECASE) is not None
 
     def line(self) -> str:
         return f"Q: {self.question} A: {self.answer}"
@@ -86,6 +131,7 @@ class ExampleSet:
     source: str
     strict: tuple[Example, ...]
     casual: tuple[Example, ...]
+    playful: tuple[Example, ...] = ()
 
 
 EMPTY = ExampleSet(source="placeholder", strict=(), casual=())
@@ -114,10 +160,21 @@ def select_examples(data: object) -> ExampleSet:
         question, answer = _clean(item.get("question")), _clean(item.get("answer"))
         if not question or not answer:
             continue
-        route = "casual" if item.get("category") == CASUAL_CATEGORY else "strict"
-        approved[str(item.get("id"))] = (
+        if item.get("draft") is True:
+            # v19 review: an answer awaiting the owner's sign-off never goes live.
+            continue
+        category = item.get("category")
+        route = (
+            "casual"
+            if category == CASUAL_CATEGORY
+            else "playful"
+            if category == PLAYFUL_CATEGORY
+            else "strict"
+        )
+        item_id = str(item.get("id"))
+        approved[item_id] = (
             route,
-            Example(question, answer),
+            Example(question, answer, STRICT_EXAMPLE_TOPICS.get(item_id)),
             item.get("few_shot") is True,
         )
 
@@ -133,7 +190,8 @@ def select_examples(data: object) -> ExampleSet:
     strict, casual = pick("strict", STRICT_EXAMPLE_IDS), pick("casual", CASUAL_EXAMPLE_IDS)
     if not strict and not casual:
         return EMPTY
-    return ExampleSet(source="approved", strict=strict, casual=casual)
+    playful = pick("playful", PLAYFUL_EXAMPLE_IDS)
+    return ExampleSet(source="approved", strict=strict, casual=casual, playful=playful)
 
 
 def load_examples(path: Path | None = None) -> ExampleSet:
@@ -160,9 +218,10 @@ def get_examples() -> ExampleSet:
     """
     examples = load_examples()
     LOGGER.info(
-        "Answer examples: %s (%d strict, %d casual)",
+        "Answer examples: %s (%d strict, %d casual, %d playful)",
         examples.source,
         len(examples.strict),
         len(examples.casual),
+        len(examples.playful),
     )
     return examples

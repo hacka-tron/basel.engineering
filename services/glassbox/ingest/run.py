@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -157,6 +158,14 @@ class Prepared:
     redacted: Counter | None = None
 
 
+# Prompt v19 (owner, 2026-10-05): About Basel sections are one topic each and are
+# indexed one chunk per section (chunk_markdown merge_short=False). The version is
+# folded into the stored hash, so the next ingest re-chunks every About Basel file
+# once even when its text did not change.
+ONE_TOPIC_CORPORA = frozenset({"about_me"})
+ONE_TOPIC_CHUNKING_VERSION = 1
+
+
 def content_hash_for(corpus: str, raw_hash: str) -> str:
     """The stored ``content_hash``: the file's hash plus every rule shaping its indexed text.
 
@@ -167,6 +176,10 @@ def content_hash_for(corpus: str, raw_hash: str) -> str:
         raw_hash = index_content_hash(raw_hash)
     if corpus in GUARDED_CORPORA:
         raw_hash = guarded_content_hash(raw_hash)
+    if corpus in ONE_TOPIC_CORPORA:
+        raw_hash = hashlib.sha256(
+            f"{raw_hash}:one-topic-v{ONE_TOPIC_CHUNKING_VERSION}".encode()
+        ).hexdigest()
     return raw_hash
 
 
@@ -323,7 +336,11 @@ async def _ingest(
                 continue
             content = prepared.text
             try:
-                chunks = chunker(content, source.source_path)
+                chunks = (
+                    chunker(content, source.source_path, merge_short=False)
+                    if source.corpus in ONE_TOPIC_CORPORA and chunker is chunk_markdown
+                    else chunker(content, source.source_path)
+                )
                 vectors = await provider.embed([chunk.text for chunk in chunks])
                 if len(vectors) != len(chunks) or any(len(vector) != 512 for vector in vectors):
                     raise ValueError("embedding provider returned an invalid vector batch")

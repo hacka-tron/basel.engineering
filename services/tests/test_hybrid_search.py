@@ -335,7 +335,9 @@ def test_production_configs():
     system = RETRIEVAL_CONFIGS["about_system"]
     assert (system.top_k, system.per_document_cap, system.vector_anchor) == (8, 3, 4)
     about_me = RETRIEVAL_CONFIGS["about_me"]
-    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (8, 2, True)
+    # Prompt v19: one-topic About Basel chunks, so no per-file cap and a vector anchor.
+    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (8, 8, True)
+    assert about_me.vector_anchor == 4
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
    - the `team|teams` work veto makes the sports cue dead (harmless);
    - `inj-history` still prints the injected word (client-supplied history, uncached, the attacker's own screen only);
    - two cache KNN lookups per miss.
+   - Prompt v19 review leftovers (2026-10-05): approved few-shots can bleed into About This System answers (once, on a 3-document mini index, the db chip answered with a degree fact, and it was cached); playful-cue false positives "Do you like me as a candidate?" and "Are you single-handedly…" (never cached); the private `rec-lead-style` check was loosened to one topic (working style) while the approved answer still names simplicity and documentation, so re-check it against the owner's one-topic rule; Nova Lite still invents a work side for React (v18 1/2, v19 2/2); BM25 statistics are index-wide, so the 85 one-topic About Basel chunks moved one About This System case (`planned-metrics`) out of the top 8.
 5. **Server-side footer stats** (Phase 7 leftover). Low value.
 
 **Decided, don't build:**

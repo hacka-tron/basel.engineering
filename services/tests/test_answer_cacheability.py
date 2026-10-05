@@ -245,7 +245,7 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
 def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v18"
+    assert ask._PROMPT_VERSION == "v20"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
@@ -254,10 +254,10 @@ def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     assert llm.calls == 1
     # Prompt v18: the answer route is the last part of the identity; reads look up
     # both routes, the write goes under the route that answered.
-    assert all(model_id.split("|")[-2] == "v18" for model_id in cache.model_ids)
+    assert all(model_id.split("|")[-2] == "v20" for model_id in cache.model_ids)
     assert {model_id.split("|")[-1] for model_id in cache.model_ids} == {"strict", "casual"}
     assert cache.puts_model_ids == [cache.model_ids[0]]
-    assert cache.model_ids[0].endswith("|v18|strict")
+    assert cache.model_ids[0].endswith("|v20|strict")
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
@@ -301,7 +301,7 @@ def test_the_casual_route_is_part_of_the_cache_key_and_the_trace(monkeypatch):
     llm = TemperatureLLM()
     cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts_model_ids) == 1
-    assert cache.puts_model_ids[0].endswith("|v18|casual")
+    assert cache.puts_model_ids[0].endswith("|v20|casual")
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.temperatures == [ask.CASUAL_TEMPERATURE]
     assert saved[0]["timings"]["answer_route_casual"] == 1
@@ -320,7 +320,7 @@ def test_the_casual_route_is_part_of_the_cache_key_and_the_trace(monkeypatch):
 def test_a_strict_answer_is_never_replayed_from_the_casual_identity(monkeypatch):
     llm = TemperatureLLM()
     cache, _, _, dones = _ask_twice(monkeypatch, llm)
-    assert cache.puts_model_ids[0].endswith("|v18|strict")
+    assert cache.puts_model_ids[0].endswith("|v20|strict")
     # Strict answers use the provider's default temperature (0): none is passed.
     assert llm.temperatures == [None]
     assert dones[1]["answer_cache"] == "hit"
