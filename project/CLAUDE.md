@@ -15,6 +15,7 @@ Read the relevant design doc before implementing a feature. If an implementation
 Details and the why are in `orchestration/README.md`.
 
 - **Orchestrate, parallelize.** Claude orchestrates with parallel worktree subagents (`.worktrees/<name>`): Opus for judgment and review, Sonnet for mechanical work and verification loops. Scope new features with a subagent, not in the main conversation. When work waits on review or the owner, start the next backlog item.
+- **Track expensive work.** Log costly loops and workflows in `orchestration/token-log.md` with the fix, and turn repeated work into a brief, playbook or script (`orchestration/README.md`).
 - **Review gate:** an Opus subagent with `orchestration/reviewer-brief.md` (reads `orchestration/reviewer-primer.md` first). Codex is optional, only when it has usage; Gemini is legacy. **Round cap 2:** after that only Critical findings, or Important ones with a reachable failure scenario, block; the rest go to `BACKLOG.md`. Track each open PR's round, verdict and fixes since.
 - **PRs:** record the review in the PR body with `gh api -X PATCH` (`gh pr edit` fails here). Chain or stack PRs that touch the same files, and trial-merge parallel ones.
 - **Merge without asking** once review is APPROVED and CI is green: `gh pr update-branch`, full test suite on the merged tree, wait for green CI, then `gh pr merge` as its own command. Exception: changes needing the owner's go-ahead (live infra, IAM, RBAC; `orchestration/README.md` "What checked in means" step 6).
