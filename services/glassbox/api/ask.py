@@ -95,7 +95,9 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # services/glassbox/sources_line.py); flirty or off-topic personal questions ("Do you
 # love me?") take the casual route and get a warm, funny persona reply with no
 # invented facts instead of the abstention.
-_PROMPT_VERSION = "v19"
+# v20 (owner, 2026-10-05): golden checks recalibrated to the core fact, and one
+# targeted fix per real-miss pattern that survived ablation (see the v20 status report).
+_PROMPT_VERSION = "v20"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -651,6 +653,26 @@ _STRICT_FIXED_EXAMPLES = (
     "Q: How much does <service> cost to run? A: About <$A> a month today and about <$B> "
     "later, plus <usage>, which <cap> keeps under <$C>.",
 )
+# v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
+# Abdel-Rahman" (third person, no premise, no contact); this example restores the
+# owner's approved shape (replay: flips rec-casual-real 4/4). Only for questions that
+# ask whether it's really me: in every strict prompt, wherever it sat, it cost other
+# answers (second: "Kubernetes in production?" claimed production use, 0/4; later:
+# a planned system feature abstained or copied the production answer, 0/4).
+_REAL_ME_EXAMPLE = (
+    "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
+    "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
+    "is at <email>."
+)
+# Who-am-I-talking-to questions only (review r1: not "Are you really using Redis?").
+_REAL_ME_QUESTION = re.compile(
+    r"\b(am i|are we) (really |actually |truly )?(talking|speaking|chatting) (to|with)\b"
+    r"|\bwho am i (talking|speaking|chatting) (to|with)\b"
+    r"|\b(is (this|it)|are you) (really |actually )?(you\b|the real\b)"
+    r"|\bare you (really |actually )?(real|human|a bot|a robot|a person|an ai|basel)"
+    r"\s*[?.!]*$",
+    re.IGNORECASE,
+)
 _EXAMPLES_INTRO = (
     "Examples of voice and format only (not sources; never copy their content). Every "
     'answer about me is in my voice like these: "I", "my", never "Basel" or "he".\n'
@@ -685,10 +707,11 @@ def _example_lines(route: str, playful: bool = False, question: str = "") -> str
         # 0/3). Every other question keeps it first, next to the absent-tech one: last,
         # it made "How much AWS experience do you have?" present Azure work as AWS work
         # (v19 round-3 review: 4/6 replays, 0/6 with it first).
+        real_me = [_REAL_ME_EXAMPLE] if _REAL_ME_QUESTION.search(question) else []
         if _PRODUCTION_QUESTION.search(question):
-            lines = [absent, *approved, *rest, _PRODUCTION_EXAMPLE]
+            lines = [absent, *approved, *rest, *real_me, _PRODUCTION_EXAMPLE]
         else:
-            lines = [absent, _PRODUCTION_EXAMPLE, *approved, *rest]
+            lines = [absent, _PRODUCTION_EXAMPLE, *approved, *rest, *real_me]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 

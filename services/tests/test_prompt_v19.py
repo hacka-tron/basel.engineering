@@ -249,7 +249,7 @@ def test_overlay_maps_playful_items():
 
 
 def test_prompt_version_is_v19():
-    assert ask._PROMPT_VERSION == "v19"
+    assert ask._PROMPT_VERSION == "v20"
 
 
 def test_about_this_system_answers_may_use_three_sentences():
@@ -329,3 +329,48 @@ def test_a_topic_example_joins_only_questions_on_its_topic(monkeypatch):
         assert strict.index("Q: Prod?") < strict.index("Q: K8s?")
     strict = _prompt("Terraform?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
     assert "Q: Prod?" in strict and "Q: K8s?" not in strict
+
+
+@pytest.mark.parametrize(
+    ("question", "included"),
+    [
+        ("Am I really talking to Basel?", True),
+        ("Is this really you?", True),
+        ("Are you the real Basel?", True),
+        ("Are you real?", True),
+        ("Is this the real Basel?", True),
+        ("Who am I talking to?", True),
+        ("Are you really using Redis?", False),
+        ("Are you actually running k3s?", False),
+        ("Kubernetes in production?", False),
+        ("Can Glassbox tell me which version is deployed right now?", False),
+    ],
+)
+def test_the_real_me_example_joins_only_questions_asking_whether_it_is_me(question, included):
+    strict = _prompt(question, WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    assert ("Q: Am I really talking to <Name>?" in strict) is included
+    if included:
+        # Not a production question: the real-me example is the last one.
+        assert strict.rstrip().endswith("is at <email>.")
+
+
+@pytest.mark.parametrize(
+    ("question", "included"),
+    [
+        ("What do you make at Microsoft right now?", True),
+        ("What's your salary expectation?", True),
+        ("How much do you earn?", True),
+        ("What's your hourly rate?", True),
+        ("What's your pay?", True),
+        ("How much are you paid?", True),
+        ("How would you design a rate limiter?", False),
+        ("How does your rate limiter work?", False),
+        ("What's your rate limit?", False),
+        ("What do you make in your free time?", False),
+        ("What did you make at Google?", False),
+        ("How much does this site cost to run?", False),
+    ],
+)
+def test_the_pay_example_joins_pay_questions_only(question, included):
+    pattern = fewshot.STRICT_EXAMPLE_TOPICS["rec-adv-salary"]
+    assert fewshot.Example("Q", "A", pattern).fits(question) is included
