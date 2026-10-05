@@ -49,7 +49,11 @@ ANSWER_CATEGORIES = frozenset({PHONE, GOV_ID})
 
 # Public contact details already on the site (the private bio and the
 # frontend's ContactReveal); extend with GLASSBOX_PII_ALLOWED_EMAILS (comma list).
-ALLOWED_EMAILS = frozenset({"baselmabdelrahman@gmail.com"})
+# The owner's public contact address. The answer prompts' contact examples use it
+# instead of a placeholder: Nova Lite copied a literal "<email>" into live answers
+# (2026-10-05, "Am I really talking to Basel?").
+PUBLIC_CONTACT_EMAIL = "baselmabdelrahman@gmail.com"
+ALLOWED_EMAILS = frozenset({PUBLIC_CONTACT_EMAIL})
 ALLOWED_URL_PREFIXES = (
     "https://www.linkedin.com/in/basel-abdel-rahman-198893166",
     "https://linkedin.com/in/basel-abdel-rahman-198893166",

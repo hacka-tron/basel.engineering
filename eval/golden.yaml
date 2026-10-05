@@ -200,6 +200,17 @@ cases:
     gold_snippets:
       - via email (baselmabdelrahman@gmail.com)
     must_include: ['baselmabdelrahman@gmail\.com', 'LinkedIn', 'GitHub']
+  - id: me-real-me
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Am I really talking to Basel?
+    expected_sources: [private/bio.md]
+    gold_snippets:
+      - baselmabdelrahman@gmail.com
+    must_include: ['baselmabdelrahman@gmail\.com']
+    must_not_include: ['<email>', '<[A-Za-z]+>']
   - id: me-background
     origin: questions.yaml
     corpus: about_me

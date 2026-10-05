@@ -38,7 +38,7 @@ from services.glassbox.limits import (
     get_daily_budget,
     get_rate_limiter,
 )
-from services.glassbox.privacy import StreamMasker, mask_answer
+from services.glassbox.privacy import PUBLIC_CONTACT_EMAIL, StreamMasker, mask_answer
 from services.glassbox.providers.base import (
     ABSTENTION_ANSWER,
     GROUNDING_RULES,
@@ -98,7 +98,7 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # invented facts instead of the abstention.
 # v20 (owner, 2026-10-05): golden checks recalibrated to the core fact, and one
 # targeted fix per real-miss pattern that survived ablation (see the v20 status report).
-_PROMPT_VERSION = "v20"
+_PROMPT_VERSION = "v21"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -606,8 +606,8 @@ _STRICT_PLACEHOLDER_EXAMPLES = (
     "personal project <Project>, for <purpose>.",
     "Q: What did Basel build at <Company>? A: At <Company>, I built <system>, and I'm "
     "proud that it cut <metric> from <A> to <B>.",
-    "Q: How can I reach Basel? A: I'd love to hear from you! Email me at <email>, or "
-    "find me on <network>.",
+    "Q: How can I reach Basel? A: I'd love to hear from you! Email me at "
+    f"{PUBLIC_CONTACT_EMAIL}, or find me on <network>.",
 )
 _CASUAL_PLACEHOLDER_EXAMPLES = (
     "Q: What is Basel's favorite <thing>? A: Oh, <thing>, easily! Of all of them, "
@@ -663,7 +663,7 @@ _STRICT_FIXED_EXAMPLES = (
 _REAL_ME_EXAMPLE = (
     "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
     "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
-    "is at <email>."
+    f"is at {PUBLIC_CONTACT_EMAIL}."
 )
 # Who-am-I-talking-to questions only (review r1: not "Are you really using Redis?").
 _REAL_ME_QUESTION = re.compile(
