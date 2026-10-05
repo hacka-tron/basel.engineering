@@ -47,19 +47,34 @@ class RetrievalConfig:
     vector_anchor: int = 0
     # BM25 pool size; None means ``candidates``.
     lexical_candidates: int | None = None
+    # A chunk only the lexical leg found is dropped when its cosine to the question
+    # is below this (0 keeps all). Prompt v19 review: for "Show me the Terraform for
+    # the database." BM25 pulled a CI-concurrency section (cosine 0.11) that made Nova
+    # Lite abstain although the answering sections were retrieved.
+    lexical_min_cosine: float = 0.0
 
 
-# About Basel is small (17 chunks): 8 chunks, at most 2 per file, and the
-# dual-experience slots. Not 6: prompt v18's casual tie-breaker (api/ask.py
-# answer_route) needs the fun-facts chunk anywhere in the set, and for "Coffee or
-# tea?" it is vector rank 7. Retrieval metrics were the same at 6 and 8.
+# About Basel (prompt v19): about 85 one-topic chunks (one per section, about 70
+# words each), 8 of them plus the dual-experience slots, no per-file cap (8 = top_k)
+# and the vector leg's top 4 always kept. With the v18 cap of 2 per file a broad
+# question ("What did you work on at YouTube?") lost the answering section of a
+# file whose 2 slots were taken; on the same index chunk recall@8 went 0.90 -> 0.96
+# and MRR 0.70 -> 0.71 (main's 19 merged chunks: 0.94 and 0.66), at about 560
+# source words per prompt instead of about 2,500.
 # About This System keeps 8 chunks, at most 3 per file, the
 # vector leg's top 4 always among them, and a 10-chunk BM25 pool: common words
 # ("google drive ingest") otherwise let planned-work sections crowd out the vector
-# leg's best hit (the "Drive was dropped" chunk, vector rank 3).
-_SYSTEM = RetrievalConfig(top_k=8, per_document_cap=3, vector_anchor=4, lexical_candidates=10)
+# leg's best hit (the "Drive was dropped" chunk, vector rank 3). v19: a lexical-only
+# chunk needs cosine >= 0.2 (recall@8 unchanged at 0.625, MRR 0.376 -> 0.379).
+_SYSTEM = RetrievalConfig(
+    top_k=8,
+    per_document_cap=3,
+    vector_anchor=4,
+    lexical_candidates=10,
+    lexical_min_cosine=0.2,
+)
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
-    "about_me": RetrievalConfig(top_k=8, per_document_cap=2, dual_experience=True),
+    "about_me": RetrievalConfig(top_k=8, per_document_cap=8, vector_anchor=4, dual_experience=True),
     "about_system": _SYSTEM,
     "portfolio": _SYSTEM,
 }
@@ -507,6 +522,14 @@ async def hybrid_search(
         for hit in tech_hits
         if hit["chunk_id"] in slots and hit["chunk_id"] not in known
     ]
+    if config.lexical_min_cosine > 0:
+        vector_ids = {m["chunk_id"] for m in vector_leg}
+        lexical_only = [
+            e for e in fused if e["chunk_id"] not in vector_ids and e["chunk_id"] not in slots
+        ]
+        await _fill_scores(redis_client, lexical_only, embedding)
+        dropped = {e["chunk_id"] for e in lexical_only if e["score"] < config.lexical_min_cosine}
+        fused = [e for e in fused if e["chunk_id"] not in dropped]
     anchors = [
         m["chunk_id"] for m in vector_leg[: config.vector_anchor] if m["chunk_id"] not in slots
     ]

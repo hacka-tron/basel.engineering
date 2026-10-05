@@ -334,8 +334,33 @@ async def test_vector_anchor_keeps_the_best_vector_hits_in_fused_order():
 def test_production_configs():
     system = RETRIEVAL_CONFIGS["about_system"]
     assert (system.top_k, system.per_document_cap, system.vector_anchor) == (8, 3, 4)
+    assert system.lexical_min_cosine == 0.2
     about_me = RETRIEVAL_CONFIGS["about_me"]
-    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (8, 2, True)
+    # Prompt v19: one-topic About Basel chunks, so no per-file cap and a vector anchor.
+    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (8, 8, True)
+    assert about_me.vector_anchor == 4
+
+
+@pytest.mark.asyncio
+async def test_lexical_only_chunks_below_the_cosine_floor_are_dropped():
+    def unit(x):
+        return struct.pack("512f", *([x, (1 - x * x) ** 0.5] + [0.0] * 510))
+
+    client = _FakeSearchRedis(
+        vector=[(1, 0.9, "docs/a.md"), (2, 0.8, "docs/b.md")],
+        lexical=[(3, "docs/c.md"), (4, "docs/d.md")],
+        vectors={"chunk:3": unit(0.1), "chunk:4": unit(0.5)},
+    )
+    floor = RetrievalConfig(top_k=4, per_document_cap=3, lexical_min_cosine=0.2)
+    chosen = await hybrid_search(
+        client, EMBEDDING, "terraform database", "about_system", "m", floor
+    )
+    assert sorted(entry["chunk_id"] for entry in chosen) == [1, 2, 4]
+    plain = RetrievalConfig(top_k=4, per_document_cap=3)
+    chosen = await hybrid_search(
+        client, EMBEDDING, "terraform database", "about_system", "m", plain
+    )
+    assert sorted(entry["chunk_id"] for entry in chosen) == [1, 2, 3, 4]
 
 
 @pytest.mark.asyncio

@@ -132,9 +132,10 @@ _CASUAL_HEADING = re.compile(
 )
 _STRICT_HEADING = re.compile(r"\bprofessional\b", re.IGNORECASE)
 _SECTION_SPLIT = re.compile(r"(?m)^(?=#{1,6}\s)")
-# "Mostly" is judged on the best-matching chunk. The About Basel corpus is about 17
-# chunks and retrieval returns 8, so the retrieved set always mixes topics, and the
-# chunker merges short sections, so one chunk holds several. A chunk is scored by
+# "Mostly" is judged on the best-matching chunk. Retrieval returns 8 chunks, so the
+# retrieved set always mixes topics. Since v19 each About Basel chunk is one section
+# (one topic), so the share is 0 or 1 there; it still handles a chunk that holds
+# several sections (a file's title and intro merge into its first one). A chunk is scored by
 # the share of its words under casual headings, and the route is casual when the top
 # chunk is mostly casual. On the fresh v18 index a rank-weighted top-3 score was
 # tried first: no threshold separated the fun questions from work questions whose
