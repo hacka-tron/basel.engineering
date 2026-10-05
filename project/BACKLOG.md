@@ -8,7 +8,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ### Next up, in order (owner priorities, 2026-10-04)
 
-1. **Prompt v17: persona, brevity, dual experience, factuality.** One spec; it replaces the 2026-10-03 v17 notes.
+1. **Prompt v17: persona, brevity, dual experience, factuality.** One spec; it replaces the 2026-10-03 v17 notes. **Status 2026-10-04: PR `feature/rag-prompt-v17` open** (report `status/2026-10-04-1936-rag-prompt-v17.md`); left over: the db-terraform chip abstains, the cost answer still names the T4g trial, `me-fav-languages` copies the skills list, regenerate not built (checks are logged), measured on the pre-resync corpus.
    - **Persona: Basel's uploaded consciousness.** The premise of every answer is that Basel uploaded his consciousness into this application and is answering visitors himself. Give it its own section of the system prompt, shared by the strict prompt and the casual one (item 3). Always first person ("I built…", "at Google I…"); never "Basel" in the third person, "the assistant" or "this AI". About This System answers are Basel explaining the system he built and now lives in, still technically precise. A light touch of the premise is fine where natural; don't open every answer with it.
    - **Brevity.** Answer in 1–2 sentences unless detail is asked for; the old 40–120 word target is gone. Lower the `max_words` checks.
    - **Dual-experience snapshot.** A question about a tool or technology gets a first answer that names BOTH sides: "Yes, I used [Tech] at [Company] for [X], and in my personal project [Name] for [Y]." Cover only a side the data supports. If there is no professional (or no personal) use, say so; never invent the missing side.
@@ -76,7 +76,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 **Open items from the 2026-09-30/10-01 session** (not started unless noted):
 
-- **About Basel corpus: RDS line is not a bug (owner, 2026-10-02).** `skills.md` describes the owner's skills, not this project's architecture, so its RDS mention stays as written. Possible later fix (low priority, no owner input needed): the golden case `me-site-stack` in `eval/golden.yaml` asserts `must_not_include` RDS on an About Basel answer, which tests the wrong thing; relax or retarget it to About This System the next time the eval set is touched (evaluations themselves stay parked).
+- **About Basel corpus: RDS line is not a bug (owner, 2026-10-02).** `skills.md` describes the owner's skills, not this project's architecture, so its RDS mention stays as written. Possible later fix (low priority, no owner input needed): the golden case `me-site-stack` in `eval/golden.yaml` asserts `must_not_include` RDS on an About Basel answer, which tests the wrong thing; relax or retarget it to About This System the next time the eval set is touched (evaluations themselves stay parked). Done in the v17 PR (relaxed).
 - **Decide: warm-answers persistently suspended?** Owner decision. Currently running and cheap (at most 10 LLM answers/day). A manual suspend does not stick, because Flux re-applied the CronJob with `suspend: false` after the incident; a lasting suspend means `spec.suspend: true` in `k8s/base/warm-cronjob.yaml` via a PR.
 - ~~**"About Basel can't answer" → fall back to About This System:** proposed, **NOT approved** by the owner. Don't build it until the owner says so.~~ Dropped 2026-10-03.
 - ~~**Optional chat bubble tightening**~~ Dropped 2026-10-03 (never approved).
