@@ -304,7 +304,7 @@ A quarantined file does not stop the run. Other files continue, and the skipped 
 
 **Chunkers.** A chunker is picked by file extension. Every chunk keeps its source path and start and end line numbers.
 
-- **Markdown** (`chunkers/markdown.py`): splits on headings (`#` through `######`). Sections under 300 words merge with the following sections as long as the total stays at or below 500 words. A section over 500 words is split into roughly 450-word windows that overlap by 50 words. Sizes are counted in whitespace-separated words, not model tokens.
+- **Markdown** (`chunkers/markdown.py`): splits on headings (`#` through `######`). Sections under 300 words merge with the following sections as long as the total stays at or below 500 words; About Basel sections (one topic each) never merge. A section over 500 words is split into roughly 450-word windows that overlap by 50 words. Sizes are counted in whitespace-separated words, not model tokens.
 - **Terraform** (`chunkers/terraform.py`): one chunk per top-level block (`resource`, `module`, `variable`, `data`, `output`, `provider`, `locals`, `terraform`), found by brace counting.
 - **YAML** (`chunkers/yaml_doc.py`): one chunk per YAML document, split on `---`.
 - **Python and TypeScript** (`chunkers/code.py`): a leading chunk for imports and module docstrings, then one chunk per top-level function, class, or exported function or arrow-function constant, with single-line decorators kept with their definition.

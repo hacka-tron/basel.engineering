@@ -86,7 +86,10 @@ def test_about_system_is_indexed_as_written():
 def test_content_hashes():
     raw = "a" * 64
     assert content_hash_for("about_system", raw) == raw
-    # Unchanged for About Basel, so this PR re-embeds nothing there.
-    assert content_hash_for("about_me", raw) == guarded_content_hash(raw)
+    # About Basel: the guard version plus the one-topic chunking version (prompt v19),
+    # so the next ingest re-chunks every About Basel file once.
+    about_me = content_hash_for("about_me", raw)
+    assert about_me not in {raw, guarded_content_hash(raw)}
+    assert about_me == content_hash_for("about_me", raw)
     assert content_hash_for("portfolio", raw) == guarded_content_hash(index_content_hash(raw))
     assert content_hash_for("portfolio", raw) not in {raw, guarded_content_hash(raw)}
