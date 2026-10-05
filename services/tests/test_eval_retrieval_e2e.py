@@ -15,16 +15,17 @@ from services.glassbox.db.models import Chunk as DbChunk
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.ingest import scanner
 from services.glassbox.ingest.run import ingest
+from services.tests.stack_ports import TEST_MYSQL_PORT, redis_url_for
 
 
 @pytest.fixture
 def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
-    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("REDIS_URL", redis_url_for())
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
     engine = create_db_engine()
     try:
@@ -42,7 +43,7 @@ async def test_evaluate_scores_k8_chunk_level_and_noise_against_real_index(
     tmp_path, integration_stack, monkeypatch
 ):
     engine = integration_stack
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:

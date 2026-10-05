@@ -29,6 +29,7 @@ from services.glassbox.db.models import Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.ingest.redis_index import replace_document_vectors
 from services.glassbox.trace import next_seq
+from services.tests.stack_ports import redis_url_for
 from services.tests.test_ask_endpoint import TEST_MYSQL_PORT, skip_unless_query_log_migrated
 
 MODEL = "fake-v1|fake-llm|v13"
@@ -435,7 +436,7 @@ async def test_new_chunk_keys_drop_their_cached_text():
 
 
 async def _redis_or_skip():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
@@ -547,7 +548,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
         engine.dispose()
         pytest.skip(f"local MySQL unavailable: {exc}")
     skip_unless_query_log_migrated(engine)
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("REDIS_URL", redis_url_for())
     monkeypatch.setenv("GLASSBOX_PROVIDER", "fake")
     get_session_factory.cache_clear()
     calls = {"retrieval": 0, "llm": 0}
@@ -602,7 +603,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     request_ids = []
 
     async def index_source_chunk():
-        client = redis.from_url("redis://127.0.0.1:6379/0")
+        client = redis.from_url(redis_url_for())
         try:
             await client.hset(
                 f"chunk:{chunk_id}",
@@ -635,7 +636,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     finally:
 
         async def clean_cache():
-            client = redis.from_url("redis://127.0.0.1:6379/0")
+            client = redis.from_url(redis_url_for())
             try:
                 await client.delete(
                     f"{KEY_PREFIX}about_me:{cache_uuid.hex}",

@@ -27,16 +27,17 @@ from services.glassbox.worker.main import (
     ensure_consumer_group,
     process_one_message,
 )
+from services.tests.stack_ports import TEST_MYSQL_PORT, redis_url_for
 
 
 @pytest.fixture
 def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
-    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("REDIS_URL", redis_url_for())
     engine = create_db_engine()
     try:
         with engine.connect() as connection:
@@ -128,7 +129,7 @@ async def test_search_uses_existing_index_and_converts_distance_to_similarity():
 
 @pytest.mark.asyncio
 async def test_search_isolates_model_during_partial_reingestion():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
@@ -274,7 +275,7 @@ async def test_enqueue_synthetic_jobs_flags_every_job(monkeypatch):
 @pytest.mark.asyncio
 async def test_enqueue_synthetic_jobs_real_redis_never_publishes(isolated_stream):
     """End-to-end against real local Redis: backlog grows, drains, no publish."""
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
@@ -380,7 +381,7 @@ async def test_run_worker_uses_pod_hostname_or_random_consumer(monkeypatch, host
             pass
 
     client = Client()
-    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("REDIS_URL", redis_url_for())
     if hostname is None:
         monkeypatch.delenv("HOSTNAME", raising=False)
     else:
