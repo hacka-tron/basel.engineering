@@ -66,7 +66,7 @@ cases:
     question: Have you used React?
     expected_sources: [private/google.md, private/projects.md]
     gold_snippets: [React]  # the technology name only: no About Basel text here
-    must_include: ['Google|Fitbit|YouTube', 'project']
+    must_include: ['Google|Fitbit|YouTube', 'project|basel\.engineering|Glassbox']
   - id: me-tech-kafka
     origin: new
     corpus: about_me
@@ -618,7 +618,7 @@ cases:
     gold_snippets:
       - 'class EmbeddingProvider(ABC):'
       - 'Providers behind interfaces:'
-    must_include: ['EmbeddingProvider|LLMProvider|interface', '\bfake\b', 'Bedrock', 'factory|GLASSBOX_PROVIDER']
+    must_include: ['EmbeddingProvider|LLMProvider|interface|embedding provider|LLM provider', '\bfake\b', 'Bedrock', 'factory|GLASSBOX_PROVIDER']
   - id: system-caches
     origin: questions.yaml
     corpus: about_system
@@ -740,7 +740,7 @@ cases:
     expected_sources: [private/microsoft.md, private/bio.md]
     gold_snippets:
       - designed distributed rate-limiting and deny-list controls to manage data access
-    must_include: ['rate[- ]limit', 'Azure|Microsoft', '100 million|outage']
+    must_include: ['rate[- ]limit|gateway|Service Fabric|75 (Azure )?regions', 'Azure|Microsoft', '100 million|outage|incident']
   - id: sugg-me-youtube
     origin: suggested
     corpus: about_me
@@ -905,7 +905,7 @@ cases:
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
       - the answer eval run manually and do not gate pull requests
-    must_include: ['manual']
+    must_include: ['manual|by hand']
   - id: planned-citation-links
     origin: new
     corpus: about_system

@@ -97,8 +97,10 @@ def test_approved_examples_replace_the_work_placeholders_verbatim(approved):
         "Q: Have you used Widgets? A: Yes, I used Widgets at Acme for gizmos, and in my "
         "personal project Foo for bars." in strict
     )
-    assert "Q: Have you used Widgets in production? A: No, but I used them" in strict
-    assert "<Project>" not in strict  # the work placeholders are gone...
+    # v19: the production shape is also a fixed placeholder example (fill-ups may
+    # still bring an approved one in when listed ids are missing, as here).
+    assert "Has Basel used <Tech> in production? A: No, but" in strict
+    assert "<Company>, I built <system>" not in strict  # the work placeholders are gone...
     assert "I don't have <Language> in my memory." in strict  # ...the fixed ones stay
     assert "Do you know Sprockets?" not in strict  # an unlisted few_shot: false item
     assert "Tabs or spaces?" not in strict  # casual examples stay out of the strict prompt

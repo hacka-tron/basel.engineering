@@ -628,6 +628,8 @@ _PLAYFUL_PLACEHOLDER_EXAMPLES = (
 # approved set has no example for (absent tech, a partial answer, system answers).
 _STRICT_FIXED_EXAMPLES = (
     "Q: Does Basel write <Language>? (not in the sources) A: I don't have <Language> in my memory.",
+    "Q: Has Basel used <Tech> in production? A: No, but I used it extensively in my "
+    "personal project <Project>, for <purpose>.",
     "Q: When did Basel start at <Company>? A: I don't have that in my memory, but at "
     "<Company> I built <system>.",
     "Q: How long does <cache> keep entries? A: <Cache> keeps entries for <duration>, "
