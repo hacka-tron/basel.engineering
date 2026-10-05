@@ -166,6 +166,15 @@ def test_the_checkout_is_ignored_by_git_and_only_about_me_markdown_enters_the_im
     assert dockerignore.index("corpus/about-me-private/**") < dockerignore.index(
         "!corpus/about-me-private/about-me/**/*.md"
     )
+    # Prompt v18: the approved example answers (few-shots) are the one other file.
+    exceptions = [line for line in dockerignore if line.startswith("!corpus/about-me-private/")]
+    assert exceptions == [
+        "!corpus/about-me-private/about-me/**/*.md",
+        "!corpus/about-me-private/examples/approved-answers.yaml",
+    ]
+    assert dockerignore.index("corpus/about-me-private/**") < dockerignore.index(
+        "!corpus/about-me-private/examples/approved-answers.yaml"
+    )
 
 
 def _release_steps():

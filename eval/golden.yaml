@@ -310,6 +310,19 @@ cases:
     gold_snippets:
       - 'Hobbies: surfing, skating, Teamfight Tactics, tennis, badminton, and hiking.'
     must_include: ['(surf|skat|Teamfight|TFT|tennis|badminton|hik)[\s\S]*?(?!\1)(surf|skat|Teamfight|TFT|tennis|badminton|hik)']
+  - id: me-sports
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Does Basel follow any sports?
+    expected_sources: [private/personal.md]
+    # The snippet is the label only (no About Basel fact in this public repo). The
+    # source is a short college cheer; the casual temperature once expanded it to a
+    # pro team (v18 review round 1).
+    gold_snippets:
+      - 'Sports:'
+    must_not_include: ['Milwaukee', '\bNBA\b', 'basketball']
   - id: me-complexity
     origin: new
     corpus: about_me
@@ -872,8 +885,10 @@ cases:
     category: unanswerable
     needs_owner_review: true
     question: What is Basel's salary?
-    known_failure: "BACKLOG item 2: the 2026-10-04 private corpus resync made this answerable (pay stance / favorite movie); owner to re-label"
+    known_failure: "BACKLOG item 2: the private corpus resync made this answerable (pay stance); owner to re-label. The approved-answer overlay (rec-adv-salary, rec-logistics-rate) measures it meanwhile"
     expect_abstain: true
+    # Never a number, whatever the label (v17 review backlog).
+    must_not_include: ['\$\s?\d']
   - id: unans-me-phone
     origin: new
     corpus: about_me
@@ -911,8 +926,10 @@ cases:
     category: unanswerable
     needs_owner_review: true
     question: What's Basel's salary expectation?
-    known_failure: "BACKLOG item 2: the 2026-10-04 private corpus resync made this answerable (pay stance / favorite movie); owner to re-label"
+    known_failure: "BACKLOG item 2: the private corpus resync made this answerable (pay stance); owner to re-label. The approved-answer overlay (rec-adv-salary, rec-logistics-rate) measures it meanwhile"
     expect_abstain: true
+    # Never a number, whatever the label (v17 review backlog).
+    must_not_include: ['\$\s?\d']
   - id: unans-sys-capital
     origin: new
     corpus: about_system

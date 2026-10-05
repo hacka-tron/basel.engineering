@@ -254,7 +254,10 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     expect_abstain = bool(case.get("expect_abstain", False))
 
     failures = []
-    if category in ANSWERABLE_CATEGORIES and is_abstain:
+    # `abstain_ok` (approved-answer overlay only, eval/approved.py): the approved
+    # answer is a denial ("No, X isn't one of my languages"), and the owner rule's
+    # memory phrasing ("I don't have X in my memory") is accepted too.
+    if category in ANSWERABLE_CATEGORIES and is_abstain and not case.get("abstain_ok"):
         failures.append("false_abstain")
     if expect_abstain and not is_abstain:
         failures.append("did_not_abstain")

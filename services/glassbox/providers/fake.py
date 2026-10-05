@@ -40,7 +40,12 @@ class FakeLLMProvider(LLMProvider):
     model_id = "fake-llm-v1"
 
     async def generate(
-        self, prompt: str, *, max_tokens: int, system: str | None = None
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        system: str | None = None,
+        temperature: float | None = None,
     ) -> AsyncIterator[str]:
         if prompt.rstrip().endswith(REWRITE_PROMPT_SUFFIX):
             # Follow-up rewrite: an identity rewrite keeps local retrieval and the

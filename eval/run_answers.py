@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from eval.approved import load_approved_cases
 from eval.graders import ANSWERABLE_CATEGORIES, CATEGORIES, grade_case
 from eval.judge import Judge, get_judge_llm, source_dicts
 from eval.schema import load_golden
@@ -32,8 +33,10 @@ from services.glassbox.api.ask import (
     _prompt,
     _rewrite_prompt,
     _token_counts,
+    answer_route,
     answer_system,
     bounded_history,
+    route_temperature,
 )
 from services.glassbox.cache.embedding import normalize_question
 from services.glassbox.providers.base import (
@@ -127,6 +130,10 @@ async def run_case(
         "category": case["category"],
         "corpus": case["corpus"],
         "holdout": bool(case.get("holdout", False)),
+        "few_shot": bool(case.get("few_shot", False)),
+        # Prompt v18: owner-approved example cases (eval/approved.py) are summarized
+        # apart from the golden set.
+        "origin": case.get("origin"),
         "known_failure": case.get("known_failure"),
         "question": case["question"],
         "history_turns": len(case.get("history", [])),
@@ -167,18 +174,24 @@ async def run_case(
             chunks = await retrieve(vector, retrieval_query, case["corpus"], embedder.model_id)
         usage: dict = {}
         first_token_ms = None
+        route = answer_route(chunks, case["corpus"], case["question"])
+        row["route"] = route
         if not chunks:
             # Same as the API: no sources means the canonical abstention, no LLM call.
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
-            prompt = _prompt(case["question"], chunks, history)
+            prompt = _prompt(case["question"], chunks, history, route)
             system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
             llm_started = time.monotonic()
             try:
                 async for part in llm.generate(
-                    prompt, max_tokens=_ANSWER_MAX_TOKENS, **system_kwargs, **usage_kwargs
+                    prompt,
+                    max_tokens=_ANSWER_MAX_TOKENS,
+                    **system_kwargs,
+                    **usage_kwargs,
+                    **route_temperature(route),
                 ):
                     if first_token_ms is None:
                         first_token_ms = round((time.monotonic() - llm_started) * 1000)
@@ -375,10 +388,26 @@ def summarize(rows: list[dict]) -> dict:
     # reported on their own and kept out of every rate, so a gate is not blocked
     # by an expected failure and a fix shows up as a change in this list.
     known = [row for row in rows if row.get("known_failure")]
+    # The approved-answer overlay (prompt v18) is reported on its own, so `overall`
+    # stays comparable with golden-set runs from before it existed.
+    approved = [row for row in rows if row.get("origin") == "approved"]
+    approved_scored = [row for row in approved if not row.get("known_failure")]
+    rows = [row for row in rows if row.get("origin") != "approved"]
     scored = [row for row in rows if not row.get("known_failure")]
     categories = sorted({row["category"] for row in scored})
+    routes: dict[str, int] = {}
+    for row in [*rows, *approved]:
+        if row.get("route"):
+            routes[row["route"]] = routes.get(row["route"], 0) + 1
     return {
         "overall": metrics(scored),
+        "routes": routes,
+        "approved_overlay": {
+            **metrics(approved_scored),
+            "few_shot": metrics([row for row in approved_scored if row.get("few_shot")]),
+            "not_few_shot": metrics([row for row in approved_scored if not row.get("few_shot")]),
+            "failed": sorted(row["id"] for row in approved_scored if not row["passed"]),
+        },
         "holdout": metrics([row for row in scored if row["holdout"]]),
         "by_category": {
             category: metrics([row for row in scored if row["category"] == category])
@@ -566,6 +595,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out", type=Path, help="JSONL output path (default eval/runs/)")
     parser.add_argument(
+        "--no-approved",
+        action="store_true",
+        help="skip the owner-approved example overlay (eval/approved.py; only present "
+        "with a local private checkout)",
+    )
+    parser.add_argument(
         "--replay",
         type=Path,
         help="reuse the rewrites and retrieved chunks of an earlier run (JSONL with sources): "
@@ -573,8 +608,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     check_paid_allowed(args.paid)
+    cases = load_golden() + ([] if args.no_approved else load_approved_cases())
     cases = select_cases(
-        load_golden(),
+        cases,
         ids=args.cases.split(",") if args.cases else None,
         categories=args.category.split(",") if args.category else None,
         max_cases=args.max_cases,

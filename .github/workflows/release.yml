@@ -69,7 +69,8 @@ jobs:
       # corpus/about-me copies were deleted on 2026-10-02). Nothing
       # here prints file names or contents (no ls/cat/debug steps; the build log
       # shows only Dockerfile steps). corpus/about-me-private/ is in .gitignore,
-      # and .dockerignore lets only its about-me/**/*.md into the image.
+      # and .dockerignore lets only its about-me/**/*.md and
+      # examples/approved-answers.yaml (prompt v18 few-shots) into the image.
       - name: Private About Basel repo configured?
         id: about_me
         env:

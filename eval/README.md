@@ -76,6 +76,8 @@ It writes one JSON line per case (question, rewrite, retrieved chunk ids and pat
 GLASSBOX_PROVIDER=bedrock GLASSBOX_EVAL_ALLOW_PAID=1 python -m eval.run_answers --paid
 ```
 
+**Approved-answer overlay (prompt v18).** With a local private checkout, `run_answers` also loads the owner-approved example answers (`corpus/about-me-private/examples/approved-answers.yaml`, `eval/approved.py`) as extra About Basel cases with their `golden` checks; `--no-approved` skips them, and without the checkout there are none. An approved answer that is an abstention makes an `unanswerable` case, any other a `fact` case. Each case is first graded against its own approved answer: if that fails (a check written before a sign-off round changed the answer), the case gets `known_failure` until the check is fixed in the private repo. The summary reports the overlay under `approved_overlay` (split into `few_shot` and `not_few_shot`, since few-shot answers are in the prompt), apart from `overall`, plus the `routes` count (strict or casual, prompt v18).
+
 The graders' known limitations (first-sentence planned/live check, verbatim-only leak detection) are listed in their docstrings in `graders.py`.
 
 ## LLM judges and calibration (RAG quality plan phase 4)
