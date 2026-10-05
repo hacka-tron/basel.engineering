@@ -18,6 +18,7 @@ from services.glassbox.api.ask import (
     answer_route,
     playful_question,
 )
+from services.glassbox.privacy import PUBLIC_CONTACT_EMAIL
 from services.glassbox.providers.base import ABSTENTION_ANSWER
 from services.tests.test_answer_cacheability import (  # noqa: F401 (fixture)
     _ask_twice,
@@ -248,8 +249,8 @@ def test_overlay_maps_playful_items():
     assert approved_case(item)["category"] == "playful"
 
 
-def test_prompt_version_is_v19():
-    assert ask._PROMPT_VERSION == "v20"
+def test_prompt_version_is_current():
+    assert ask._PROMPT_VERSION == "v21"
 
 
 def test_about_this_system_answers_may_use_three_sentences():
@@ -351,7 +352,7 @@ def test_the_real_me_example_joins_only_questions_asking_whether_it_is_me(questi
     assert ("Q: Am I really talking to <Name>?" in strict) is included
     if included:
         # Not a production question: the real-me example is the last one.
-        assert strict.rstrip().endswith("is at <email>.")
+        assert strict.rstrip().endswith(f"is at {PUBLIC_CONTACT_EMAIL}.")
 
 
 @pytest.mark.parametrize(
