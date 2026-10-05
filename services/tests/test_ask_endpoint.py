@@ -15,6 +15,7 @@ from services.glassbox.api.main import app
 from services.glassbox.db.models import Chunk, Document, Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.worker.main import STREAM_NAME
+from services.tests.stack_ports import redis_url_for
 
 LEAKY_WORKER_MESSAGE = (
     "(pymysql.err.OperationalError) (2003, \"Can't connect to MySQL server on "
@@ -541,7 +542,7 @@ def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
     # The long-lived local worker consumes DB 0. Keep this simulated-worker
     # test's real enqueue on a separate Stream so it cannot steal the job.
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/15")
+    monkeypatch.setenv("REDIS_URL", redis_url_for(15))
     get_session_factory.cache_clear()
     engine = create_db_engine()
     try:
@@ -553,7 +554,7 @@ def integration_stack(monkeypatch):
     skip_unless_query_log_migrated(engine)
 
     async def check_redis():
-        client = redis.from_url("redis://127.0.0.1:6379/15")
+        client = redis.from_url(redis_url_for(15))
         try:
             await client.ping()
         finally:
@@ -669,7 +670,7 @@ def test_full_stream_and_query_row_with_simulated_worker(integration_stack, monk
         if enqueued:
 
             async def remove_job():
-                client = redis.from_url("redis://127.0.0.1:6379/15")
+                client = redis.from_url(redis_url_for(15))
                 try:
                     assert await client.xdel(STREAM_NAME, enqueued["message_id"]) == 1
                 finally:

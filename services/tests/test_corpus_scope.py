@@ -26,6 +26,7 @@ from services.glassbox.ingest.scanner import (
 )
 from services.glassbox.ingest.sweep import ScopedDocument, plan_sweep
 from services.glassbox.retrieval.search import knn_query, search_chunks
+from services.tests.stack_ports import redis_url_for
 
 VECTOR = [1.0] + [0.0] * 511
 
@@ -235,7 +236,7 @@ async def test_ensure_index_ft_alter_on_real_redis_adds_kind_and_filter_works(mo
 
     Uses its own index name and key prefix, so the shared ``idx:chunks`` is untouched.
     """
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
