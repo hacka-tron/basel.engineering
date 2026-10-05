@@ -4,11 +4,12 @@ import pytest
 import redis.asyncio as redis
 
 from services.glassbox.killswitch import RedisKillSwitch
+from services.tests.stack_ports import redis_url_for
 
 
 @pytest.mark.asyncio
 async def test_llm_disabled_reads_opt_in_flag():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
