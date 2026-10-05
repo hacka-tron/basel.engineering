@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.glassbox.api.main import app
+from services.tests.stack_ports import redis_url_for
 
 
 class FakeRedis:
@@ -86,7 +87,7 @@ def test_real_redis_lock_blocks_concurrent_requests():
     import redis.asyncio as redis
 
     async def scenario():
-        client = redis.from_url("redis://127.0.0.1:6379/0")
+        client = redis.from_url(redis_url_for())
         try:
             await client.ping()
         except Exception as exc:

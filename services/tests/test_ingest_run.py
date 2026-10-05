@@ -24,6 +24,7 @@ from services.glassbox.ingest.scanner import (
     strip_front_matter,
 )
 from services.glassbox.providers.fake import FakeEmbeddingProvider
+from services.tests.stack_ports import TEST_MYSQL_PORT, redis_url_for
 
 
 def _disk(root, source_path):
@@ -211,13 +212,13 @@ def test_release_workflow_rebuilds_on_every_path_copied_into_the_image():
 @pytest.fixture
 def integration_stack(monkeypatch):
     monkeypatch.setenv("MYSQL_HOST", "127.0.0.1")
-    monkeypatch.setenv("MYSQL_PORT", "3306")
+    monkeypatch.setenv("MYSQL_PORT", TEST_MYSQL_PORT)
     monkeypatch.setenv("MYSQL_USER", "glassbox")
     monkeypatch.setenv("MYSQL_PASSWORD", "glassbox")
     monkeypatch.setenv("MYSQL_DATABASE", "glassbox")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("REDIS_URL", redis_url_for())
     engine = create_db_engine()
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         with engine.connect() as connection:
             connection.exec_driver_sql("SELECT 1")
@@ -799,7 +800,7 @@ async def test_model_tag_backfill_sets_fields_only_on_existing_chunk_hashes():
     from services.glassbox.cache.answer import _model_tag
     from services.glassbox.ingest.redis_index import backfill_model_tags
 
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:

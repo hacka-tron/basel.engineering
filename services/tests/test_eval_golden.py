@@ -15,6 +15,7 @@ from eval.schema import GOLDEN_PATH, GoldenError, load_golden, snippet_in, valid
 from services.glassbox.api.ask import WorkerChunk
 from services.glassbox.providers.base import ABSTENTION_ANSWER
 from services.glassbox.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from services.tests.stack_ports import redis_url_for
 
 
 def _disk(root, source_path):
@@ -385,7 +386,7 @@ async def test_run_answers_end_to_end_against_mysql_and_redis(tmp_path, monkeypa
         "MYSQL_DATABASE": "glassbox",
     }.items():
         monkeypatch.setenv(key, os.environ.get(key, value))
-    redis_url = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
+    redis_url = os.environ.get("REDIS_URL", redis_url_for())
     engine = create_db_engine()
     client = redis.from_url(redis_url)
     try:
