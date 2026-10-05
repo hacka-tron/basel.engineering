@@ -496,6 +496,57 @@ data "aws_iam_policy_document" "ci" {
     }
   }
 
+  # ---- Monthly budget and the Bedrock answer stop (infra/modules/compute
+  # budget.tf). Budgets is a global service with no region in its ARNs. ----
+
+  # The glassbox-monthly-cost budget, its alert notifications and tags.
+  # ModifyBudget covers create, update and delete of the budget, its
+  # notifications and their subscribers; ViewBudget covers the describes.
+  statement {
+    sid    = "ManageProjectBudgets"
+    effect = "Allow"
+    actions = [
+      "budgets:ListTagsForResource",
+      "budgets:ModifyBudget",
+      "budgets:TagResource",
+      "budgets:UntagResource",
+      "budgets:ViewBudget",
+    ]
+    resources = ["arn:aws:budgets::${var.aws_account_id}:budget/glassbox-*"]
+  }
+
+  # The budget action that attaches the answer-model deny policy. No
+  # ExecuteBudgetAction: CI never runs or reverses the action itself.
+  statement {
+    sid    = "ManageProjectBudgetActions"
+    effect = "Allow"
+    actions = [
+      "budgets:CreateBudgetAction",
+      "budgets:DeleteBudgetAction",
+      "budgets:DescribeBudgetAction",
+      "budgets:ListTagsForResource",
+      "budgets:TagResource",
+      "budgets:UntagResource",
+      "budgets:UpdateBudgetAction",
+    ]
+    resources = ["arn:aws:budgets::${var.aws_account_id}:budget/glassbox-*/action/*"]
+  }
+
+  # CreateBudgetAction passes the role Budgets assumes to run the action. Only
+  # that role, and only to Budgets.
+  statement {
+    sid       = "PassBudgetActionRole"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${var.aws_account_id}:role/glassbox-budget-action"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["budgets.amazonaws.com"]
+    }
+  }
+
   statement {
     sid       = "ListStateBucket"
     effect    = "Allow"
@@ -706,6 +757,22 @@ data "aws_iam_policy_document" "plan" {
     effect    = "Allow"
     actions   = ["sns:Get*", "sns:List*"]
     resources = ["arn:aws:sns:${var.aws_region}:${var.aws_account_id}:glassbox-*"]
+  }
+
+  # Refresh of the monthly budget, its notifications and the budget action
+  # (infra/modules/compute/budget.tf). IAM reads are covered by ReadProjectIam.
+  statement {
+    sid    = "ReadProjectBudgets"
+    effect = "Allow"
+    actions = [
+      "budgets:DescribeBudgetAction",
+      "budgets:ListTagsForResource",
+      "budgets:ViewBudget",
+    ]
+    resources = [
+      "arn:aws:budgets::${var.aws_account_id}:budget/glassbox-*",
+      "arn:aws:budgets::${var.aws_account_id}:budget/glassbox-*/action/*",
+    ]
   }
 
   statement {

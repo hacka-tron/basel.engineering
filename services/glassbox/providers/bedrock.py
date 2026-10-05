@@ -7,13 +7,19 @@ from collections.abc import AsyncIterator
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from services.glassbox.providers.base import (
     GROUNDING_RULES,
     ContentFilteredError,
     EmbeddingProvider,
+    LLMAccessDeniedError,
     LLMProvider,
 )
+
+# What Bedrock Runtime returns when IAM denies the call, for example once the AWS
+# budget action has attached the answer-model deny policy (budget.tf).
+_ACCESS_DENIED_CODES = {"AccessDeniedException"}
 
 DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 DEFAULT_LLM_MODEL = "us.amazon.nova-lite-v1:0"
@@ -146,6 +152,13 @@ class BedrockLLMProvider(LLMProvider):
             response = await asyncio.shield(opening)
         except asyncio.CancelledError:
             opening.add_done_callback(_close_orphaned_response)
+            raise
+        except ClientError as exc:
+            # IAM refuses before any output: a typed error the API turns into its
+            # retrieval-only answer. Other errors (throttling, validation) stay as
+            # they are.
+            if exc.response.get("Error", {}).get("Code") in _ACCESS_DENIED_CODES:
+                raise LLMAccessDeniedError(f"Bedrock access denied for {self.model_id}") from exc
             raise
         stream = response["stream"]
         iterator = iter(stream)

@@ -91,9 +91,10 @@ LIVE_UNITS = [
     ("docs/DESIGN.md", "- On every pull request and push to `main` (`ci.yml`"),
     ("docs/DESIGN.md", "**Operations runbooks.** Node operations are push-button too"),
     ("docs/DESIGN.md", "- **Logs:** plain-text application logs"),
-    ("docs/DESIGN.md", "- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms"),
+    ("docs/DESIGN.md", "- **Alerts:** AWS Budgets (cost; Terraform-managed"),
     ("docs/DESIGN.md", "- **Backups:** daily snapshots of the node's root volume"),
-    ("docs/DESIGN.md", "- AWS Budgets: `Glassbox-Monthly`"),
+    ("docs/DESIGN.md", "- AWS Budgets (`infra/modules/compute/budget.tf`"),
+    ("docs/DESIGN.md", "- **Automatic Bedrock answer stop:**"),
     ("docs/DESIGN.md", "Phases 0 to 6 are done and live."),
     ("docs/DESIGN.md", "Built: the answer is plain prose without citation markers"),
     (

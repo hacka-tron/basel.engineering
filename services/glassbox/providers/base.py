@@ -22,6 +22,17 @@ class ContentFilteredError(RuntimeError):
     """
 
 
+class LLMAccessDeniedError(RuntimeError):
+    """The model provider refused the call for lack of permission.
+
+    In production this is the AWS budget stop (infra/modules/compute/budget.tf):
+    when the Bedrock budget is spent AWS Budgets attaches a deny policy for the
+    answer models to the node's role, and Bedrock answers AccessDeniedException. Nothing
+    was generated or billed, so the API degrades to its retrieval-only answer
+    (sources, the playful budget line) instead of an error, and caches nothing.
+    """
+
+
 # Default system prompt for grounded answers.
 GROUNDING_RULES = (
     "Answer only from the numbered sources in the user message, but do not include bracketed "
