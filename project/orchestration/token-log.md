@@ -1,0 +1,14 @@
+# Token log: expensive loops and what we did about them
+
+Record anything that cost a lot of tokens (or paid model spend), with the fix. Check this before starting similar work, and add a line when a subagent's completion notice shows a high count or a loop repeats.
+
+| Date | Workflow | Cost seen | Fix |
+|---|---|---|---|
+| 2026-10-02 | An agent polling long jobs (crawls, timing runs) | ~500k tokens, mostly waiting | Never poll: run detached with one completion signal; end the turn and wait for the notification. |
+| 2026-10-03 | Deep-dive refresh: an agent re-deriving RAG context by exploring | ~210k for one refresh | `orchestration/rag-plan-brief.md` (decisions, environment, rules, Gotchas). Every RAG dispatch points at it first. |
+| 2026-10-03 | Prompt iterations on Nova Lite (v15, v16): full golden runs to test single wording changes | many full runs; ±3 passes of noise per run | Smoke-test wording with `run_answers --cases` (under $0.002 each); test length rules on `me-current-role` and `system-budget` x3 first; re-grade old runs with `grade_case` instead of re-running. Write a prompt-version playbook after v17 lands (open). |
+| 2026-10-03 | Full Titan ingest | ~45 minutes wall time | Run it in the background; reuse an already-ingested index for same-index comparisons. |
+| 2026-10-04 | Model and pricing research (feasibility review, the Bedrock model landscape) | ~90k and ~97k per research agent | Results are recorded with dates and sources in `BACKLOG.md` RESUME HERE item 4. Reuse them; refresh only when a decision depends on prices or models newer than those dates. |
+| 2026-10-04 | Process-doc PRs: each `gh pr checks --watch` started before CI registered | extra wait-and-retry calls | Wait on the run itself (`gh run list --branch <b>` then `gh run watch <id> --exit-status`), then merge. |
+| 2026-10-04 | Local `.venv` wiped repeatedly: a self-pointing `.venv` symlink was committed in the v16 merge (`.gitignore` had `.venv/`, which doesn't match a symlink), and pre-commit's stash/restore of the unstaged "deleted" entry recreated it over the real venv | several failed commits and two venv rebuilds | Untracked it and changed the ignore rule to `.venv` (#174). If the venv vanishes again, check `git ls-files -s .venv`. Rebuild: `python3.12 -m venv .venv && .venv/bin/pip install -r services/requirements-dev.txt pre-commit virtualenv`. |
+| 2026-10-04 | Reading the private About Basel corpus | 6 files, ~30 KB | Fetch once per session into the scratchpad (`gh api repos/hacka-tron/basel.engineering-docs/contents/about-me/<f>.md -H "Accept: application/vnd.github.raw"`) and point agents at the copy. Never commit it to this public repo. |
