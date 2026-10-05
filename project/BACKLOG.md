@@ -245,3 +245,5 @@ Documented as known limitations directly in code (docstrings) — not yet fixed,
 - AWS account: Free vs. Paid plan (owner to-do, see RESUME HERE; production runs on the current plan). Free plan auto-closes the account after 6 months or when credits run out.
 - Cloudflare origin protection: Worker-injected secret header vs. IP-range-only — IP-range-only is the current plan; revisit only if abuse becomes a concern.
 - Project name: "Glassbox" is a placeholder (DD1 §19).
+- **Owner to-do, early January 2027:** buy a 1-year no-upfront Savings Plan/RI for the t4g.small (the EC2 trial ends 2026-12-31; about 30–40% off the ~$12/month instance). Delete the hand-made `Glassbox-Monthly` budget after the budget apply (`infra/CI.md` "Budget stop").
+- Follow-up (budget stop): an "Ops · ..." button to reverse the Bedrock stop, if ever wanted (needs `budgets:ExecuteBudgetAction` and PassRole on the ops role); after the first GPT-6 Luna charge, confirm it bills with billing entity "AWS Marketplace" so `glassbox-bedrock-answers` counts it.
