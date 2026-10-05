@@ -126,6 +126,15 @@ check "mysql output redacted" $?
 ! grep -qF UNEXPECTED <<<"$out"
 check "every redis command answered" $?
 
+# The shipped path: main runs budget_section in `bash -c` with only the
+# functions in BUDGET_FUNCTIONS, so a helper missing from that list breaks it.
+export calls KILL_EXISTS KILL_VALUE CONFIGMAP_OK
+sub=$(bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" 2>&1)
+! grep -qF 'command not found' <<<"$sub"
+check "subshell: every helper is available (no command not found)" $?
+grep -qF 'by mode/cache: full miss = 31' <<<"$sub" && grep -qF 'generated answers (full, miss): 31' <<<"$sub"
+check "subshell: query-log counts still printed" $?
+
 # Read-only: no Secret reads, and Redis only gets GET/TTL/EXISTS/HGET/SCAN.
 ! grep -qiE 'secret' "$calls"
 check "no Secret read" $?
@@ -248,9 +257,9 @@ out=$(sqlout)
 printf '%s\n' "$out" | sed 's/^/     | /'
 grep -qF 'last ingest run #2: succeeded, started 90 min ago, docs changed 4, chunks written 37, sweep mode apply, corpora in sweep 2' <<<"$out"
 check "sql: latest ingest run summary (not the older run)" $?
-grep -qF '    sweep about_me: known 20, planned 2, deleted 2, not refused' <<<"$out"
+grep -qF '    sweep about_me (model m): known 20, planned 2, deleted 2, not refused' <<<"$out"
 check "sql: per-corpus sweep counts" $?
-grep -qF '    sweep portfolio: known 9, planned 7, deleted 0, REFUSED (reason in ingestion_runs.notes)' <<<"$out"
+grep -qF '    sweep portfolio (model m): known 9, planned 7, deleted 0, REFUSED (reason in ingestion_runs.notes)' <<<"$out"
 check "sql: refusal flagged without printing its text" $?
 ! grep -qE 'ABCDEFGH|would delete|SECRET QUESTION' <<<"$out"
 check "sql: no refusal or question text printed" $?
@@ -262,6 +271,12 @@ check "sql: ttft nearest-rank p50/p95, misses (NULL and 2-day-old rows ignored)"
 out=$( { query_log_sql; echo "INSERT INTO queries (cache_status) VALUES ('miss');"; } | docker exec -i "$cid" mysql -uroot -prootpw --force -N -B glassbox 2>&1 || true)
 grep -qiE 'read.only' <<<"$out"
 check "sql: session is read-only (an INSERT after it is refused)" $?
+
+export cid
+export -f kc
+sub=$(bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" 2>&1)
+grep -qF 'last ingest run #2:' <<<"$sub" && grep -qF 'ttft last 24h, cache_status miss: n 10' <<<"$sub" && grep -qF 'asks: ' <<<"$sub"
+check "subshell (as main runs it): ingest, ttft and query-log lines appear" $?
 
 # Degrade: no ingestion runs and no ttft values.
 sqlroot <<'SQL'

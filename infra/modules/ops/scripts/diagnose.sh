@@ -180,9 +180,9 @@ SELECT CONCAT('  most repeated question #', ROW_NUMBER() OVER (ORDER BY COUNT(*)
 SELECT '  last ingest run: none recorded' FROM (SELECT 1) d WHERE NOT EXISTS (SELECT 1 FROM ingestion_runs);
 SELECT CONCAT('  last ingest run #', id, ': ', status, ', started ', TIMESTAMPDIFF(MINUTE, started_at, NOW()), ' min ago, docs changed ', COALESCE(docs_changed, 0), ', chunks written ', COALESCE(chunks_written, 0), ', sweep mode ', CASE WHEN JSON_EXTRACT(notes, '$.sweep.mode') IS NULL THEN 'none' WHEN JSON_UNQUOTE(JSON_EXTRACT(notes, '$.sweep.mode')) REGEXP '^[a-z_]{1,12}$' THEN JSON_UNQUOTE(JSON_EXTRACT(notes, '$.sweep.mode')) ELSE '?' END, ', corpora in sweep ', COALESCE(JSON_LENGTH(JSON_EXTRACT(notes, '$.sweep.corpora')), 0))
   FROM ingestion_runs ORDER BY id DESC LIMIT 1;
-SELECT CONCAT('    sweep ', CASE WHEN jt.corpus REGEXP '^[a-z_]{1,20}$' THEN jt.corpus ELSE '?' END, ': known ', COALESCE(jt.known, '?'), ', planned ', COALESCE(jt.planned, '?'), ', deleted ', COALESCE(jt.deleted, '?'), ', ', CASE WHEN jt.refused IS NULL OR JSON_TYPE(jt.refused) = 'NULL' THEN 'not refused' ELSE 'REFUSED (reason in ingestion_runs.notes)' END)
+SELECT CONCAT('    sweep ', CASE WHEN jt.corpus REGEXP '^[a-z_]{1,20}$' THEN jt.corpus ELSE '?' END, ' (model ', CASE WHEN jt.model REGEXP '^[A-Za-z0-9_.:/-]{1,60}$' THEN jt.model ELSE '?' END, '): known ', COALESCE(jt.known, '?'), ', planned ', COALESCE(jt.planned, '?'), ', deleted ', COALESCE(jt.deleted, '?'), ', ', CASE WHEN jt.refused IS NULL OR JSON_TYPE(jt.refused) = 'NULL' THEN 'not refused' ELSE 'REFUSED (reason in ingestion_runs.notes)' END)
   FROM (SELECT notes FROM ingestion_runs ORDER BY id DESC LIMIT 1) r,
-  JSON_TABLE(r.notes, '$.sweep.corpora[*]' COLUMNS (corpus VARCHAR(40) PATH '$.corpus', known INT PATH '$.known', planned INT PATH '$.planned', deleted INT PATH '$.deleted', refused JSON PATH '$.refused')) jt;
+  JSON_TABLE(r.notes, '$.sweep.corpora[*]' COLUMNS (corpus VARCHAR(40) PATH '$.corpus', model VARCHAR(80) PATH '$.model', known INT PATH '$.known', planned INT PATH '$.planned', deleted INT PATH '$.deleted', refused JSON PATH '$.refused')) jt;
 SELECT '  ttft last 24h: no asks with a ttft_ms' FROM (SELECT 1) d
   WHERE NOT EXISTS (SELECT 1 FROM queries WHERE created_at >= NOW() - INTERVAL 1 DAY AND ttft_ms IS NOT NULL);
 SELECT CONCAT('  ttft last 24h, cache_status ', cache_status, ': n ', MAX(n), ', p50 ', MAX(IF(rn = CEIL(n * 0.50), ttft_ms, NULL)), ' ms, p95 ', MAX(IF(rn = CEIL(n * 0.95), ttft_ms, NULL)), ' ms')
@@ -206,6 +206,10 @@ csp_section() {
   sed -nE 's/.*csp-report-only violation directive=([a-z-]+) blocked=([A-Za-z0-9:./-]+) path=.*/\1 \2/p' <<<"$csp_log" |
     sort | uniq -c | sort -rn | head -15 | redact 160 || true
 }
+
+# Every function budget_section needs; main copies them into the bash -c
+# subshell, and the test runs that exact command.
+BUDGET_FUNCTIONS="kc redact as_int redis_read query_log_sql budget_section"
 
 main() {
   exec </dev/null 2>&1
@@ -300,7 +304,7 @@ main() {
   # Last, and bounded as a whole, so a slow Redis or MySQL exec can't push
   # the node sections above past the document's 300 s limit.
   section "LLM budget, kill switch, warm-up cap, query log, last ingest run, TTFT (counts only)"
-  timeout --kill-after=5 60 bash -c "$(declare -f kc redact as_int redis_read budget_section); budget_section" ||
+  timeout --kill-after=5 60 bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" ||
     echo "(budget section did not finish within 60s)"
 
   section "end of diagnose"
