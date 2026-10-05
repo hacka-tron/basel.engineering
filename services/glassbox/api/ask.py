@@ -681,7 +681,9 @@ def _example_lines(route: str, playful: bool = False) -> str:
         # side for a personal project on "Any React experience?"; first, both are
         # fixed (3 of 3 smoke runs each).
         absent, *rest = _STRICT_FIXED_EXAMPLES
-        lines = [absent, _PRODUCTION_EXAMPLE, *approved, *rest]
+        # The production example goes last, nearest the question (owner sign-off
+        # round 3: placed first it lost the "No" on the live retrieval, 0/3).
+        lines = [absent, *approved, *rest, _PRODUCTION_EXAMPLE]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 
