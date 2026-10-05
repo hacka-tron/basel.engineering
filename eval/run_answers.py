@@ -45,10 +45,8 @@ from services.glassbox.providers.base import (
 
 HERE = Path(__file__).resolve().parent
 RUNS_DIR = HERE / "runs"
-# Matches the retrieval worker (services/glassbox/worker/main.py, top_k=8).
-RETRIEVAL_TOP_K = 8
-
-Retriever = Callable[[list[float], str, str], Awaitable[list[WorkerChunk]]]
+# (vector, retrieval query, corpus, embedding model) -> chunks, as the worker retrieves.
+Retriever = Callable[[list[float], str, str, str], Awaitable[list[WorkerChunk]]]
 
 
 class PaidRunRefused(SystemExit):
@@ -94,12 +92,15 @@ def select_cases(
 
 
 def stack_retriever(redis_client, session_factory) -> Retriever:
-    """Retrieval over the real Redis index and MySQL chunk table, as the worker does."""
-    from services.glassbox.retrieval.search import search_chunks
+    """Retrieval over the real Redis index and MySQL chunk table, as the worker does
+    (hybrid search with the production settings, ``retrieval.search.RETRIEVAL_CONFIGS``)."""
+    from services.glassbox.retrieval.search import hybrid_search
     from services.glassbox.worker.main import _load_chunks
 
-    async def retrieve(vector: list[float], corpus: str, model_id: str) -> list[WorkerChunk]:
-        matches = await search_chunks(redis_client, vector, corpus, model_id, top_k=RETRIEVAL_TOP_K)
+    async def retrieve(
+        vector: list[float], query: str, corpus: str, model_id: str
+    ) -> list[WorkerChunk]:
+        matches = await hybrid_search(redis_client, vector, query, corpus, model_id)
         rows = await asyncio.to_thread(_load_chunks, session_factory, matches)
         return [WorkerChunk.model_validate(row) for row in rows]
 
@@ -163,7 +164,7 @@ async def run_case(
             row["replayed_from"] = replay.get("prompt_version")
         else:
             vector = (await embedder.embed([normalize_question(retrieval_query)]))[0]
-            chunks = await retrieve(vector, case["corpus"], embedder.model_id)
+            chunks = await retrieve(vector, retrieval_query, case["corpus"], embedder.model_id)
         usage: dict = {}
         first_token_ms = None
         if not chunks:

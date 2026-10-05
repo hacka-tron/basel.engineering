@@ -117,7 +117,7 @@ def test_schema_rejects_duplicate_ids_and_unreviewed_about_basel(tmp_path):
 
 
 def _stub_retriever(calls: list):
-    async def retrieve(vector, corpus, model_id):
+    async def retrieve(vector, query, corpus, model_id):
         calls.append((corpus, model_id, len(vector)))
         if corpus == "about_me":
             return []  # exercises the no-sources abstention path
@@ -188,7 +188,7 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
 
 
 def test_a_failing_case_is_recorded_and_the_run_continues():
-    async def broken(vector, corpus, model_id):
+    async def broken(vector, query, corpus, model_id):
         raise RuntimeError("redis down")
 
     cases = load_golden()[:2]
@@ -414,7 +414,7 @@ async def test_run_answers_end_to_end_against_mysql_and_redis(tmp_path, monkeypa
         assert len(rows) == len(cases)
         assert all(row["error"] is None for row in rows), [row["error"] for row in rows]
         assert all(row["retrieved"] for row in rows)
-        assert all(len(row["retrieved"]) <= run_answers.RETRIEVAL_TOP_K for row in rows)
+        assert all(len(row["retrieved"]) <= 8 for row in rows)
     finally:
         with engine.begin() as connection:
             chunk_ids = list(
