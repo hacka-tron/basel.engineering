@@ -362,7 +362,7 @@ async def test_about_basel_tech_question_gets_a_professional_and_a_project_slot(
         client, EMBEDDING, "Have you used Redis?", "about_me", "m", legs=legs
     )
     ids = [entry["chunk_id"] for entry in chosen]
-    assert ids[:2] == [7, 8]  # professional slot, then personal project
+    assert ids[-2:] == [7, 8]  # professional slot, then personal project, nearest the question
     assert len(ids) == RETRIEVAL_CONFIGS["about_me"].top_k
     assert legs["tech_terms"] == ["redis"] and legs["slots"] == [7, 8]
 

@@ -10,7 +10,7 @@ Their ranked lists are fused with reciprocal rank fusion (RRF), then a
 per-document cap and the final size are applied. For About Basel technology
 questions ("have you used Redis?") one slot goes to the best professional chunk
 that names the technology and one to the best personal-project chunk that does
-(:func:`select_chunks`), so an answer can name both sides when the data has both.
+(:func:`dual_experience_slots`), so an answer can name both sides when the data has both.
 """
 
 import logging
@@ -476,11 +476,13 @@ async def hybrid_search(
         per_document_cap=config.per_document_cap,
         slot_ids=[*slots, *anchors],
     )
-    # Dual-experience slots lead; everything else (anchors included) is in fused order.
+    # Fused order, with the dual-experience slots last: the prompt puts sources just
+    # before the question, and with a work slot first Nova Lite attributed a work-only
+    # technology to the personal project in 7 of 13 tries (0 of 6 with slots last).
     rank = {entry["chunk_id"]: index for index, entry in enumerate(fused)}
-    selected = [e for e in selected if e["chunk_id"] in slots] + sorted(
+    selected = sorted(
         (e for e in selected if e["chunk_id"] not in slots), key=lambda e: rank[e["chunk_id"]]
-    )
+    ) + [e for e in selected if e["chunk_id"] in slots]
     await _fill_scores(redis_client, selected, embedding)
     if legs is not None:
         legs.update(vector=vector_leg, lexical=lexical_leg, tech_terms=tech_terms, slots=slots)
