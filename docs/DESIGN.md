@@ -639,13 +639,12 @@ infra/
     backend.tf          # S3 backend with native lockfile
   modules/
     network/            # VPC, 1 public subnet, no NAT gateway
-    compute/            # EC2, security group, IAM instance role, Elastic IP, user_data (k3s), zram (zram.tf)
+    compute/            # EC2, security group, IAM instance role, Elastic IP, user_data (k3s), zram (zram.tf), monthly budget and Bedrock answer stop (budget.tf)
     # no database module: MySQL runs in-cluster (see 10.5), not RDS
     edge/               # Cloudflare DNS record + cache rule (Terraform-managed, see 10.3)
     secrets/            # SSM parameters
     registry/           # ECR repository and lifecycle policy
     ops/                # glassbox-ops-* SSM documents behind the Ops runbooks (§12)
-    # no budgets module: the AWS Budgets alert was set up by the owner outside Terraform (10.8)
 ```
 
 ### 10.2 Network
@@ -695,7 +694,9 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 
 ### 10.8 Cost controls
 
-- AWS Budgets: `Glassbox-Monthly`, $20/month, with actual-spend alerts at 50%, 80% and 100% and a forecast alert (DD4 §4). It was created by the owner outside Terraform (there is no `budgets` module). (Setting up a budget is also a $20 onboarding credit task.)
+- AWS Budgets (`infra/modules/compute/budget.tf`, added 2026-10-05): `glassbox-monthly-cost`, $25/month of total account cost, unblended, with credits and refunds left out (gross usage; credits currently cover the whole bill, so a budget counting them never fires). Email alerts to the owner at actual 50%, 80% and 100% and at forecasted 100%.
+- **Automatic Bedrock answer stop:** at actual 100% a budget action (approval model automatic) attaches a deny policy to the node's instance role. It denies `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the answer models only (every inference profile in the module's `bedrock_profiles` and the foundation models behind them), never the Titan embedding model, so retrieval keeps working and the site answers in retrieval-only mode: an `AccessDeniedException` from Bedrock becomes the same outcome as the kill switch (sources, the playful budget line, nothing cached). AWS Budgets runs the action as a role that may only attach and detach that one policy on that one role. Budgets resets the action at the start of the next month, which detaches the policy; the owner can lift it earlier by reversing the action in the Budgets console (`infra/CI.md` "Budget stop"). Billing data lags by hours, so spend can pass $25 before the stop fires, and fixed costs (node, disk, IP) keep accruing after it. Ops · Diagnose shows whether the stop is on.
+- The older hand-made `Glassbox-Monthly` budget ($20, counts credits) predates this and can be deleted.
 - Cost allocation tag `project=glassbox` on every resource via provider `default_tags`.
 
 ---
@@ -707,7 +708,7 @@ That trade-off is acceptable here specifically because `documents`/`chunks` are 
 | Secrets indexed into the public corpus | Allowlist + denylist + secret scanner that fails the ingest job |
 | Personal details (phone, address, ID numbers) leaking from About Basel or portfolio sources | Ingest-time personal-data guard on every `about_me` and `portfolio` document (redaction, optional quarantine) and an answer-time mask on every streamed answer (below, "Privacy") |
 | Prompt injection via user questions | Strict system prompt; context is only the owner's curated content; no tools/actions exposed to the model |
-| LLM cost abuse | Per-IP token bucket, global daily cap, answer cache, max tokens, retrieval-only fallback |
+| LLM cost abuse | Per-IP token bucket, global daily cap, answer cache, max tokens, retrieval-only fallback, and the AWS budget action that denies the answer models at $25/month (10.8) |
 | Direct origin access | Security group limited to Cloudflare's published IP ranges |
 | Cluster API exposure | Kubernetes API port not opened publicly; no SSH port; Flux pulls from GitHub; node administration only through the approval-gated "Ops · ..." runbook workflows, which run fixed `glassbox-ops-*` SSM documents (§12, `infra/CI.md`) |
 | Long-lived CI credentials | GitHub Actions uses OIDC, with no stored AWS keys, to assume one of several narrowly scoped IAM roles (Terraform apply, Terraform plan, release, ops, ops read-only, bootstrap). Each role's trust is pinned to its own GitHub environment; the release role also requires the run's git ref to be `main` (`infra/bootstrap/main.tf`, `infra/CI.md` "Release role trust") |
@@ -793,7 +794,7 @@ Keep it light; the node has little memory to spare.
 - Not built yet: structured JSON logs with `request_id`, and aggregating the stage timings into server-side footer stats (the footer is per browser session, §6.2).
 - **Node health:** "Ops · Diagnose" reports memory, swap and zram, pressure (PSI), pods, Flux and KEDA status, warning events and k3s errors, with no approval needed (§12).
 - **Metrics (not built yet):** a Prometheus `/metrics` endpoint on the API (request latency histogram, cache hit counters, queue lag, LLM tokens), optionally shipped to Grafana Cloud's free tier with Grafana Alloy rather than running Prometheus in-cluster.
-- **Alerts:** AWS Budgets (cost); two CloudWatch status-check alarms (EC2 recover and reboot actions) that email the owner; a GitHub Actions uptime probe on `/readyz` every 15 minutes (added 2026-10-01; the alarms take effect once applied, see DD2 §3b); and a GitHub Actions streaming check through Cloudflare after each release and daily (DD2 §7.8).
+- **Alerts:** AWS Budgets (cost; Terraform-managed, with an automatic Bedrock answer stop at 100%, 10.8); two CloudWatch status-check alarms (EC2 recover and reboot actions) that email the owner; a GitHub Actions uptime probe on `/readyz` every 15 minutes (added 2026-10-01; the alarms take effect once applied, see DD2 §3b); and a GitHub Actions streaming check through Cloudflare after each release and daily (DD2 §7.8).
 - **Backups:** daily snapshots of the node's root volume, 7 kept, with a one-click "Ops · Restore from snapshot" (added 2026-10-01, takes effect once applied, DD2 §3b).
 
 ---
