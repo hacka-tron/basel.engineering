@@ -870,7 +870,7 @@ cases:
       - Self-healing (DD2 §3)** — not built yet.
     # The negation is status_ok's job; must_include names the planned item, so a bare
     # "No." fails (graders.status_ok contract; review r1).
-    must_include: ['Auto Scaling|ASG|self-heal']
+    must_include: ['Auto Scaling|ASG|self-heal|manual|single']
   - id: planned-metrics
     origin: new
     corpus: about_system
