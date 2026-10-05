@@ -837,7 +837,7 @@ cases:
     notes: >-
       False premise: there is no Terraform for the database. A correct answer says
       MySQL runs in the cluster (not RDS) rather than inventing a Terraform block.
-    question: Show me the Terraform for the database.
+    question: Is the database managed by Terraform?
     expected_sources: [docs/DESIGN.md, docs/architecture/deep-dive.md]
     gold_snippets:
       - 'no database module: MySQL runs in-cluster (see 10.5), not RDS'

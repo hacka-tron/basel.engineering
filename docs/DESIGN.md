@@ -102,7 +102,7 @@ Below 768px (and on any viewport at most 500px tall and under 1024px wide), the 
 The topic control switches which corpus is queried: the header toggle on desktop, the "Asking about" chips above the ask box on phones (Chat view). Each corpus has 3 to 4 suggested question chips so no one faces a blank box. They live in `frontend/src/suggested-questions.json`, which the answer-cache warm-up (§7.3) also reads:
 
 - **About Basel:** "What have you built with distributed systems?", "What did you work on at YouTube?", "Are you a fit for a platform engineering role?" (first person since prompt v19: the chat answers as Basel)
-- **About This System:** "How does the caching work?", "Why k3s instead of EKS?", "What happens when I press stress test?", "Show me the Terraform for the database."
+- **About This System:** "How does the caching work?", "Why k3s instead of EKS?", "What happens when I press stress test?", "Is the database managed by Terraform?" (was "Show me the Terraform for the database." until prompt v19: Nova Lite read the imperative as a request for code and abstained)
 - **Portfolio:** "What can you build for me?", "Which project is most like a SaaS app?", "Are you available for freelance work?"
 
 Until projects are indexed, the Portfolio questions come back with no sources and cost no LLM call (in the warm-up too).

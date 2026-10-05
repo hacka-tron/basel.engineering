@@ -47,11 +47,6 @@ class RetrievalConfig:
     vector_anchor: int = 0
     # BM25 pool size; None means ``candidates``.
     lexical_candidates: int | None = None
-    # A chunk only the lexical leg found is dropped when its cosine to the question
-    # is below this (0 keeps all). Prompt v19 review: for "Show me the Terraform for
-    # the database." BM25 pulled a CI-concurrency section (cosine 0.11) that made Nova
-    # Lite abstain although the answering sections were retrieved.
-    lexical_min_cosine: float = 0.0
 
 
 # About Basel (prompt v19): about 85 one-topic chunks (one per section, about 70
@@ -64,14 +59,12 @@ class RetrievalConfig:
 # About This System keeps 8 chunks, at most 3 per file, the
 # vector leg's top 4 always among them, and a 10-chunk BM25 pool: common words
 # ("google drive ingest") otherwise let planned-work sections crowd out the vector
-# leg's best hit (the "Drive was dropped" chunk, vector rank 3). v19: a lexical-only
-# chunk needs cosine >= 0.2 (recall@8 unchanged at 0.625, MRR 0.376 -> 0.379).
+# leg's best hit (the "Drive was dropped" chunk, vector rank 3).
 _SYSTEM = RetrievalConfig(
     top_k=8,
     per_document_cap=3,
     vector_anchor=4,
     lexical_candidates=10,
-    lexical_min_cosine=0.2,
 )
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
     "about_me": RetrievalConfig(top_k=8, per_document_cap=8, vector_anchor=4, dual_experience=True),
@@ -522,14 +515,6 @@ async def hybrid_search(
         for hit in tech_hits
         if hit["chunk_id"] in slots and hit["chunk_id"] not in known
     ]
-    if config.lexical_min_cosine > 0:
-        vector_ids = {m["chunk_id"] for m in vector_leg}
-        lexical_only = [
-            e for e in fused if e["chunk_id"] not in vector_ids and e["chunk_id"] not in slots
-        ]
-        await _fill_scores(redis_client, lexical_only, embedding)
-        dropped = {e["chunk_id"] for e in lexical_only if e["score"] < config.lexical_min_cosine}
-        fused = [e for e in fused if e["chunk_id"] not in dropped]
     anchors = [
         m["chunk_id"] for m in vector_leg[: config.vector_anchor] if m["chunk_id"] not in slots
     ]

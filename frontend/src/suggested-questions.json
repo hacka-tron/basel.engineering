@@ -8,7 +8,7 @@
     "How does the caching work?",
     "Why k3s instead of EKS?",
     "What happens when I press stress test?",
-    "Show me the Terraform for the database."
+    "Is the database managed by Terraform?"
   ],
   "portfolio": [
     "What can you build for me?",
