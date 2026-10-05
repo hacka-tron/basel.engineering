@@ -191,11 +191,13 @@ async def _generate_items(
 ) -> list[dict]:
     """Generate ``abstention_disabled`` or ``perturbed`` items through the real pipeline."""
     from eval.judge import source_dicts
-    from services.glassbox.api.ask import _ANSWER_MAX_TOKENS, _prompt
+    from services.glassbox.api.ask import _ANSWER_MAX_TOKENS, PERSONA_RULES, _prompt, answer_system
     from services.glassbox.cache.embedding import normalize_question
     from services.glassbox.providers.base import GROUNDING_RULES
 
-    system_no_abstain = GROUNDING_RULES.replace(
+    # The production system prompt (persona + grounding, prompt v17), with only the
+    # abstention rule loosened for the abstention_disabled kind.
+    system_no_abstain = f"{PERSONA_RULES}\n\nGrounding rules: " + GROUNDING_RULES.replace(
         "If the sources do not answer the question at all, reply with exactly ",
         "If the sources do not answer the question, give your best answer instead of replying ",
     )
@@ -225,7 +227,7 @@ async def _generate_items(
                 chunk.model_copy(update={"text": c["text"]})
                 for chunk, c in zip(chunks, changed, strict=True)
             ]
-            prompt, system = _prompt(case["question"], chunks), None
+            prompt, system = _prompt(case["question"], chunks), answer_system(None)
             extra["perturbation"] = how
         kwargs = {"system": system} if system else {}
         answer = "".join(

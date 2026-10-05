@@ -84,6 +84,8 @@ async def test_haiku_streams_deltas_with_bounded_tokens_and_grounding_instructio
     request = client.generation_requests[0]
     assert request["modelId"] == provider.model_id
     assert request["inferenceConfig"]["maxTokens"] == 50
+    # Prompt v17: deterministic decoding (was 0.2).
+    assert request["inferenceConfig"]["temperature"] == 0.0
     assert request["messages"] == [{"role": "user", "content": [{"text": "Source [1]: text"}]}]
     assert "bracketed citation markers" in request["system"][0]["text"].lower()
 

@@ -97,6 +97,12 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         return vectors
 
 
+# Prompt v17: 0 (was 0.2) for answers, rewrites and judges alike. Grounded answers
+# gain nothing from sampling variety, and repeat runs of the golden set get closer.
+# The casual-tone prompt (BACKLOG "Next up" item 3) may use a slightly higher value.
+TEMPERATURE = 0.0
+
+
 class BedrockLLMProvider(LLMProvider):
     reports_usage = True
 
@@ -129,7 +135,7 @@ class BedrockLLMProvider(LLMProvider):
                 modelId=self.model_id,
                 system=[{"text": GROUNDING_RULES if system is None else system}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
-                inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
+                inferenceConfig={"maxTokens": max_tokens, "temperature": TEMPERATURE},
             )
         )
         try:
