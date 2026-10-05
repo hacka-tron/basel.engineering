@@ -653,7 +653,7 @@ _EXAMPLES_INTRO = (
 )
 
 
-def _example_lines(route: str, playful: bool = False) -> str:
+def _example_lines(route: str, playful: bool = False, question: str = "") -> str:
     """The few-shot block: the owner-approved examples when loaded, else placeholders.
 
     ``playful`` (casual route, v19) adds the owner's playful-reply examples, or a
@@ -666,7 +666,10 @@ def _example_lines(route: str, playful: bool = False) -> str:
         if playful:
             lines += [e.line() for e in examples.playful] or list(_PLAYFUL_PLACEHOLDER_EXAMPLES)
     else:
-        approved = [e.line() for e in examples.strict] or list(_STRICT_PLACEHOLDER_EXAMPLES)
+        # A topic example (fewshot.STRICT_EXAMPLE_TOPICS) joins only for its questions.
+        approved = [e.line() for e in examples.strict if e.fits(question)] or list(
+            _STRICT_PLACEHOLDER_EXAMPLES
+        )
         # The absent-tech example goes first (fix round, 2026-10-05): placed after the
         # approved examples, Nova Lite answered "Do you write Go?" with the bare
         # abstention instead of "I don't have Go in my memory", and invented a work
@@ -765,7 +768,7 @@ def _prompt(
         "nothing else.\n"
         # Prompt v18: the owner-approved examples (private repo) replace the v17
         # placeholders when available; see services/glassbox/fewshot.py.
-         + _example_lines(STRICT_ROUTE)
+         + _example_lines(STRICT_ROUTE, question=question)
     )
 
 

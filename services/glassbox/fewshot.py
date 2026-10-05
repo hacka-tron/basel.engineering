@@ -51,12 +51,24 @@ APPROVED_EXAMPLES_ENV = "GLASSBOX_APPROVED_EXAMPLES_PATH"
 #   copy whole sources (one follow-ups answer went from 20 to 406 words); the
 #   freelance question is answered from the corpus, which has the same wording.
 # (Ablations, 2026-10-04/05.)
+#
+# v19 sign-off round 3: the personal-project Kubernetes answer, right after the
+# production one, but only for a question that names Kubernetes (STRICT_EXAMPLE_TOPICS).
+# Without it, "Have you worked with / used Kubernetes?" copied the nearest example:
+# the work-only Kafka answer's employer ("Yes, I've used Kubernetes in production. At
+# <Company>...", an invented claim) or the production answer's wording. Placed before
+# the production example it cost "Kubernetes in production?" its "No"; in every strict
+# prompt it made "Terraform?" answer from the "learning right now" section instead of
+# the project (0/6, against 6/6 without it). Stored-retrieval ablations, 2026-10-05.
 STRICT_EXAMPLE_IDS = (
     "rec-tech-kafka",
     "rec-tech-k8s-prod",
+    "rec-tech-kubernetes",
     "rec-impact-1",
     "rec-adv-employer",
 )
+# Examples used only when the question matches the pattern (case-insensitive).
+STRICT_EXAMPLE_TOPICS = {"rec-tech-kubernetes": r"\b(kubernetes|k8s|k3s)\b"}
 # The casual prompt gets four fun answers. Favorite color and favorite food are
 # deliberately left out, so the eval can check that unseen casual questions take
 # the approved tone without copying an example. v19: the favorite-show answer
@@ -87,6 +99,11 @@ _WHITESPACE = re.compile(r"\s+")
 class Example:
     question: str
     answer: str
+    # A regex: the example is used only for questions it matches (None: always).
+    topic: str | None = None
+
+    def fits(self, question: str) -> bool:
+        return self.topic is None or re.search(self.topic, question, re.IGNORECASE) is not None
 
     def line(self) -> str:
         return f"Q: {self.question} A: {self.answer}"
@@ -138,9 +155,10 @@ def select_examples(data: object) -> ExampleSet:
             if category == PLAYFUL_CATEGORY
             else "strict"
         )
-        approved[str(item.get("id"))] = (
+        item_id = str(item.get("id"))
+        approved[item_id] = (
             route,
-            Example(question, answer),
+            Example(question, answer, STRICT_EXAMPLE_TOPICS.get(item_id)),
             item.get("few_shot") is True,
         )
 
