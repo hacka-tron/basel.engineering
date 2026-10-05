@@ -441,6 +441,9 @@ def test_disconnect_mid_answer_stops_generation_and_logs_stopped(harness):
     assert saved["tokens_in"] > 0
     assert 3 <= saved["tokens_out"] <= produced
     assert saved["chunks"][0].chunk_id == 42
+    # Answer log (phase 10): the partial answer as sent, no abstention verdict.
+    assert saved["answer"].startswith(" w0 w1")
+    assert saved["abstained"] is None and saved["route"] == "strict"
     # The reserved answer slot stays spent; a stopped answer is never cached.
     assert harness["budget"].reservations == 1
     assert harness["cache"].puts == 0
