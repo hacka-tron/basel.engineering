@@ -45,6 +45,7 @@ from services.glassbox.providers.base import (
     REWRITE_FOLLOW_UP_PREFIX,
     REWRITE_PROMPT_SUFFIX,
     ContentFilteredError,
+    LLMAccessDeniedError,
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
@@ -1165,6 +1166,10 @@ async def _stream(
                     )
                 ]
                 rewritten_query = _clean_rewrite("".join(parts))
+            except LLMAccessDeniedError:
+                # The AWS budget stop is on (budget.tf); retrieval uses the original
+                # question, and the answer below degrades to retrieval-only.
+                LOGGER.warning("Follow-up rewrite for %s: LLM access denied", request_id)
             except Exception:
                 LOGGER.warning("Follow-up rewrite failed for %s", request_id, exc_info=True)
             yield await stage(
@@ -1391,6 +1396,10 @@ async def _stream(
         # live 2026-10-05). It runs first, so the masker sees only text that is sent.
         sources_lines = SourcesLineFilter()
         content_filtered = False
+        # Set when the provider refuses the call before any output (the AWS budget
+        # stop: IAM denies the answer models). Answered like the kill switch.
+        llm_denied = False
+        received_output = False
         yield await stage("llm", "start", route=route)
         # aclosing: if the client leaves while this generator is suspended at a
         # yield, closing it closes the provider stream too (Bedrock's finally closes
@@ -1406,6 +1415,7 @@ async def _stream(
         ) as parts:
             try:
                 async for part in parts:
+                    received_output = True
                     safe = masker.push(sources_lines.push(part))
                     if safe:
                         response_parts.append(safe)
@@ -1416,6 +1426,39 @@ async def _stream(
                 # the cache write below is skipped for it.
                 content_filtered = True
                 LOGGER.warning("Answer for %s stopped by the provider's content filter", request_id)
+            except LLMAccessDeniedError:
+                # Only a refusal before any output degrades; one after text was sent
+                # (not seen in practice) stays an error like any broken stream.
+                if received_output:
+                    raise
+                llm_denied = True
+                LOGGER.warning(
+                    "Answer for %s: LLM access denied (AWS budget stop?); retrieval only",
+                    request_id,
+                )
+        if llm_denied:
+            # Same outcome as the kill switch and the daily cap: the sources are
+            # already on screen, no text, mode retrieval_only (the frontend's budget
+            # line), nothing written to the answer cache. The budget slot reserved
+            # above stays spent (no refund path exists; at most one slot per ask).
+            yield await stage(
+                "llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000)
+            )
+            timings["llm_access_denied"] = 1
+            total_ms = elapsed_ms(request_start_ts)
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0, mode="retrieval_only")
+            yield frame(
+                "done",
+                {
+                    "total_ms": total_ms,
+                    "mode": "retrieval_only",
+                    "answer_cache": "miss",
+                    "abstained": False,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                },
+            )
+            return
         tail = masker.push(sources_lines.flush()) + masker.flush()
         if sources_lines.dropped:
             timings["sources_line_dropped"] = sources_lines.dropped

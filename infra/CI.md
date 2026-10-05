@@ -253,7 +253,7 @@ same `redact` over everything SSM returns (stdout, stderr) and over the
 
 | Action | What it does | When to use it | Approval |
 |---|---|---|---|
-| `diagnose` | Read-only snapshot: uptime, memory, swap and zram, memory/IO/CPU pressure (PSI), vmstat, largest processes, k3s service, nodes and conditions, `kubectl top`, all pods, deployments, CronJobs and Jobs, Flux sources, Kustomizations and HelmReleases, KEDA, the newest warning events, counts of the API's CSP Report-Only violation log lines from the last 24 hours (directive and blocked origin only), the LLM budget counters (with `corpus:ver` for `about_me`, `about_system` and `portfolio`) and today's query-log counts, the last ingest run's sweep summary (`ingestion_runs.notes`: mode, per corpus known/planned/deleted counts and whether it refused, never the reason) and TTFT p50/p95 over the last 24 hours split by `cache_status` (counts and integers only), k3s error lines from the last 30 minutes, kernel OOM kills. Every command is time-bounded. | First step of any incident (521/522, slow site, stuck deploy). Any time you want to look. | None (`ops-read`) |
+| `diagnose` | Read-only snapshot: uptime, memory, swap and zram, memory/IO/CPU pressure (PSI), vmstat, largest processes, k3s service, nodes and conditions, `kubectl top`, all pods, deployments, CronJobs and Jobs, Flux sources, Kustomizations and HelmReleases, KEDA, the newest warning events, counts of the API's CSP Report-Only violation log lines from the last 24 hours (directive and blocked origin only), the LLM budget counters (with `corpus:ver` for `about_me`, `about_system` and `portfolio`) and today's query-log counts, the last ingest run's sweep summary (`ingestion_runs.notes`: mode, per corpus known/planned/deleted counts and whether it refused, never the reason) and TTFT p50/p95 over the last 24 hours split by `cache_status` (counts and integers only), k3s error lines from the last 30 minutes, kernel OOM kills; from the AWS API, whether the budget stop is on (see "Budget stop"). Every command is time-bounded. | First step of any incident (521/522, slow site, stuck deploy). Any time you want to look. | None (`ops-read`) |
 | `reboot-node` | EC2 `RebootInstances` on the tagged glassbox instance. This is an ACPI reboot that AWS forces after about 4 minutes. Reads the kernel boot ID first (read-only `glassbox-ops-boot-id` document), then waits up to 20 minutes for a different boot ID, so a ping from before the reboot can't pass for success; if the node can't answer beforehand it requires a boot time after the request instead. Fails clearly if it never changes. Then gives k3s 90s and runs diagnose. | The node is unresponsive: diagnose times out or the apiserver doesn't answer, or memory/IO pressure stays pegged and nothing else helps. | `ops` |
 | `restart-deployment` (`deployment`: `api`, `retrieval-worker`, `traefik`) | `kubectl rollout restart` plus a wait of up to 10 minutes for the rollout. | A pod is Running but wedged (stuck streams, not serving), or Traefik is routing badly. `api` rolls with `maxSurge: 0`, so the site is down for a few seconds. | `ops` |
 | `flux-suspend` (`flux_target`) | Sets `spec.suspend: true`, like `flux suspend`. Targets: Kustomizations `keda`, `keda-scaling`, `ingest`, `app-ready` and `flux-system`, and `helmrelease-keda` (the KEDA HelmRelease). | Stop Flux re-applying something during an incident, for example KEDA Helm retries thrashing the node (`helmrelease-keda`, `keda`), or skip an ingest run (`ingest`). `flux-system` freezes **all** deploys. | `ops` |
@@ -296,7 +296,9 @@ Both roles are defined in `infra/bootstrap/runbooks.tf`. They reuse
   us-east-1. For `list-snapshots` and diagnose it can list snapshots, root
   volume replacement tasks and alarms (`ec2:DescribeSnapshots`,
   `ec2:DescribeReplaceRootVolumeTasks`, `cloudwatch:DescribeAlarms`,
-  us-east-1; these have no resource-level scoping).
+  us-east-1; these have no resource-level scoping). Both ops roles may call
+  `iam:ListAttachedRolePolicies` on `glassbox-instance` only, for the budget
+  stop line.
 - `glassbox-ops` trusts only the `ops` environment. It can call
   `ssm:SendCommand` only with `glassbox-ops-*` and `glassbox-zram-swap`, on
   the tagged instance. It can call `ec2:RebootInstances` only on the tagged
@@ -402,6 +404,125 @@ change is `module.ops.aws_ssm_document.ops["diagnose"]`, from the earlier
 merged Diagnose changes #116/#121, and is expected); (4) click the AWS confirmation email;
 (5) run Ops · List snapshots (alarms `OK`; snapshots appear after the
 next 04:00 UTC window) and Ops · Diagnose.
+
+## Budget stop (monthly budgets)
+
+Added on 2026-10-05 (`infra/modules/compute/budget.tf`). It takes effect once
+applied (order below).
+
+**Two budgets (owner decision, 2026-10-05).** The node's fixed costs (instance,
+disk, IPv4 address: about $17.50 a month on demand once the EC2 trial ends on
+2026-12-31) would trip a whole-bill stop every month for reasons that have
+nothing to do with LLM spend, so the stop watches Bedrock alone:
+
+- `glassbox-monthly-cost`: the whole account, $30 a month
+  (`monthly_budget_usd`), unblended. **Email alerts only** at actual 50%, 80%
+  and 100% and at forecasted 100%; no action.
+- `glassbox-bedrock-answers`: Bedrock spend only, $12.50 a month
+  (`bedrock_budget_usd`), unblended. Emails at actual 80% and 100%, and
+  carries the automatic stop at actual 100%.
+
+Both count **gross** usage: credits and refunds are left out. Promotional
+credits currently cover the whole bill, and a budget that counted them (like
+the older hand-made `Glassbox-Monthly` one, which reads $0.00) would never
+fire. Both email `alert_email` directly (no SNS topic, no confirmation click).
+AWS sends each actual alert once per month. Forecast alerts need about five
+weeks of usage history before they can fire.
+
+**What counts as Bedrock.** The filter is `SERVICE = "Amazon Bedrock"` OR
+`BILLING_ENTITY = "AWS Marketplace"`, minus `RECORD_TYPE` Credit and Refund.
+Amazon's own models (Nova, Titan) bill under the service "Amazon Bedrock".
+Third-party models (Anthropic's, and the OpenAI GPT-6 Luna offer the owner
+plans to switch to) are sold through AWS Marketplace. They bill under their
+own product name (for example "... (Amazon Bedrock Edition)") with billing
+entity "AWS Marketplace", so a "Amazon Bedrock" service filter alone would
+miss them. Luna's product name can't be known before its first charge. The
+filter therefore uses the documented, stable dimension: Cost Explorer
+documents `Billing entity` "AWS Marketplace" as "a purchase in AWS
+Marketplace". **Trade-off:** any other Marketplace purchase in this account
+would also count toward the Bedrock budget and could fire the stop early.
+Today the account has none (checked 2026-10-05). After Luna's first charge,
+check in Cost Explorer (group by Service, billing entity "AWS Marketplace")
+that it appears. The expression was checked read-only against Cost Explorer:
+September and October show the gross Bedrock usage, where a plain
+"Amazon Bedrock" filter with credits shows $0. `filter_expression` can't be
+combined with `cost_types`, which is why credits are excluded through
+`RECORD_TYPE` there.
+
+**The stop:** at actual 100% of `glassbox-bedrock-answers`, a budget action with approval model `AUTOMATIC`
+attaches the managed policy `glassbox-budget-stop-answer-models` to the node's
+role `glassbox-instance`. It denies `bedrock:InvokeModel` and
+`bedrock:InvokeModelWithResponseStream` (Converse and ConverseStream have no
+IAM actions of their own) on the answer models only: the inference profile of
+every `bedrock_profiles` entry in `main.tf` and its foundation models in each
+destination region. The list is built from that local, so a model added there
+is covered in the same change. The Titan embedding model is never denied (a
+Terraform precondition fails the plan if it ever were), so retrieval keeps
+working. The site then answers like the kill switch: sources shown, the
+playful budget line, no error, nothing cached (`LLMAccessDeniedError` in
+`services/glassbox/providers`, handled in `api/ask.py`). The warm-up stops at
+its first retrieval-only answer and hands its warm-up slot back. AWS emails `alert_email`
+when the action runs.
+
+Budgets runs the action as `glassbox-budget-action`: trusted only by
+`budgets.amazonaws.com` with `aws:SourceAccount` and `aws:SourceArn`
+`budget/*` of this account (AWS's documented form for Budgets), and allowed only `iam:AttachRolePolicy` and
+`iam:DetachRolePolicy` on `glassbox-instance` with `iam:PolicyARN` equal to the
+stop policy.
+
+**Overshoot:** AWS billing data, which Budgets evaluates, is updated at least
+once a day and lags usage by hours, so Bedrock spend can pass $12.50 before
+the stop fires (Marketplace charges may lag more). The app's own daily LLM cap
+still bounds Bedrock spend per day in the meantime. The stop only cuts Bedrock
+answers; the whole-account budget only emails.
+
+**Is it on?** Ops · Diagnose (and Ops · List snapshots) prints an "AWS budget
+stop" line: `off (answers enabled)` or `ON: ... is attached`.
+
+**How it lifts:**
+
+- **On its own, at the start of next month.** AWS Budgets resets IAM-policy
+  actions at the beginning of each budget period (the 1st, UTC), which
+  detaches the policy, and the action goes back to standby (AWS blog "Get
+  started with AWS Budgets actions" and "Manage cost overruns, part 2").
+  Nothing to do; Diagnose shows `off` afterwards. Bedrock picks the change up
+  within a minute or so (IAM propagation); no restart is needed.
+- **Earlier, by hand (one click):** AWS console → Billing and Cost Management
+  → Budgets → `glassbox-bedrock-answers` → in the budget's **Action history**
+  table select the completed action → **Reverse**. The policy is detached and
+  the action shows **Reversed**: Budgets won't run it again this month, so
+  only do this after raising the limit or deciding the extra spend is fine.
+  To make it watch again in the same month, choose **Reset** on it (if spend
+  is still over the threshold it fires again). To raise the limit instead,
+  change `bedrock_budget_usd` in Terraform (a PR and the Terraform approval),
+  not in the console, or the next apply puts it back.
+- Terraform never undoes the stop by itself: `glassbox-instance` doesn't
+  manage its policy attachments, so an apply leaves an attached stop in
+  place. Don't rename or delete the stop policy while it is attached (IAM
+  refuses to delete an attached policy and the apply fails).
+
+There is no "Ops · ..." button to reverse the stop: it would need the ops role
+to run `budgets:ExecuteBudgetAction` and pass the action role, which is more
+access than one console click saves (BACKLOG follow-up).
+
+**Cost:** free. Monitoring-only budgets are free, and the first two
+action-enabled budgets in an account are free (this is the one).
+
+**Apply order** (IAM first, or the Terraform apply fails with
+AccessDenied): (1) merge; (2) Actions → Bootstrap → Run workflow on `main`,
+approve: in-place updates to the `glassbox-ci` (Budgets writes on
+`budget/glassbox-*`, PassRole of `glassbox-budget-action` to Budgets),
+`glassbox-ci-plan` (Budgets reads), `glassbox-ops-read` and `glassbox-ops`
+(read the node role's attached policies) role policies; (3) approve the
+pending Terraform run on `main` (`terraform-prod`): 6 to add (the stop
+policy, `glassbox-budget-action` and its inline policy, the two budgets, the
+budget action), nothing changed or destroyed; (4) run Ops · Diagnose: the
+budget stop line says `off`; (5) optional: delete the old hand-made
+`Glassbox-Monthly` budget in the Budgets console (it counts credits and never
+fires). After the apply, the next PR plan should show no change to
+`module.compute.aws_budgets_budget.bedrock` (or `.monthly`); a diff in its `notification`
+set would mean the action's own notification doesn't match the 100% one
+in `budget.tf` (fix the module, not the console).
 
 ## Bootstrap via pipeline
 

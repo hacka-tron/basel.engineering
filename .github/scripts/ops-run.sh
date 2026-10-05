@@ -158,6 +158,26 @@ daily_snapshots() {
       | select(.instance == $i)] | sort_by(.start)'
 }
 
+# The deny policy AWS Budgets attaches to the node's role at 100% of the
+# monthly budget (infra/modules/compute/budget.tf). Attached means Bedrock
+# answers are off and the site answers retrieval-only.
+BUDGET_STOP_POLICY=glassbox-budget-stop-answer-models
+NODE_ROLE=glassbox-instance
+
+budget_stop_status() {
+  local attached
+  if ! attached=$(aws iam list-attached-role-policies --role-name "$NODE_ROLE" \
+    --query "AttachedPolicies[?PolicyName=='$BUDGET_STOP_POLICY'].PolicyName" \
+    --output text 2>/dev/null); then
+    echo "(could not read: the ops roles can't list the node role's policies until the Bootstrap run)"
+  elif [ -n "$attached" ] && [ "$attached" != "None" ]; then
+    echo "ON: $BUDGET_STOP_POLICY is attached to $NODE_ROLE. Answers are retrieval-only until"
+    echo "the 1st of next month (UTC) or until the action is reversed in the Budgets console."
+  else
+    echo "off (answers enabled)"
+  fi
+}
+
 # Read-only: the alarms, the daily snapshots and recent root volume
 # replacement tasks, from the AWS API (works even when the node is down).
 # Each part fails soft: a missing permission (before the Bootstrap run) or
@@ -172,6 +192,9 @@ aws_overview() {
     aws cloudwatch describe-alarms --region "$REGION" --alarm-name-prefix glassbox-node- \
       --query 'MetricAlarms[].[AlarmName,StateValue,StateUpdatedTimestamp,ActionsEnabled]' --output text 2>/dev/null ||
       echo "(could not read alarms: not applied yet, or the role lacks cloudwatch:DescribeAlarms)"
+    echo
+    echo "== AWS budget stop (glassbox-bedrock-answers; infra/CI.md \"Budget stop\") =="
+    budget_stop_status
     echo
     echo "== daily snapshots of $instance (newest last; restore with 'Ops · Restore from snapshot') =="
     if snaps=$(daily_snapshots "$instance" 2>/dev/null); then
