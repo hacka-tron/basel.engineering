@@ -670,10 +670,16 @@ def _prompt(
     chunks: list[WorkerChunk],
     history: list[HistoryMessage] | None = None,
     route: str = STRICT_ROUTE,
+    corpus: str | None = None,
 ) -> str:
-    """The answer prompt for a route: strict (work, skills, this system) or casual."""
+    """The answer prompt for a route: strict (work, skills, this system) or casual.
+
+    ``corpus`` sets the length rule (owner, 2026-10-05): About This System answers
+    may use up to three sentences, every other corpus one or two.
+    """
     if route == CASUAL_ROUTE:
         return _casual_prompt(question, chunks, history)
+    sentences = "one to three sentences" if corpus == "about_system" else "one or two sentences"
     return (
         _sources_block(question, chunks, history)
         # The style rules sit after the sources, next to the question: Nova Lite
@@ -693,7 +699,7 @@ def _prompt(
         "sources that answer this question: numbers, thresholds, limits, durations, names "
         'and conditions, with exact values ("a 24-hour TTL", not "a while"). Never state '
         "a price, count or size that is not in the sources.\n"
-        "- Answer in one or two sentences unless the question asks for detail, steps or a "
+        f"- Answer in {sentences} unless the question asks for detail, steps or a "
         "list; then use a short list. Say each point once. Do not add related "
         "mechanisms, features or background the question did not ask about. When a source "
         "gives a total, give the total, not its breakdown. Stop when the question is "
@@ -1319,7 +1325,7 @@ async def _stream(
         if route == CASUAL_ROUTE:
             timings["answer_route_casual"] = 1
         LOGGER.info("Answer route for %s: %s", request_id, route)
-        prompt = llm_prompt = _prompt(request.question, chunks, history, route)
+        prompt = llm_prompt = _prompt(request.question, chunks, history, route, request.corpus)
         # Persona plus grounding rules; follow-ups add the history rules (v17). Both
         # routes share it, so the persona, grounding and injection rules are the same.
         system_kwargs = {"system": answer_system(history)}

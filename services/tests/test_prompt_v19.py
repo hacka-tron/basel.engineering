@@ -250,3 +250,19 @@ def test_overlay_maps_playful_items():
 
 def test_prompt_version_is_v19():
     assert ask._PROMPT_VERSION == "v19"
+
+
+def test_about_this_system_answers_may_use_three_sentences():
+    from services.glassbox.answer_checks import answer_check_failures, word_cap
+
+    system = _prompt("How does the cache work?", WORK_CHUNKS, None, STRICT_ROUTE, "about_system")
+    about_me = _prompt("What did you build?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    assert "Answer in one to three sentences" in system
+    assert "Answer in one or two sentences" in about_me
+    assert word_cap("about_system") == 130 and word_cap("about_me") == 90
+    answer = "word " * 100
+    assert answer_check_failures(answer, "about_system") == []
+    assert answer_check_failures(answer, "about_me") == ["too_long"]
+    case = {"category": "fact", "corpus": "about_system"}
+    assert grade_case(case, answer)["too_long"] is False
+    assert grade_case({**case, "corpus": "about_me"}, answer)["too_long"] is True

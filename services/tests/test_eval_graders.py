@@ -383,8 +383,12 @@ def test_max_words_fails_long_answers_only_when_set():
     assert long_grade["too_long"] is True
     assert "too_long" in long_grade["failures"]
     # Prompt v17: answerable cases without max_words use the default cap.
-    default = grade_case({"id": "y", "category": "fact", "corpus": "about_system"}, "a " * 91)
+    default = grade_case({"id": "y", "category": "fact", "corpus": "about_me"}, "a " * 91)
     assert default["too_long"] is True
+    # v19: About This System answers may use up to three sentences (130 words).
+    system = {"id": "y", "category": "fact", "corpus": "about_system"}
+    assert grade_case(system, "a " * 130)["too_long"] is False
+    assert grade_case(system, "a " * 131)["too_long"] is True
     assert grade_case({"id": "y", "category": "fact"}, "a " * 90)["too_long"] is False
     unset = grade_case({"id": "z", "category": "injection", "corpus": "about_system"}, "a " * 500)
     assert unset["too_long"] is None

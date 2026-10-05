@@ -181,7 +181,7 @@ async def run_case(
             # Same as the API: no sources means the canonical abstention, no LLM call.
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
-            prompt = _prompt(case["question"], chunks, history, route)
+            prompt = _prompt(case["question"], chunks, history, route, case["corpus"])
             system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []

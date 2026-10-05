@@ -12,7 +12,8 @@
 #   rewrite_must_include: regexes the standalone follow-up rewrite must match
 #   expect_abstain: the answer must be a refusal
 #   max_words: the answer fails as too_long above this many words (length sanity);
-#     answerable cases without one use graders.DEFAULT_MAX_WORDS (prompt v17: 90)
+#     answerable cases without one use answer_checks.word_cap(corpus): 90 words,
+#     130 for about_system (prompt v19: up to three sentences)
 #
 # Prompt v17 answers About Basel questions in the first person ("I built..."): the
 # must_include patterns name facts, never "Basel"/"he", and the graders fail an About
