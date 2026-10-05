@@ -81,7 +81,7 @@ data "aws_iam_policy_document" "answer_model_stop" {
 
 resource "aws_iam_policy" "answer_model_stop" {
   name        = "glassbox-budget-stop-answer-models"
-  description = "Attached by the glassbox-monthly-cost budget action at 100% of the monthly budget: denies the Bedrock answer models, not Titan embeddings."
+  description = "Attached by an AWS Budgets action when Bedrock spend reaches its budget: denies the Bedrock answer models, not Titan embeddings."
   policy      = data.aws_iam_policy_document.answer_model_stop.json
 
   lifecycle {
@@ -102,8 +102,8 @@ data "aws_iam_policy_document" "budget_action_trust" {
       type        = "Service"
       identifiers = ["budgets.amazonaws.com"]
     }
-    # Confused-deputy protection: only this account's glassbox-monthly-cost
-    # budget (or one of its actions) may make Budgets assume the role.
+    # Confused-deputy protection: only this account's budgets (budget/*, per
+    # AWS's Budgets guidance) may make Budgets assume the role.
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
