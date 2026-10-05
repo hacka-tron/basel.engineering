@@ -200,6 +200,43 @@ def test_a_failing_case_is_recorded_and_the_run_continues():
     assert run_answers.summarize(rows)["overall"]["errors"] == 2
 
 
+def test_replay_reuses_stored_rewrite_and_chunks_without_retrieval(tmp_path):
+    cases = [c for c in load_golden() if c["id"] in {"sugg-system-stress", "mt-stress-cooldown"}]
+    stored = {
+        case["id"]: {
+            "id": case["id"],
+            "prompt_version": "v16",
+            "rewrite": "How long is the stress test cooldown?" if case.get("history") else None,
+            "retrieved": [
+                {"n": 1, "chunk_id": 7, "source_path": "docs/x.md", "score": 0.8},
+            ],
+            "sources": [{"n": 1, "source_path": "docs/x.md", "text": "512 MiB, 5-minute"}],
+            "error": None,
+        }
+        for case in cases
+    }
+    path = tmp_path / "old.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in stored.values()))
+
+    async def never(*_args):
+        raise AssertionError("must not retrieve")
+
+    rows = asyncio.run(
+        run_answers.run_cases(
+            cases,
+            embedder=FakeEmbeddingProvider(),
+            llm=FakeLLMProvider(),
+            retrieve=never,
+            replay=run_answers.load_replay(path),
+        )
+    )
+    assert all(row["error"] is None for row in rows)
+    by_id = {row["id"]: row for row in rows}
+    assert by_id["mt-stress-cooldown"]["rewrite"] == "How long is the stress test cooldown?"
+    assert by_id["sugg-system-stress"]["sources"][0]["text"] == "512 MiB, 5-minute"
+    assert by_id["sugg-system-stress"]["replayed_from"] == "v16"
+
+
 def test_known_failures_are_reported_apart_and_kept_out_of_rates():
     cases = [c for c in load_golden() if c["id"] in {"me-site-stack", "me-education"}]
     # No committed case is a known failure today, so mark one for this test.
