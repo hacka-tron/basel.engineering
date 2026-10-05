@@ -43,9 +43,12 @@ locals {
     ]),
   )
 
+  # AWS's confused-deputy guidance for Budgets uses budget/* as the source ARN;
+  # the exact form Budgets sends when it runs an action is not documented, so a
+  # narrower pattern could stop the action from ever assuming this role.
+  # aws:SourceAccount still limits it to this account's budgets.
   budget_source_arns = [
-    "arn:aws:budgets::${var.aws_account_id}:budget/${local.budget_name}",
-    "arn:aws:budgets::${var.aws_account_id}:budget/${local.budget_name}/action/*",
+    "arn:aws:budgets::${var.aws_account_id}:budget/*",
   ]
 }
 

@@ -431,7 +431,7 @@ Terraform precondition fails the plan if it ever were), so retrieval keeps
 working. The site then answers like the kill switch: sources shown, the
 playful budget line, no error, nothing cached (`LLMAccessDeniedError` in
 `services/glassbox/providers`, handled in `api/ask.py`). The warm-up stops at
-its first retrieval-only answer and keeps its slot. AWS emails `alert_email`
+its first retrieval-only answer and hands its warm-up slot back. AWS emails `alert_email`
 when the action runs.
 
 Budgets runs the action as `glassbox-budget-action`: trusted only by
