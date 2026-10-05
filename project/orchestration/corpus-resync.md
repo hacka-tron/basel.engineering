@@ -12,3 +12,9 @@ Repeated owner request: "I updated my bullet bank; pick it up." Done 2026-10-03 
 5. Check that every H2 section stays under 300 words. Commit in the docs repo with a repo-local identity (`git config user.name/user.email` from this repo's recent commits; the scratch clone has none). Open a PR listing the changes per file, then merge it (the owner asked for the sync).
 6. It goes live with the next Release (any merge to `main` here, or Actions → Release, which needs the owner's click). Tell the owner which applies.
 7. Follow-ups: update golden cases whose facts changed, tell any running eval agent (keep one index per comparison), and refresh draft example answers that cite the changed facts.
+
+**Owner overrides: the corpus intentionally differs from the bullet bank here. Keep them on every resync.**
+- C# is not attributed to the alerting/ticketing services; it is "his primary language at Microsoft, used across his work on core Azure services" (owner, 2026-10-04; docs PR #7).
+- `bio.md` "Basel's seniority and why he's exploring new roles" is owner-dictated and has no bullet-bank source: operating at a senior level without the Senior title yet 😢, and "It's not you, it's me :P" with the serious version. Never drop it as "not in the bank".
+
+**Owner answer rules that affect corpus wording** (also in the v17 spec): don't volunteer where Basel hasn't used something. Only a production question ("have you used X in production?") with personal-only use gets "No, but I used it extensively in my personal project X". So corpus text shouldn't add "he hasn't used X at work" lines either.
