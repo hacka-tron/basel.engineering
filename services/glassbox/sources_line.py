@@ -13,6 +13,10 @@ held back until the next token decides it ("Sure" is released as soon as the
 "u" arrives; "Sour" waits for one more token). Everything else streams through
 with no delay. Apply it before ``privacy.StreamMasker``, so the masker sees only
 text that will be sent.
+
+Two exceptions (v19 review): lines inside a fenced code block (a YAML ``sources:``
+key) are never dropped, and an answer is never emptied: if the stream ends with
+nothing sent but a dropped line, that line is sent after all.
 """
 
 from __future__ import annotations
@@ -28,6 +32,9 @@ _LABEL_PREFIX = re.compile(
     r"[ \t*_#>(\[-]*(?:s(?:o(?:u(?:r(?:c(?:e(?:s)?)?)?)?)?)?)?[ \t*_]*",
     re.IGNORECASE,
 )
+# A fenced code block opens or closes on a line starting with ``` or ~~~.
+_FENCE = re.compile(r"[ \t]*(?:```|~~~)")
+_FENCE_PREFIX = re.compile(r"[ \t]*(?:`{1,2}|~{1,2})")
 # Longest held line start: decoration is short in practice; past this the line is
 # released even if it still matches the prefix pattern (e.g. a row of dashes).
 _HOLD_MAX = 32
@@ -55,17 +62,28 @@ class SourcesLineFilter:
         self._buf = ""
         self._at_line_start = True
         self._dropping = False
+        self._in_fence = False
+        self._sent_text = False
+        self._dropped_text = ""
         self.dropped = 0
 
     def push(self, part: str) -> str:
+        out = self._push(part)
+        if out.strip():
+            self._sent_text = True
+        return out
+
+    def _push(self, part: str) -> str:
         self._buf += part
         out: list[str] = []
         while self._buf:
             if self._dropping:
                 newline = self._buf.find("\n")
                 if newline < 0:
+                    self._dropped_text += self._buf
                     self._buf = ""
                     break
+                self._dropped_text += self._buf[:newline] + "\n"
                 # Keep the newline that ended the dropped line: "A\nSources: 1\nB"
                 # becomes "A\nB" (the newline before the label went with it).
                 self._buf = self._buf[newline:]
@@ -88,13 +106,23 @@ class SourcesLineFilter:
             line = self._buf[lead:]
             if not line:
                 break  # only newlines so far: wait for the line they lead to
+            newline = line.find("\n")
+            head = line if newline < 0 else line[:newline]
+            fence = _FENCE.match(line)
+            if not fence and newline < 0 and _FENCE_PREFIX.fullmatch(head):
+                break  # may still become a fence marker
+            if fence or self._in_fence:
+                if fence:
+                    self._in_fence = not self._in_fence
+                out.append(self._buf[:lead])
+                self._buf = line
+                self._at_line_start = False
+                continue
             if _SOURCES_LABEL.match(line):
                 self.dropped += 1
                 self._dropping = True
                 self._buf = line
                 continue
-            newline = line.find("\n")
-            head = line if newline < 0 else line[:newline]
             if newline < 0 and len(head) <= _HOLD_MAX and _LABEL_PREFIX.fullmatch(head):
                 break  # could still become "Sources:": wait for the next token
             out.append(self._buf[:lead])
@@ -105,9 +133,14 @@ class SourcesLineFilter:
     def flush(self) -> str:
         """Release what is held at the end: an unfinished non-label line start."""
         if self._dropping:
+            self._dropped_text += self._buf
             self._buf = ""
-            return ""
+            self._dropping = False
         held, self._buf = self._buf, ""
+        if not self._sent_text and not held.strip() and self._dropped_text.strip():
+            # Never empty a whole answer: the only line was a label line.
+            self.dropped = 0
+            return self._dropped_text.strip()
         # Trailing blank lines are dropped too: they only ever preceded a label
         # candidate that never came.
         return held.rstrip("\r\n") if not held.strip() else held

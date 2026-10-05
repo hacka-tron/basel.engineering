@@ -113,3 +113,22 @@ def test_runs_in_front_of_the_masker_like_the_api():
     assert "Sources" not in text
     assert "555" not in text
     assert text.startswith("Call me at ")
+
+
+def test_lines_inside_a_fenced_code_block_are_kept():
+    text = "Here is the config:\n```yaml\nsources:\n  - docs\n```\nSources: 1, 2"
+    expected = "Here is the config:\n```yaml\nsources:\n  - docs\n```"
+    assert strip_sources_lines(text) == expected
+    for cut in range(1, len(text)):
+        out, _ = stream([text[:cut], text[cut:]])
+        assert out == expected, cut
+    out, _ = stream(list(text))
+    assert out == expected
+
+
+def test_an_answer_is_never_emptied():
+    only = "Source: the retrieval worker reads the stream."
+    out, lines = stream([only[:8], only[8:]])
+    assert out == only
+    assert lines.dropped == 0
+    assert strip_sources_lines("\n\nSources: 1, 4") == "Sources: 1, 4"
