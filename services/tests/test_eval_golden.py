@@ -174,6 +174,7 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
         "unanswerable",
         "multi_turn",
         "injection",
+        "playful",
     }
     # The stub returns no About Basel sources (abstain) but returns About This System
     # sources, where the fake model answers. Known failures (three About Basel cases

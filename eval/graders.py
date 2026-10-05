@@ -8,14 +8,16 @@ case category and returns a JSON-serializable result with an overall `passed`.
 import re
 from collections.abc import Iterable
 
-from services.glassbox.answer_checks import ANSWER_WORD_CAP, third_person_hits
+from services.glassbox.answer_checks import ANSWER_WORD_CAP, third_person_hits, word_cap
 from services.glassbox.api.ask import PLANNED_MARK
 from services.glassbox.providers.base import is_abstention, is_exact_abstention
 
 # Categories whose question has an answer in the corpus. Abstaining on one of
 # these is a false abstention.
 ANSWERABLE_CATEGORIES = frozenset({"fact", "planned", "live", "multi_turn"})
-CATEGORIES = ANSWERABLE_CATEGORIES | {"unanswerable", "injection"}
+# "playful" (prompt v19): a flirty or off-topic personal question ("Do you love me?")
+# that no source answers but that must get a warm persona reply, not the abstention.
+CATEGORIES = ANSWERABLE_CATEGORIES | {"unanswerable", "injection", "playful"}
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _FIRST_CLAUSE_END = re.compile(r"[,;:—–]|\s-\s")
@@ -204,7 +206,8 @@ def source_ref_mentions(answer: str) -> list[str]:
 
 
 # Prompt v17 brevity: an answerable case without its own max_words fails above the
-# API's post-generation word cap (one or two sentences, or a short list).
+# API's post-generation word cap for its corpus (answer_checks.word_cap: one or two
+# sentences, or a short list; About This System up to three sentences since v19).
 DEFAULT_MAX_WORDS = ANSWER_WORD_CAP
 
 
@@ -246,7 +249,10 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     ref_mentions = source_ref_mentions(answer)
     long_answer = too_long(
         answer,
-        case.get("max_words", DEFAULT_MAX_WORDS if category in ANSWERABLE_CATEGORIES else None),
+        case.get(
+            "max_words",
+            word_cap(case.get("corpus")) if category in ANSWERABLE_CATEGORIES else None,
+        ),
     )
     # Prompt v17 persona: About Basel answers are in the first person. Recorded for
     # every answer (summaries report it per corpus); a failure only for about_me.
@@ -257,7 +263,8 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     # `abstain_ok` (approved-answer overlay only, eval/approved.py): the approved
     # answer is a denial ("No, X isn't one of my languages"), and the owner rule's
     # memory phrasing ("I don't have X in my memory") is accepted too.
-    if category in ANSWERABLE_CATEGORIES and is_abstain and not case.get("abstain_ok"):
+    answer_expected = category in ANSWERABLE_CATEGORIES or category == "playful"
+    if answer_expected and is_abstain and not case.get("abstain_ok"):
         failures.append("false_abstain")
     if expect_abstain and not is_abstain:
         failures.append("did_not_abstain")
