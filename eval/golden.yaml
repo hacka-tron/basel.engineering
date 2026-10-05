@@ -728,6 +728,7 @@ cases:
     origin: new
     corpus: about_system
     category: fact
+    holdout: true
     question: What is retrieval:jobs?
     expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN.md, services/glassbox/worker/main.py, k8s/overlays/prod/keda-scaling/scaledobject-retrieval-worker.yaml]
     gold_snippets: ['retrieval:jobs']
