@@ -17,6 +17,21 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ### Next up, in order
 
+**Owner feedback, 2026-10-05 morning: do these first** (observed on the live site, build-133):
+
+0. **Fix answer-voice and grounding issues the owner found live.** One PR. Read `orchestration/prompt-version-playbook.md` first; the private-repo parts follow `orchestration/corpus-resync.md`.
+   - **(a) About This System answers still end with "Sources: 1, 4, 5, 9".** Example: "What happens when I press stress test?" ended with that line. The per-answer sources list was removed on purpose (status 2026-10-03 "Remove the sources list under chat answers"), so the model is now writing it itself. Fix it in the prompt and with a deterministic post-filter that drops a trailing "Sources: …" line from streamed text (mind `StreamMasker` and streaming). Add a golden `must_not_include '(?im)^sources?:'` check.
+   - **(b) The suggested-question chips still talk about Basel in the third person.** Rewrite `frontend/src/suggested-questions.json` (and any warm-up copies) to address him directly ("What do you…", "Have you…"). Keep the warm-answers list in sync, and update the golden cases and eval overlays that reference the chip text. Read `project/MOBILE_DESIGN.md` before the frontend change.
+   - **(c) Off-topic personal questions should get a funny answer, not the abstention line.** "Do you love me?" got "I checked everything Basel gave me and came up empty. Try asking about his projects instead?" That fallback is also in the third person. Fixes:
+     - Make the frontend's playful abstention lines first person.
+     - Give flirty or off-topic personal questions a warm, funny reply on the casual route, grounded in the persona (an uploaded mind with a sense of humour), with no invented facts.
+     - Add 1–2 approved-style examples, and get owner sign-off on the exact lines.
+   - **(d) "Why are you looking for new roles?" must not get the "It's not you, it's me :P" answer.** That joke is only for "why are you leaving Microsoft?". A general "why are you looking" gets: to work on interesting new problems and grow as an engineer.
+     - Split the private `bio.md` section into two answers.
+     - Adjust `examples/approved-answers.yaml` (`rec-adv-employer` stays Microsoft-specific; add a "why looking" item).
+     - Add golden cases for both phrasings.
+   - **(e) "What's your favorite show?" answered with the movie Gladiator.** A show question should answer only about shows and anime (the list is long and ever-changing, "ask the real me…"). Movies only when movies are asked about. Fix with the corpus wording (separate the movie and show lines in `personal.md`) and an approved example. Add golden cases: "favorite show" `must_not_include 'Gladiator'`, "favorite movie" `must_include 'Gladiator'`.
+
 1. **Watch the live answers for a few days**, using the answer log (#185). Hit rate: the SQL is in `eval/README.md`.
    - Check that "have you used X?" answers name both sides where the data has both. Phase 8 now retrieves both, but Nova Lite still drops a side for Redis and React sometimes. If it persists, try a two-sided approved example again, now that slots supply both chunks (v18 dropped it because it invented a work side).
    - Check the strict prompt's unsupported "favorite X" framing (golden cases are `known_failure`, see `status/2026-10-04-2144-rag-prompt-v18.md`).
