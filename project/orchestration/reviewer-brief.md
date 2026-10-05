@@ -21,6 +21,7 @@ change anything:
   real cluster, no terraform apply). NEVER read, open or copy any
   terraform.tfstate, *.tfvars or plan file.
 - Never run `git stash`.
+- Run pytest only against your own throwaway MySQL/Redis containers, with `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` exported for every run (including `-x`, `-k` and single-test runs): without them the tests default to 3306/6379, the owner's shared local compose stack (`services/tests/stack_ports.py`), and leave test rows in it.
 - You MAY run tests, linters, builds, `kubectl kustomize`, docker
   compose, local dev servers, and throwaway scripts outside the repo.
   Clean up anything you start. [If other agents share the machine:

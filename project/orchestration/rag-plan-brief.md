@@ -19,7 +19,7 @@ Order: 0 golden-set refresh, 1 phase 3 paid baseline, 2 phase 6 part 2 (corpus s
 ## Rules for every task
 
 - Worktree `.worktrees/<name>` on its own branch from `origin/main`; open a PR; **don't merge** (the orchestrator merges after review).
-- Hard rules: never read tfstate/tfvars/plan files; no terraform apply, no AWS/SSM/kubectl writes against live, no GitHub secret/environment changes; never `git stash`.
+- Hard rules: never read tfstate/tfvars/plan files; no terraform apply, no AWS/SSM/kubectl writes against live, no GitHub secret/environment changes; never `git stash`; pytest only against your own throwaway MySQL/Redis containers, with `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` exported for every run (including `-x`, `-k` and single-test runs): without them the tests default to 3306/6379, the owner's shared local compose stack (`services/tests/stack_ports.py`), and leave test rows in it.
 - Checks: `ruff check services eval`, `pytest services/tests -q` (with the docker stack up, DB tests run too), a status report in `project/status/` per its README.
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Final report: under 250 words. PR URL, what changed, checks and results, numbers, open questions.
