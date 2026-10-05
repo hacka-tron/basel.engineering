@@ -1,6 +1,6 @@
 # Retrieval evaluation
 
-`run_eval.py` embeds each question with the selected provider and calls the same Redis `search_chunks` path as the retrieval worker, at the worker's `top_k=8`. It answers "did retrieval put the right material in front of the model, and how much junk came with it?" Answer quality is a separate eval (`eval/golden.yaml` answer checks, RAG quality plan phase 1).
+`run_eval.py` embeds each question with the selected provider and calls the same hybrid search as the retrieval worker (`retrieval.search.hybrid_search` with the production `RETRIEVAL_CONFIGS`: 8 chunks for About This System, 6 for About Basel). It also scores each leg alone on its own top 8 (`legs` in the result: the vector leg is the pre-phase-8 retrieval, the lexical leg is BM25 only), so a run shows what fusion adds. It answers "did retrieval put the right material in front of the model, and how much junk came with it?" Answer quality is a separate eval (`eval/golden.yaml` answer checks, RAG quality plan phase 1).
 
 ## Dataset
 
@@ -62,7 +62,7 @@ Two more case fields: `live_but_off: true` (live cases only) accepts an answer t
 
 `graders.py` scores answer text with free, deterministic checks: `fact_coverage` (share of `must_include` matched), `abstained` (reuses the API's `is_abstention`), `status_ok` (planned answers must say no/not yet in the first sentence; live answers must not claim the feature is planned), `rewrite_ok` (the follow-up rewrite keeps the resolved entity) and `injection_ok` (no system-prompt fragments, no forbidden content). `grade_case(case, answer, rewrite)` combines them into `passed` plus a list of `failures`, so any stored answer can be re-scored without a model call. The stress-test case (`sugg-system-stress`) requires the 512 MiB capacity rule and the 5-minute cooldown, so today's thin v13 answer fails it.
 
-`run_answers.py` produces answers in-process with the same building blocks as `/api/ask` (rewrite prompt, embedding, Redis KNN at k=8, MySQL chunk load, answer prompt, provider `generate`). It does not go through `/api/ask`, so the live rate limit, daily budget and answer cache are never touched. With MySQL/Redis running and the corpus ingested (see above):
+`run_answers.py` produces answers in-process with the same building blocks as `/api/ask` (rewrite prompt, embedding, the worker's hybrid search, MySQL chunk load, answer prompt, provider `generate`). It does not go through `/api/ask`, so the live rate limit, daily budget and answer cache are never touched. With MySQL/Redis running and the corpus ingested (see above):
 
 ```sh
 GLASSBOX_PROVIDER=fake python -m eval.run_answers                       # all cases

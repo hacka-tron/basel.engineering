@@ -42,6 +42,7 @@ PRODUCTION_TOP_K = 8
 # The fused result (what the worker serves) is the headline; each leg is also
 # scored on its own top 8 (``legs`` in the result) to show what fusion adds.
 LEGS = ("vector", "lexical")
+LEG_CASE_KEYS = ("hit_at_8", "reciprocal_rank_at_8", "chunk_hit", "chunk_reciprocal_rank")
 CONTINUITY_K = 5
 # Sources that should never ground an answer: test code and implementation plans.
 NOISE_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
@@ -261,6 +262,7 @@ async def evaluate(questions: list[dict]) -> dict:
         ).hexdigest()
         versions = {corpus: await RedisRetrievalCache(client).version(corpus) for corpus in CORPORA}
         cases = []
+        leg_cases: dict[str, dict] = {}
         unreachable = []
         for item in questions:
             missing = [
@@ -288,6 +290,11 @@ async def evaluate(questions: list[dict]) -> dict:
                 leg: score_retrieval(item, _triples(legs[leg][:PRODUCTION_TOP_K], by_chunk))
                 for leg in LEGS
             }
+            leg_cases[item["id"]] = case["legs"]
+            # Stored per case: each leg's scores only (the summaries use the full rows).
+            case["legs"] = {
+                leg: {key: row[key] for key in LEG_CASE_KEYS} for leg, row in case["legs"].items()
+            }
             case["dual_experience_slots"] = len(legs["slots"])
             cases.append(case)
         return {
@@ -301,7 +308,9 @@ async def evaluate(questions: list[dict]) -> dict:
             "noise_prefixes": list(NOISE_PREFIXES),
             "unreachable_gold_snippets": unreachable,
             **summarize(cases),
-            "legs": {leg: summarize([case["legs"][leg] for case in cases]) for leg in LEGS},
+            "legs": {
+                leg: summarize([leg_cases[case["id"]][leg] for case in cases]) for leg in LEGS
+            },
             "cases": cases,
         }
     finally:

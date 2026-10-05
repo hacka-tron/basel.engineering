@@ -77,13 +77,13 @@ After a semantic answer-cache miss, the Glassbox API hands retrieval to a separa
 Glassbox retrieval combines two searches over the same Redis index, `idx:chunks`, both filtered by corpus and embedding model (`retrieval/search.py`):
 
 - **Vector leg:** a KNN query for the 20 chunks nearest the question vector (HNSW, cosine distance).
-- **Keyword leg:** a BM25 full-text query for 20 chunks on the `text` field. The question is lowercased and split into words the way RediSearch splits the indexed text (`demo:load:lock` becomes demo, load, lock; `_PLANNED_SOURCE_SIGNAL` stays one word), stopwords and one-letter words are dropped, and the rest are OR-joined, because `FT.SEARCH` ANDs bare words and a whole question would match nothing.
+- **Keyword leg:** a BM25 full-text query on the `text` field (20 chunks; 10 in About This System, where common words would otherwise flood the list). The question is lowercased and split into words the way RediSearch splits the indexed text (`demo:load:lock` becomes demo, load, lock; `_PLANNED_SOURCE_SIGNAL` stays one word), stopwords and one-letter words are dropped, and the rest are OR-joined, because `FT.SEARCH` ANDs bare words and a whole question would match nothing.
 
-**Fusion.** Reciprocal rank fusion scores each chunk by the sum of 1/(10 + rank) over the lists it appears in. The usual k=60 measured worse with 20-candidate lists. About This System then keeps 8 chunks, at most 3 from one file; About Basel keeps 6, at most 2 from one file. If the keyword query fails (an index without the `text` field), the vector results are served alone.
+**Fusion.** Reciprocal rank fusion scores each chunk by the sum of 1/(10 + rank) over the lists it appears in. The usual k=60 measured worse with 20-candidate lists. About This System then keeps 8 chunks, at most 3 from one file, and always includes the vector leg's top 4, so keyword matches on planned-work sections can't push out the best semantic hit; About Basel keeps 6, at most 2 from one file. If the keyword query fails (an index without the `text` field), the vector results are served alone.
 
 **Dual-experience slots (About Basel).** A question that names a known technology with an experience cue ("Have you used Redis?", "Kubernetes in production?") triggers one more keyword query for that technology's spellings. The best-ranked work chunk (from the employer files) and the best personal-project chunk that name it take the first two slots, and fused rank fills the rest. A side the data lacks gets no slot, so no unrelated chunk is forced in.
 
-**Measured effect** (golden set, Titan V2, 2026-10-05): chunk-level recall@8 rose from 0.76 to 0.81 overall (About This System 0.55 to 0.63), file-level MRR from 0.70 to 0.76, and the three exact-identifier questions moved to rank 1. Retrieval adds about half a millisecond per question; the `text` field adds about 5 MB to Redis.
+**Measured effect** (golden set, Titan V2, 2026-10-05): chunk-level recall@8 rose from 0.76 to 0.81 overall (About This System 0.55 to 0.63), chunk-level MRR from 0.55 to 0.61, file-level MRR from 0.70 to 0.76, and the three exact-identifier questions moved to rank 1. Retrieval adds about half a millisecond per question; the `text` field adds about 5 MB to Redis.
 
 ## SSE event contract and trace sequencing
 
