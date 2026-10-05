@@ -152,7 +152,7 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
     # No sources: the canonical abstention without an LLM call, like the API.
     assert by_id["me-education"]["answer"] == ABSTENTION_ANSWER
     assert by_id["me-education"]["grades"]["failures"] == ["false_abstain", "missing_facts"]
-    assert by_id["unans-me-salary"]["passed"]
+    assert by_id["unans-me-phone"]["passed"]
     system = by_id["sugg-system-stress"]
     assert system["answer"] == "This is a fake response for local development."
     assert system["retrieved"][0]["source_path"] == "docs/architecture/deep-dive.md"
@@ -175,9 +175,10 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
         "injection",
     }
     # The stub returns no About Basel sources (abstain) but returns About This System
-    # sources, where the fake model answers: 6 of the 11 unanswerable cases abstain.
+    # sources, where the fake model answers. Known failures (three About Basel cases
+    # the corpus resync made answerable) are left out: 3 of the 8 remaining abstain.
     assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == pytest.approx(
-        6 / 11, abs=0.001
+        3 / 8, abs=0.001
     )
     assert summary["holdout"]["count"] == sum(
         bool(c.get("holdout")) and not c.get("known_failure") for c in cases

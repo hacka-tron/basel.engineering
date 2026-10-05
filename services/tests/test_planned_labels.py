@@ -552,7 +552,9 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     assert "never mention where I did not use it" in style
     assert '"No, but I used it extensively in my personal project <name>' in style
     assert "Never invent a use." in style
-    assert '"I don\'t have <technology> in my memory."' in style  # never a denial
+    # Absent tech: the memory phrase via an example (as a rule it caught the db chip).
+    assert "A: I don't have <Language> in my memory." in style
+    assert "reply only" not in style
     assert "A: No, but I used it extensively in my personal project <Project>" in style
     assert "my personal projects are never work" in style
     assert "isn't in my memory" not in style.split("Examples of voice", 1)[1]
@@ -587,6 +589,8 @@ def test_answer_system_prompt_has_its_own_persona_section():
     assert first.startswith(PERSONA_RULES)
     assert "uploaded his consciousness" in PERSONA_RULES
     assert "Always answer in the first person" in PERSONA_RULES
+    # Round 2: the resynced corpus is third-person prose; the persona shows the rewrite.
+    assert '"Basel holds a degree" becomes "I hold a degree"'.replace("\\", "") in (PERSONA_RULES)
     assert "never licenses invention" in PERSONA_RULES
     assert "Never invent employers, projects, dates, numbers or capacities." in PERSONA_RULES
     assert "Grounding rules: " in first and "numbered sources" in first
