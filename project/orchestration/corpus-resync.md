@@ -15,6 +15,8 @@ Repeated owner request: "I updated my bullet bank; pick it up." Done 2026-10-03 
 
 **Owner overrides: the corpus intentionally differs from the bullet bank here. Keep them on every resync.**
 - C# is not attributed to the alerting/ticketing services; it is "his primary language at Microsoft, used across his work on core Azure services" (owner, 2026-10-04; docs PR #7).
+- `google.md`: the 4 sister teams Basel mentored and onboarded used the **YouTube automation framework**, not the Java/ADB mobile framework (owner correction, 2026-10-04; the bullet bank still ties them to the mobile one).
+- Sign-off page answers (2026-10-04, docs PR #8) are owner-dictated and have no bullet-bank source. Keep them: `bio.md` "What Basel is looking for next", "availability, location, work authorization, and pay" (no numbers, no address) and "Freelance and contract work"; `skills.md`'s line that AWS/Kubernetes/Terraform come from personal projects; `personal.md`'s fun facts. The voice is warm on purpose.
 - `bio.md` "Basel's seniority and why he's exploring new roles" is owner-dictated and has no bullet-bank source: operating at a senior level without the Senior title yet 😢, and "It's not you, it's me :P" with the serious version. Never drop it as "not in the bank".
 
 **Owner answer rules that affect corpus wording** (also in the v17 spec): don't volunteer where Basel hasn't used something. Only a production question ("have you used X in production?") with personal-only use gets "No, but I used it extensively in my personal project X". So corpus text shouldn't add "he hasn't used X at work" lines either.
