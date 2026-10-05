@@ -193,7 +193,7 @@ aws_overview() {
       --query 'MetricAlarms[].[AlarmName,StateValue,StateUpdatedTimestamp,ActionsEnabled]' --output text 2>/dev/null ||
       echo "(could not read alarms: not applied yet, or the role lacks cloudwatch:DescribeAlarms)"
     echo
-    echo "== AWS budget stop (glassbox-monthly-cost; infra/CI.md \"Budget stop\") =="
+    echo "== AWS budget stop (glassbox-bedrock-answers; infra/CI.md \"Budget stop\") =="
     budget_stop_status
     echo
     echo "== daily snapshots of $instance (newest last; restore with 'Ops · Restore from snapshot') =="

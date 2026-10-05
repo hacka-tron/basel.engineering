@@ -31,7 +31,13 @@ variable "alert_email" {
 }
 
 variable "monthly_budget_usd" {
-  description = "Monthly AWS cost budget in USD. Actual spend at 100% stops the Bedrock answer models."
+  description = "Whole-account monthly cost budget in USD (gross unblended). Email alerts only."
   type        = number
-  default     = 25
+  default     = 30
+}
+
+variable "bedrock_budget_usd" {
+  description = "Monthly Bedrock budget in USD (first-party Bedrock plus AWS Marketplace, gross unblended). Actual spend at 100% stops the Bedrock answer models."
+  type        = number
+  default     = 12.5
 }

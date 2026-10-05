@@ -1,32 +1,45 @@
-# Monthly cost budget and the automatic Bedrock answer stop.
+# Two monthly budgets and the automatic Bedrock answer stop (owner decision
+# 2026-10-05: the node's fixed costs, about $17.50/month on demand once the
+# EC2 trial ends, would trip a whole-bill stop for reasons that have nothing to
+# do with LLM spend, so the stop watches Bedrock alone).
 #
-#   glassbox-monthly-cost     $var.monthly_budget_usd (25) a month, total account
-#                             cost, unblended, gross: credits and refunds are
-#                             left out, so promotional credits can't hide real
-#                             usage (the older hand-made budget counted credits
-#                             and read $0). Emails alert_email at actual 50%, 80%
-#                             and 100% and at forecasted 100%.
-#   answer-model stop         At actual 100% AWS Budgets itself (approval model
-#                             AUTOMATIC) attaches glassbox-budget-stop-answer-
-#                             models to the node's role. It denies the answer
-#                             models only (every bedrock_profiles entry: their
-#                             inference profiles and the foundation models
-#                             behind them), never the Titan embedding model, so
-#                             retrieval keeps working and the site answers in
-#                             retrieval-only mode (services/glassbox/api/ask.py,
-#                             LLMAccessDeniedError).
-#   glassbox-budget-action    The role Budgets assumes to run the action. It can
-#                             only attach and detach that one policy on that one
-#                             role.
+#   glassbox-monthly-cost      Whole account, $var.monthly_budget_usd (30) a
+#                              month, unblended, gross: credits and refunds are
+#                              left out, so promotional credits can't hide real
+#                              usage (the older hand-made budget counted credits
+#                              and read $0). Email alerts only, at actual 50%,
+#                              80% and 100% and at forecasted 100%. No action.
+#   glassbox-bedrock-answers   Bedrock only, $var.bedrock_budget_usd (12.50) a
+#                              month, unblended, gross. Counts first-party
+#                              Bedrock (SERVICE "Amazon Bedrock") and anything
+#                              billed through AWS Marketplace (BILLING_ENTITY
+#                              "AWS Marketplace"), which is how third-party
+#                              Bedrock models such as Anthropic's or a later
+#                              OpenAI GPT-6 Luna offer are billed; see the
+#                              filter below. Emails at actual 80% and 100%.
+#   answer-model stop          At actual 100% of the Bedrock budget AWS Budgets
+#                              itself (approval model AUTOMATIC) attaches
+#                              glassbox-budget-stop-answer-models to the node's
+#                              role. It denies the answer models only (every
+#                              bedrock_profiles entry: their inference profiles
+#                              and the foundation models behind them), never the
+#                              Titan embedding model, so retrieval keeps working
+#                              and the site answers in retrieval-only mode
+#                              (services/glassbox/api/ask.py,
+#                              LLMAccessDeniedError).
+#   glassbox-budget-action     The role Budgets assumes to run the action. It can
+#                              only attach and detach that one policy on that
+#                              one role.
 #
 # Lifting the stop: AWS Budgets resets IAM-policy actions at the start of each
 # budget period (the 1st of the month, UTC), detaching the policy; to lift it
 # earlier, reverse the action in the console. See infra/CI.md "Budget stop".
-# Budgets evaluates a few times a day on billing data that lags by hours, so
-# spend can pass $25 before the stop fires.
+# Billing data is updated at least once a day and lags by hours, so Bedrock
+# spend can pass the limit before the stop fires.
 
 locals {
-  budget_name = "glassbox-monthly-cost"
+  account_budget_name = "glassbox-monthly-cost"
+  bedrock_budget_name = "glassbox-bedrock-answers"
 
   # Built from bedrock_profiles (main.tf), so a model added there (for example
   # a later GPT-6 Luna profile) is covered by the stop in the same change.
@@ -132,9 +145,9 @@ resource "aws_iam_role_policy" "budget_action" {
 # ---- Budget, alerts and the action ------------------------------------------
 
 resource "aws_budgets_budget" "monthly" {
-  name         = local.budget_name
+  name         = local.account_budget_name
   budget_type  = "COST"
-  limit_amount = format("%.1f", var.monthly_budget_usd)
+  limit_amount = format("%.2f", var.monthly_budget_usd)
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
@@ -145,10 +158,6 @@ resource "aws_budgets_budget" "monthly" {
     include_refund = false
   }
 
-  # actual 100% matches the action's threshold exactly (same operator and
-  # subscriber): the provider reads every notification on the budget back, so a
-  # notification the action shares must also be in this list or every plan
-  # would try to delete it.
   dynamic "notification" {
     for_each = [
       { type = "ACTUAL", threshold = 50 },
@@ -166,8 +175,78 @@ resource "aws_budgets_budget" "monthly" {
   }
 }
 
+# Bedrock spend, first party and Marketplace. Third-party Bedrock models are
+# sold through AWS Marketplace: they bill under their own product name (for
+# example "Claude ... (Amazon Bedrock Edition)") with billing entity "AWS
+# Marketplace", not under SERVICE "Amazon Bedrock". The product name of a
+# model not used yet (GPT-6 Luna) can't be known before its first charge, so
+# the filter takes the documented, stable dimension instead: BILLING_ENTITY
+# "AWS Marketplace" (Cost Explorer: "AWS Marketplace: Identifies a purchase
+# in AWS Marketplace"). Trade-off: any other Marketplace purchase in this
+# account would also count toward the Bedrock budget and could fire the stop
+# early. Today the account has none.
+#
+# filter_expression needs metrics and can't be combined with cost_types, so
+# "gross" is expressed in the filter: RECORD_TYPE Credit and Refund are left
+# out, like include_credit/include_refund = false on the account budget.
+resource "aws_budgets_budget" "bedrock" {
+  name         = local.bedrock_budget_name
+  budget_type  = "COST"
+  limit_amount = format("%.2f", var.bedrock_budget_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+  metrics      = ["UnblendedCost"]
+
+  filter_expression {
+    and {
+      or {
+        dimensions {
+          key    = "SERVICE"
+          values = ["Amazon Bedrock"]
+        }
+      }
+      or {
+        dimensions {
+          key    = "BILLING_ENTITY"
+          values = ["AWS Marketplace"]
+        }
+      }
+    }
+    and {
+      not {
+        dimensions {
+          key    = "RECORD_TYPE"
+          values = ["Credit", "Refund"]
+        }
+      }
+    }
+  }
+
+  # actual 100% matches the action's threshold exactly (same operator and
+  # subscriber): the provider reads every notification on the budget back, so a
+  # notification the action shares must also be in this list or every plan
+  # would try to delete it.
+  dynamic "notification" {
+    for_each = [80, 100]
+    content {
+      notification_type          = "ACTUAL"
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      subscriber_email_addresses = [var.alert_email]
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.bedrock_budget_usd > 0 && var.bedrock_budget_usd < var.monthly_budget_usd
+      error_message = "The Bedrock budget must be positive and below the whole-account budget."
+    }
+  }
+}
+
 resource "aws_budgets_budget_action" "answer_model_stop" {
-  budget_name        = aws_budgets_budget.monthly.name
+  budget_name        = aws_budgets_budget.bedrock.name
   action_type        = "APPLY_IAM_POLICY"
   approval_model     = "AUTOMATIC"
   notification_type  = "ACTUAL"
