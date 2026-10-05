@@ -309,3 +309,12 @@ def test_a_topic_example_joins_only_questions_on_its_topic(monkeypatch):
         assert strict.index("Q: Prod?") < strict.index("Q: K8s?")
     strict = _prompt("Terraform?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
     assert "Q: Prod?" in strict and "Q: K8s?" not in strict
+
+
+def test_the_real_me_example_sits_last_before_the_production_one():
+    # v20: second in the block it made "Kubernetes in production?" claim production use.
+    strict = _prompt("Kubernetes in production?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    cost = strict.index("Q: How much does <service> cost to run?")
+    real = strict.index("Q: Am I really talking to <Name>?")
+    production = strict.index("Q: <Tech> in production?")
+    assert cost < real < production

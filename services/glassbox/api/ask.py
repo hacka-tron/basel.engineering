@@ -642,18 +642,21 @@ _PRODUCTION_EXAMPLE = (
 # approved set has no example for (absent tech, a partial answer, system answers).
 _STRICT_FIXED_EXAMPLES = (
     "Q: Does Basel write <Language>? (not in the sources) A: I don't have <Language> in my memory.",
-    # v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
-    # Abdel-Rahman" (third person, no premise, no contact); this example restores the
-    # owner's approved shape (replay: flips rec-casual-real, probe set 18/18 twice).
-    "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
-    "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
-    "is at <email>.",
     "Q: When did Basel start at <Company>? A: I don't have that in my memory, but at "
     "<Company> I built <system>.",
     "Q: How long does <cache> keep entries? A: <Cache> keeps entries for <duration>, "
     "then they expire.",
     "Q: How much does <service> cost to run? A: About <$A> a month today and about <$B> "
     "later, plus <usage>, which <cap> keeps under <$C>.",
+    # v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
+    # Abdel-Rahman" (third person, no premise, no contact); this example restores the
+    # owner's approved shape (replay: flips rec-casual-real). Last of these, right before
+    # the production example: second in the block (after the absent-tech one) it made
+    # "Kubernetes in production?" answer "Yes, I've used Kubernetes in production" (0/4
+    # replays; last: 4/4, rec-casual-real still flipped 4/4).
+    "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
+    "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
+    "is at <email>.",
 )
 _EXAMPLES_INTRO = (
     "Examples of voice and format only (not sources; never copy their content). Every "
