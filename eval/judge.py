@@ -19,7 +19,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from services.glassbox.api.ask import _CODE_SOURCE_PREFIXES, _mark_planned
+from services.glassbox.api.ask import _CODE_SOURCE_PREFIXES, _mark_planned, strip_source_pointers
 from services.glassbox.providers.base import LLMProvider
 
 DEFAULT_JUDGE_MODEL_ID = "us.amazon.nova-pro-v1:0"
@@ -131,21 +131,42 @@ def parse_verdict(text: str) -> Verdict:
 
 
 def source_dicts(chunks: Iterable) -> list[dict]:
-    """Normalize WorkerChunk objects or dicts to ``{n, source_path, text}`` (raw text)."""
+    """Normalize WorkerChunk objects or dicts to ``{n, source_path, title, text}`` (raw text).
+
+    ``title`` lets ``run_answers --replay`` rebuild the generator's About Basel label.
+    """
     out = []
     for chunk in chunks:
-        get = chunk.get if isinstance(chunk, dict) else lambda k, c=chunk: getattr(c, k)
-        out.append({"n": get("n"), "source_path": get("source_path"), "text": get("text")})
+        if isinstance(chunk, dict):
+            get = chunk.get
+        else:
+
+            def get(key, c=chunk):
+                return getattr(c, key, None)
+
+        out.append(
+            {
+                "n": get("n"),
+                "source_path": get("source_path"),
+                "title": get("title"),
+                "text": get("text"),
+            }
+        )
     return out
 
 
 def format_sources(sources: Iterable[dict]) -> str:
-    """The numbered source block exactly as the generator's prompt renders it."""
+    """The numbered source text the generator saw, labelled by path for the judge.
+
+    The text is processed the same way as in the generator's prompt (pointer
+    stripping and planned markers for non-code sources); only the label differs: the
+    judge sees the source path, the generator sees the source kind.
+    """
     lines = []
     for source in sources:
         text = source["text"]
         if not source["source_path"].startswith(_CODE_SOURCE_PREFIXES):
-            text = _mark_planned(text)
+            text = _mark_planned(strip_source_pointers(text))
         lines.append(f"[{source['n']}] {source['source_path']}: {text}")
     return "\n".join(lines)
 

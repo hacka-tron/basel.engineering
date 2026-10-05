@@ -239,17 +239,20 @@ async def run_case(
 def replay_chunks(row: dict) -> list[WorkerChunk]:
     """The chunks an earlier run retrieved for a case, rebuilt from its stored row.
 
-    Stored rows keep no chunk title; the prompt only uses it as a fallback label for
-    an About Basel chunk without a Markdown heading.
+    The title is only a fallback label for an About Basel chunk without a Markdown
+    heading.
     """
-    texts = {source["n"]: source["text"] for source in row.get("sources") or []}
+    sources = {source["n"]: source for source in row.get("sources") or []}
+    texts = {n: source["text"] for n, source in sources.items()}
     return [
         WorkerChunk(
             n=item["n"],
             chunk_id=item["chunk_id"],
             text=texts[item["n"]],
             source_path=item["source_path"],
-            title="",
+            # Rows written since prompt v17 round 2 store the title; older rows fall
+            # back to "" (about_me_label then uses the chunk's own heading).
+            title=sources.get(item["n"], {}).get("title") or "",
             score=item["score"],
         )
         for item in row.get("retrieved") or []

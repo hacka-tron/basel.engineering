@@ -69,7 +69,7 @@ _REFUSAL_OPENERS = re.compile(
     r"|none of the (?:provided |numbered )?sources|there is no information|theres no information"
     r"|no information|it is unclear|its unclear"
     # Prompt v17 persona wording for a gap ("I don't have that in my memory.").
-    r"|i dont have (?:that|this|it|any of that) in my memory|thats not in my memory)\b"
+    r"|i dont have (?:\w+ ){1,4}in my memory|thats not in my memory)\b"
 )
 # A refusal opener followed by one of these goes on to answer from the sources
 # ("None of the sources mention X, but they show Y"), so it is not an abstention.

@@ -552,6 +552,7 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     assert "never mention where I did not use it" in style
     assert '"No, but I used it extensively in my personal project <name>' in style
     assert "Never invent a use." in style
+    assert '"I don\'t have <technology> in my memory."' in style  # never a denial
     assert "A: No, but I used it extensively in my personal project <Project>" in style
     assert "my personal projects are never work" in style
     assert "isn't in my memory" not in style.split("Examples of voice", 1)[1]
@@ -569,7 +570,8 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     assert style.index("My readers are") < style.index("Tone lives only in the phrasing")
     # Provisional examples: first person, placeholders only (no About Basel facts).
     examples = style.split("Examples of voice and format only", 1)[1]
-    assert "A: Yes, I used <Tech> in my personal project <Project>" in examples
+    assert "A: Yes! I used <Tech> in my personal project <Project>" in examples
+    assert "I'd love to hear from you!" in examples  # warm tone (owner, 2026-10-04)
     answers = [line.split(" A: ", 1)[1] for line in examples.splitlines() if " A: " in line]
     assert answers and not any("Basel" in answer for answer in answers)
     assert "Green" not in examples
@@ -605,6 +607,31 @@ def test_source_pointers_are_stripped_from_document_text_only():
     )
     assert strip_source_pointers("It follows DESIGN-002 §5.1 closely.") == "It follows closely."
     assert strip_source_pointers("Done. See the deep dive for details.") == "Done."
+    # Round 1 review: a parenthetical with facts and a path keeps its facts (real
+    # sentences from DESIGN.md, DESIGN-005, DESIGN-002 and the deep dive).
+    cap = strip_source_pointers(
+        "The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at "
+        "128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this node."
+    )
+    assert "maxReplicaCount: 3" in cap and "128Mi" in cap and "512 MiB" in cap
+    recall = strip_source_pointers(
+        "Retrieval is decent (Titan recall@5 0.87 at the document level; the phase 3 "
+        "baseline measured 0.851, see §2.2), but three things hold quality back."
+    )
+    assert "0.87" in recall and "0.851" in recall and "§" not in recall
+    runbook = strip_source_pointers(
+        'the owner-approved "Ops · Reindex" runbook exists for a MySQL-only restore; '
+        "see DESIGN.md §6.5)."
+    )
+    assert '"Ops · Reindex" runbook exists for a MySQL-only restore' in runbook
+    assert "DESIGN" not in runbook
+    corpora = strip_source_pointers(
+        "Each corpus (`about_me`, `about_system` or `portfolio`, one list kept in "
+        "`services/glassbox/corpora.py`) has its own scope."
+    )
+    assert "`about_me`, `about_system` or `portfolio`" in corpora
+    # A file pattern needs a word boundary: "api.tsunami" is not "api.ts".
+    assert strip_source_pointers("It calls api.tsunami today.") == "It calls api.tsunami today."
     # Directory names, versions and sizes are facts, not pointers.
     for kept in ("Manifests live in `k8s/base`.", "Version 1.2.3 uses 3.5 GB (t4g.small)."):
         assert strip_source_pointers(kept) == kept
@@ -645,7 +672,7 @@ def test_grounding_rules_treat_the_question_as_data():
         ("k8s/base/api.yaml", "Kubernetes manifest"),
         ("infra/modules/compute/main.tf", "infrastructure (Terraform)"),
         ("docs/DESIGN.md", "design document"),
-        ("private/bio.md", "About Basel (t)"),
+        ("private/bio.md", "About Basel (bio · t)"),
         ("corpus/portfolio/x.md", "portfolio project"),
         ("README.md", "document"),
     ],
@@ -674,7 +701,8 @@ def test_about_basel_prompt_never_contains_a_private_path():
     ]
     prompt = _prompt("What is Basel's favorite food?", chunks)
     assert "private/" not in prompt
-    assert "[1] About Basel (Personal): Favorite food: X." in prompt
+    assert "[1] About Basel (personal · Personal): Favorite food: X." in prompt
+    assert ".md" not in prompt.split("Question:")[0]
     heading = "## Basel's favorite food\nMolokhia."
     chunk = WorkerChunk(
         n=1,
@@ -684,8 +712,9 @@ def test_about_basel_prompt_never_contains_a_private_path():
         title="personal.md",
         score=0.9,
     )
-    assert "[1] About Basel (Basel's favorite food): ## Basel's favorite food" in _prompt(
-        "q?", [chunk]
+    assert (
+        "[1] About Basel (personal · Basel's favorite food): ## Basel's favorite food"
+        in _prompt("q?", [chunk])
     )
 
 

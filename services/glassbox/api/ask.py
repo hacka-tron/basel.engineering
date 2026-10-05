@@ -331,28 +331,58 @@ def _source_kind(source_path: str) -> str:
 # entirely; a file path elsewhere becomes its bare name without directory or
 # extension ("release.yml" -> "release"); design-doc section references
 # ("DESIGN-002 §5.1") go. Directory names such as k8s/base stay: they are facts.
-_POINTER_FILE = r"`?(?:[\w.-]+/)*[\w-]+\.(?:md|py|tf|ya?ml|tsx?|json|sh|toml|ini)`?"
-_POINTER_PAREN = re.compile(
-    r"\s*\((?:[^()]*?\b(?:see|in|from)\s+)?[^()]*?(?:" + _POINTER_FILE + r"|§)[^()]*\)"
+_POINTER_FILE = r"`?(?:[\w.*-]+/)*[\w*-]+\.(?:md|py|tf|ya?ml|tsx?|json|sh|toml|ini)\b(?![\w-])`?"
+_POINTER_SECTION = r"(?:\bDESIGN(?:-\d{3})?(?:\.md)?\s*)?§\s?\d+(?:\.\d+)*"
+_POINTER_TOKEN = re.compile(rf"{_POINTER_FILE}|{_POINTER_SECTION}|\bDESIGN(?:-\d{{3}})?\b")
+# What may sit around pointers inside a parenthetical that is only a pointer:
+# "(see DESIGN.md §6.7)", "(`ask.py`, `worker.py`)", "(in the deep dive)".
+_POINTER_FILLER = re.compile(
+    r"\b(?:see|also|in|from|and|or|under|the|deep dive|for details)\b|[\s,;:`]", re.IGNORECASE
 )
+_PARENTHETICAL = re.compile(r"\s*\(([^()]*)\)")
+# "See X." / "; see X" where X is only a pointer (optionally "for details").
 _POINTER_SEE = re.compile(
-    r"\s*[(\[]?\b[Ss]ee\s+(?:also\s+)?(?:" + _POINTER_FILE + r"|DESIGN[\w.-]*|the deep dive)"
-    r"[^.;)\]]*[)\]]?"
+    rf"(?:[;,]\s*|\s*)\b[Ss]ee\s+(?:also\s+)?(?:{_POINTER_FILE}|{_POINTER_SECTION}"
+    r"|DESIGN(?:-\d{3})?|the deep dive)(?:\s+(?:and|or)\s+(?:"
+    + _POINTER_FILE
+    + "|"
+    + _POINTER_SECTION
+    + r"))*(?:\s+for (?:more )?details)?(?=\s*[.;)]|\s*$)"
 )
-_POINTER_DOC_SECTION = re.compile(r"\s*\bDESIGN(?:-\d{3})?(?:\.md)?\s+§\s?[\d.]*\d")
-_POINTER_FILE_RE = re.compile(_POINTER_FILE)
 _POINTER_DOUBLE_STOP = re.compile(r"(?<!\.)\.\.(?!\.)")
 
 
+def _drop_pointer_only_parenthetical(match: re.Match) -> str:
+    inner = match.group(1)
+    if not _POINTER_TOKEN.search(inner):
+        return match.group(0)
+    rest = _POINTER_FILLER.sub("", _POINTER_TOKEN.sub("", inner))
+    return "" if not rest else match.group(0)
+
+
+def _bare_name(match: re.Match) -> str:
+    token = match.group(0)
+    if "§" in token:
+        return ""
+    if token.startswith("DESIGN") and "." not in token:
+        return token  # a bare "DESIGN" word is left to the parenthetical/see rules
+    return token.strip("`").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+
 def strip_source_pointers(text: str) -> str:
-    """Document text without file paths, "see ..." pointers or design-doc section refs."""
-    text = _POINTER_PAREN.sub("", text)
+    """Document text without source pointers, keeping every other fact.
+
+    Only pointers go (prompt v17, #170 review minor; round 1 review: never a fact): a
+    parenthetical is dropped only when it holds nothing but pointers ("(see DESIGN.md
+    §6.7)"), a "see X" clause only when X is a pointer, a section reference ("§5.1")
+    always; any other file path becomes its bare name ("`release.yml`" -> "release").
+    """
+    text = _PARENTHETICAL.sub(_drop_pointer_only_parenthetical, text)
     text = _POINTER_SEE.sub("", text)
-    text = _POINTER_DOC_SECTION.sub("", text)
-    text = _POINTER_DOUBLE_STOP.sub(".", text)  # "... closely. See X." -> "... closely."
-    return _POINTER_FILE_RE.sub(
-        lambda match: match.group(0).strip("`").rsplit("/", 1)[-1].rsplit(".", 1)[0], text
-    )
+    text = _POINTER_TOKEN.sub(_bare_name, text)
+    text = re.sub(r"[ \t]+([.,;)])", r"\1", text)
+    text = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", text)
+    return _POINTER_DOUBLE_STOP.sub(".", text)
 
 
 def _prompt(
@@ -363,8 +393,12 @@ def _prompt(
         # rule, prompt v15); About Basel sources never show a private/ path.
         label = _source_kind(chunk.source_path)
         if chunk.source_path.startswith("private/"):
-            # Same visitor-safe section label the browser gets (about_me_label).
-            label = f"{label} ({about_me_label(chunk.text, chunk.title)})"
+            # The topic (file stem, e.g. "projects") plus the section label the browser
+            # gets (about_me_label), so each chunk names its project or employer and
+            # facts from one project don't bleed into another (v17 review: CryptoKing's
+            # MEAN stack on the portfolio site). The stem is never a path.
+            topic = chunk.source_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            label = f"{label} ({topic} · {about_me_label(chunk.text, chunk.title)})"
         if chunk.source_path.startswith(_CODE_SOURCE_PREFIXES):
             return f"[{chunk.n}] {label}: {chunk.text}"
         return f"[{chunk.n}] {label}: {_mark_planned(strip_source_pointers(chunk.text))}"
@@ -423,8 +457,8 @@ def _prompt(
         "mention where I did not use it. If the question asks about "
         "production, work or professional use and the sources show only personal-project "
         'use, answer "No, but I used it extensively in my personal project <name>, for '
-        '<purpose>." If the sources do not mention the technology at all, say briefly that '
-        "it isn't one I use. Never invent a use.\n"
+        '<purpose>." If the sources do not mention the technology at all, reply only '
+        '"I don\'t have <technology> in my memory." Never invent a use.\n'
         # Strict factuality lives in PERSONA_RULES (system prompt), not here: as a bullet
         # after the question it made Nova Lite answer the false-premise chip "Show me
         # the Terraform for the database." with a bare abstention (v17 round 1 ablation:
@@ -461,16 +495,20 @@ def _prompt(
         # item 2) before it replaces these.
         "Examples of voice and format only (not sources; never copy their content). Every "
         'answer about me is in my voice like these: "I", "my", never "Basel" or "he".\n'
-        "Q: What is Basel's favorite <thing>? A: <Thing>, easily! Of all of them, that's "
-        "the one I pick.\n"
-        "Q: Has Basel used <Tech>? A: Yes, I used <Tech> in my personal project <Project> "
+        # Warm, friendly voice (owner, 2026-10-04): examples set the tone on Nova Lite,
+        # rule lists don't. Placeholders only; still factual in shape.
+        "Q: What is Basel's favorite <thing>? A: Oh, <thing>, easily! Of all of them, "
+        "that's the one I'd pick every time.\n"
+        "Q: Has Basel used <Tech>? A: Yes! I used <Tech> in my personal project <Project> "
         "for <purpose>.\n"
         "Q: Has Basel used <Tech> in production? A: No, but I used it extensively in my "
         "personal project <Project>, for <purpose>.\n"
-        "Q: What did Basel build at <Company>? A: At <Company>, I built <system>, which cut "
-        "<metric> from <A> to <B>.\n"
+        "Q: What did Basel build at <Company>? A: At <Company>, I built <system>, and I'm "
+        "proud that it cut <metric> from <A> to <B>.\n"
         "Q: When did Basel start at <Company>? A: I don't have that in my memory, but at "
         "<Company> I built <system>.\n"
+        "Q: How can I reach Basel? A: I'd love to hear from you! Email me at <email>, or "
+        "find me on <network>.\n"
         "Q: How long does <cache> keep entries? A: <Cache> keeps entries for <duration>, "
         "then they expire.\n"
         "Q: How much does <service> cost to run? A: About <$A> a month today and about <$B> "

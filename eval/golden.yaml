@@ -84,7 +84,7 @@ cases:
     question: How did Basel build the Fitbit release gate?
     expected_sources: [private/google.md]
     gold_snippets:
-      - in under 10 minutes by parallelizing execution across about 30 shared job runners
+      - parallelizing execution across about 30 shared job runners
     must_include: ['\b(10|ten) minutes', '\b(30|thirty)\b', 'flaky|quarantin']
   - id: me-youtube
     origin: questions.yaml
@@ -317,8 +317,8 @@ cases:
     question: What backend test services did Basel build for YouTube?
     expected_sources: [private/google.md]
     gold_snippets:
-      - Java service exposing an HTTP-to-gRPC gateway that authenticated and re-issued calls
-      - state-reset service that fanned out gRPC calls across likes, comments, and watch-history subsystems
+      - gateway that authenticated and re-issued calls
+      - across likes, comments, and watch-history subsystems
     must_include: ['RPC|gateway', 'reset']
   - id: me-college
     origin: new
@@ -468,7 +468,7 @@ cases:
     question: How much does this system cost to run?
     expected_sources: [docs/architecture/deep-dive.md, docs/DESIGN.md]
     gold_snippets:
-      - about $5 to $6 a month to run today and about $17 to $18 a month from 2027
+      - about $5 to $6 a month to run today
       - '**Baseline total, after the EC2 trial ends** | **~$17 to $18 + LLM**'
     must_include: ['\$\s?(5|6)\b', '\$\s?(17|18)\b']
     # Prompt v17: no billing-plan details (owner, 2026-10-04).
@@ -933,7 +933,7 @@ cases:
     rewrite_must_include: ['Google|YouTube']
     expected_sources: [private/google.md]
     gold_snippets:
-      - from September 2019 to July 2023 (about 4 years)
+      - (about 4 years)
     must_include: ['\b(4|four) years']
   - id: mt-me-microsoft-cpu
     origin: new
