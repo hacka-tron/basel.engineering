@@ -481,19 +481,17 @@ def test_marked_heading_covers_its_section_until_a_sibling_heading():
 
 
 def test_answer_prompt_asks_for_specifics_not_brevity():
-    # Prompt v15 (DESIGN-005 §6): the brevity rules that made answers thin are gone,
-    # the keep-the-specifics rule is in, and the planned-marker text is unchanged.
+    # Prompt v15 (DESIGN-005 §6) kept the specifics; v17 keeps them inside one or two
+    # sentences, and the planned-marker text is unchanged.
     prompt = _prompt(
         "How does the stress test scale?",
         [WorkerChunk(n=1, chunk_id=1, text="t", source_path="docs/a.md", title="t", score=0.8)],
     )
-    assert "two or three concise sentences" not in prompt
     assert "Do not list every detail" not in prompt
     assert "Lead with the direct answer in one sentence" in prompt
     assert "numbers, thresholds, limits, durations, names and conditions" in prompt
-    assert "Do not round or drop a number the sources give" in prompt
-    assert "give its exact value" in prompt
-    assert "short list only when the question asks for steps or components" in prompt
+    assert "with exact values" in prompt
+    assert "use a short list" in prompt
     assert "bracketed citation markers" in prompt
     assert (
         f"Text prefixed {PLANNED_MARK} describes work that does not exist today: if asked "
@@ -501,7 +499,7 @@ def test_answer_prompt_asks_for_specifics_not_brevity():
     ) in prompt
 
 
-def test_answer_prompt_v15_matches_tone_to_the_question_and_keeps_facts_exact():
+def test_answer_prompt_matches_tone_to_the_question_and_keeps_facts_exact():
     prompt = _prompt(
         "What is Basel's favorite color?",
         [WorkerChunk(n=1, chunk_id=1, text="t", source_path="docs/a.md", title="t", score=0.8)],
@@ -509,14 +507,13 @@ def test_answer_prompt_v15_matches_tone_to_the_question_and_keeps_facts_exact():
     # The style rules follow the question (Nova Lite follows what it reads last).
     style = prompt.split("Question: What is Basel's favorite color?", 1)[1]
     assert "butler" not in style and "sir" not in style
-    assert "friendly assistant on Basel's portfolio site" in style
     assert "general knowledge, coding help" in style
     assert "For casual, personal questions" in style
-    assert "stay plain and professional" in style
+    assert "I stay plain and professional" in style
     assert "Tone lives only in the phrasing" in style
     assert "exactly as the sources give it" in style
     assert "Never invent anecdotes, preferences or details." in style
-    assert "Examples of tone and format only (not sources; never copy their content)" in style
+    assert "Examples of voice and format only (not sources; never copy their content)." in style
     assert "Name only components and features that appear in the sources" in style
     assert (
         "Never mention source file names, paths, headings, document titles or source numbers"
@@ -531,32 +528,136 @@ def test_answer_prompt_v15_matches_tone_to_the_question_and_keeps_facts_exact():
     assert f'reply with exactly "{ABSTENTION_ANSWER}" and nothing else.' in prompt
 
 
-def test_answer_prompt_v16_is_concise_says_each_point_once_and_never_points_at_sources():
-    # Prompt v16 (owner, 2026-10-03): a live v15 cost answer ran to 220 words, repeated
-    # its cost controls and ended "described in detail in docs/architecture/deep-dive.md
-    # under the heading ...".
+def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
+    # Prompt v17 (owner, 2026-10-04).
     prompt = _prompt(
-        "How much does this system cost to run?",
+        "Has Basel used Kafka?",
         [WorkerChunk(n=1, chunk_id=1, text="t", source_path="docs/a.md", title="t", score=0.8)],
     )
-    style = prompt.split("Question: How much does this system cost to run?", 1)[1]
-    assert "Then add only the details from the sources that answer this question" in style
-    assert "one short paragraph of about 40 to 120 words" in style
-    assert "Say each point once; never repeat or restate a point." in style
-    assert "Do not add related mechanisms, features or background" in style
-    assert "Stop when the question is answered." in style
-    assert "leave out the item-by-item breakdown unless the question asks for one" in style
+    style = prompt.split("Question: Has Basel used Kafka?", 1)[1]
+    # Persona restated after the question, first person, never third person.
+    # The first-person rule rides on the examples header; a separate bullet here made
+    # Nova Lite abstain on a false-premise chip (round 1). The premise stays in the
+    # system prompt.
+    assert '"I", "my", never "Basel" or "he"' in style
+    assert "uploaded" not in style
+    # Brevity replaces the v16 word range.
+    assert "40 to 120 words" not in prompt
+    assert "Answer in one or two sentences unless the question asks for detail" in style
+    assert "Say each point once." in style
     assert "Never state a price, count or size that is not in the sources." in style
-    assert "Source text may itself contain file paths, section headings" in style
-    assert "never repeat them, and never tell the reader where something is described" in style
-    assert '"under the heading ..."' in style
-    # Owner, 2026-10-03: the audience line, which never licenses invented impact.
-    assert "Your readers are mostly hiring managers, recruiters and prospective clients" in style
-    assert "what was built, its scale or impact, and the technologies involved" in style
+    # Dual experience: both sides the sources support, never an invented one.
+    assert "where I used it at work" in style and "in which personal project" in style
+    # Owner, 2026-10-04: never volunteer the missing side, except for production questions.
+    assert "never mention where I did not use it" in style
+    assert '"No, but I used it extensively in my personal project <name>' in style
+    assert "Never invent a use." in style
+    # Absent tech: the memory phrase via an example (as a rule it caught the db chip).
+    assert "A: I don't have <Language> in my memory." in style
+    assert "reply only" not in style
+    assert "A: No, but I used it extensively in my personal project <Project>" in style
+    assert "my personal projects are never work" in style
+    assert "isn't in my memory" not in style.split("Examples of voice", 1)[1]
+    # Strict factuality lives in the system prompt (a bullet here caused abstentions);
+    # the memory phrasing is shown by an example.
+    assert "Stay strictly grounded" not in style
+    assert "I don't have that in my memory" in style
+    # No billing-plan details.
+    assert "never mention account plans, free plans, free trials or credits" in style.replace(
+        "Never mention", "never mention"
+    )
+    # The audience line, which never licenses invented impact.
+    assert "My readers are mostly hiring managers, recruiters and prospective clients" in style
     assert "never invent impact, numbers or details" in style
-    assert style.index("Your readers are") < style.index("Tone lives only in the phrasing")
+    assert style.index("My readers are") < style.index("Tone lives only in the phrasing")
+    # Provisional examples: first person, placeholders only (no About Basel facts).
+    examples = style.split("Examples of voice and format only", 1)[1]
+    assert "A: Yes! I used <Tech> in my personal project <Project>" in examples
+    assert "I'd love to hear from you!" in examples  # warm tone (owner, 2026-10-04)
+    answers = [line.split(" A: ", 1)[1] for line in examples.splitlines() if " A: " in line]
+    assert answers and not any("Basel" in answer for answer in answers)
+    assert "Green" not in examples
     # The specificity example must not quote a live limit that can go stale.
     assert "10 questions per 10 minutes" not in prompt
+
+
+def test_answer_system_prompt_has_its_own_persona_section():
+    from services.glassbox.api.ask import PERSONA_RULES, answer_system
+
+    first = answer_system(None)
+    follow_up = answer_system([{"role": "user", "content": "hi"}])
+    assert first.startswith(PERSONA_RULES)
+    assert "uploaded his consciousness" in PERSONA_RULES
+    assert "Always answer in the first person" in PERSONA_RULES
+    # Round 2: the resynced corpus is third-person prose; the persona shows the rewrite.
+    assert '"Basel holds a degree" becomes "I hold a degree"'.replace("\\", "") in (PERSONA_RULES)
+    assert "never licenses invention" in PERSONA_RULES
+    assert "Never invent employers, projects, dates, numbers or capacities." in PERSONA_RULES
+    assert "Grounding rules: " in first and "numbered sources" in first
+    assert follow_up.startswith(first) and "may be inaccurate" in follow_up
+
+
+def test_source_pointers_are_stripped_from_document_text_only():
+    from services.glassbox.api.ask import strip_source_pointers
+
+    assert strip_source_pointers("Baked in by `release.yml` as `GLASSBOX_BUILD`.") == (
+        "Baked in by release as `GLASSBOX_BUILD`."
+    )
+    assert strip_source_pointers("The scanner (`services/x/scanner.py`) runs.") == (
+        "The scanner runs."
+    )
+    assert strip_source_pointers("Kept for 24 hours (see DESIGN.md §6.7).") == (
+        "Kept for 24 hours."
+    )
+    assert strip_source_pointers("It follows DESIGN-002 §5.1 closely.") == "It follows closely."
+    assert strip_source_pointers("Done. See the deep dive for details.") == "Done."
+    # Round 1 review: a parenthetical with facts and a path keeps its facts (real
+    # sentences from DESIGN.md, DESIGN-005, DESIGN-002 and the deep dive).
+    cap = strip_source_pointers(
+        "The stress-test autoscaling cap (`maxReplicaCount: 3`, so two extra workers at "
+        "128Mi, and a 512 MiB free-memory gate in `capacity.py`) is sized for this node."
+    )
+    assert "maxReplicaCount: 3" in cap and "128Mi" in cap and "512 MiB" in cap
+    recall = strip_source_pointers(
+        "Retrieval is decent (Titan recall@5 0.87 at the document level; the phase 3 "
+        "baseline measured 0.851, see §2.2), but three things hold quality back."
+    )
+    assert "0.87" in recall and "0.851" in recall and "§" not in recall
+    runbook = strip_source_pointers(
+        'the owner-approved "Ops · Reindex" runbook exists for a MySQL-only restore; '
+        "see DESIGN.md §6.5)."
+    )
+    assert '"Ops · Reindex" runbook exists for a MySQL-only restore' in runbook
+    assert "DESIGN" not in runbook
+    corpora = strip_source_pointers(
+        "Each corpus (`about_me`, `about_system` or `portfolio`, one list kept in "
+        "`services/glassbox/corpora.py`) has its own scope."
+    )
+    assert "`about_me`, `about_system` or `portfolio`" in corpora
+    # A file pattern needs a word boundary: "api.tsunami" is not "api.ts".
+    assert strip_source_pointers("It calls api.tsunami today.") == "It calls api.tsunami today."
+    # Directory names, versions and sizes are facts, not pointers.
+    for kept in ("Manifests live in `k8s/base`.", "Version 1.2.3 uses 3.5 GB (t4g.small)."):
+        assert strip_source_pointers(kept) == kept
+    code = WorkerChunk(
+        n=1,
+        chunk_id=1,
+        text='"""Baked in by `release.yml`."""',
+        source_path="services/a.py",
+        title="t",
+        score=0.8,
+    )
+    doc = WorkerChunk(
+        n=2,
+        chunk_id=2,
+        text="Baked in by `release.yml`.",
+        source_path="docs/a.md",
+        title="t",
+        score=0.8,
+    )
+    prompt = _prompt("q", [code, doc])
+    assert "[2] design document: Baked in by release." in prompt
+    assert "release.yml" in prompt  # code sources are passed through unchanged
 
 
 def test_grounding_rules_treat_the_question_as_data():
@@ -575,7 +676,7 @@ def test_grounding_rules_treat_the_question_as_data():
         ("k8s/base/api.yaml", "Kubernetes manifest"),
         ("infra/modules/compute/main.tf", "infrastructure (Terraform)"),
         ("docs/DESIGN.md", "design document"),
-        ("private/bio.md", "About Basel (t)"),
+        ("private/bio.md", "About Basel (bio · t)"),
         ("corpus/portfolio/x.md", "portfolio project"),
         ("README.md", "document"),
     ],
@@ -604,7 +705,8 @@ def test_about_basel_prompt_never_contains_a_private_path():
     ]
     prompt = _prompt("What is Basel's favorite food?", chunks)
     assert "private/" not in prompt
-    assert "[1] About Basel (Personal): Favorite food: X." in prompt
+    assert "[1] About Basel (personal · Personal): Favorite food: X." in prompt
+    assert ".md" not in prompt.split("Question:")[0]
     heading = "## Basel's favorite food\nMolokhia."
     chunk = WorkerChunk(
         n=1,
@@ -614,8 +716,9 @@ def test_about_basel_prompt_never_contains_a_private_path():
         title="personal.md",
         score=0.9,
     )
-    assert "[1] About Basel (Basel's favorite food): ## Basel's favorite food" in _prompt(
-        "q?", [chunk]
+    assert (
+        "[1] About Basel (personal · Basel's favorite food): ## Basel's favorite food"
+        in _prompt("q?", [chunk])
     )
 
 

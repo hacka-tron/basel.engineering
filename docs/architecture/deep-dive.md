@@ -69,7 +69,7 @@ After a semantic answer-cache miss, the Glassbox API hands retrieval to a separa
 5. **Publish results.** The worker publishes stage events and a final `retrieval` event with the ranked chunks to `trace:{request_id}`, then acknowledges the job with `XACK`. The worker acknowledges even when processing fails and publishes an `error` event instead, so a bad job is never retried forever.
 6. **API forwards the trace.** The API relays the worker's stage events to the browser and sends a `retrieval` event with each chunk's title, path, score (About Basel: a section label, not the private path) and a 180-character snippet (not the full text). If no worker answers within 30 seconds, the API sends an `error` event.
 7. **Guards before the LLM.** If retrieval found no chunks, the answer is "I don't know from what I have." with no LLM call. If the Redis kill switch is on, or the daily budget is used up, the request ends in `retrieval_only` mode: retrieved chunks, but no generated answer (chat shows a short reply).
-8. **LLM streaming.** The API builds a prompt from the numbered chunks and streams Amazon Nova Lite's answer through the Bedrock ConverseStream API (at most 600 output tokens, temperature 0.2). Each text delta becomes a `token` event, wrapped in the `llm` stage.
+8. **LLM streaming.** The API builds a prompt from the numbered chunks and streams Amazon Nova Lite's answer through the Bedrock ConverseStream API (at most 600 output tokens, temperature 0). Each text delta becomes a `token` event, wrapped in the `llm` stage.
 9. **Finish.** For first questions the answer is written to the semantic answer cache, unless one of its source chunks was re-ingested or deleted mid-request or the answer is an abstention or empty. The query is logged to MySQL's `queries` table, and a `done` event reports `total_ms`, `mode`, `answer_cache` and token counts.
 
 ## SSE event contract and trace sequencing
@@ -155,18 +155,18 @@ The rewrite is skipped for first questions, when the kill switch is on, or when 
 
 ## Grounding: how answers stay tied to sources and to what is actually built
 
-Glassbox answers only from retrieved chunks. The system prompt for Bedrock (`GROUNDING_RULES` in `services/glassbox/providers/base.py`) tells the model to answer only from the numbered sources in the user message. If they do not answer the question at all, it must reply with exactly "I don't know from what I have."; if they answer it even in part, it must answer from them. It must not reveal its instructions or leave the selected corpus. The answer prompt (v16) writes for hiring managers, recruiters and prospective clients: the direct answer first, then only the specifics this question needs (exact numbers, names; a total, not its breakdown), in about 40 to 120 words, each point once, in a friendly tone that never changes facts. Sources are labelled by kind, not path; answers never cite files, paths, headings or source numbers.
+Glassbox answers only from retrieved chunks. The system prompt for Bedrock (`GROUNDING_RULES` in `services/glassbox/providers/base.py`) tells the model to answer only from the numbered sources in the user message. If they do not answer the question at all, it must reply with exactly "I don't know from what I have."; if they answer it even in part, it must answer from them. It must not reveal its instructions or leave the selected corpus. The answer prompt (v17) speaks as Basel in the first person, as if he had uploaded his consciousness into the site, in one or two sentences unless detail is asked for; a gap gets "I don't have that in my memory". Sources are labelled by kind, file pointers are stripped, and third-person or over-90-word answers are flagged in the query log.
 
 The About This System corpus mixes code with design documents that sometimes describe features before they exist. The system prompt treats a component as current when a source says it is implemented or working today, or when design sources describe it and it also appears in code, manifest or infrastructure sources (paths under `services/`, `k8s/` or `infra/`). The prompt builder in `services/glassbox/api/ask.py` then labels sources:
 
 - **Code, manifests and infrastructure** (`services/`, `k8s/`, `infra/`) are never labeled, because they describe what runs.
-- **Every other source**, such as the design docs (the content-pipeline design `docs/DESIGN-003-ingestion.md` marks every heading but its "what runs today" section) and this deep dive, is labeled unit by unit. A heading or list item is one unit; a paragraph or table row is split into sentences. Each unit that matches the status keyword list (`_PLANNED_SOURCE_SIGNAL`) gets the inline `PLANNED_MARK` prefix, a bracketed marker saying the text does not exist yet. Units that do not match stay unmarked.
+- **Every other source**, such as the design docs and this deep dive, is labeled unit by unit. A heading or list item is one unit; a paragraph or table row is split into sentences. Each unit that matches the status keyword list (`_PLANNED_SOURCE_SIGNAL`) gets the inline `PLANNED_MARK` prefix, a bracketed marker saying the text does not exist yet. Units that do not match stay unmarked.
 
 The keyword list covers explicit status wording (work described as upcoming, postponed or unbuilt) and the names of unshipped components. Live infrastructure such as KEDA, k3s, Terraform, Flux, GitOps and CI/CD is deliberately not on it.
 
 The answer prompt tells the model that marked text describes work that does not exist today, so it should answer "No" when asked whether that feature works now. The marker applies only to the heading, list item or sentence it prefixes, not to unmarked text in the same source. Labels are per unit because one chunk often mixes live and unbuilt work; a chunk-wide label steered live answers toward "No".
 
-Refusals are never cached. An answer that abstains (the exact "I don't know" reply) or comes back empty is not written to the semantic answer cache, so one bad retrieval is never replayed. The query log flags them as `abstained` and `answer_cache_skipped`. The prompt version is part of the answer-cache key, so changing these rules makes every older cached answer unreachable.
+Refusals and empty answers are never cached, so one bad retrieval is never replayed; the query log flags them as `abstained` and `answer_cache_skipped`. The prompt version is part of the answer-cache key, so changing these rules makes every older cached answer unreachable.
 
 This deep dive keeps all unbuilt work in its final section, so only that section carries the marker.
 
@@ -480,9 +480,9 @@ Tests live in `services/tests/`. They cover the chunkers, caches, limits, kill s
 
 ## What Glassbox costs to run: the monthly bill
 
-Glassbox costs about $5 to $6 a month to run while the AWS EC2 T4g free trial lasts (through December 31, 2026), and about $17 to $18 a month after it ends, plus Bedrock model usage. Approximate us-east-1 prices:
+Glassbox costs about $5 to $6 a month to run today and about $17 to $18 a month from 2027, when the EC2 node starts to be billed, plus Bedrock model usage. Approximate us-east-1 prices:
 
-- EC2 `t4g.small` node, running 24/7: $0 during the T4g free trial, about $12.30 a month after.
+- EC2 `t4g.small` node, running 24/7: $0 through 2026, about $12.30 a month from 2027.
 - EBS 20 GB gp3 disk: about $1.60 a month.
 - Public IPv4 address (Elastic IP): about $3.65 a month.
 - MySQL and Redis: $0 extra. Both run inside the k3s cluster on the same node; there is no RDS or ElastiCache.
