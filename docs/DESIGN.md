@@ -810,7 +810,7 @@ Approximate on-demand us-east-1 prices; verify in the AWS Pricing Calculator bef
 | MySQL | $0 — runs in-cluster on the EC2 node's own storage, not RDS (see §10.5) |
 | Cloudflare (DNS + TLS + proxy) | $0 |
 | Bedrock embeddings | pennies |
-| Bedrock LLM on Nova Lite (capped at 500 answers/day) | about $0.0003 per new answer (~4,000 input tokens measured 2026-10-03), so cents in practice, worst case ~$4.50 |
+| Bedrock LLM on Nova Lite (capped at 200 answers/day) | about $0.0003 per new answer (~4,000 input tokens measured 2026-10-03), so cents in practice, worst case ~$1.80 |
 | **Baseline total, while the EC2 trial lasts** | **~$5 to $6 + LLM** |
 | **Baseline total, after the EC2 trial ends** | **~$17 to $18 + LLM** |
 

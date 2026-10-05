@@ -13,9 +13,9 @@ data:
   AWS_REGION: us-east-1
   BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
   BEDROCK_LLM_MODEL_ID: us.amazon.nova-lite-v1:0
-  GLASSBOX_DAILY_LLM_CAP: "500"
+  GLASSBOX_DAILY_LLM_CAP: "200"
   # Answer-cache warm-up: LLM calls per UTC day across all warm-up runs
-  # (CronJob + post-deploy), out of the 500 above (services/glassbox/warm.py).
+  # (CronJob + post-deploy), out of the 200 above (services/glassbox/warm.py).
   GLASSBOX_WARM_DAILY_LLM_CAP: "10"
   # Client IP for rate limiting (services/glassbox/limits.py client_address):
   # forwarding headers are believed only from peers in the pod network
