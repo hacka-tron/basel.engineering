@@ -275,3 +275,37 @@ def test_the_short_production_example_is_the_last_example(approved):
     production = strict.index("Q: <Tech> in production?")
     assert absent < approved_line < production
     assert strict.rstrip().endswith("where <what it does>.")
+
+
+def test_the_personal_project_kubernetes_example_follows_the_production_one():
+    # Sign-off round 3: without it "Have you worked with Kubernetes?" copied the
+    # work-only or production example; before the production example it cost
+    # "Kubernetes in production?" its "No".
+    ids = fewshot.STRICT_EXAMPLE_IDS
+    assert ids.index("rec-tech-kubernetes") == ids.index("rec-tech-k8s-prod") + 1
+
+
+def test_a_topic_example_joins_only_questions_on_its_topic(monkeypatch):
+    data = {
+        "items": [
+            {
+                "id": "rec-tech-k8s-prod",
+                "category": "Technology",
+                "question": "Prod?",
+                "answer": "No, but.",
+            },
+            {
+                "id": "rec-tech-kubernetes",
+                "category": "Technology",
+                "question": "K8s?",
+                "answer": "Yes, in my project.",
+            },
+        ]
+    }
+    examples = fewshot.select_examples(data)
+    monkeypatch.setattr(ask, "get_examples", lambda: examples)
+    for question in ("Have you worked with Kubernetes?", "Any k8s experience?", "k3s?"):
+        strict = _prompt(question, WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+        assert strict.index("Q: Prod?") < strict.index("Q: K8s?")
+    strict = _prompt("Terraform?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    assert "Q: Prod?" in strict and "Q: K8s?" not in strict
