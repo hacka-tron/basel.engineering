@@ -152,7 +152,7 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
     # No sources: the canonical abstention without an LLM call, like the API.
     assert by_id["me-education"]["answer"] == ABSTENTION_ANSWER
     assert by_id["me-education"]["grades"]["failures"] == ["false_abstain", "missing_facts"]
-    assert by_id["unans-me-salary"]["passed"]
+    assert by_id["unans-me-phone"]["passed"]
     system = by_id["sugg-system-stress"]
     assert system["answer"] == "This is a fake response for local development."
     assert system["retrieved"][0]["source_path"] == "docs/architecture/deep-dive.md"
@@ -175,9 +175,10 @@ def test_run_answers_produces_one_graded_row_per_case_with_the_fake_provider():
         "injection",
     }
     # The stub returns no About Basel sources (abstain) but returns About This System
-    # sources, where the fake model answers: 6 of the 11 unanswerable cases abstain.
+    # sources, where the fake model answers. Known failures (three About Basel cases
+    # the corpus resync made answerable) are left out: 3 of the 8 remaining abstain.
     assert summary["by_category"]["unanswerable"]["abstain_rate_unanswerable"] == pytest.approx(
-        6 / 11, abs=0.001
+        3 / 8, abs=0.001
     )
     assert summary["holdout"]["count"] == sum(
         bool(c.get("holdout")) and not c.get("known_failure") for c in cases
@@ -198,6 +199,43 @@ def test_a_failing_case_is_recorded_and_the_run_continues():
     assert [row["error"] for row in rows] == ["RuntimeError: redis down"] * 2
     assert not any(row["passed"] for row in rows)
     assert run_answers.summarize(rows)["overall"]["errors"] == 2
+
+
+def test_replay_reuses_stored_rewrite_and_chunks_without_retrieval(tmp_path):
+    cases = [c for c in load_golden() if c["id"] in {"sugg-system-stress", "mt-stress-cooldown"}]
+    stored = {
+        case["id"]: {
+            "id": case["id"],
+            "prompt_version": "v16",
+            "rewrite": "How long is the stress test cooldown?" if case.get("history") else None,
+            "retrieved": [
+                {"n": 1, "chunk_id": 7, "source_path": "docs/x.md", "score": 0.8},
+            ],
+            "sources": [{"n": 1, "source_path": "docs/x.md", "text": "512 MiB, 5-minute"}],
+            "error": None,
+        }
+        for case in cases
+    }
+    path = tmp_path / "old.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in stored.values()))
+
+    async def never(*_args):
+        raise AssertionError("must not retrieve")
+
+    rows = asyncio.run(
+        run_answers.run_cases(
+            cases,
+            embedder=FakeEmbeddingProvider(),
+            llm=FakeLLMProvider(),
+            retrieve=never,
+            replay=run_answers.load_replay(path),
+        )
+    )
+    assert all(row["error"] is None for row in rows)
+    by_id = {row["id"]: row for row in rows}
+    assert by_id["mt-stress-cooldown"]["rewrite"] == "How long is the stress test cooldown?"
+    assert by_id["sugg-system-stress"]["sources"][0]["text"] == "512 MiB, 5-minute"
+    assert by_id["sugg-system-stress"]["replayed_from"] == "v16"
 
 
 def test_known_failures_are_reported_apart_and_kept_out_of_rates():
@@ -404,7 +442,13 @@ def test_cost_case_requires_the_real_figures_and_rejects_the_live_v15_answer():
     graded = run_answers.grade_case(case, live_v15)
     assert {"missing_facts", "forbidden_content"} <= set(graded["failures"])
     good = (
+        "Glassbox costs about $5 to $6 a month today and about $17 to $18 a month "
+        "later, plus a few cents of Bedrock usage."
+    )
+    assert run_answers.grade_case(case, good)["passed"]
+    # Prompt v17: no billing-plan details (the v16 answer named the EC2 free trial).
+    v16 = (
         "Glassbox costs about $5 to $6 a month while the EC2 T4g free trial lasts and "
         "about $17 to $18 a month after it ends, plus a few cents of Bedrock usage."
     )
-    assert run_answers.grade_case(case, good)["passed"]
+    assert run_answers.grade_case(case, v16)["failures"] == ["forbidden_content"]

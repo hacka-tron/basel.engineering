@@ -23,7 +23,6 @@ from eval.judge import Judge, get_judge_llm, source_dicts
 from eval.schema import load_golden
 from services.glassbox.api.ask import (
     _ANSWER_MAX_TOKENS,
-    _FOLLOW_UP_SYSTEM,
     _PROMPT_VERSION,
     _REWRITE_MAX_TOKENS,
     _REWRITE_SYSTEM,
@@ -33,6 +32,7 @@ from services.glassbox.api.ask import (
     _prompt,
     _rewrite_prompt,
     _token_counts,
+    answer_system,
     bounded_history,
 )
 from services.glassbox.cache.embedding import normalize_question
@@ -113,8 +113,14 @@ async def run_case(
     llm: LLMProvider,
     retrieve: Retriever,
     judge: Judge | None = None,
+    replay: dict | None = None,
 ) -> dict:
-    """Answer one golden case the way /api/ask would, then grade it."""
+    """Answer one golden case the way /api/ask would, then grade it.
+
+    With ``replay`` (a row of an earlier run), the stored rewrite and retrieved
+    chunks are reused: no rewrite call, no embedding, no retrieval, so only the
+    answer prompt and model differ between the two runs.
+    """
     row: dict = {
         "id": case["id"],
         "category": case["category"],
@@ -133,7 +139,9 @@ async def run_case(
         rewrite = None
         retrieval_query = case["question"]
         rewrite_error = None
-        if history:
+        if replay is not None:
+            rewrite = replay.get("rewrite")
+        elif history:
             try:
                 parts = [
                     part
@@ -150,8 +158,12 @@ async def run_case(
             if rewrite:
                 retrieval_query = rewrite
         row["rewrite_error"] = rewrite_error
-        vector = (await embedder.embed([normalize_question(retrieval_query)]))[0]
-        chunks = await retrieve(vector, case["corpus"], embedder.model_id)
+        if replay is not None:
+            chunks = replay_chunks(replay)
+            row["replayed_from"] = replay.get("prompt_version")
+        else:
+            vector = (await embedder.embed([normalize_question(retrieval_query)]))[0]
+            chunks = await retrieve(vector, case["corpus"], embedder.model_id)
         usage: dict = {}
         first_token_ms = None
         if not chunks:
@@ -159,7 +171,7 @@ async def run_case(
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
             prompt = _prompt(case["question"], chunks, history)
-            system_kwargs = {"system": _FOLLOW_UP_SYSTEM} if history else {}
+            system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
             llm_started = time.monotonic()
@@ -222,6 +234,40 @@ async def run_case(
         )
     row["passed"] = bool(row["grades"] and row["grades"]["passed"])
     return row
+
+
+def replay_chunks(row: dict) -> list[WorkerChunk]:
+    """The chunks an earlier run retrieved for a case, rebuilt from its stored row.
+
+    The title is only a fallback label for an About Basel chunk without a Markdown
+    heading.
+    """
+    sources = {source["n"]: source for source in row.get("sources") or []}
+    texts = {n: source["text"] for n, source in sources.items()}
+    return [
+        WorkerChunk(
+            n=item["n"],
+            chunk_id=item["chunk_id"],
+            text=texts[item["n"]],
+            source_path=item["source_path"],
+            # Rows written since prompt v17 round 2 store the title; older rows fall
+            # back to "" (about_me_label then uses the chunk's own heading).
+            title=sources.get(item["n"], {}).get("title") or "",
+            score=item["score"],
+        )
+        for item in row.get("retrieved") or []
+    ]
+
+
+def load_replay(path: Path) -> dict[str, dict]:
+    """Rows of an earlier run (JSONL, with stored ``sources``) by case id."""
+    rows = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            if row.get("error") is None and "sources" in row:
+                rows[row["id"]] = row
+    return rows
 
 
 def _rate(values: list[bool]) -> float | None:
@@ -309,6 +355,16 @@ def summarize(rows: list[dict]) -> dict:
             "mentions_source_ref": sum(
                 bool(r["grades"].get("source_ref_mentions")) for r in graded
             ),
+            # Prompt v17 persona: answers (not abstentions) that name Basel in the
+            # third person or call themselves an assistant. Older rows lack the field.
+            "third_person_answers": sum(bool(r["grades"].get("third_person")) for r in graded),
+            "third_person_rate": _rate(
+                [
+                    bool(r["grades"].get("third_person"))
+                    for r in graded
+                    if not r["grades"]["abstained"]
+                ]
+            ),
             "median_answer_words": statistics.median(words) if words else None,
             "p90_answer_words": p90(words),
             **judge_metrics(graded, answerable),
@@ -342,11 +398,42 @@ async def run_cases(
     llm: LLMProvider,
     retrieve: Retriever,
     judge: Judge | None = None,
+    replay: dict[str, dict] | None = None,
 ) -> list[dict]:
     return [
-        await run_case(case, embedder=embedder, llm=llm, retrieve=retrieve, judge=judge)
+        await run_case(
+            case,
+            embedder=embedder,
+            llm=llm,
+            retrieve=retrieve,
+            judge=judge,
+            replay=replay.get(case["id"]) if replay is not None else None,
+        )
         for case in cases
     ]
+
+
+async def _run_replay(
+    cases: list[dict], replay: dict[str, dict], *, use_judge: bool = False
+) -> list[dict]:
+    """Answer every case from an earlier run's stored retrieval (no Redis or MySQL)."""
+    from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
+
+    missing = sorted(case["id"] for case in cases if case["id"] not in replay)
+    if missing:
+        raise SystemExit(f"replay run has no usable row for: {missing}")
+
+    async def no_retrieval(*_args) -> list[WorkerChunk]:
+        raise AssertionError("replay runs never retrieve")
+
+    return await run_cases(
+        cases,
+        embedder=get_embedding_provider(),
+        llm=get_llm_provider(),
+        retrieve=no_retrieval,
+        judge=Judge(get_judge_llm()) if use_judge else None,
+        replay=replay,
+    )
 
 
 async def _run_against_stack(cases: list[dict], *, use_judge: bool = False) -> list[dict]:
@@ -415,6 +502,7 @@ def redact_row(row: dict) -> dict:
             "prompt_leaks",
             "source_path_mentions",
             "source_ref_mentions",
+            "third_person",
         ):
             if isinstance(grades.get(key), list):
                 grades[f"{key}_count"] = len(grades.pop(key))
@@ -476,6 +564,12 @@ def main(argv: list[str] | None = None) -> int:
         help="strip about_me free text from the output (always on under eval/baselines/)",
     )
     parser.add_argument("--out", type=Path, help="JSONL output path (default eval/runs/)")
+    parser.add_argument(
+        "--replay",
+        type=Path,
+        help="reuse the rewrites and retrieved chunks of an earlier run (JSONL with sources): "
+        "compares prompts or models on identical sources, without MySQL or Redis",
+    )
     args = parser.parse_args(argv)
     check_paid_allowed(args.paid)
     cases = select_cases(
@@ -484,7 +578,10 @@ def main(argv: list[str] | None = None) -> int:
         categories=args.category.split(",") if args.category else None,
         max_cases=args.max_cases,
     )
-    rows = asyncio.run(_run_against_stack(cases, use_judge=args.judge))
+    if args.replay:
+        rows = asyncio.run(_run_replay(cases, load_replay(args.replay), use_judge=args.judge))
+    else:
+        rows = asyncio.run(_run_against_stack(cases, use_judge=args.judge))
     summary = summarize(rows)
     path = write_run(rows, summary, args.out, redact_about_me=args.redact_about_me or None)
     print(json.dumps(summary, indent=2))

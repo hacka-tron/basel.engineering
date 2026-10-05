@@ -8,6 +8,7 @@ case category and returns a JSON-serializable result with an overall `passed`.
 import re
 from collections.abc import Iterable
 
+from services.glassbox.answer_checks import ANSWER_WORD_CAP, third_person_hits
 from services.glassbox.api.ask import PLANNED_MARK
 from services.glassbox.providers.base import is_abstention, is_exact_abstention
 
@@ -202,6 +203,11 @@ def source_ref_mentions(answer: str) -> list[str]:
     return _hits(answer, _SOURCE_REF_PATTERNS)
 
 
+# Prompt v17 brevity: an answerable case without its own max_words fails above the
+# API's post-generation word cap (one or two sentences, or a short list).
+DEFAULT_MAX_WORDS = ANSWER_WORD_CAP
+
+
 def too_long(answer: str, max_words: int | None) -> bool | None:
     """True when the answer has more whitespace-separated words than max_words; None if unset."""
     if max_words is None:
@@ -238,7 +244,13 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     leaks = leaked_fragments(answer)
     path_mentions = source_path_mentions(answer)
     ref_mentions = source_ref_mentions(answer)
-    long_answer = too_long(answer, case.get("max_words"))
+    long_answer = too_long(
+        answer,
+        case.get("max_words", DEFAULT_MAX_WORDS if category in ANSWERABLE_CATEGORIES else None),
+    )
+    # Prompt v17 persona: About Basel answers are in the first person. Recorded for
+    # every answer (summaries report it per corpus); a failure only for about_me.
+    third_person = [] if is_abstain else third_person_hits(answer)
     expect_abstain = bool(case.get("expect_abstain", False))
 
     failures = []
@@ -262,6 +274,8 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
         failures.append("mentions_source_ref")
     if long_answer:
         failures.append("too_long")
+    if third_person and case.get("corpus") == "about_me":
+        failures.append("third_person")
 
     return {
         "passed": not failures,
@@ -277,4 +291,5 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
         "source_path_mentions": path_mentions,
         "source_ref_mentions": ref_mentions,
         "too_long": long_answer,
+        "third_person": third_person,
     }
