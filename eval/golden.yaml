@@ -95,7 +95,8 @@ cases:
     question: Have you used Kubernetes?
     expected_sources: [private/projects.md]
     gold_snippets: [Kubernetes]  # the technology name only: no About Basel text here
-    must_include: ['basel\.engineering|Glassbox|personal project|k3s']
+    # Owner, 2026-10-05: askers care how and why k3s is used (cost: no EKS control plane).
+    must_include: ['basel\.engineering|Glassbox|personal project|k3s', 'EKS|control plane|single']
     must_not_include: ['at (Microsoft|Google)']
   - id: me-tech-k8s-production
     origin: new
