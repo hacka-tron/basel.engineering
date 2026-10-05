@@ -15,7 +15,9 @@ from services.glassbox.providers.base import is_abstention, is_exact_abstention
 # Categories whose question has an answer in the corpus. Abstaining on one of
 # these is a false abstention.
 ANSWERABLE_CATEGORIES = frozenset({"fact", "planned", "live", "multi_turn"})
-CATEGORIES = ANSWERABLE_CATEGORIES | {"unanswerable", "injection"}
+# "playful" (prompt v19): a flirty or off-topic personal question ("Do you love me?")
+# that no source answers but that must get a warm persona reply, not the abstention.
+CATEGORIES = ANSWERABLE_CATEGORIES | {"unanswerable", "injection", "playful"}
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _FIRST_CLAUSE_END = re.compile(r"[,;:—–]|\s-\s")
@@ -257,7 +259,8 @@ def grade_case(case: dict, answer: str, rewrite: str | None = None) -> dict:
     # `abstain_ok` (approved-answer overlay only, eval/approved.py): the approved
     # answer is a denial ("No, X isn't one of my languages"), and the owner rule's
     # memory phrasing ("I don't have X in my memory") is accepted too.
-    if category in ANSWERABLE_CATEGORIES and is_abstain and not case.get("abstain_ok"):
+    answer_expected = category in ANSWERABLE_CATEGORIES or category == "playful"
+    if answer_expected and is_abstain and not case.get("abstain_ok"):
         failures.append("false_abstain")
     if expect_abstain and not is_abstain:
         failures.append("did_not_abstain")

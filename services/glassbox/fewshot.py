@@ -67,7 +67,17 @@ CASUAL_EXAMPLE_IDS = (
     "rec-casual-fun",
 )
 CASUAL_CATEGORY = "Casual & personal"
-_LIMITS = {"strict": len(STRICT_EXAMPLE_IDS), "casual": len(CASUAL_EXAMPLE_IDS)}
+# Prompt v19: playful replies to flirty or off-topic personal questions ("Do you love
+# me?"), added to the casual prompt only for those questions (api/ask.py
+# playful_question). Their own category, so they never fill the strict or casual
+# sets; any `few_shot: true` item of the category fills a short set.
+PLAYFUL_EXAMPLE_IDS = ("rec-playful-love", "rec-playful-marry")
+PLAYFUL_CATEGORY = "Playful & off-topic"
+_LIMITS = {
+    "strict": len(STRICT_EXAMPLE_IDS),
+    "casual": len(CASUAL_EXAMPLE_IDS),
+    "playful": len(PLAYFUL_EXAMPLE_IDS),
+}
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -86,6 +96,7 @@ class ExampleSet:
     source: str
     strict: tuple[Example, ...]
     casual: tuple[Example, ...]
+    playful: tuple[Example, ...] = ()
 
 
 EMPTY = ExampleSet(source="placeholder", strict=(), casual=())
@@ -114,7 +125,14 @@ def select_examples(data: object) -> ExampleSet:
         question, answer = _clean(item.get("question")), _clean(item.get("answer"))
         if not question or not answer:
             continue
-        route = "casual" if item.get("category") == CASUAL_CATEGORY else "strict"
+        category = item.get("category")
+        route = (
+            "casual"
+            if category == CASUAL_CATEGORY
+            else "playful"
+            if category == PLAYFUL_CATEGORY
+            else "strict"
+        )
         approved[str(item.get("id"))] = (
             route,
             Example(question, answer),
@@ -133,7 +151,8 @@ def select_examples(data: object) -> ExampleSet:
     strict, casual = pick("strict", STRICT_EXAMPLE_IDS), pick("casual", CASUAL_EXAMPLE_IDS)
     if not strict and not casual:
         return EMPTY
-    return ExampleSet(source="approved", strict=strict, casual=casual)
+    playful = pick("playful", PLAYFUL_EXAMPLE_IDS)
+    return ExampleSet(source="approved", strict=strict, casual=casual, playful=playful)
 
 
 def load_examples(path: Path | None = None) -> ExampleSet:
@@ -160,9 +179,10 @@ def get_examples() -> ExampleSet:
     """
     examples = load_examples()
     LOGGER.info(
-        "Answer examples: %s (%d strict, %d casual)",
+        "Answer examples: %s (%d strict, %d casual, %d playful)",
         examples.source,
         len(examples.strict),
         len(examples.casual),
+        len(examples.playful),
     )
     return examples
