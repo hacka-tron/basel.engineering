@@ -181,7 +181,10 @@ def test_first_question_skips_rewrite_and_uses_answer_cache(harness, history):
     llm = harness["llm"]
     assert llm.rewrite_calls == []
     assert len(llm.answer_calls) == 1
-    assert llm.answer_calls[0]["system"] is None
+    # Prompt v17: the persona and grounding rules, without the history rules.
+    system = llm.answer_calls[0]["system"]
+    assert system.startswith("Persona: you are Basel")
+    assert "numbered sources" in system and "may be inaccurate" not in system
     assert "Conversation so far" not in llm.answer_calls[0]["prompt"]
     assert all(data.get("node") != "rewrite" for name, data in stream if name == "stage")
     assert any(data.get("node") == "answer_cache" for name, data in stream if name == "stage")

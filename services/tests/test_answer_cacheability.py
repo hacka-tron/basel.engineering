@@ -243,14 +243,14 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
 def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v16"
+    assert ask._PROMPT_VERSION == "v17"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
     assert cache.puts[0]["answer"] == "This is a fake response for local development."
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.calls == 1
-    assert all(model_id.endswith("|v16") for model_id in cache.model_ids)
+    assert all(model_id.endswith("|v17") for model_id in cache.model_ids)
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
@@ -338,3 +338,33 @@ def test_content_filter_after_partial_text_keeps_it_and_skips_the_cache(monkeypa
     assert dones[0]["abstained"] is False
     assert cache.puts == []
     assert saved[0]["timings"]["content_filtered"] == 1
+
+
+def test_v17_memory_phrasing_is_a_refusal_only_on_its_own():
+    # Prompt v17: gaps get "I don't have that in my memory". Alone it is a refusal
+    # (never cached); followed by what the sources do say, it is a real answer.
+    assert is_abstention("I don't have that in my memory.")
+    assert is_abstention("Sorry, I don't have that in my memory.")
+    assert not is_abstention("I don't have that in my memory, but at Google I built tests.")
+    assert not is_abstention(
+        "Yes, I used it in my personal project; professional use of it isn't in my memory."
+    )
+
+
+@pytest.mark.parametrize(
+    ("reply", "flags"),
+    [
+        ("I built the queue on Redis streams.", set()),
+        ("Basel built the queue on Redis streams.", {"answer_check_third_person"}),
+        ("I built it. " + "word " * 90, {"answer_check_too_long"}),
+    ],
+)
+def test_v17_answer_checks_are_logged_and_the_answer_still_streams(monkeypatch, reply, flags):
+    # Logged in stage_timings_ms, never regenerated: the answer has already streamed.
+    llm = ScriptedLLM(reply)
+    cache, saved, streams, _ = _ask_twice(monkeypatch, llm)
+    tokens = "".join(data["text"] for name, data in streams[0] if name == "token")
+    assert tokens == reply
+    logged = {key for key in saved[0]["timings"] if key.startswith("answer_check_")}
+    assert logged == flags
+    assert len(cache.puts) == 1  # a flagged answer is still cached (temperature 0)

@@ -23,7 +23,6 @@ from eval.judge import Judge, get_judge_llm, source_dicts
 from eval.schema import load_golden
 from services.glassbox.api.ask import (
     _ANSWER_MAX_TOKENS,
-    _FOLLOW_UP_SYSTEM,
     _PROMPT_VERSION,
     _REWRITE_MAX_TOKENS,
     _REWRITE_SYSTEM,
@@ -33,6 +32,7 @@ from services.glassbox.api.ask import (
     _prompt,
     _rewrite_prompt,
     _token_counts,
+    answer_system,
     bounded_history,
 )
 from services.glassbox.cache.embedding import normalize_question
@@ -171,7 +171,7 @@ async def run_case(
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
             prompt = _prompt(case["question"], chunks, history)
-            system_kwargs = {"system": _FOLLOW_UP_SYSTEM} if history else {}
+            system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
             llm_started = time.monotonic()
@@ -352,6 +352,16 @@ def summarize(rows: list[dict]) -> dict:
             "mentions_source_ref": sum(
                 bool(r["grades"].get("source_ref_mentions")) for r in graded
             ),
+            # Prompt v17 persona: answers (not abstentions) that name Basel in the
+            # third person or call themselves an assistant. Older rows lack the field.
+            "third_person_answers": sum(bool(r["grades"].get("third_person")) for r in graded),
+            "third_person_rate": _rate(
+                [
+                    bool(r["grades"].get("third_person"))
+                    for r in graded
+                    if not r["grades"]["abstained"]
+                ]
+            ),
             "median_answer_words": statistics.median(words) if words else None,
             "p90_answer_words": p90(words),
             **judge_metrics(graded, answerable),
@@ -489,6 +499,7 @@ def redact_row(row: dict) -> dict:
             "prompt_leaks",
             "source_path_mentions",
             "source_ref_mentions",
+            "third_person",
         ):
             if isinstance(grades.get(key), list):
                 grades[f"{key}_count"] = len(grades.pop(key))

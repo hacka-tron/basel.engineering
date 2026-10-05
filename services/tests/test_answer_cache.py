@@ -347,7 +347,7 @@ def test_warm_up_still_hits_after_an_unrelated_reingest(monkeypatch):
     class CountingLLM(FakeLLMProvider):
         calls = 0
 
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             CountingLLM.calls += 1
             async for part in super().generate(prompt, max_tokens=max_tokens):
                 yield part
@@ -555,7 +555,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
     chunk_id = 10**15 + uuid4().int % 10**9
 
     class CountingLLM(FakeLLMProvider):
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             calls["llm"] += 1
             async for part in super().generate(prompt, max_tokens=max_tokens):
                 yield part

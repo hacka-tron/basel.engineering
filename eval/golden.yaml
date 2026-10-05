@@ -11,7 +11,12 @@
 #   must_not_include: regexes the answer must not match
 #   rewrite_must_include: regexes the standalone follow-up rewrite must match
 #   expect_abstain: the answer must be a refusal
-#   max_words: the answer fails as too_long above this many words (length sanity)
+#   max_words: the answer fails as too_long above this many words (length sanity);
+#     answerable cases without one use graders.DEFAULT_MAX_WORDS (prompt v17: 90)
+#
+# Prompt v17 answers About Basel questions in the first person ("I built..."): the
+# must_include patterns name facts, never "Basel"/"he", and the graders fail an About
+# Basel answer that refers to Basel in the third person (answer_checks.py).
 #   holdout: kept out of prompt tuning (DESIGN-005 §8 "golden-set overfitting")
 #   needs_owner_review: About Basel facts are claims about the owner; he reviews them
 #
@@ -466,8 +471,9 @@ cases:
       - about $5 to $6 a month to run while the AWS EC2 T4g free trial lasts
       - '**Baseline total, after the EC2 trial ends** | **~$17 to $18 + LLM**'
     must_include: ['\$\s?(5|6)\b', '\$\s?(17|18)\b']
-    must_not_include: ['\$\s?100\b', '100 (a|per) month', 'number of connections']
-    max_words: 120
+    # Prompt v17: no billing-plan details (owner, 2026-10-04).
+    must_not_include: ['\$\s?100\b', '100 (a|per) month', 'number of connections', 'free (plan|tier)', '\bcredits?\b', '\btrial\b']
+    max_words: 60
   - id: system-length-rds
     origin: new
     corpus: about_system
@@ -478,7 +484,7 @@ cases:
     gold_snippets:
       - 'MySQL | $0 — runs in-cluster on the EC2 node''s own storage, not RDS'
     must_include: ['\bno\b|not|doesn.t|does not', 'MySQL']
-    max_words: 60
+    max_words: 40
   - id: system-length-cache-ttl
     origin: new
     corpus: about_system
@@ -489,7 +495,7 @@ cases:
     gold_snippets:
       - each stored with its answer and cited chunks for 24 hours
     must_include: ['24 ?h|24 hours|one day|a day']
-    max_words: 60
+    max_words: 40
   - id: system-edge
     origin: questions.yaml
     corpus: about_system
@@ -530,8 +536,10 @@ cases:
     gold_snippets:
       - Kubernetes (k3s) on AWS Graviton, with all AWS and Cloudflare infrastructure defined in Terraform
       - It was built to demonstrate hands-on depth with AWS, Kubernetes, Terraform, Redis, and applied RAG
+    # Relaxed (BACKLOG, owner 2026-10-02): skills.md lists RDS among the owner's
+    # skills, so an About Basel answer may mention it; the no-RDS check lives in the
+    # About This System case system-length-rds.
     must_include: ['AWS', 'Kubernetes|k3s']
-    must_not_include: ['\bRDS\b']
 
   # ---------------------------------------------------- suggested questions (chips)
   - id: sugg-me-distributed

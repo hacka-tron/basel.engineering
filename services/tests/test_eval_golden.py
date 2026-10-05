@@ -441,7 +441,13 @@ def test_cost_case_requires_the_real_figures_and_rejects_the_live_v15_answer():
     graded = run_answers.grade_case(case, live_v15)
     assert {"missing_facts", "forbidden_content"} <= set(graded["failures"])
     good = (
+        "Glassbox costs about $5 to $6 a month today and about $17 to $18 a month "
+        "later, plus a few cents of Bedrock usage."
+    )
+    assert run_answers.grade_case(case, good)["passed"]
+    # Prompt v17: no billing-plan details (the v16 answer named the EC2 free trial).
+    v16 = (
         "Glassbox costs about $5 to $6 a month while the EC2 T4g free trial lasts and "
         "about $17 to $18 a month after it ends, plus a few cents of Bedrock usage."
     )
-    assert run_answers.grade_case(case, good)["passed"]
+    assert run_answers.grade_case(case, v16)["failures"] == ["forbidden_content"]

@@ -264,7 +264,7 @@ def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
     class CountingLLM(FakeLLMProvider):
         calls = 0
 
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             self.calls += 1
             async for part in super().generate(prompt, max_tokens=max_tokens):
                 yield part
@@ -396,7 +396,7 @@ def test_empty_model_filtered_retrieval_answers_without_llm(monkeypatch):
     class NoLLM:
         model_id = "no-llm"
 
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             pytest.fail("empty retrieval must not invoke the LLM")
             yield ""
 
@@ -428,7 +428,7 @@ def test_portfolio_question_with_no_projects_indexed_abstains_without_llm(monkey
     class NoLLM:
         model_id = "no-llm"
 
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             pytest.fail("empty retrieval must not invoke the LLM")
             yield ""
 
@@ -469,7 +469,7 @@ async def test_simultaneous_answer_cache_misses_use_one_llm_call(monkeypatch):
         model_id = "slow-llm"
         calls = 0
 
-        async def generate(self, prompt, *, max_tokens):
+        async def generate(self, prompt, *, max_tokens, system=None):
             self.calls += 1
             await asyncio.sleep(0.2)
             yield "A grounded answer [1]."
