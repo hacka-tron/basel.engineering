@@ -91,6 +91,8 @@ The cost answer in both v16 runs: "Glassbox costs about $5 to $6 a month to run 
 
 The unsupported claims are the same kinds in both versions: `/api/version` working "by asking the cluster" (from the question), the site described as planned, and either an invented provider variable or unrelated planned work listed as follow-up features. v17's new false abstention is the suggested question "Show me the Terraform for the database." (false premise), answered "I don't have that in my memory." Nova Lite still copies the cost section's "while the AWS EC2 T4g free trial lasts" despite the no-billing rule (in the user prompt or the system prompt). Temperature 0 is not fully deterministic on Bedrock: 11 of 95 answers differed between two v17 runs.
 
+**v17 round 1 (same day).** An ablation showed that the after-question first-person bullet and the factuality bullet, not retrieval or pointer stripping, made the db chip abstain. Both moved: factuality into the system persona, the first-person rule into the examples header. The deep-dive cost lead dropped the trial name. The owner's dual-experience rule (no volunteered missing side; "No, but…" for production questions) replaced the two-sided example. Final prompt, 2 replay runs: pass 59-60, fact_cov 0.779, false abstain 4/79, third person 1/37, median 15 / p90 70 words, unsupported claims 4 (new: an About Basel answer calling the site "built on the MEAN stack").
+
 What the retrieval misses show:
 
 - `system-rate-limit` and `system-budget` (rank 0): the top 3 are `services/tests/test_ask_endpoint.py` and `test_limits.py`; the top 8 for rate limit are six test chunks plus one DESIGN-002 chunk.

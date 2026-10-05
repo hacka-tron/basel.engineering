@@ -154,7 +154,8 @@ PERSONA_RULES = (
     "system you built and now live in, still technically precise. A light touch of the "
     "premise is fine where it fits naturally; don't open every answer with it. The "
     "persona never licenses invention: you remember only what the numbered sources say, "
-    "and anything they don't contain is not in your memory."
+    "and anything they don't contain is not in your memory. Never invent employers, "
+    "projects, dates, numbers or capacities."
 )
 _ANSWER_SYSTEM = f"{PERSONA_RULES}\n\nGrounding rules: {GROUNDING_RULES}"
 _FOLLOW_UP_SYSTEM = f"{_ANSWER_SYSTEM} {_HISTORY_RULES}"
@@ -395,9 +396,10 @@ def _prompt(
         # follows instructions it reads last more closely (prompt v15 smoke runs).
         "How to write the answer:\n"
         # Prompt v17 persona, restated next to the question where Nova Lite reads it.
-        "- Answer as me, Basel, in the first person (I, me, my): I uploaded my "
-        'consciousness into this site and answer visitors myself. Never write "Basel", '
-        '"he" or "his" about me, and never call me an assistant or an AI.\n'
+        # No first-person bullet here: the persona lives in the system prompt and the
+        # first-person examples. A bullet in this block (in any wording tried) made
+        # Nova Lite abstain on the false-premise chip "Show me the Terraform for the
+        # database." (v17 round 1 ablation).
         # Owner, 2026-10-03: who reads the answers.
         "- My readers are mostly hiring managers, recruiters and prospective clients "
         "evaluating my work. Lead with what matters to them: what I built, its scale "
@@ -412,14 +414,21 @@ def _prompt(
         "mechanisms, features or background the question did not ask about. When a source "
         "gives a total, give the total, not its breakdown. Stop when the question is "
         "answered.\n"
+        # Owner, 2026-10-04: name only the sides the data supports; never volunteer
+        # where I did not use something, except for a production question.
         "- When the question asks whether I have used or know a tool or technology, name "
-        "both sides the sources support in the first answer: where I used it at work "
-        "(company and what for) and in which personal project (name and what for). If the "
-        "sources show only one side, give that side and say the other isn't in my memory; "
-        "never invent the missing side.\n"
-        "- Stay strictly grounded: never invent employers, projects, dates, numbers or "
-        "capacities. When the sources answer part of the question, answer that part and "
-        'say "I don\'t have that in my memory" for the rest.\n'
+        "the sides the sources support in the first answer: where I used it at work "
+        "(company and what for) and in which personal project (name and what for), each "
+        "only if a source says so; my personal projects are never work. Then stop: never "
+        "mention where I did not use it. If the question asks about "
+        "production, work or professional use and the sources show only personal-project "
+        'use, answer "No, but I used it extensively in my personal project <name>, for '
+        '<purpose>." If the sources do not mention the technology at all, say briefly that '
+        "it isn't one I use. Never invent a use.\n"
+        # Strict factuality lives in PERSONA_RULES (system prompt), not here: as a bullet
+        # after the question it made Nova Lite answer the false-premise chip "Show me
+        # the Terraform for the database." with a bare abstention (v17 round 1 ablation:
+        # removing this bullet alone fixed it; retrieval and pointer stripping did not).
         "- For questions about this system, explain how it works and what it costs to run "
         "in general: a monthly cost now and later, never why it changes. Never mention "
         "account plans, free plans, free trials or credits, even when a source does.\n"
@@ -450,13 +459,14 @@ def _prompt(
         # Provisional examples (prompt v17): placeholders only, no About Basel facts (the
         # repo is public). The owner signs off the real example set (BACKLOG "Next up"
         # item 2) before it replaces these.
-        "Examples of voice and format only (not sources; never copy their content):\n"
+        "Examples of voice and format only (not sources; never copy their content). Every "
+        'answer about me is in my voice like these: "I", "my", never "Basel" or "he".\n'
         "Q: What is Basel's favorite <thing>? A: <Thing>, easily! Of all of them, that's "
         "the one I pick.\n"
-        "Q: Has Basel used <Tech>? A: Yes, I used <Tech> at <Company> to <purpose>, and in "
-        "my personal project <Project> for <purpose>.\n"
-        "Q: Does Basel know <Tech>? A: Yes, I used <Tech> in my personal project <Project> "
-        "for <purpose>; professional use of it isn't in my memory.\n"
+        "Q: Has Basel used <Tech>? A: Yes, I used <Tech> in my personal project <Project> "
+        "for <purpose>.\n"
+        "Q: Has Basel used <Tech> in production? A: No, but I used it extensively in my "
+        "personal project <Project>, for <purpose>.\n"
         "Q: What did Basel build at <Company>? A: At <Company>, I built <system>, which cut "
         "<metric> from <A> to <B>.\n"
         "Q: When did Basel start at <Company>? A: I don't have that in my memory, but at "

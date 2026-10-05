@@ -480,9 +480,9 @@ Tests live in `services/tests/`. They cover the chunkers, caches, limits, kill s
 
 ## What Glassbox costs to run: the monthly bill
 
-Glassbox costs about $5 to $6 a month to run while the AWS EC2 T4g free trial lasts (through December 31, 2026), and about $17 to $18 a month after it ends, plus Bedrock model usage. Approximate us-east-1 prices:
+Glassbox costs about $5 to $6 a month to run today and about $17 to $18 a month from 2027, when the EC2 node starts to be billed, plus Bedrock model usage. Approximate us-east-1 prices:
 
-- EC2 `t4g.small` node, running 24/7: $0 during the T4g free trial, about $12.30 a month after.
+- EC2 `t4g.small` node, running 24/7: $0 through 2026, about $12.30 a month from 2027.
 - EBS 20 GB gp3 disk: about $1.60 a month.
 - Public IPv4 address (Elastic IP): about $3.65 a month.
 - MySQL and Redis: $0 extra. Both run inside the k3s cluster on the same node; there is no RDS or ElastiCache.

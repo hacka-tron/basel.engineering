@@ -513,7 +513,7 @@ def test_answer_prompt_matches_tone_to_the_question_and_keeps_facts_exact():
     assert "Tone lives only in the phrasing" in style
     assert "exactly as the sources give it" in style
     assert "Never invent anecdotes, preferences or details." in style
-    assert "Examples of voice and format only (not sources; never copy their content)" in style
+    assert "Examples of voice and format only (not sources; never copy their content)." in style
     assert "Name only components and features that appear in the sources" in style
     assert (
         "Never mention source file names, paths, headings, document titles or source numbers"
@@ -536,9 +536,11 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     )
     style = prompt.split("Question: Has Basel used Kafka?", 1)[1]
     # Persona restated after the question, first person, never third person.
-    assert "Answer as me, Basel, in the first person" in style
-    assert 'Never write "Basel", "he" or "his" about me' in style
-    assert "never call me an assistant or an AI" in style
+    # The first-person rule rides on the examples header; a separate bullet here made
+    # Nova Lite abstain on a false-premise chip (round 1). The premise stays in the
+    # system prompt.
+    assert '"I", "my", never "Basel" or "he"' in style
+    assert "uploaded" not in style
     # Brevity replaces the v16 word range.
     assert "40 to 120 words" not in prompt
     assert "Answer in one or two sentences unless the question asks for detail" in style
@@ -546,9 +548,16 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     assert "Never state a price, count or size that is not in the sources." in style
     # Dual experience: both sides the sources support, never an invented one.
     assert "where I used it at work" in style and "in which personal project" in style
-    assert "never invent the missing side" in style
-    # Strict factuality and the memory phrasing for gaps.
-    assert "never invent employers, projects, dates, numbers or" in style
+    # Owner, 2026-10-04: never volunteer the missing side, except for production questions.
+    assert "never mention where I did not use it" in style
+    assert '"No, but I used it extensively in my personal project <name>' in style
+    assert "Never invent a use." in style
+    assert "A: No, but I used it extensively in my personal project <Project>" in style
+    assert "my personal projects are never work" in style
+    assert "isn't in my memory" not in style.split("Examples of voice", 1)[1]
+    # Strict factuality lives in the system prompt (a bullet here caused abstentions);
+    # the memory phrasing is shown by an example.
+    assert "Stay strictly grounded" not in style
     assert "I don't have that in my memory" in style
     # No billing-plan details.
     assert "never mention account plans, free plans, free trials or credits" in style.replace(
@@ -560,12 +569,9 @@ def test_answer_prompt_v17_persona_brevity_dual_experience_and_factuality():
     assert style.index("My readers are") < style.index("Tone lives only in the phrasing")
     # Provisional examples: first person, placeholders only (no About Basel facts).
     examples = style.split("Examples of voice and format only", 1)[1]
-    assert "A: Yes, I used <Tech> at <Company> to <purpose>, and in my personal project" in (
-        examples
-    )
-    assert "Basel" not in examples.replace("What is Basel's", "").replace("Has Basel", "").replace(
-        "Does Basel", ""
-    ).replace("did Basel", "")
+    assert "A: Yes, I used <Tech> in my personal project <Project>" in examples
+    answers = [line.split(" A: ", 1)[1] for line in examples.splitlines() if " A: " in line]
+    assert answers and not any("Basel" in answer for answer in answers)
     assert "Green" not in examples
     # The specificity example must not quote a live limit that can go stale.
     assert "10 questions per 10 minutes" not in prompt
@@ -580,6 +586,7 @@ def test_answer_system_prompt_has_its_own_persona_section():
     assert "uploaded his consciousness" in PERSONA_RULES
     assert "Always answer in the first person" in PERSONA_RULES
     assert "never licenses invention" in PERSONA_RULES
+    assert "Never invent employers, projects, dates, numbers or capacities." in PERSONA_RULES
     assert "Grounding rules: " in first and "numbered sources" in first
     assert follow_up.startswith(first) and "may be inaccurate" in follow_up
 
