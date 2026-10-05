@@ -510,9 +510,10 @@ async def test_answer_lock_wait_is_bounded(monkeypatch):
     cache = NeverFilled()
     monkeypatch.setattr(ask, "_ANSWER_LOCK_WAIT_S", 0.03)
     start = asyncio.get_running_loop().time()
-    assert await ask._wait_for_answer(cache, "about_me", "model", [0.0] * 512) is None
+    assert await ask._wait_for_answer(cache, "about_me", "model", [0.0] * 512) == (None, None)
     assert asyncio.get_running_loop().time() - start < 0.2
-    assert cache.calls == 1
+    # One poll, which looks up each answer route's identity (prompt v18).
+    assert cache.calls == len(ask.ANSWER_ROUTES)
 
 
 def test_worker_error_ends_stream_before_llm(monkeypatch):

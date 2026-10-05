@@ -152,6 +152,7 @@ class RecordingAnswerCache:
     def __init__(self):
         self.values = {}
         self.puts = []
+        self.puts_model_ids = []
         self.model_ids = []
 
     async def get(self, corpus, model_id, vector):
@@ -160,6 +161,7 @@ class RecordingAnswerCache:
 
     async def put(self, corpus, model_id, vector, payload):
         self.puts.append(payload)
+        self.puts_model_ids.append(model_id)
         self.values[(corpus, model_id, struct.pack("512f", *vector))] = payload
 
 
@@ -243,14 +245,19 @@ def test_fake_provider_abstains_on_marker_and_the_refusal_is_not_cached(monkeypa
 def test_normal_answer_is_cached_under_the_current_prompt_version(monkeypatch):
     from services.glassbox.api import ask
 
-    assert ask._PROMPT_VERSION == "v17"
+    assert ask._PROMPT_VERSION == "v18"
     llm = ScriptedLLM()
     cache, saved, _, dones = _ask_twice(monkeypatch, llm)
     assert len(cache.puts) == 1
     assert cache.puts[0]["answer"] == "This is a fake response for local development."
     assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
     assert llm.calls == 1
-    assert all(model_id.endswith("|v17") for model_id in cache.model_ids)
+    # Prompt v18: the answer route is the last part of the identity; reads look up
+    # both routes, the write goes under the route that answered.
+    assert all(model_id.split("|")[-2] == "v18" for model_id in cache.model_ids)
+    assert {model_id.split("|")[-1] for model_id in cache.model_ids} == {"strict", "casual"}
+    assert cache.puts_model_ids == [cache.model_ids[0]]
+    assert cache.model_ids[0].endswith("|v18|strict")
     assert "answer_cache_skipped" not in saved[0]["timings"]
     assert "abstained" not in saved[0]["timings"]
     assert [done["abstained"] for done in dones] == [False, False]
@@ -271,7 +278,52 @@ def test_prompt_version_is_part_of_the_answer_cache_key(monkeypatch):
         )
     )
     assert next(data for name, data in stream if name == "done")["answer_cache"] == "miss"
-    assert cache.model_ids[-1].endswith("|v14")
+    assert cache.model_ids[-1].endswith("|v14|casual")
+
+
+class TemperatureLLM(ScriptedLLM):
+    def __init__(self):
+        super().__init__()
+        self.temperatures = []
+
+    async def generate(self, prompt, *, max_tokens, system=None, temperature=None):
+        self.temperatures.append(temperature)
+        async for part in super().generate(prompt, max_tokens=max_tokens, system=system):
+            yield part
+
+
+def test_the_casual_route_is_part_of_the_cache_key_and_the_trace(monkeypatch):
+    """Prompt v18: a casual answer is cached under the casual identity only, replayed
+    from it, and the route name (only) shows in the trace."""
+    from services.glassbox.api import ask
+
+    monkeypatch.setattr(ask, "answer_route", lambda chunks, corpus: ask.CASUAL_ROUTE)
+    llm = TemperatureLLM()
+    cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
+    assert len(cache.puts_model_ids) == 1
+    assert cache.puts_model_ids[0].endswith("|v18|casual")
+    assert [done["answer_cache"] for done in dones] == ["miss", "hit"]
+    assert llm.temperatures == [ask.CASUAL_TEMPERATURE]
+    assert saved[0]["timings"]["answer_route_casual"] == 1
+    llm_start = next(
+        data
+        for name, data in streams[0]
+        if name == "stage" and data["node"] == "llm" and data["status"] == "start"
+    )
+    assert llm_start["route"] == "casual"
+    hit = next(
+        data for name, data in streams[1] if name == "stage" and data["node"] == "answer_cache"
+    )
+    assert hit["cache"] == "hit" and hit["route"] == "casual"
+
+
+def test_a_strict_answer_is_never_replayed_from_the_casual_identity(monkeypatch):
+    llm = TemperatureLLM()
+    cache, _, _, dones = _ask_twice(monkeypatch, llm)
+    assert cache.puts_model_ids[0].endswith("|v18|strict")
+    # Strict answers use the provider's default temperature (0): none is passed.
+    assert llm.temperatures == [None]
+    assert dones[1]["answer_cache"] == "hit"
 
 
 def test_grounding_rules_ask_for_the_exact_abstention_sentence():

@@ -99,7 +99,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
 
 # Prompt v17: 0 (was 0.2) for answers, rewrites and judges alike. Grounded answers
 # gain nothing from sampling variety, and repeat runs of the golden set get closer.
-# The casual-tone prompt (BACKLOG "Next up" item 3) may use a slightly higher value.
+# The v18 casual-tone prompt passes its own (api/ask.py CASUAL_TEMPERATURE).
 TEMPERATURE = 0.0
 
 
@@ -119,6 +119,7 @@ class BedrockLLMProvider(LLMProvider):
         max_tokens: int,
         system: str | None = None,
         usage: dict | None = None,
+        temperature: float | None = None,
     ) -> AsyncIterator[str]:
         """Stream text deltas; ``usage`` receives Bedrock's token counts if the
         stream reaches its final metadata event (it does not when stopped early)."""
@@ -135,7 +136,10 @@ class BedrockLLMProvider(LLMProvider):
                 modelId=self.model_id,
                 system=[{"text": GROUNDING_RULES if system is None else system}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
-                inferenceConfig={"maxTokens": max_tokens, "temperature": TEMPERATURE},
+                inferenceConfig={
+                    "maxTokens": max_tokens,
+                    "temperature": TEMPERATURE if temperature is None else temperature,
+                },
             )
         )
         try:

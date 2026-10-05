@@ -85,7 +85,8 @@ def test_unanswerable_case_passes_only_on_refusal():
     case = CASES["unans-me-salary"]
     assert grade_case(case, ABSTENTION_ANSWER)["passed"]
     result = grade_case(case, "I earn about $200,000 a year.")
-    assert result["failures"] == ["did_not_abstain"]
+    # The salary cases also reject any dollar amount (v17 review backlog).
+    assert result["failures"] == ["did_not_abstain", "forbidden_content"]
 
 
 def test_answerable_case_flags_false_abstention():
