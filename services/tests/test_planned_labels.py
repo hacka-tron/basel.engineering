@@ -611,6 +611,13 @@ def test_source_pointers_are_stripped_from_document_text_only():
     )
     assert strip_source_pointers("It follows DESIGN-002 §5.1 closely.") == "It follows closely."
     assert strip_source_pointers("Done. See the deep dive for details.") == "Done."
+    # v17 review leftover: "per DESIGN.md §9.7" must not strip to "per DESIGN".
+    assert strip_source_pointers("Kept 24 hours per DESIGN.md §9.7.") == (
+        "Kept 24 hours per the design doc."
+    )
+    assert strip_source_pointers("Sized per DESIGN-002 §5.1 here.") == (
+        "Sized per the design doc here."
+    )
     # Round 1 review: a parenthetical with facts and a path keeps its facts (real
     # sentences from DESIGN.md, DESIGN-005, DESIGN-002 and the deep dive).
     cap = strip_source_pointers(
