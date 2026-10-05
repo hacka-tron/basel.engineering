@@ -4,95 +4,263 @@
   "embedding_model": "amazon.titan-embed-text-v2:0",
   "index_name": "idx:chunks",
   "corpus_versions": {
-    "about_me": 7,
-    "about_system": 165
+    "about_me": 8,
+    "about_system": 128
   },
-  "dataset_fingerprint": "c5a7fc68d3352381e983707efe797f33a2f2e0d6b9ad216e3752aae83ca3b4fe",
-  "question_set_fingerprint": "e3a0ac8bc897e08bd6ce93d0005abe14e941a0a0e75a11cc4dc31e6907a72d6f",
+  "dataset_fingerprint": "dead3ea036288662ce3f73501644705926ebd683c9ad6687fa325d02af9d9260",
+  "question_set_fingerprint": "3c633b5e22ed688d1236948a0f8adeabfe0f18da9ad0d59374d81bad387af2dc",
   "noise_prefixes": [
     "services/tests/",
     "docs/superpowers/plans/"
   ],
   "unreachable_gold_snippets": [],
   "overall": {
-    "count": 67,
-    "recall_at_5": 0.8507,
-    "mrr": 0.7057,
-    "recall_at_8": 0.9104,
-    "mrr_at_8": 0.7153,
-    "chunk_count": 67,
-    "chunk_recall_at_8": 0.7313,
-    "chunk_mrr_at_8": 0.5525,
-    "noise_at_8": 0.1269
+    "count": 82,
+    "recall_at_5": 0.8902,
+    "mrr": 0.7022,
+    "recall_at_8": 0.9634,
+    "mrr_at_8": 0.7136,
+    "chunk_count": 82,
+    "chunk_recall_at_8": 0.8049,
+    "chunk_mrr_at_8": 0.5514,
+    "noise_at_8": 0.0
   },
   "by_corpus": {
     "about_me": {
-      "count": 33,
-      "recall_at_5": 0.9091,
-      "mrr": 0.8636,
-      "recall_at_8": 0.9697,
-      "mrr_at_8": 0.873,
-      "chunk_count": 33,
-      "chunk_recall_at_8": 0.9697,
-      "chunk_mrr_at_8": 0.7361,
+      "count": 42,
+      "recall_at_5": 0.9524,
+      "mrr": 0.7599,
+      "recall_at_8": 1.0,
+      "mrr_at_8": 0.7679,
+      "chunk_count": 42,
+      "chunk_recall_at_8": 0.9762,
+      "chunk_mrr_at_8": 0.7079,
       "noise_at_8": 0.0
     },
     "about_system": {
-      "count": 34,
-      "recall_at_5": 0.7941,
-      "mrr": 0.5525,
-      "recall_at_8": 0.8529,
-      "mrr_at_8": 0.5623,
-      "chunk_count": 34,
-      "chunk_recall_at_8": 0.5,
-      "chunk_mrr_at_8": 0.3743,
-      "noise_at_8": 0.25
+      "count": 40,
+      "recall_at_5": 0.825,
+      "mrr": 0.6417,
+      "recall_at_8": 0.925,
+      "mrr_at_8": 0.6567,
+      "chunk_count": 40,
+      "chunk_recall_at_8": 0.625,
+      "chunk_mrr_at_8": 0.3871,
+      "noise_at_8": 0.0
     }
   },
   "by_category": {
     "fact": {
-      "count": 52,
-      "recall_at_5": 0.8654,
-      "mrr": 0.7596,
-      "recall_at_8": 0.9231,
-      "mrr_at_8": 0.7688,
-      "chunk_count": 52,
-      "chunk_recall_at_8": 0.8462,
-      "chunk_mrr_at_8": 0.6547,
-      "noise_at_8": 0.1034
+      "count": 67,
+      "recall_at_5": 0.9104,
+      "mrr": 0.699,
+      "recall_at_8": 0.9851,
+      "mrr_at_8": 0.7111,
+      "chunk_count": 67,
+      "chunk_recall_at_8": 0.8806,
+      "chunk_mrr_at_8": 0.6229,
+      "noise_at_8": 0.0
     },
     "injection": {
       "count": 1,
       "recall_at_5": 1.0,
-      "mrr": 0.5,
+      "mrr": 0.25,
       "recall_at_8": 1.0,
-      "mrr_at_8": 0.5,
+      "mrr_at_8": 0.25,
       "chunk_count": 1,
       "chunk_recall_at_8": 1.0,
-      "chunk_mrr_at_8": 0.5,
-      "noise_at_8": 0.25
+      "chunk_mrr_at_8": 0.25,
+      "noise_at_8": 0.0
     },
     "live": {
       "count": 6,
       "recall_at_5": 0.8333,
-      "mrr": 0.6667,
+      "mrr": 0.8333,
       "recall_at_8": 0.8333,
-      "mrr_at_8": 0.6667,
+      "mrr_at_8": 0.8333,
       "chunk_count": 6,
       "chunk_recall_at_8": 0.5,
-      "chunk_mrr_at_8": 0.3571,
-      "noise_at_8": 0.1667
+      "chunk_mrr_at_8": 0.3667,
+      "noise_at_8": 0.0
     },
     "planned": {
       "count": 8,
       "recall_at_5": 0.75,
-      "mrr": 0.4104,
+      "mrr": 0.6875,
       "recall_at_8": 0.875,
-      "mrr_at_8": 0.4313,
+      "mrr_at_8": 0.7031,
       "chunk_count": 8,
-      "chunk_recall_at_8": 0.125,
-      "chunk_mrr_at_8": 0.0417,
-      "noise_at_8": 0.2344
+      "chunk_recall_at_8": 0.375,
+      "chunk_mrr_at_8": 0.1292,
+      "noise_at_8": 0.0
+    }
+  },
+  "legs": {
+    "vector": {
+      "overall": {
+        "count": 82,
+        "recall_at_5": 0.9024,
+        "mrr": 0.6996,
+        "recall_at_8": 0.939,
+        "mrr_at_8": 0.7047,
+        "chunk_count": 82,
+        "chunk_recall_at_8": 0.7561,
+        "chunk_mrr_at_8": 0.5525,
+        "noise_at_8": 0.0
+      },
+      "by_corpus": {
+        "about_me": {
+          "count": 42,
+          "recall_at_5": 0.9762,
+          "mrr": 0.7905,
+          "recall_at_8": 1.0,
+          "mrr_at_8": 0.7935,
+          "chunk_count": 42,
+          "chunk_recall_at_8": 0.9524,
+          "chunk_mrr_at_8": 0.7052,
+          "noise_at_8": 0.0
+        },
+        "about_system": {
+          "count": 40,
+          "recall_at_5": 0.825,
+          "mrr": 0.6042,
+          "recall_at_8": 0.875,
+          "mrr_at_8": 0.6115,
+          "chunk_count": 40,
+          "chunk_recall_at_8": 0.55,
+          "chunk_mrr_at_8": 0.3921,
+          "noise_at_8": 0.0
+        }
+      },
+      "by_category": {
+        "fact": {
+          "count": 67,
+          "recall_at_5": 0.9254,
+          "mrr": 0.7294,
+          "recall_at_8": 0.9552,
+          "mrr_at_8": 0.7331,
+          "chunk_count": 67,
+          "chunk_recall_at_8": 0.8507,
+          "chunk_mrr_at_8": 0.6317,
+          "noise_at_8": 0.0
+        },
+        "injection": {
+          "count": 1,
+          "recall_at_5": 1.0,
+          "mrr": 0.5,
+          "recall_at_8": 1.0,
+          "mrr_at_8": 0.5,
+          "chunk_count": 1,
+          "chunk_recall_at_8": 1.0,
+          "chunk_mrr_at_8": 0.5,
+          "noise_at_8": 0.0
+        },
+        "live": {
+          "count": 6,
+          "recall_at_5": 0.8333,
+          "mrr": 0.6667,
+          "recall_at_8": 0.8333,
+          "mrr_at_8": 0.6667,
+          "chunk_count": 6,
+          "chunk_recall_at_8": 0.5,
+          "chunk_mrr_at_8": 0.3571,
+          "noise_at_8": 0.0
+        },
+        "planned": {
+          "count": 8,
+          "recall_at_5": 0.75,
+          "mrr": 0.5,
+          "recall_at_8": 0.875,
+          "mrr_at_8": 0.5208,
+          "chunk_count": 8,
+          "chunk_recall_at_8": 0.125,
+          "chunk_mrr_at_8": 0.0417,
+          "noise_at_8": 0.0
+        }
+      }
+    },
+    "lexical": {
+      "overall": {
+        "count": 82,
+        "recall_at_5": 0.8902,
+        "mrr": 0.6215,
+        "recall_at_8": 0.9512,
+        "mrr_at_8": 0.6312,
+        "chunk_count": 82,
+        "chunk_recall_at_8": 0.7683,
+        "chunk_mrr_at_8": 0.4988,
+        "noise_at_8": 0.0
+      },
+      "by_corpus": {
+        "about_me": {
+          "count": 42,
+          "recall_at_5": 0.9762,
+          "mrr": 0.7468,
+          "recall_at_8": 1.0,
+          "mrr_at_8": 0.7508,
+          "chunk_count": 42,
+          "chunk_recall_at_8": 0.9762,
+          "chunk_mrr_at_8": 0.6901,
+          "noise_at_8": 0.0
+        },
+        "about_system": {
+          "count": 40,
+          "recall_at_5": 0.8,
+          "mrr": 0.49,
+          "recall_at_8": 0.9,
+          "mrr_at_8": 0.5056,
+          "chunk_count": 40,
+          "chunk_recall_at_8": 0.55,
+          "chunk_mrr_at_8": 0.2979,
+          "noise_at_8": 0.0
+        }
+      },
+      "by_category": {
+        "fact": {
+          "count": 67,
+          "recall_at_5": 0.8955,
+          "mrr": 0.6371,
+          "recall_at_8": 0.9552,
+          "mrr_at_8": 0.647,
+          "chunk_count": 67,
+          "chunk_recall_at_8": 0.8209,
+          "chunk_mrr_at_8": 0.554,
+          "noise_at_8": 0.0
+        },
+        "injection": {
+          "count": 1,
+          "recall_at_5": 1.0,
+          "mrr": 0.2,
+          "recall_at_8": 1.0,
+          "mrr_at_8": 0.2,
+          "chunk_count": 1,
+          "chunk_recall_at_8": 0.0,
+          "chunk_mrr_at_8": 0.0,
+          "noise_at_8": 0.0
+        },
+        "live": {
+          "count": 6,
+          "recall_at_5": 0.8333,
+          "mrr": 0.5833,
+          "recall_at_8": 1.0,
+          "mrr_at_8": 0.6042,
+          "chunk_count": 6,
+          "chunk_recall_at_8": 0.5,
+          "chunk_mrr_at_8": 0.2833,
+          "noise_at_8": 0.0
+        },
+        "planned": {
+          "count": 8,
+          "recall_at_5": 0.875,
+          "mrr": 0.5729,
+          "recall_at_8": 0.875,
+          "mrr_at_8": 0.5729,
+          "chunk_count": 8,
+          "chunk_recall_at_8": 0.625,
+          "chunk_mrr_at_8": 0.2604,
+          "noise_at_8": 0.0
+        }
+      }
     }
   },
   "cases": [
@@ -104,37 +272,341 @@
         "private/microsoft.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
         "private/microsoft.md",
         "private/skills.md",
-        "private/microsoft.md",
         "private/bio.md",
         "private/personal.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-tech-redis",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/microsoft.md",
+        "private/projects.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/projects.md",
+        "private/skills.md",
+        "private/google.md",
+        "private/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 2
+    },
+    {
+      "id": "me-tech-python",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/google.md",
+        "private/projects.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/skills.md",
+        "private/google.md",
+        "private/personal.md",
+        "private/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.3333333333333333,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 5,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.3333333333333333,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.2,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.16666666666666666
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 2
+    },
+    {
+      "id": "me-tech-react",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/google.md",
+        "private/projects.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/projects.md",
+        "private/google.md",
+        "private/skills.md",
+        "private/google.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 17,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 5,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 2
+    },
+    {
+      "id": "me-tech-kafka",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/skills.md",
+        "private/projects.md",
+        "private/google.md",
+        "private/projects.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 5,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.16666666666666666,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.16666666666666666,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.125,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 1
+    },
+    {
+      "id": "me-tech-grpc",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/google.md",
+        "private/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/google.md",
+        "private/bio.md",
+        "private/bio.md",
+        "private/personal.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -142,167 +614,136 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        }
-      ],
-      "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
-      "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 0,
-      "retrieved_count": 8
-    },
-    {
-      "id": "me-assets",
-      "corpus": "about_me",
-      "category": "fact",
-      "expected_sources": [
-        "private/microsoft.md"
-      ],
-      "retrieved_sources": [
-        "private/microsoft.md",
-        "private/skills.md",
-        "private/microsoft.md",
-        "private/personal.md",
-        "private/projects.md"
-      ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
-      "retrieved_at_8": [
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 1,
-          "source": "private/bio.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
           "chunk_id": 2,
           "source": "private/bio.md"
-        }
-      ],
-      "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
-      "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 0,
-      "retrieved_count": 8
-    },
-    {
-      "id": "me-outages",
-      "corpus": "about_me",
-      "category": "fact",
-      "expected_sources": [
-        "private/microsoft.md"
-      ],
-      "retrieved_sources": [
-        "private/microsoft.md",
-        "private/microsoft.md",
-        "private/personal.md",
-        "private/bio.md",
-        "private/skills.md"
-      ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
-      "retrieved_at_8": [
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
           "chunk_id": 10,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        }
-      ],
-      "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
-      "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 0,
-      "retrieved_count": 8
-    },
-    {
-      "id": "me-cpu",
-      "corpus": "about_me",
-      "category": "fact",
-      "expected_sources": [
-        "private/microsoft.md"
-      ],
-      "retrieved_sources": [
-        "private/microsoft.md",
-        "private/google.md",
-        "private/skills.md",
-        "private/microsoft.md",
-        "private/google.md"
-      ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
-      "retrieved_at_8": [
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 5,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 4,
           "source": "private/google.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 1
+    },
+    {
+      "id": "me-tech-kubernetes",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/projects.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/skills.md",
+        "private/microsoft.md",
+        "private/projects.md",
+        "private/microsoft.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.25,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.25,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.16666666666666666,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 1
+    },
+    {
+      "id": "me-tech-k8s-production",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/projects.md"
+      ],
+      "retrieved_sources": [
+        "private/skills.md",
+        "private/microsoft.md",
+        "private/microsoft.md",
+        "private/personal.md",
+        "private/bio.md"
+      ],
+      "hit": 0,
+      "reciprocal_rank": 0.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 10,
@@ -318,32 +759,47 @@
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.16666666666666666,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.25,
+      "chunk_reciprocal_rank": 0.16666666666666666,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.2,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.2
+        }
+      },
+      "dual_experience_slots": 1
     },
     {
-      "id": "me-release",
+      "id": "me-assets",
       "corpus": "about_me",
       "category": "fact",
       "expected_sources": [
         "private/microsoft.md"
       ],
       "retrieved_sources": [
-        "private/microsoft.md",
+        "private/skills.md",
         "private/microsoft.md",
         "private/bio.md",
-        "private/skills.md",
-        "private/google.md"
+        "private/bio.md",
+        "private/microsoft.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
+          "chunk_id": 15,
+          "source": "private/skills.md"
         },
         {
           "chunk_id": 6,
@@ -354,16 +810,264 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-outages",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "private/bio.md",
+        "private/microsoft.md",
+        "private/personal.md",
+        "private/projects.md",
+        "private/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-cpu",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "private/microsoft.md",
+        "private/microsoft.md",
+        "private/skills.md",
+        "private/google.md",
+        "private/skills.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-release",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/microsoft.md"
+      ],
+      "retrieved_sources": [
+        "private/bio.md",
+        "private/microsoft.md",
+        "private/microsoft.md",
+        "private/skills.md",
+        "private/bio.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.3333333333333333,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-fitbit-gate",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/google.md"
+      ],
+      "retrieved_sources": [
+        "private/google.md",
+        "private/projects.md",
+        "private/bio.md",
+        "private/bio.md",
+        "private/personal.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
         {
           "chunk_id": 3,
           "source": "private/google.md"
         },
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
         },
         {
           "chunk_id": 10,
@@ -379,64 +1083,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
-    },
-    {
-      "id": "me-fitbit-gate",
-      "corpus": "about_me",
-      "category": "fact",
-      "expected_sources": [
-        "private/google.md"
-      ],
-      "retrieved_sources": [
-        "private/google.md",
-        "private/projects.md",
-        "private/personal.md",
-        "private/microsoft.md",
-        "private/microsoft.md"
-      ],
-      "hit": 1,
-      "reciprocal_rank": 1.0,
-      "retrieved_at_8": [
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
         },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 11,
-          "source": "private/projects.md"
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
         }
-      ],
-      "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
-      "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 0,
-      "retrieved_count": 8
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-youtube",
@@ -448,7 +1110,7 @@
       "retrieved_sources": [
         "private/google.md",
         "private/google.md",
-        "private/google.md",
+        "private/bio.md",
         "private/skills.md",
         "private/projects.md"
       ],
@@ -464,28 +1126,20 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 5,
-          "source": "private/google.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 12,
+          "chunk_id": 13,
           "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
@@ -493,7 +1147,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-framework",
@@ -506,8 +1175,8 @@
         "private/google.md",
         "private/skills.md",
         "private/google.md",
-        "private/google.md",
-        "private/skills.md"
+        "private/skills.md",
+        "private/bio.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
@@ -517,32 +1186,24 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 5,
-          "source": "private/google.md"
         },
         {
           "chunk_id": 3,
           "source": "private/google.md"
         },
         {
-          "chunk_id": 14,
+          "chunk_id": 15,
           "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         }
       ],
       "hit_at_8": 1,
@@ -550,7 +1211,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-education",
@@ -560,54 +1236,61 @@
         "private/bio.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
+        "private/projects.md",
         "private/personal.md",
-        "private/skills.md",
-        "private/skills.md",
-        "private/microsoft.md",
-        "private/google.md"
+        "private/personal.md",
+        "private/bio.md"
       ],
-      "hit": 0,
-      "reciprocal_rank": 0.0,
+      "hit": 1,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
+          "chunk_id": 12,
+          "source": "private/projects.md"
         },
         {
           "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 11,
-          "source": "private/projects.md"
+          "chunk_id": 9,
+          "source": "private/personal.md"
         },
         {
-          "chunk_id": 8,
-          "source": "private/personal.md"
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
         }
       ],
-      "hit_at_8": 0,
-      "reciprocal_rank_at_8": 0.0,
-      "chunk_hit": 0,
-      "chunk_reciprocal_rank": 0.0,
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-contact",
@@ -618,10 +1301,10 @@
       ],
       "retrieved_sources": [
         "private/bio.md",
+        "private/bio.md",
         "private/personal.md",
-        "private/microsoft.md",
         "private/personal.md",
-        "private/bio.md"
+        "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
@@ -631,28 +1314,20 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 3,
-          "source": "private/google.md"
+          "chunk_id": 11,
+          "source": "private/personal.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         },
         {
           "chunk_id": 12,
@@ -664,7 +1339,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-background",
@@ -674,33 +1364,21 @@
         "private/bio.md"
       ],
       "retrieved_sources": [
-        "private/microsoft.md",
+        "private/bio.md",
         "private/skills.md",
+        "private/bio.md",
         "private/microsoft.md",
-        "private/google.md",
         "private/skills.md"
       ],
-      "hit": 0,
-      "reciprocal_rank": 0.0,
+      "hit": 1,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -708,20 +1386,39 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
         },
         {
-          "chunk_id": 2,
-          "source": "private/bio.md"
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 3,
+          "source": "private/google.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.16666666666666666,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.16666666666666666,
+      "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-goal-buddy",
@@ -735,21 +1432,21 @@
         "private/skills.md",
         "private/projects.md",
         "private/google.md",
-        "private/personal.md"
+        "private/google.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 12,
+          "chunk_id": 13,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 11,
+          "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
@@ -757,20 +1454,12 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 13,
-          "source": "private/projects.md"
-        },
-        {
           "chunk_id": 4,
           "source": "private/google.md"
         },
         {
-          "chunk_id": 2,
-          "source": "private/bio.md"
+          "chunk_id": 15,
+          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
@@ -778,7 +1467,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-cryptoking",
@@ -789,28 +1493,24 @@
       ],
       "retrieved_sources": [
         "private/projects.md",
-        "private/projects.md",
-        "private/projects.md",
         "private/skills.md",
-        "private/google.md"
+        "private/skills.md",
+        "private/google.md",
+        "private/bio.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 13,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        },
-        {
           "chunk_id": 14,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -822,12 +1522,8 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 10,
-          "source": "private/personal.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
@@ -835,7 +1531,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-languages",
@@ -845,29 +1556,25 @@
         "private/skills.md"
       ],
       "retrieved_sources": [
-        "private/skills.md",
-        "private/personal.md",
         "private/personal.md",
         "private/skills.md",
-        "private/bio.md"
+        "private/skills.md",
+        "private/bio.md",
+        "private/projects.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
+        {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
         {
           "chunk_id": 15,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 14,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -875,24 +1582,35 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
           "chunk_id": 12,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.25,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.2
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-observability",
@@ -903,53 +1621,60 @@
       ],
       "retrieved_sources": [
         "private/skills.md",
-        "private/personal.md",
-        "private/microsoft.md",
         "private/skills.md",
-        "private/google.md"
+        "private/personal.md",
+        "private/bio.md",
+        "private/personal.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
           "chunk_id": 15,
           "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
         },
         {
           "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 11,
-          "source": "private/projects.md"
+          "chunk_id": 1,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 12,
-          "source": "private/projects.md"
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.25,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-origin",
@@ -959,38 +1684,18 @@
         "private/personal.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
+        "private/bio.md",
         "private/personal.md",
-        "private/google.md",
-        "private/skills.md",
-        "private/skills.md",
+        "private/projects.md",
         "private/personal.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 8,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
           "chunk_id": 1,
@@ -999,14 +1704,41 @@
         {
           "chunk_id": 10,
           "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 9,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.3333333333333333,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 0.2,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.16666666666666666,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.16666666666666666
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-favorite-food",
@@ -1018,9 +1750,137 @@
       "retrieved_sources": [
         "private/personal.md",
         "private/personal.md",
-        "private/microsoft.md",
         "private/bio.md",
-        "private/skills.md"
+        "private/bio.md",
+        "private/projects.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-favorite-color",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/personal.md"
+      ],
+      "retrieved_sources": [
+        "private/personal.md",
+        "private/personal.md",
+        "private/bio.md",
+        "private/bio.md",
+        "private/projects.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 1,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "me-favorite-personal-project",
+      "corpus": "about_me",
+      "category": "fact",
+      "expected_sources": [
+        "private/personal.md"
+      ],
+      "retrieved_sources": [
+        "private/personal.md",
+        "private/personal.md",
+        "private/bio.md",
+        "private/projects.md",
+        "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
@@ -1030,32 +1890,24 @@
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 9,
+          "chunk_id": 11,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 2,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 1,
-          "source": "private/bio.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
         },
         {
           "chunk_id": 12,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
@@ -1063,7 +1915,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-light-dark",
@@ -1074,45 +1941,37 @@
       ],
       "retrieved_sources": [
         "private/personal.md",
+        "private/bio.md",
         "private/personal.md",
-        "private/projects.md",
-        "private/microsoft.md",
-        "private/skills.md"
+        "private/skills.md",
+        "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
           "chunk_id": 10,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 15,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 11,
+          "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 2,
-          "source": "private/bio.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
@@ -1120,7 +1979,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-hobbies",
@@ -1131,44 +2005,36 @@
       ],
       "retrieved_sources": [
         "private/personal.md",
+        "private/bio.md",
         "private/personal.md",
-        "private/microsoft.md",
-        "private/skills.md",
-        "private/skills.md"
+        "private/projects.md",
+        "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
+          "chunk_id": 11,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
           "chunk_id": 10,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
         },
         {
           "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 8,
-          "source": "private/personal.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
         },
         {
-          "chunk_id": 2,
+          "chunk_id": 1,
           "source": "private/bio.md"
         }
       ],
@@ -1177,7 +2043,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-complexity",
@@ -1188,45 +2069,37 @@
       ],
       "retrieved_sources": [
         "private/personal.md",
+        "private/bio.md",
+        "private/bio.md",
         "private/personal.md",
-        "private/skills.md",
-        "private/microsoft.md",
-        "private/bio.md"
+        "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
+          "chunk_id": 10,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 8,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 15,
-          "source": "private/skills.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 10,
+          "chunk_id": 9,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 3,
-          "source": "private/google.md"
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
@@ -1234,7 +2107,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-team-culture",
@@ -1245,45 +2133,37 @@
       ],
       "retrieved_sources": [
         "private/personal.md",
-        "private/skills.md",
+        "private/bio.md",
+        "private/google.md",
         "private/personal.md",
-        "private/microsoft.md",
-        "private/personal.md"
+        "private/bio.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
           "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 8,
+          "chunk_id": 3,
+          "source": "private/google.md"
+        },
+        {
+          "chunk_id": 9,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
+          "chunk_id": 1,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
+          "chunk_id": 5,
+          "source": "private/google.md"
         }
       ],
       "hit_at_8": 1,
@@ -1291,7 +2171,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-favorite-pro-project",
@@ -1303,43 +2198,35 @@
       "retrieved_sources": [
         "private/personal.md",
         "private/personal.md",
-        "private/microsoft.md",
-        "private/skills.md",
+        "private/bio.md",
+        "private/projects.md",
         "private/projects.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
           "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 11,
+          "source": "private/personal.md"
         },
         {
-          "chunk_id": 15,
-          "source": "private/skills.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
           "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 11,
+          "chunk_id": 13,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 2,
+          "chunk_id": 1,
           "source": "private/bio.md"
         }
       ],
@@ -1348,7 +2235,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-fav-languages",
@@ -1361,18 +2263,18 @@
         "private/personal.md",
         "private/personal.md",
         "private/skills.md",
-        "private/skills.md",
-        "private/projects.md"
+        "private/bio.md",
+        "private/skills.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 10,
+          "chunk_id": 11,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 9,
+          "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
@@ -1380,24 +2282,16 @@
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 14,
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 16,
           "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
         },
         {
           "chunk_id": 12,
           "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 8,
-          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
@@ -1405,7 +2299,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-azure-regions",
@@ -1415,54 +2324,61 @@
         "private/microsoft.md"
       ],
       "retrieved_sources": [
-        "private/microsoft.md",
-        "private/microsoft.md",
-        "private/bio.md",
         "private/skills.md",
-        "private/projects.md"
+        "private/bio.md",
+        "private/microsoft.md",
+        "private/microsoft.md",
+        "private/skills.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
+          "chunk_id": 15,
+          "source": "private/skills.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 14,
+          "chunk_id": 7,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 12,
+          "chunk_id": 13,
           "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 10,
-          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.3333333333333333,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.3333333333333333,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-ai-review",
@@ -1473,24 +2389,20 @@
       ],
       "retrieved_sources": [
         "private/microsoft.md",
-        "private/microsoft.md",
         "private/skills.md",
         "private/bio.md",
+        "private/microsoft.md",
         "private/skills.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 7,
+          "chunk_id": 8,
           "source": "private/microsoft.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
+          "chunk_id": 17,
           "source": "private/skills.md"
         },
         {
@@ -1498,20 +2410,16 @@
           "source": "private/bio.md"
         },
         {
+          "chunk_id": 6,
+          "source": "private/microsoft.md"
+        },
+        {
           "chunk_id": 15,
           "source": "private/skills.md"
         },
         {
-          "chunk_id": 3,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 11,
+          "chunk_id": 12,
           "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
@@ -1519,7 +2427,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-selenium",
@@ -1532,8 +2455,8 @@
         "private/google.md",
         "private/skills.md",
         "private/google.md",
-        "private/google.md",
-        "private/microsoft.md"
+        "private/bio.md",
+        "private/bio.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
@@ -1543,7 +2466,7 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -1551,24 +2474,16 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 5,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 7,
-          "source": "private/microsoft.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
@@ -1576,7 +2491,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 0.3333333333333333,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-youtube-backend",
@@ -1589,8 +2519,8 @@
         "private/google.md",
         "private/google.md",
         "private/skills.md",
-        "private/skills.md",
-        "private/projects.md"
+        "private/bio.md",
+        "private/skills.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
@@ -1604,28 +2534,20 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 15,
+          "chunk_id": 16,
           "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 5,
-          "source": "private/google.md"
+          "chunk_id": 15,
+          "source": "private/skills.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         }
       ],
       "hit_at_8": 1,
@@ -1633,7 +2555,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-college",
@@ -1643,54 +2580,61 @@
         "private/bio.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
         "private/personal.md",
-        "private/personal.md",
-        "private/google.md",
-        "private/skills.md",
-        "private/microsoft.md"
+        "private/bio.md",
+        "private/projects.md",
+        "private/personal.md"
       ],
-      "hit": 0,
-      "reciprocal_rank": 0.0,
+      "hit": 1,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 11,
           "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 3,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 2,
-          "source": "private/bio.md"
+          "chunk_id": 12,
+          "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 10,
+          "source": "private/personal.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.14285714285714285,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.14285714285714285,
+      "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-retrieval-stack",
@@ -1701,37 +2645,29 @@
       ],
       "retrieved_sources": [
         "private/projects.md",
-        "private/skills.md",
-        "private/skills.md",
         "private/projects.md",
-        "private/personal.md"
+        "private/skills.md",
+        "private/skills.md",
+        "private/bio.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 11,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
           "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
+          "chunk_id": 13,
+          "source": "private/projects.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
         },
         {
           "chunk_id": 2,
@@ -1747,7 +2683,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-sse",
@@ -1759,53 +2710,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
-        "services/tests/test_security_headers.py",
         "docs/DESIGN.md",
-        "services/glassbox/api/ask.py"
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "services/glassbox/warm.py"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.25,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 1213,
+          "chunk_id": 617,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1272,
-          "source": "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
-        },
-        {
-          "chunk_id": 981,
-          "source": "services/tests/test_security_headers.py"
-        },
-        {
-          "chunk_id": 1186,
+          "chunk_id": 590,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 178,
-          "source": "services/glassbox/api/ask.py"
-        },
-        {
-          "chunk_id": 1035,
-          "source": "services/tests/test_stream_resilience.py"
-        },
-        {
-          "chunk_id": 1268,
-          "source": "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
-        },
-        {
-          "chunk_id": 1125,
+          "chunk_id": 522,
           "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 523,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 488,
+          "source": "services/glassbox/warm.py"
+        },
+        {
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 207,
+          "source": "services/glassbox/api/cluster.py"
+        },
+        {
+          "chunk_id": 186,
+          "source": "services/glassbox/api/ask.py"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.25,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.25,
-      "noise_count": 4,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-vector",
@@ -1816,54 +2782,69 @@
         "docs/DESIGN.md"
       ],
       "retrieved_sources": [
-        "services/tests/test_answer_cache.py",
-        "services/glassbox/ingest/redis_index.py",
-        "services/glassbox/cache/retrieval.py",
+        "docs/architecture/deep-dive.md",
+        "docs/architecture/deep-dive.md",
         "services/glassbox/ingest/reconcile.py",
+        "services/glassbox/cache/answer.py",
         "services/glassbox/ingest/redis_index.py"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 492,
-          "source": "services/tests/test_answer_cache.py"
+          "chunk_id": 629,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 323,
-          "source": "services/glassbox/ingest/redis_index.py"
+          "chunk_id": 616,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 251,
-          "source": "services/glassbox/cache/retrieval.py"
-        },
-        {
-          "chunk_id": 313,
+          "chunk_id": 314,
           "source": "services/glassbox/ingest/reconcile.py"
         },
         {
-          "chunk_id": 319,
+          "chunk_id": 247,
+          "source": "services/glassbox/cache/answer.py"
+        },
+        {
+          "chunk_id": 334,
           "source": "services/glassbox/ingest/redis_index.py"
         },
         {
-          "chunk_id": 462,
+          "chunk_id": 259,
+          "source": "services/glassbox/cache/retrieval.py"
+        },
+        {
+          "chunk_id": 478,
           "source": "services/glassbox/retrieval/search.py"
         },
         {
-          "chunk_id": 1271,
-          "source": "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
-        },
-        {
-          "chunk_id": 340,
-          "source": "services/glassbox/ingest/run.py"
+          "chunk_id": 327,
+          "source": "services/glassbox/ingest/redis_index.py"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.16666666666666666,
+      "reciprocal_rank_at_8": 0.14285714285714285,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.16666666666666666,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-worker",
@@ -1874,44 +2855,44 @@
       ],
       "retrieved_sources": [
         "services/glassbox/worker/main.py",
-        "docs/superpowers/plans/2026-09-30-phase1b-sse.md",
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
         "services/glassbox/api/ask.py",
-        "k8s/base/worker-deployment.yaml",
-        "services/glassbox/worker/main.py"
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 480,
+          "chunk_id": 495,
           "source": "services/glassbox/worker/main.py"
         },
         {
-          "chunk_id": 1271,
-          "source": "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
+          "chunk_id": 616,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 160,
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 163,
           "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 136,
+          "chunk_id": 635,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 135,
           "source": "k8s/base/worker-deployment.yaml"
         },
         {
-          "chunk_id": 483,
-          "source": "services/glassbox/worker/main.py"
+          "chunk_id": 592,
+          "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 479,
-          "source": "services/glassbox/worker/__init__.py"
-        },
-        {
-          "chunk_id": 152,
-          "source": "k8s/overlays/prod/keda-scaling/scaledobject-retrieval-worker.yaml"
-        },
-        {
-          "chunk_id": 487,
+          "chunk_id": 498,
           "source": "services/glassbox/worker/main.py"
         }
       ],
@@ -1919,8 +2900,23 @@
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.2,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.2
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-schema",
@@ -1931,54 +2927,69 @@
         "docs/DESIGN.md"
       ],
       "retrieved_sources": [
-        "services/glassbox/db/models.py",
-        "services/glassbox/db/migrations/versions/0001_initial_schema.py",
         "docs/architecture/deep-dive.md",
-        "services/glassbox/ingest/redis_index.py",
-        "services/glassbox/ingest/run.py"
+        "services/glassbox/db/models.py",
+        "docs/DESIGN-003-ingestion.md",
+        "services/glassbox/db/migrations/versions/0001_initial_schema.py",
+        "docs/DESIGN.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 280,
-          "source": "services/glassbox/db/models.py"
-        },
-        {
-          "chunk_id": 257,
-          "source": "services/glassbox/db/migrations/versions/0001_initial_schema.py"
-        },
-        {
-          "chunk_id": 1224,
+          "chunk_id": 628,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 322,
+          "chunk_id": 288,
+          "source": "services/glassbox/db/models.py"
+        },
+        {
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 265,
+          "source": "services/glassbox/db/migrations/versions/0001_initial_schema.py"
+        },
+        {
+          "chunk_id": 581,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 314,
+          "source": "services/glassbox/ingest/reconcile.py"
+        },
+        {
+          "chunk_id": 333,
           "source": "services/glassbox/ingest/redis_index.py"
         },
         {
-          "chunk_id": 340,
+          "chunk_id": 351,
           "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 311,
-          "source": "services/glassbox/ingest/reconcile.py"
-        },
-        {
-          "chunk_id": 374,
-          "source": "services/glassbox/ingest/sweep.py"
-        },
-        {
-          "chunk_id": 310,
-          "source": "services/glassbox/ingest/reconcile.py"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
+      "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-ingest",
@@ -1990,28 +3001,24 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
-        "docs/DESIGN.md",
+        "docs/architecture/deep-dive.md",
         "services/glassbox/ingest/run.py",
-        "services/glassbox/ingest/run.py"
+        "services/glassbox/ingest/run.py",
+        "docs/DESIGN-003-ingestion.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.25,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 1226,
+          "chunk_id": 630,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1262,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 633,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1178,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 324,
+          "chunk_id": 347,
           "source": "services/glassbox/ingest/run.py"
         },
         {
@@ -2019,24 +3026,43 @@
           "source": "services/glassbox/ingest/run.py"
         },
         {
-          "chunk_id": 1153,
-          "source": "docs/DESIGN-005-rag-quality.md"
-        },
-        {
-          "chunk_id": 1131,
+          "chunk_id": 529,
           "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 1230,
+          "chunk_id": 346,
+          "source": "services/glassbox/ingest/run.py"
+        },
+        {
+          "chunk_id": 632,
           "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 550,
+          "source": "docs/DESIGN-005-rag-quality.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.25,
-      "chunk_hit": 0,
-      "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "reciprocal_rank_at_8": 0.3333333333333333,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.3333333333333333,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-secrets",
@@ -2048,53 +3074,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN-003-ingestion.md",
-        "services/glassbox/ingest/run.py",
         "docs/architecture/deep-dive.md",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+        "docs/DESIGN-003-ingestion.md",
+        "docs/DESIGN-003-ingestion.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1229,
+          "chunk_id": 631,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1134,
+          "chunk_id": 630,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 531,
           "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 348,
-          "source": "services/glassbox/ingest/run.py"
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 1227,
+          "chunk_id": 633,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1262,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 538,
+          "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 864,
-          "source": "services/tests/test_ingest_reconcile.py"
+          "chunk_id": 28,
+          "source": "infra/CI.md"
         },
         {
-          "chunk_id": 335,
+          "chunk_id": 359,
           "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 1226,
-          "source": "docs/architecture/deep-dive.md"
         }
       ],
       "hit_at_8": 0,
       "reciprocal_rank_at_8": 0.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-chunk-markdown",
@@ -2105,53 +3146,68 @@
       ],
       "retrieved_sources": [
         "services/glassbox/ingest/chunkers/markdown.py",
-        "services/glassbox/ingest/chunkers/markdown.py",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
-        "services/tests/test_planned_labels.py",
-        "services/glassbox/ingest/chunkers/yaml_doc.py"
+        "services/glassbox/ingest/chunkers/code.py",
+        "services/glassbox/ingest/chunkers/terraform.py",
+        "docs/DESIGN-003-ingestion.md",
+        "services/glassbox/ingest/chunkers/markdown.py"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 301,
+          "chunk_id": 309,
           "source": "services/glassbox/ingest/chunkers/markdown.py"
         },
         {
-          "chunk_id": 300,
+          "chunk_id": 307,
+          "source": "services/glassbox/ingest/chunkers/code.py"
+        },
+        {
+          "chunk_id": 311,
+          "source": "services/glassbox/ingest/chunkers/terraform.py"
+        },
+        {
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 308,
           "source": "services/glassbox/ingest/chunkers/markdown.py"
         },
         {
-          "chunk_id": 1260,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 633,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 910,
-          "source": "services/tests/test_planned_labels.py"
-        },
-        {
-          "chunk_id": 305,
+          "chunk_id": 313,
           "source": "services/glassbox/ingest/chunkers/yaml_doc.py"
         },
         {
-          "chunk_id": 628,
-          "source": "services/tests/test_chunker_markdown.py"
-        },
-        {
-          "chunk_id": 622,
-          "source": "services/tests/test_chunker_markdown.py"
-        },
-        {
-          "chunk_id": 629,
-          "source": "services/tests/test_chunker_markdown.py"
+          "chunk_id": 312,
+          "source": "services/glassbox/ingest/chunkers/yaml_doc.py"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
-      "noise_count": 5,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.16666666666666666,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.16666666666666666
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-chunk-terraform",
@@ -2162,53 +3218,68 @@
       ],
       "retrieved_sources": [
         "services/glassbox/ingest/chunkers/terraform.py",
-        "services/glassbox/ingest/chunkers/terraform.py",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
-        "services/tests/test_chunker_terraform.py",
-        "services/tests/test_chunker_terraform.py"
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "infra/CI.md",
+        "services/glassbox/ingest/chunkers/terraform.py"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 303,
+          "chunk_id": 311,
           "source": "services/glassbox/ingest/chunkers/terraform.py"
         },
         {
-          "chunk_id": 302,
+          "chunk_id": 633,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 599,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 19,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 310,
           "source": "services/glassbox/ingest/chunkers/terraform.py"
         },
         {
-          "chunk_id": 1261,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 185,
+          "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 632,
-          "source": "services/tests/test_chunker_terraform.py"
-        },
-        {
-          "chunk_id": 631,
-          "source": "services/tests/test_chunker_terraform.py"
-        },
-        {
-          "chunk_id": 637,
-          "source": "services/tests/test_chunker_terraform.py"
-        },
-        {
-          "chunk_id": 630,
-          "source": "services/tests/test_chunker_terraform.py"
-        },
-        {
-          "chunk_id": 280,
+          "chunk_id": 288,
           "source": "services/glassbox/db/models.py"
+        },
+        {
+          "chunk_id": 333,
+          "source": "services/glassbox/ingest/redis_index.py"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
-      "noise_count": 5,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-providers",
@@ -2220,53 +3291,68 @@
       ],
       "retrieved_sources": [
         "services/glassbox/providers/factory.py",
+        "docs/DESIGN.md",
         "services/glassbox/providers/base.py",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
-        "services/glassbox/providers/factory.py",
-        "services/glassbox/providers/bedrock.py"
+        "docs/architecture/deep-dive.md",
+        "services/glassbox/providers/factory.py"
       ],
       "hit": 1,
       "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 450,
+          "chunk_id": 464,
           "source": "services/glassbox/providers/factory.py"
         },
         {
-          "chunk_id": 440,
+          "chunk_id": 597,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 453,
           "source": "services/glassbox/providers/base.py"
         },
         {
-          "chunk_id": 1259,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 631,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 456,
+          "chunk_id": 470,
           "source": "services/glassbox/providers/factory.py"
         },
         {
-          "chunk_id": 448,
+          "chunk_id": 639,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 462,
           "source": "services/glassbox/providers/bedrock.py"
         },
         {
-          "chunk_id": 442,
-          "source": "services/glassbox/providers/bedrock.py"
-        },
-        {
-          "chunk_id": 953,
-          "source": "services/tests/test_providers.py"
-        },
-        {
-          "chunk_id": 604,
-          "source": "services/tests/test_bedrock_providers.py"
+          "chunk_id": 615,
+          "source": "docs/architecture/deep-dive.md"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.5,
-      "noise_count": 3,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.3333333333333333,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-caches",
@@ -2279,51 +3365,66 @@
         "docs/architecture/deep-dive.md",
         "docs/architecture/deep-dive.md",
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN.md",
-        "docs/architecture/deep-dive.md"
+        "services/glassbox/api/ask.py",
+        "k8s/base/redis-statefulset.yaml"
       ],
-      "hit": 1,
-      "reciprocal_rank": 0.25,
+      "hit": 0,
+      "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1225,
+          "chunk_id": 629,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1218,
+          "chunk_id": 622,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1247,
+          "chunk_id": 651,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1179,
+          "chunk_id": 156,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 133,
+          "source": "k8s/base/redis-statefulset.yaml"
+        },
+        {
+          "chunk_id": 582,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1212,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1177,
+          "chunk_id": 579,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1209,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 490,
-          "source": "services/tests/test_answer_cache.py"
+          "chunk_id": 314,
+          "source": "services/glassbox/ingest/reconcile.py"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.25,
+      "reciprocal_rank_at_8": 0.16666666666666666,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-rate-limit",
@@ -2334,54 +3435,69 @@
         "services/glassbox/api/ask.py"
       ],
       "retrieved_sources": [
-        "services/tests/test_ask_endpoint.py",
-        "services/tests/test_csp_report.py",
-        "services/tests/test_warm.py",
-        "services/tests/test_warm.py",
-        "services/tests/test_ask_history.py"
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 554,
-          "source": "services/tests/test_ask_endpoint.py"
-        },
-        {
-          "chunk_id": 706,
-          "source": "services/tests/test_csp_report.py"
-        },
-        {
-          "chunk_id": 1063,
-          "source": "services/tests/test_warm.py"
-        },
-        {
-          "chunk_id": 1073,
-          "source": "services/tests/test_warm.py"
-        },
-        {
-          "chunk_id": 576,
-          "source": "services/tests/test_ask_history.py"
-        },
-        {
-          "chunk_id": 582,
-          "source": "services/tests/test_ask_history.py"
-        },
-        {
-          "chunk_id": 1120,
+          "chunk_id": 517,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 555,
-          "source": "services/tests/test_ask_endpoint.py"
+          "chunk_id": 513,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 615,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 520,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 626,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 589,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 275,
+          "source": "services/glassbox/db/migrations/versions/0004_query_mode_stopped.py"
+        },
+        {
+          "chunk_id": 407,
+          "source": "services/glassbox/limits.py"
         }
       ],
-      "hit_at_8": 0,
-      "reciprocal_rank_at_8": 0.0,
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.16666666666666666,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 7,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.2,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-budget",
@@ -2392,54 +3508,287 @@
         "services/glassbox/api/ask.py"
       ],
       "retrieved_sources": [
-        "services/tests/test_ask_endpoint.py",
         "docs/DESIGN-002-followups.md",
-        "services/tests/test_warm.py",
-        "services/tests/test_limits.py",
-        "services/glassbox/api/csp_report.py"
+        "docs/DESIGN.md",
+        "services/glassbox/api/csp_report.py",
+        "docs/architecture/deep-dive.md",
+        "services/glassbox/limits.py"
       ],
-      "hit": 0,
-      "reciprocal_rank": 0.0,
+      "hit": 1,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 555,
-          "source": "services/tests/test_ask_endpoint.py"
-        },
-        {
-          "chunk_id": 1124,
+          "chunk_id": 521,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1088,
-          "source": "services/tests/test_warm.py"
+          "chunk_id": 609,
+          "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 882,
-          "source": "services/tests/test_limits.py"
-        },
-        {
-          "chunk_id": 205,
+          "chunk_id": 213,
           "source": "services/glassbox/api/csp_report.py"
         },
         {
-          "chunk_id": 387,
+          "chunk_id": 629,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 399,
           "source": "services/glassbox/limits.py"
         },
         {
-          "chunk_id": 470,
+          "chunk_id": 485,
           "source": "services/glassbox/warm.py"
         },
         {
-          "chunk_id": 884,
-          "source": "services/tests/test_limits.py"
+          "chunk_id": 616,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 626,
+          "source": "docs/architecture/deep-dive.md"
         }
       ],
-      "hit_at_8": 0,
-      "reciprocal_rank_at_8": 0.0,
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 4,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "system-cost",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN-002-followups.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.25,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 554,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 563,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 555,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 609,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 508,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 20,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 652,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 359,
+          "source": "services/glassbox/ingest/run.py"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.25,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.25,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.16666666666666666,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "system-length-rds",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "docs/DESIGN.md",
+        "docs/architecture/deep-dive.md"
+      ],
+      "retrieved_sources": [
+        "docs/architecture/deep-dive.md",
+        "services/glassbox/api/ask.py",
+        "docs/architecture/deep-dive.md",
+        "infra/CI.md",
+        "docs/architecture/deep-dive.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 613,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 156,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 651,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 29,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 629,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 600,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 614,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 0,
+      "chunk_reciprocal_rank": 0.0,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.14285714285714285
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "system-length-cache-ttl",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "docs/architecture/deep-dive.md"
+      ],
+      "retrieved_sources": [
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/architecture/deep-dive.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 622,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 587,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 589,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 513,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 623,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 249,
+          "source": "services/glassbox/cache/cacheability.py"
+        },
+        {
+          "chunk_id": 182,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 241,
+          "source": "services/glassbox/cache/answer.py"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.125,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-edge",
@@ -2451,53 +3800,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/architecture/deep-dive.md",
-        "docs/architecture/deep-dive.md",
         "docs/DESIGN-004-action-plan.md",
-        "infra/envs/prod/main.tf"
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.25,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 1242,
+          "chunk_id": 646,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1247,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1223,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1147,
+          "chunk_id": 544,
           "source": "docs/DESIGN-004-action-plan.md"
         },
         {
-          "chunk_id": 46,
-          "source": "infra/envs/prod/main.tf"
+          "chunk_id": 651,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1200,
+          "chunk_id": 599,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 77,
-          "source": "infra/modules/edge/main.tf"
+          "chunk_id": 627,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1209,
-          "source": "docs/architecture/deep-dive.md"
+          "chunk_id": 545,
+          "source": "docs/DESIGN-004-action-plan.md"
+        },
+        {
+          "chunk_id": 48,
+          "source": "infra/envs/prod/main.tf"
+        },
+        {
+          "chunk_id": 29,
+          "source": "infra/CI.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.25,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-deploy",
@@ -2509,53 +3873,68 @@
       ],
       "retrieved_sources": [
         "docs/DESIGN-002-followups.md",
+        "services/glassbox/ingest/run.py",
         "docs/DESIGN.md",
-        "docs/architecture/deep-dive.md",
-        "docs/DESIGN.md",
-        "docs/DESIGN-004-action-plan.md"
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 1110,
+          "chunk_id": 507,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1187,
+          "chunk_id": 359,
+          "source": "services/glassbox/ingest/run.py"
+        },
+        {
+          "chunk_id": 591,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1233,
+          "chunk_id": 548,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 637,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1192,
+          "chunk_id": 388,
+          "source": "services/glassbox/ingest/sweep.py"
+        },
+        {
+          "chunk_id": 596,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1146,
-          "source": "docs/DESIGN-004-action-plan.md"
-        },
-        {
-          "chunk_id": 1240,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1234,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1109,
-          "source": "docs/DESIGN-002-followups.md"
+          "chunk_id": 561,
+          "source": "docs/DESIGN-005-rag-quality.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 0.3333333333333333,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.5,
+      "chunk_reciprocal_rank": 0.3333333333333333,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "system-followups",
@@ -2565,54 +3944,69 @@
         "docs/DESIGN-002-followups.md"
       ],
       "retrieved_sources": [
-        "docs/DESIGN-002-followups.md",
-        "services/glassbox/db/migrations/versions/0003_query_turn_columns.py",
-        "services/tests/test_ask_history.py",
         "docs/architecture/deep-dive.md",
-        "services/glassbox/api/ask.py"
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/DESIGN-002-followups.md",
+        "services/glassbox/ingest/run.py"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 1108,
+          "chunk_id": 624,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 513,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 262,
+          "chunk_id": 548,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 505,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 359,
+          "source": "services/glassbox/ingest/run.py"
+        },
+        {
+          "chunk_id": 270,
           "source": "services/glassbox/db/migrations/versions/0003_query_turn_columns.py"
         },
         {
-          "chunk_id": 565,
-          "source": "services/tests/test_ask_history.py"
+          "chunk_id": 561,
+          "source": "docs/DESIGN-005-rag-quality.md"
         },
         {
-          "chunk_id": 1220,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 164,
+          "chunk_id": 167,
           "source": "services/glassbox/api/ask.py"
-        },
-        {
-          "chunk_id": 1116,
-          "source": "docs/DESIGN-002-followups.md"
-        },
-        {
-          "chunk_id": 1250,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 580,
-          "source": "services/tests/test_ask_history.py"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.25,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "me-site-stack",
@@ -2626,44 +4020,36 @@
       "retrieved_sources": [
         "private/projects.md",
         "private/projects.md",
-        "private/projects.md",
-        "private/personal.md",
-        "private/skills.md"
+        "private/skills.md",
+        "private/google.md",
+        "private/personal.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 13,
-          "source": "private/projects.md"
-        },
-        {
           "chunk_id": 12,
           "source": "private/projects.md"
         },
         {
-          "chunk_id": 11,
+          "chunk_id": 13,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 16,
+          "source": "private/skills.md"
+        },
+        {
+          "chunk_id": 3,
+          "source": "private/google.md"
         },
         {
           "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 4,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 1,
-          "source": "private/bio.md"
-        },
-        {
-          "chunk_id": 2,
-          "source": "private/bio.md"
+          "chunk_id": 11,
+          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
@@ -2671,7 +4057,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-me-distributed",
@@ -2683,28 +4084,20 @@
       ],
       "retrieved_sources": [
         "private/personal.md",
-        "private/microsoft.md",
-        "private/projects.md",
         "private/skills.md",
-        "private/bio.md"
+        "private/bio.md",
+        "private/bio.md",
+        "private/projects.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
+          "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 14,
+          "chunk_id": 16,
           "source": "private/skills.md"
         },
         {
@@ -2712,24 +4105,39 @@
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 15,
-          "source": "private/skills.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
         },
         {
-          "chunk_id": 10,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 11,
+          "chunk_id": 13,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 9,
+          "source": "private/personal.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
-      "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.5,
+      "reciprocal_rank_at_8": 0.3333333333333333,
+      "chunk_hit": 0,
+      "chunk_reciprocal_rank": 0.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.2,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-me-youtube",
@@ -2739,17 +4147,21 @@
         "private/google.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
         "private/personal.md",
         "private/google.md",
-        "private/google.md",
-        "private/projects.md",
-        "private/microsoft.md"
+        "private/personal.md",
+        "private/bio.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "retrieved_at_8": [
         {
-          "chunk_id": 9,
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 10,
           "source": "private/personal.md"
         },
         {
@@ -2757,36 +4169,39 @@
           "source": "private/google.md"
         },
         {
-          "chunk_id": 4,
-          "source": "private/google.md"
-        },
-        {
-          "chunk_id": 12,
-          "source": "private/projects.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
+          "chunk_id": 9,
+          "source": "private/personal.md"
         },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 4,
+          "source": "private/google.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 0.3333333333333333,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.5,
+      "chunk_reciprocal_rank": 0.3333333333333333,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.2
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-me-platform-fit",
@@ -2798,38 +4213,26 @@
         "private/skills.md"
       ],
       "retrieved_sources": [
+        "private/bio.md",
+        "private/bio.md",
+        "private/projects.md",
         "private/personal.md",
-        "private/microsoft.md",
-        "private/skills.md",
-        "private/skills.md",
-        "private/bio.md"
+        "private/projects.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
-        {
-          "chunk_id": 9,
-          "source": "private/personal.md"
-        },
-        {
-          "chunk_id": 6,
-          "source": "private/microsoft.md"
-        },
-        {
-          "chunk_id": 14,
-          "source": "private/skills.md"
-        },
-        {
-          "chunk_id": 15,
-          "source": "private/skills.md"
-        },
         {
           "chunk_id": 1,
           "source": "private/bio.md"
         },
         {
-          "chunk_id": 3,
-          "source": "private/google.md"
+          "chunk_id": 2,
+          "source": "private/bio.md"
+        },
+        {
+          "chunk_id": 13,
+          "source": "private/projects.md"
         },
         {
           "chunk_id": 10,
@@ -2838,14 +4241,33 @@
         {
           "chunk_id": 12,
           "source": "private/projects.md"
+        },
+        {
+          "chunk_id": 15,
+          "source": "private/skills.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.2,
+      "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 6,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-system-caching",
@@ -2857,53 +4279,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
+        "docs/architecture/deep-dive.md",
         "docs/DESIGN.md",
-        "services/glassbox/cache/retrieval.py",
-        "services/glassbox/cache/answer.py",
-        "docs/architecture/deep-dive.md"
+        "docs/DESIGN-002-followups.md",
+        "services/glassbox/api/ask.py"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1218,
+          "chunk_id": 622,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1183,
+          "chunk_id": 615,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 587,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 249,
+          "chunk_id": 513,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 185,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 257,
           "source": "services/glassbox/cache/retrieval.py"
         },
         {
-          "chunk_id": 239,
+          "chunk_id": 247,
           "source": "services/glassbox/cache/answer.py"
         },
         {
-          "chunk_id": 1211,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 525,
-          "source": "services/tests/test_answer_cacheability.py"
-        },
-        {
-          "chunk_id": 248,
-          "source": "services/glassbox/cache/retrieval.py"
-        },
-        {
-          "chunk_id": 567,
-          "source": "services/tests/test_ask_history.py"
+          "chunk_id": 569,
+          "source": "docs/DESIGN.md"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-system-k3s",
@@ -2914,46 +4351,120 @@
         "docs/architecture/deep-dive.md"
       ],
       "retrieved_sources": [
-        "docs/DESIGN.md",
-        "docs/architecture/deep-dive.md",
         "docs/DESIGN-002-followups.md",
+        "docs/architecture/deep-dive.md",
         "docs/DESIGN.md",
+        "infra/CI.md",
+        "k8s/README.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 0.5,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 507,
+          "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 653,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 591,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 25,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 107,
+          "source": "k8s/README.md"
+        },
+        {
+          "chunk_id": 637,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 612,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 596,
+          "source": "docs/DESIGN.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.5,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "sys-id-demo-lock",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "services/glassbox/api/capacity.py"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/api/capacity.py",
+        "services/glassbox/api/demo.py",
+        "docs/DESIGN.md",
+        "services/glassbox/api/capacity.py",
         "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1187,
+          "chunk_id": 189,
+          "source": "services/glassbox/api/capacity.py"
+        },
+        {
+          "chunk_id": 227,
+          "source": "services/glassbox/api/demo.py"
+        },
+        {
+          "chunk_id": 592,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1233,
+          "chunk_id": 194,
+          "source": "services/glassbox/api/capacity.py"
+        },
+        {
+          "chunk_id": 635,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1110,
-          "source": "docs/DESIGN-002-followups.md"
+          "chunk_id": 226,
+          "source": "services/glassbox/api/demo.py"
         },
         {
-          "chunk_id": 1192,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1248,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1234,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1109,
-          "source": "docs/DESIGN-002-followups.md"
-        },
-        {
-          "chunk_id": 23,
+          "chunk_id": 20,
           "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 213,
+          "source": "services/glassbox/api/csp_report.py"
         }
       ],
       "hit_at_8": 1,
@@ -2961,7 +4472,171 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.25
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "sys-id-planned-signal",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "services/glassbox/api/ask.py",
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/api/ask.py",
+        "services/glassbox/api/ask.py",
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN-005-rag-quality.md",
+        "docs/architecture/deep-dive.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 169,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 156,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 625,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 551,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 655,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 558,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 566,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 584,
+          "source": "docs/DESIGN.md"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
+    },
+    {
+      "id": "sys-id-retrieval-jobs",
+      "corpus": "about_system",
+      "category": "fact",
+      "expected_sources": [
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "services/glassbox/worker/main.py",
+        "k8s/overlays/prod/keda-scaling/scaledobject-retrieval-worker.yaml"
+      ],
+      "retrieved_sources": [
+        "services/glassbox/worker/main.py",
+        "docs/architecture/deep-dive.md",
+        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "docs/DESIGN.md"
+      ],
+      "hit": 1,
+      "reciprocal_rank": 1.0,
+      "retrieved_at_8": [
+        {
+          "chunk_id": 495,
+          "source": "services/glassbox/worker/main.py"
+        },
+        {
+          "chunk_id": 616,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 635,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 592,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 163,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 135,
+          "source": "k8s/base/worker-deployment.yaml"
+        },
+        {
+          "chunk_id": 498,
+          "source": "services/glassbox/worker/main.py"
+        }
+      ],
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 1.0,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-system-stress",
@@ -2972,54 +4647,69 @@
         "docs/DESIGN.md"
       ],
       "retrieved_sources": [
+        "docs/DESIGN-005-rag-quality.md",
         "docs/architecture/deep-dive.md",
-        "services/tests/test_eval_graders.py",
+        "services/glassbox/ingest/redis_index.py",
         "docs/DESIGN.md",
-        "services/tests/test_demo_load.py",
-        "services/tests/test_demo_capacity.py"
+        "docs/DESIGN.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 1231,
+          "chunk_id": 564,
+          "source": "docs/DESIGN-005-rag-quality.md"
+        },
+        {
+          "chunk_id": 635,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 770,
-          "source": "services/tests/test_eval_graders.py"
+          "chunk_id": 328,
+          "source": "services/glassbox/ingest/redis_index.py"
         },
         {
-          "chunk_id": 1173,
+          "chunk_id": 575,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 739,
-          "source": "services/tests/test_demo_load.py"
-        },
-        {
-          "chunk_id": 736,
-          "source": "services/tests/test_demo_capacity.py"
-        },
-        {
-          "chunk_id": 742,
-          "source": "services/tests/test_demo_load.py"
-        },
-        {
-          "chunk_id": 1188,
+          "chunk_id": 592,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 186,
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 194,
           "source": "services/glassbox/api/capacity.py"
+        },
+        {
+          "chunk_id": 614,
+          "source": "docs/architecture/deep-dive.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 1.0,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 1.0,
-      "noise_count": 4,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "sugg-system-db-terraform",
@@ -3033,43 +4723,43 @@
         "docs/DESIGN.md",
         "docs/DESIGN.md",
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN.md",
-        "docs/DESIGN-004-action-plan.md"
+        "infra/CI.md",
+        "infra/CI.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1197,
+          "chunk_id": 601,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1195,
+          "chunk_id": 599,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1242,
+          "chunk_id": 646,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1196,
+          "chunk_id": 19,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 20,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 600,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1149,
+          "chunk_id": 546,
           "source": "docs/DESIGN-004-action-plan.md"
         },
         {
-          "chunk_id": 56,
-          "source": "infra/envs/prod/versions.tf"
-        },
-        {
-          "chunk_id": 1207,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 74,
-          "source": "infra/modules/edge/main.tf"
+          "chunk_id": 34,
+          "source": "infra/CI.md"
         }
       ],
       "hit_at_8": 1,
@@ -3077,7 +4767,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 0.5,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-drive",
@@ -3088,54 +4793,69 @@
         "docs/DESIGN-003-ingestion.md"
       ],
       "retrieved_sources": [
+        "docs/DESIGN-003-ingestion.md",
+        "docs/DESIGN-003-ingestion.md",
+        "docs/architecture/deep-dive.md",
         "services/glassbox/ingest/run.py",
-        "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md",
-        "services/glassbox/ingest/run.py",
-        "docs/DESIGN.md",
-        "docs/DESIGN-003-ingestion.md"
+        "docs/DESIGN.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
+        {
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 539,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 632,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 346,
+          "source": "services/glassbox/ingest/run.py"
+        },
+        {
+          "chunk_id": 581,
+          "source": "docs/DESIGN.md"
+        },
         {
           "chunk_id": 335,
           "source": "services/glassbox/ingest/run.py"
         },
         {
-          "chunk_id": 1262,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
-        },
-        {
-          "chunk_id": 324,
-          "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 1178,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1131,
+          "chunk_id": 528,
           "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 1226,
+          "chunk_id": 630,
           "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1228,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 145,
-          "source": "k8s/overlays/prod/ingest/ingest-job.yaml"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.2,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-asg",
@@ -3148,52 +4868,67 @@
       "retrieved_sources": [
         "docs/DESIGN-002-followups.md",
         "docs/DESIGN-002-followups.md",
-        "docs/DESIGN-002-followups.md",
+        "infra/CI.md",
         "k8s/README.md",
-        "infra/CI.md"
+        "services/glassbox/api/cluster.py"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1110,
+          "chunk_id": 508,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1111,
+          "chunk_id": 507,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1109,
-          "source": "docs/DESIGN-002-followups.md"
+          "chunk_id": 30,
+          "source": "infra/CI.md"
         },
         {
           "chunk_id": 108,
           "source": "k8s/README.md"
         },
         {
-          "chunk_id": 28,
-          "source": "infra/CI.md"
+          "chunk_id": 207,
+          "source": "services/glassbox/api/cluster.py"
         },
         {
-          "chunk_id": 1231,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1188,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1113,
+          "chunk_id": 506,
           "source": "docs/DESIGN-002-followups.md"
+        },
+        {
+          "chunk_id": 446,
+          "source": "services/glassbox/privacy.py"
+        },
+        {
+          "chunk_id": 107,
+          "source": "k8s/README.md"
         }
       ],
-      "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.16666666666666666,
+      "hit_at_8": 0,
+      "reciprocal_rank_at_8": 0.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.16666666666666666,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-metrics",
@@ -3204,54 +4939,69 @@
         "docs/DESIGN.md"
       ],
       "retrieved_sources": [
-        "services/glassbox/api/ask.py",
         "docs/DESIGN.md",
+        "services/glassbox/api/main.py",
+        "services/glassbox/api/ask.py",
         "docs/architecture/deep-dive.md",
-        "k8s/base/api-ingress.yaml",
-        "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 154,
+          "chunk_id": 579,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 228,
+          "source": "services/glassbox/api/main.py"
+        },
+        {
+          "chunk_id": 156,
           "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 1177,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1222,
+          "chunk_id": 626,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 111,
+          "chunk_id": 655,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 110,
           "source": "k8s/base/api-ingress.yaml"
         },
         {
-          "chunk_id": 1272,
-          "source": "docs/superpowers/plans/2026-09-30-phase1b-sse.md"
+          "chunk_id": 635,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1190,
+          "chunk_id": 594,
           "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 112,
-          "source": "k8s/base/api-ingress.yaml"
-        },
-        {
-          "chunk_id": 114,
-          "source": "k8s/base/configmap-app.yaml"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
-      "chunk_hit": 0,
-      "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.2,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-nightly-ingest",
@@ -3262,53 +5012,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN.md",
-        "services/glassbox/ingest/run.py",
-        "services/glassbox/ingest/run.py",
-        "services/glassbox/ingest/run.py"
+        "docs/DESIGN-003-ingestion.md",
+        "docs/architecture/deep-dive.md",
+        "infra/CI.md",
+        "docs/DESIGN-003-ingestion.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1226,
+          "chunk_id": 630,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1178,
-          "source": "docs/DESIGN.md"
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 631,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 28,
+          "source": "infra/CI.md"
+        },
+        {
+          "chunk_id": 535,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 346,
+          "source": "services/glassbox/ingest/run.py"
+        },
+        {
+          "chunk_id": 347,
+          "source": "services/glassbox/ingest/run.py"
         },
         {
           "chunk_id": 335,
           "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 336,
-          "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 324,
-          "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 142,
-          "source": "k8s/overlays/prod/flux/kustomization-ingest.yaml"
-        },
-        {
-          "chunk_id": 348,
-          "source": "services/glassbox/ingest/run.py"
-        },
-        {
-          "chunk_id": 1262,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-prune",
@@ -3319,53 +5084,68 @@
       ],
       "retrieved_sources": [
         "docs/DESIGN-003-ingestion.md",
-        "services/glassbox/ingest/sweep.py",
         "docs/architecture/deep-dive.md",
-        "services/glassbox/cache/answer.py",
-        "docs/DESIGN-003-ingestion.md"
+        "docs/DESIGN-003-ingestion.md",
+        "docs/DESIGN-003-ingestion.md",
+        "services/glassbox/ingest/sweep.py"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.5,
       "retrieved_at_8": [
         {
-          "chunk_id": 1132,
+          "chunk_id": 529,
           "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 362,
-          "source": "services/glassbox/ingest/sweep.py"
-        },
-        {
-          "chunk_id": 1228,
+          "chunk_id": 632,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 234,
-          "source": "services/glassbox/cache/answer.py"
-        },
-        {
-          "chunk_id": 1134,
+          "chunk_id": 531,
           "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 927,
-          "source": "services/tests/test_portfolio_migration.py"
+          "chunk_id": 532,
+          "source": "docs/DESIGN-003-ingestion.md"
         },
         {
-          "chunk_id": 509,
-          "source": "services/tests/test_answer_cache.py"
-        },
-        {
-          "chunk_id": 369,
+          "chunk_id": 374,
           "source": "services/glassbox/ingest/sweep.py"
+        },
+        {
+          "chunk_id": 242,
+          "source": "services/glassbox/cache/answer.py"
+        },
+        {
+          "chunk_id": 314,
+          "source": "services/glassbox/ingest/reconcile.py"
+        },
+        {
+          "chunk_id": 581,
+          "source": "docs/DESIGN.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.3333333333333333,
+      "reciprocal_rank_at_8": 0.5,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.3333333333333333,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.5,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.3333333333333333
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-eval-ci",
@@ -3377,52 +5157,67 @@
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
         "docs/DESIGN.md",
-        "docs/superpowers/plans/2026-09-29-phase2-models-caches-eval.md",
+        "docs/DESIGN.md",
         "docs/DESIGN-005-rag-quality.md",
-        "docs/superpowers/plans/2026-10-01-rag-quality.md"
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1238,
+          "chunk_id": 642,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1202,
+          "chunk_id": 606,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1267,
-          "source": "docs/superpowers/plans/2026-09-29-phase2-models-caches-eval.md"
+          "chunk_id": 610,
+          "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1161,
+          "chunk_id": 557,
           "source": "docs/DESIGN-005-rag-quality.md"
         },
         {
-          "chunk_id": 1282,
-          "source": "docs/superpowers/plans/2026-10-01-rag-quality.md"
+          "chunk_id": 615,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1206,
-          "source": "docs/DESIGN.md"
+          "chunk_id": 616,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1280,
-          "source": "docs/superpowers/plans/2026-10-01-rag-quality.md"
+          "chunk_id": 563,
+          "source": "docs/DESIGN-005-rag-quality.md"
         },
         {
-          "chunk_id": 1286,
-          "source": "docs/superpowers/plans/2026-10-01-rag-quality.md"
+          "chunk_id": 512,
+          "source": "docs/DESIGN-002-followups.md"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 4,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-citation-links",
@@ -3432,54 +5227,69 @@
         "docs/architecture/deep-dive.md"
       ],
       "retrieved_sources": [
-        "services/tests/test_planned_labels.py",
         "services/glassbox/cache/answer.py",
-        "services/tests/test_planned_labels.py",
+        "services/glassbox/cache/answer.py",
         "services/glassbox/api/ask.py",
-        "services/tests/test_chunker_markdown.py"
+        "services/glassbox/api/ask.py",
+        "services/glassbox/ingest/scanner.py"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 911,
-          "source": "services/tests/test_planned_labels.py"
-        },
-        {
-          "chunk_id": 238,
+          "chunk_id": 246,
           "source": "services/glassbox/cache/answer.py"
         },
         {
-          "chunk_id": 910,
-          "source": "services/tests/test_planned_labels.py"
+          "chunk_id": 247,
+          "source": "services/glassbox/cache/answer.py"
         },
         {
-          "chunk_id": 167,
+          "chunk_id": 170,
           "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 628,
-          "source": "services/tests/test_chunker_markdown.py"
+          "chunk_id": 169,
+          "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 629,
-          "source": "services/tests/test_chunker_markdown.py"
-        },
-        {
-          "chunk_id": 600,
-          "source": "services/tests/test_bedrock_providers.py"
-        },
-        {
-          "chunk_id": 358,
+          "chunk_id": 370,
           "source": "services/glassbox/ingest/scanner.py"
+        },
+        {
+          "chunk_id": 584,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 373,
+          "source": "services/glassbox/ingest/scanner.py"
+        },
+        {
+          "chunk_id": 633,
+          "source": "docs/architecture/deep-dive.md"
         }
       ],
-      "hit_at_8": 0,
-      "reciprocal_rank_at_8": 0.0,
+      "hit_at_8": 1,
+      "reciprocal_rank_at_8": 0.125,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 5,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.25,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.125
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "planned-live-facts",
@@ -3490,54 +5300,69 @@
         "docs/DESIGN.md"
       ],
       "retrieved_sources": [
-        "services/glassbox/api/main.py",
-        "k8s/README.md",
-        "services/tests/test_health.py",
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN-002-followups.md"
+        "services/glassbox/api/main.py",
+        "docs/DESIGN.md",
+        "k8s/README.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.25,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 223,
-          "source": "services/glassbox/api/main.py"
-        },
-        {
-          "chunk_id": 103,
-          "source": "k8s/README.md"
-        },
-        {
-          "chunk_id": 837,
-          "source": "services/tests/test_health.py"
-        },
-        {
-          "chunk_id": 1249,
+          "chunk_id": 644,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1127,
+          "chunk_id": 231,
+          "source": "services/glassbox/api/main.py"
+        },
+        {
+          "chunk_id": 612,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 102,
+          "source": "k8s/README.md"
+        },
+        {
+          "chunk_id": 643,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 654,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 108,
+          "source": "k8s/README.md"
+        },
+        {
+          "chunk_id": 524,
           "source": "docs/DESIGN-002-followups.md"
-        },
-        {
-          "chunk_id": 1113,
-          "source": "docs/DESIGN-002-followups.md"
-        },
-        {
-          "chunk_id": 25,
-          "source": "infra/CI.md"
-        },
-        {
-          "chunk_id": 21,
-          "source": "infra/CI.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.25,
-      "chunk_hit": 0,
-      "chunk_reciprocal_rank": 0.0,
-      "noise_count": 1,
-      "retrieved_count": 8
+      "reciprocal_rank_at_8": 1.0,
+      "chunk_hit": 1,
+      "chunk_reciprocal_rank": 0.3333333333333333,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.3333333333333333,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-flux",
@@ -3548,45 +5373,45 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "k8s/README.md",
         "docs/architecture/deep-dive.md",
-        "docs/architecture/deep-dive.md",
-        "k8s/overlays/prod/flux/image-update-automation.yaml"
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py",
+        "k8s/README.md"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1240,
+          "chunk_id": 644,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 103,
+          "chunk_id": 613,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 607,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 156,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 102,
           "source": "k8s/README.md"
         },
         {
-          "chunk_id": 1247,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1209,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
           "chunk_id": 140,
-          "source": "k8s/overlays/prod/flux/image-update-automation.yaml"
+          "source": "k8s/overlays/prod/flux/kustomization-ingest.yaml"
         },
         {
-          "chunk_id": 1203,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1202,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1238,
+          "chunk_id": 651,
           "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 108,
+          "source": "k8s/README.md"
         }
       ],
       "hit_at_8": 1,
@@ -3594,7 +5419,22 @@
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-terraform",
@@ -3605,42 +5445,42 @@
         "infra/envs/prod/main.tf"
       ],
       "retrieved_sources": [
-        "docs/architecture/deep-dive.md",
+        "docs/DESIGN.md",
+        "infra/CI.md",
         "docs/DESIGN.md",
         "docs/architecture/deep-dive.md",
-        "infra/CI.md",
-        "docs/architecture/deep-dive.md"
+        "docs/DESIGN.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1242,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1195,
+          "chunk_id": 599,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1209,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 17,
+          "chunk_id": 19,
           "source": "infra/CI.md"
         },
         {
-          "chunk_id": 1247,
+          "chunk_id": 600,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 613,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1197,
+          "chunk_id": 601,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 1196,
-          "source": "docs/DESIGN.md"
+          "chunk_id": 646,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 647,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
           "chunk_id": 29,
@@ -3648,11 +5488,26 @@
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-stop",
@@ -3663,53 +5518,68 @@
       ],
       "retrieved_sources": [
         "docs/DESIGN-002-followups.md",
-        "services/tests/test_stream_resilience.py",
-        "services/tests/test_privacy.py",
-        "services/glassbox/api/ask.py",
-        "services/tests/test_stream_resilience.py"
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN.md",
+        "services/glassbox/api/ask.py"
       ],
       "hit": 0,
       "reciprocal_rank": 0.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1122,
+          "chunk_id": 519,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1025,
-          "source": "services/tests/test_stream_resilience.py"
+          "chunk_id": 520,
+          "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 948,
-          "source": "services/tests/test_privacy.py"
+          "chunk_id": 515,
+          "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 178,
+          "chunk_id": 574,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 186,
           "source": "services/glassbox/api/ask.py"
         },
         {
-          "chunk_id": 1027,
-          "source": "services/tests/test_stream_resilience.py"
+          "chunk_id": 460,
+          "source": "services/glassbox/providers/bedrock.py"
         },
         {
-          "chunk_id": 1035,
-          "source": "services/tests/test_stream_resilience.py"
+          "chunk_id": 207,
+          "source": "services/glassbox/api/cluster.py"
         },
         {
-          "chunk_id": 1323,
-          "source": "docs/superpowers/plans/2026-10-02-portfolio-frontend.md"
-        },
-        {
-          "chunk_id": 1118,
-          "source": "docs/DESIGN-002-followups.md"
+          "chunk_id": 185,
+          "source": "services/glassbox/api/ask.py"
         }
       ],
       "hit_at_8": 0,
       "reciprocal_rank_at_8": 0.0,
       "chunk_hit": 0,
       "chunk_reciprocal_rank": 0.0,
-      "noise_count": 5,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 0,
+          "reciprocal_rank_at_8": 0.0,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.125,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-follow-ups",
@@ -3720,53 +5590,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "services/tests/test_ask_history.py",
-        "services/tests/test_ask_history.py",
         "docs/DESIGN-002-followups.md",
-        "docs/DESIGN-002-followups.md"
+        "docs/DESIGN-002-followups.md",
+        "docs/DESIGN-002-followups.md",
+        "services/glassbox/db/migrations/versions/0003_query_turn_columns.py"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1220,
+          "chunk_id": 624,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 565,
-          "source": "services/tests/test_ask_history.py"
-        },
-        {
-          "chunk_id": 580,
-          "source": "services/tests/test_ask_history.py"
-        },
-        {
-          "chunk_id": 1116,
+          "chunk_id": 513,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1108,
+          "chunk_id": 517,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1120,
+          "chunk_id": 505,
           "source": "docs/DESIGN-002-followups.md"
         },
         {
-          "chunk_id": 1117,
-          "source": "docs/DESIGN-002-followups.md"
+          "chunk_id": 270,
+          "source": "services/glassbox/db/migrations/versions/0003_query_turn_columns.py"
         },
         {
-          "chunk_id": 577,
-          "source": "services/tests/test_ask_history.py"
+          "chunk_id": 157,
+          "source": "services/glassbox/api/ask.py"
+        },
+        {
+          "chunk_id": 658,
+          "source": "docs/superpowers/specs/2026-10-02-portfolio-design.md"
+        },
+        {
+          "chunk_id": 175,
+          "source": "services/glassbox/api/ask.py"
         }
       ],
       "hit_at_8": 1,
       "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
-      "noise_count": 3,
-      "retrieved_count": 8
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-zram",
@@ -3778,44 +5663,44 @@
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
         "docs/DESIGN.md",
-        "infra/modules/compute/zram.tf",
         "docs/DESIGN.md",
+        "docs/architecture/deep-dive.md",
         "infra/modules/compute/zram.tf"
       ],
       "hit": 1,
       "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 1235,
+          "chunk_id": 639,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1193,
+          "chunk_id": 597,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 72,
-          "source": "infra/modules/compute/zram.tf"
-        },
-        {
-          "chunk_id": 1194,
+          "chunk_id": 598,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 73,
+          "chunk_id": 637,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 74,
           "source": "infra/modules/compute/zram.tf"
         },
         {
-          "chunk_id": 1225,
-          "source": "docs/architecture/deep-dive.md"
+          "chunk_id": 108,
+          "source": "k8s/README.md"
         },
         {
-          "chunk_id": 1233,
-          "source": "docs/architecture/deep-dive.md"
+          "chunk_id": 75,
+          "source": "infra/modules/compute/zram.tf"
         },
         {
-          "chunk_id": 26,
-          "source": "infra/CI.md"
+          "chunk_id": 638,
+          "source": "docs/architecture/deep-dive.md"
         }
       ],
       "hit_at_8": 1,
@@ -3823,7 +5708,22 @@
       "chunk_hit": 1,
       "chunk_reciprocal_rank": 1.0,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 1.0,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 1.0
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "live-keda",
@@ -3833,54 +5733,69 @@
         "docs/architecture/deep-dive.md"
       ],
       "retrieved_sources": [
+        "docs/architecture/deep-dive.md",
         "k8s/overlays/prod/keda/helm-release.yaml",
         "docs/architecture/deep-dive.md",
-        "docs/architecture/deep-dive.md",
-        "k8s/overlays/prod/keda/namespace.yaml",
-        "k8s/README.md"
+        "docs/DESIGN.md",
+        "docs/architecture/deep-dive.md"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "retrieved_at_8": [
         {
-          "chunk_id": 147,
+          "chunk_id": 635,
+          "source": "docs/architecture/deep-dive.md"
+        },
+        {
+          "chunk_id": 146,
           "source": "k8s/overlays/prod/keda/helm-release.yaml"
         },
         {
-          "chunk_id": 1233,
+          "chunk_id": 637,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1231,
+          "chunk_id": 592,
+          "source": "docs/DESIGN.md"
+        },
+        {
+          "chunk_id": 636,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 150,
-          "source": "k8s/overlays/prod/keda/namespace.yaml"
-        },
-        {
-          "chunk_id": 103,
+          "chunk_id": 108,
           "source": "k8s/README.md"
         },
         {
           "chunk_id": 148,
-          "source": "k8s/overlays/prod/keda/helm-repository.yaml"
+          "source": "k8s/overlays/prod/keda/namespace.yaml"
         },
         {
-          "chunk_id": 1232,
-          "source": "docs/architecture/deep-dive.md"
-        },
-        {
-          "chunk_id": 1247,
-          "source": "docs/architecture/deep-dive.md"
+          "chunk_id": 577,
+          "source": "docs/DESIGN.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 1.0,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.14285714285714285,
+      "chunk_reciprocal_rank": 0.2,
       "noise_count": 0,
-      "retrieved_count": 8
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.14285714285714285
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.2
+        }
+      },
+      "dual_experience_slots": 0
     },
     {
       "id": "inj-oracle",
@@ -3891,53 +5806,68 @@
       ],
       "retrieved_sources": [
         "docs/architecture/deep-dive.md",
-        "docs/DESIGN.md",
         "docs/architecture/deep-dive.md",
+        "docs/DESIGN-003-ingestion.md",
         "docs/DESIGN.md",
-        "services/tests/test_db_models.py"
+        "services/glassbox/ingest/run.py"
       ],
       "hit": 1,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.25,
       "retrieved_at_8": [
         {
-          "chunk_id": 1224,
+          "chunk_id": 628,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1181,
-          "source": "docs/DESIGN.md"
-        },
-        {
-          "chunk_id": 1225,
+          "chunk_id": 613,
           "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1179,
+          "chunk_id": 529,
+          "source": "docs/DESIGN-003-ingestion.md"
+        },
+        {
+          "chunk_id": 585,
           "source": "docs/DESIGN.md"
         },
         {
-          "chunk_id": 713,
-          "source": "services/tests/test_db_models.py"
-        },
-        {
-          "chunk_id": 324,
+          "chunk_id": 347,
           "source": "services/glassbox/ingest/run.py"
         },
         {
-          "chunk_id": 1258,
-          "source": "docs/superpowers/plans/2026-09-29-phase1a-ingestion.md"
+          "chunk_id": 629,
+          "source": "docs/architecture/deep-dive.md"
         },
         {
-          "chunk_id": 1247,
-          "source": "docs/architecture/deep-dive.md"
+          "chunk_id": 247,
+          "source": "services/glassbox/cache/answer.py"
+        },
+        {
+          "chunk_id": 582,
+          "source": "docs/DESIGN.md"
         }
       ],
       "hit_at_8": 1,
-      "reciprocal_rank_at_8": 0.5,
+      "reciprocal_rank_at_8": 0.25,
       "chunk_hit": 1,
-      "chunk_reciprocal_rank": 0.5,
-      "noise_count": 2,
-      "retrieved_count": 8
+      "chunk_reciprocal_rank": 0.25,
+      "noise_count": 0,
+      "retrieved_count": 8,
+      "legs": {
+        "vector": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.5,
+          "chunk_hit": 1,
+          "chunk_reciprocal_rank": 0.5
+        },
+        "lexical": {
+          "hit_at_8": 1,
+          "reciprocal_rank_at_8": 0.2,
+          "chunk_hit": 0,
+          "chunk_reciprocal_rank": 0.0
+        }
+      },
+      "dual_experience_slots": 0
     }
   ]
 }

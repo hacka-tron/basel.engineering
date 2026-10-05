@@ -206,8 +206,9 @@ async def prepare_index(sessions, redis_client) -> None:
     added = await ensure_index(redis_client)
     # Retry the backfill if an earlier run stopped after FT.ALTER but before
     # tagging all existing hashes. Untagged vectors stay invisible meanwhile.
-    # A newly added ``kind`` needs nothing here: reconcile, at the end of the
-    # run, rewrites every key whose ``kind`` differs from its row.
+    # A newly added ``kind`` or ``text`` needs nothing here: reconcile, at the end
+    # of the run, rewrites every key whose ``kind`` or ``text_v`` differs from its
+    # row (the hybrid search's BM25 leg simply misses keys until then).
     if "model" in added or not await redis_client.get("idx:chunks:model-tags-ready"):
         with sessions() as session:
             rows = session.execute(select(DbChunk.id, DbChunk.embedding_model)).all()

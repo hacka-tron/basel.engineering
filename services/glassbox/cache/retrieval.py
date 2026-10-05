@@ -9,7 +9,9 @@ from typing import Protocol
 class RetrievalCache(Protocol):
     async def version(self, corpus: str) -> int: ...
 
-    def key(self, corpus: str, version: int, model_id: str, vector: list[float]) -> str: ...
+    def key(
+        self, corpus: str, version: int, model_id: str, vector: list[float], query: str = ""
+    ) -> str: ...
 
     async def get(self, key: str) -> list[dict] | None: ...
 
@@ -24,9 +26,17 @@ class RedisRetrievalCache:
         raw = await self.client.get(f"corpus:ver:{corpus}")
         return int(raw) if raw is not None else 0
 
-    def key(self, corpus: str, version: int, model_id: str, vector: list[float]) -> str:
+    def key(
+        self, corpus: str, version: int, model_id: str, vector: list[float], query: str = ""
+    ) -> str:
+        """``query`` holds whatever else shapes the result besides the vector (the
+        worker passes its retrieval mode and the lexical terms); empty keeps the
+        vector-only key."""
         packed = struct.pack(f"<{len(vector)}f", *vector)
-        fingerprint = hashlib.sha256(model_id.encode() + b"\0" + packed).hexdigest()
+        material = model_id.encode() + b"\0" + packed
+        if query:
+            material += b"\0" + query.encode()
+        fingerprint = hashlib.sha256(material).hexdigest()
         return f"ret:{corpus}:v{version}:{fingerprint}"
 
     async def get(self, key: str) -> list[dict] | None:

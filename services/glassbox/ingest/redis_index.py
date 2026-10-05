@@ -17,7 +17,7 @@ return -1
 
 # Every field ``idx:chunks`` must have, in FT.CREATE order: (name, schema args).
 # ``ensure_index`` adds whichever of these an existing index lacks with FT.ALTER,
-# so a new field (``kind`` here, phase 8's ``text`` later) is one line in this list.
+# so a new field (``kind``, then phase 8's ``text``) is one line in this list.
 VECTOR_SCHEMA = (
     "VECTOR",
     "HNSW",
@@ -34,7 +34,13 @@ EXPECTED_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("model", ("TAG",)),
     ("kind", ("TAG",)),
     ("vector", VECTOR_SCHEMA),
+    # Phase 8: the chunk text (headings included) for the BM25 leg of hybrid search.
+    ("text", ("TEXT",)),
 )
+# Stored on every hash next to ``text``: reconcile compares it (``_COMPARED``), so a
+# key written before ``text`` existed, or by an older text format, is rewritten once
+# from MySQL. Bump it when the indexed text changes shape (e.g. a breadcrumb header).
+TEXT_VERSION = "1"
 # The ``kind`` tag values: what sort of source a chunk came from.
 KINDS = ("doc", "code", "infra", "manifest", "test")
 
@@ -92,8 +98,11 @@ async def ensure_index(client) -> frozenset[str]:
     Returns the names of the fields this call added (all of them when it created
     the index). Hashes written before a field existed don't carry it: the caller
     backfills ``model`` from MySQL, and the reconcile step rewrites any key whose
-    ``kind`` differs from its row (``reconcile._COMPARED``). FT.ALTER only extends
-    the schema; a field can't be removed or retyped this way.
+    ``kind`` or ``text_v`` differs from its row (``reconcile._COMPARED``), which
+    backfills ``kind`` and ``text``. FT.ALTER only extends the schema; a field can't
+    be removed or retyped this way. The index is never dropped here: ``FT.DROPINDEX``
+    without ``DD`` would keep the keys, but every search would miss until the
+    rebuilt index finished its background scan.
     """
     try:
         info = await client.execute_command("FT.INFO", INDEX_NAME)
@@ -127,6 +136,16 @@ async def backfill_model_tags(client, rows: list[tuple[int, str]]) -> None:
         )
 
 
+def lexical_text(text: str) -> str:
+    """The ``text`` field: the chunk text with every whitespace run made one space.
+
+    RediSearch 7.2 does not split TEXT on newlines: ``alpha\nbeta`` is indexed as
+    the single token ``alphabeta``, so the last word of every line would be glued
+    to the first word of the next and never match.
+    """
+    return " ".join(text.split())
+
+
 def chunk_fields(
     corpus: str, model_id: str, vector: bytes, source_path: str, document_id: int, text: str
 ) -> dict:
@@ -134,6 +153,7 @@ def chunk_fields(
 
     ``content_sha`` lets the reconcile step (and the answer cache) check that a key
     still describes the MySQL row with the same id, without reading the vector.
+    ``text`` feeds the BM25 leg; ``text_v`` says which text format it holds.
     """
     return {
         "corpus": corpus,
@@ -143,6 +163,8 @@ def chunk_fields(
         "source_path": source_path,
         "document_id": document_id,
         "content_sha": chunk_content_sha(text),
+        "text": lexical_text(text),
+        "text_v": TEXT_VERSION,
     }
 
 

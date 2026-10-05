@@ -22,7 +22,7 @@ export const architectureNodes: ArchitectureNode[] = [
   { id: 'worker', type: 'architecture', data: { label: 'Worker', implementation: 'Python retrieval worker on k3s', description: 'Finds matching document chunks and sends trace events back to the API.' }, position: { x: 540, y: 120 } },
   { id: 'embed_cache', type: 'architecture', data: { label: 'Embed Cache', implementation: 'Redis key-value cache', description: 'Avoids regenerating embeddings for questions it has already seen.' }, position: { x: 180, y: 260 } },
   { id: 'embed', type: 'architecture', data: { label: 'Embed', implementation: 'Amazon Titan Text Embeddings V2', description: 'Turns text into vectors so related questions and documents can be compared.' }, position: { x: 360, y: 260 } },
-  { id: 'vector_search', type: 'architecture', data: { label: 'Vector Search', implementation: 'Redis Stack / RediSearch', description: 'Uses a vector index to find the closest matching document chunks.' }, position: { x: 540, y: 260 } },
+  { id: 'vector_search', type: 'architecture', data: { label: 'Hybrid Search', implementation: 'Redis Stack / RediSearch', description: 'Combines vector similarity with keyword (BM25) matching to find the best document chunks.' }, position: { x: 540, y: 260 } },
   { id: 'mysql', type: 'architecture', data: { label: 'MySQL', implementation: 'MySQL 8 on k3s', description: 'Stores the source documents, chunks, and query records.' }, position: { x: 720, y: 260 } },
   { id: 'llm', type: 'architecture', data: { label: 'LLM', implementation: 'Amazon Nova Lite via Bedrock', description: 'Writes an answer using the retrieved passages and streams it to the page.' }, position: { x: 540, y: 380 } },
 ]

@@ -300,7 +300,7 @@ def test_sheet_contains_text_but_yaml_block_does_not():
 
 
 def _stub_retriever(calls):
-    async def retrieve(vector, corpus, model_id):
+    async def retrieve(vector, query, corpus, model_id):
         calls.append(corpus)
         return [
             WorkerChunk(
