@@ -124,7 +124,9 @@ Standard checks for every phase: `ruff check services eval`, `pytest services/te
 
 **Acceptance:** CI time increase under 60 seconds; no secrets or network calls needed.
 
-## Phase 10 (planned): answer logging and online review
+## Phase 10 (partly built): answer logging and online review
+
+**Status 2026-10-04:** the answer log is built (PR `feature/rag-p10-answer-log`, DESIGN-005 §5.6): migration `0008_query_answer_log`, `services/glassbox/answer_log.py` (masking, 90-day retention, background write), the hit-rate query in `eval/README.md`. Not built yet: `eval/sample_live.py` and the weekly review.
 
 **Autonomous:** code yes; merge needs the owner's logging decision (DESIGN-005 §9 item 6).
 

@@ -120,6 +120,11 @@ def test_schema_columns_and_constraints():
         "turn_index",
         "rewritten_query",
         "ttft_ms",
+        "answer",
+        "abstained",
+        "answer_route",
+        "llm_model_id",
+        "prompt_version",
     ]
     assert isinstance(queries.c.id.type, BigInteger)
     assert queries.c.id.primary_key and queries.c.id.autoincrement
@@ -130,7 +135,7 @@ def test_schema_columns_and_constraints():
     assert isinstance(queries.c.question.type, String)
     assert queries.c.question.type.length == 1000
     assert isinstance(queries.c.cache_status.type, ENUM)
-    assert queries.c.cache_status.type.enums == ["answer_hit", "miss"]
+    assert queries.c.cache_status.type.enums == ["answer_hit", "miss", "coalesced"]
     assert isinstance(queries.c.mode.type, ENUM)
     assert queries.c.mode.type.enums == ["full", "retrieval_only", "stopped"]
     assert all(
@@ -155,6 +160,9 @@ def test_schema_columns_and_constraints():
     assert queries.c.rewritten_query.type.length == 1000
     assert isinstance(queries.c.ttft_ms.type, Integer)
     assert queries.c.ttft_ms.nullable and queries.c.ttft_ms.server_default is None
+    # Migration 0008, the answer log: all nullable, no defaults.
+    for name in ("answer", "abstained", "answer_route", "llm_model_id", "prompt_version"):
+        assert queries.c[name].nullable and queries.c[name].server_default is None
     assert not queries.foreign_keys
     assert len(queries.indexes) == 1
     index = next(iter(queries.indexes))
@@ -209,7 +217,7 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "CHAR(26) NOT NULL" in ddl["queries"]
     assert "ENUM('about_me','about_system','portfolio') NOT NULL" in ddl["queries"]
     assert "VARCHAR(1000) NOT NULL" in ddl["queries"]
-    assert "ENUM('answer_hit','miss') NOT NULL" in ddl["queries"]
+    assert "ENUM('answer_hit','miss','coalesced') NOT NULL" in ddl["queries"]
     assert "ENUM('full','retrieval_only','stopped') NOT NULL" in ddl["queries"]
     assert ddl["queries"].count("JSON") == 2
     assert "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP" in ddl["queries"]
@@ -217,6 +225,8 @@ def test_mysql_ddl_contains_required_schema_clauses():
     assert "turn_index TINYINT UNSIGNED NOT NULL DEFAULT 0" in ddl["queries"]
     assert "rewritten_query VARCHAR(1000)," in ddl["queries"]
     assert "ttft_ms INTEGER," in ddl["queries"]
+    assert "answer TEXT," in ddl["queries"]
+    assert "abstained BOOL," in ddl["queries"]
     index = next(iter(Query.__table__.indexes))
     assert str(CreateIndex(index).compile(dialect=mysql_dialect())) == (
         "CREATE INDEX idx_created ON queries (created_at)"
@@ -303,15 +313,12 @@ def test_portfolio_migration_appends_the_enum_member_on_both_tables():
     import importlib
     import inspect
 
-    from services.glassbox.db.wait_for_migrations import get_head_revisions
-
     migration = importlib.import_module(
         "services.glassbox.db.migrations.versions.0007_portfolio_corpus"
     )
     assert migration.down_revision == "0006_ingestion_run_notes"
     assert migration.revision == "0007_portfolio_corpus"
     assert len(migration.revision) <= 32
-    assert get_head_revisions() == frozenset({"0007_portfolio_corpus"})
     assert migration.TABLES == ("documents", "queries")
     assert migration.OLD.enums == ["about_me", "about_system"]
     # Appended at the end only: existing values keep their index, storage stays 1 byte.
@@ -323,3 +330,28 @@ def test_portfolio_migration_appends_the_enum_member_on_both_tables():
     downgrade = inspect.getsource(migration.downgrade)
     assert "DELETE FROM queries WHERE corpus = 'portfolio'" in downgrade
     assert "DELETE FROM documents WHERE corpus = 'portfolio'" in downgrade
+
+
+def test_answer_log_migration_is_additive_and_downgrades_without_losing_rows():
+    import importlib
+    import inspect
+
+    from services.glassbox.db.wait_for_migrations import get_head_revisions
+
+    migration = importlib.import_module(
+        "services.glassbox.db.migrations.versions.0008_query_answer_log"
+    )
+    assert migration.down_revision == "0007_portfolio_corpus"
+    assert migration.revision == "0008_query_answer_log"
+    assert len(migration.revision) <= 32
+    assert get_head_revisions() == frozenset({"0008_query_answer_log"})
+    # Appended at the end only: existing values keep their index (INSTANT change).
+    assert migration.NEW_CACHE_STATUS.enums == [*migration.OLD_CACHE_STATUS.enums, "coalesced"]
+    assert migration.NEW_CACHE_STATUS.enums == list(Query.__table__.c.cache_status.type.enums)
+    upgrade = inspect.getsource(migration.upgrade)
+    assert upgrade.count("nullable=True") == len(migration.COLUMNS) == 5
+    assert "drop_column" not in upgrade and "DELETE" not in upgrade
+    downgrade = inspect.getsource(migration.downgrade)
+    # Safe downgrade: coalesced rows are folded into answer_hit, never deleted.
+    assert "SET cache_status = 'answer_hit' WHERE cache_status = 'coalesced'" in downgrade
+    assert "DELETE" not in downgrade

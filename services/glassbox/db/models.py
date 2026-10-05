@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.mysql import BLOB, CHAR, ENUM, JSON, MEDIUMTEXT, TIMESTAMP, TINYINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -67,7 +77,11 @@ class Query(Base):
     request_id: Mapped[str] = mapped_column(CHAR(26), nullable=False)
     corpus: Mapped[str] = mapped_column(ENUM(*CORPORA), nullable=False)
     question: Mapped[str] = mapped_column(String(1000), nullable=False)
-    cache_status: Mapped[str] = mapped_column(ENUM("answer_hit", "miss"), nullable=False)
+    # 'coalesced' (migration 0008): a concurrent identical question was already being
+    # answered, and this request waited for and replayed that answer.
+    cache_status: Mapped[str] = mapped_column(
+        ENUM("answer_hit", "miss", "coalesced"), nullable=False
+    )
     mode: Mapped[str] = mapped_column(ENUM("full", "retrieval_only", "stopped"), nullable=False)
     chunk_ids: Mapped[list[int] | None] = mapped_column(JSON)
     stage_timings_ms: Mapped[dict[str, int] | None] = mapped_column(JSON)
@@ -89,3 +103,11 @@ class Query(Base):
     # Added by migration 0005 (DESIGN-002 §7.5, §9.3): ms from request receipt to the
     # first streamed answer token; NULL when no answer text was streamed.
     ttft_ms: Mapped[int | None] = mapped_column(Integer)
+    # Added by migration 0008 (RAG plan phase 10, services/glassbox/answer_log.py): the
+    # answer as streamed (masked), whether it was the exact abstention, and, when the
+    # model wrote it, the answer route (strict/casual), LLM model ID and prompt version.
+    answer: Mapped[str | None] = mapped_column(Text)
+    abstained: Mapped[bool | None] = mapped_column(Boolean)
+    answer_route: Mapped[str | None] = mapped_column(String(16))
+    llm_model_id: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(16))
