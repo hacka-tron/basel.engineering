@@ -76,9 +76,13 @@ STRICT_EXAMPLE_IDS = (
 # for every question it changed nothing for pay and cost the production "No".
 STRICT_EXAMPLE_TOPICS = {
     "rec-tech-kubernetes": r"\b(kubernetes|k8s|k3s)\b",
+    # Review r1: not "rate limit(er)" or "make ... in your free time"; also "What's your
+    # pay?" and "How much are you paid?".
     "rec-adv-salary": (
-        r"\b(salary|salaries|compensation|earn|earnings|hourly rate|day rate|your rate"
-        r"|pay range|get paid)\b|\b(what|how much) do you (make|earn)\b"
+        r"\b(salary|salaries|compensation|earnings|pay range|get paid|are you paid"
+        r"|hourly rate|day rate)\b"
+        r"|\byour (pay|rate)\b(?!\s*limit)"
+        r"|^(?!.*\bfree time\b).*\b(what|how much) do you (make|earn)\b"
     ),
 }
 # The casual prompt gets four fun answers. Favorite color and favorite food are

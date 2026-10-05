@@ -664,10 +664,13 @@ _REAL_ME_EXAMPLE = (
     "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
     "is at <email>."
 )
+# Who-am-I-talking-to questions only (review r1: not "Are you really using Redis?").
 _REAL_ME_QUESTION = re.compile(
-    r"\b(really|actually|truly) (talking|speaking|chatting) (to|with)\b"
-    r"|\bis (this|it) (really|actually) (you|basel)\b"
-    r"|\bare you (really|actually|the real) ",
+    r"\b(am i|are we) (really |actually |truly )?(talking|speaking|chatting) (to|with)\b"
+    r"|\bwho am i (talking|speaking|chatting) (to|with)\b"
+    r"|\b(is (this|it)|are you) (really |actually )?(you\b|the real\b)"
+    r"|\bare you (really |actually )?(real|human|a bot|a robot|a person|an ai|basel)"
+    r"\s*[?.!]*$",
     re.IGNORECASE,
 )
 _EXAMPLES_INTRO = (
