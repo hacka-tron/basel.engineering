@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from services.glassbox import answer_log
 from services.glassbox.answer_checks import answer_check_failures
 from services.glassbox.api.sse import frame, with_heartbeat
 from services.glassbox.cache.answer import AnswerCache, RedisAnswerCache
@@ -28,7 +29,6 @@ from services.glassbox.cache.embedding import (
     normalize_question,
 )
 from services.glassbox.corpora import Corpus
-from services.glassbox.db.models import Query
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.fewshot import get_examples
 from services.glassbox.killswitch import get_kill_switch
@@ -830,32 +830,34 @@ def _save_query(
     ttft_ms: int | None = None,
     cache_status: str = "miss",
     mode: str = "full",
+    answer: str | None = None,
+    abstained: bool | None = None,
+    route: str | None = None,
+    llm_model_id: str | None = None,
 ) -> None:
-    # The query log is stats, not part of answering: a failed insert (for example,
-    # the 0003 columns missing while migrate is still running) is logged and dropped
-    # rather than turning an already-generated answer into a stream error.
-    try:
-        with get_session_factory()() as session:
-            session.add(
-                Query(
-                    request_id=request_id,
-                    corpus=request.corpus,
-                    question=request.question,
-                    cache_status=cache_status,
-                    mode=mode,
-                    chunk_ids=[chunk.chunk_id for chunk in chunks],
-                    stage_timings_ms=timings,
-                    total_ms=total_ms,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    turn_index=turn_index,
-                    rewritten_query=rewritten_query,
-                    ttft_ms=ttft_ms,
-                )
-            )
-            session.commit()
-    except Exception:
-        LOGGER.warning("Query log write failed for %s", request_id, exc_info=True)
+    # Answer log (RAG plan phase 10): masking, retention and error counting live in
+    # services/glassbox/answer_log.py; it never raises.
+    answer_log.record(
+        get_session_factory,
+        request_id=request_id,
+        corpus=request.corpus,
+        question=request.question,
+        chunk_ids=[chunk.chunk_id for chunk in chunks],
+        timings=timings,
+        total_ms=total_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        turn_index=turn_index,
+        rewritten_query=rewritten_query,
+        ttft_ms=ttft_ms,
+        cache_status=cache_status,
+        mode=mode,
+        answer=answer,
+        abstained=abstained,
+        route=route,
+        llm_model_id=llm_model_id,
+        prompt_version=_PROMPT_VERSION,
+    )
 
 
 # Worker error text is never relayed as-is: an older worker (rolling deploy)
@@ -896,6 +898,11 @@ async def _stream(
     # (request_start_ts, the same origin as total_ms) to the first non-empty
     # `token` frame this generator yields. Stays None when no answer text was sent.
     ttft_ms: int | None = None
+    # Answer log (RAG plan phase 10): what the row records beyond the stats above.
+    route: str | None = None
+    llm_model_id: str | None = None
+    coalesced = False
+    log_tasks: list[asyncio.Task] = []
 
     def token_frame(text: str) -> str:
         nonlocal ttft_ms
@@ -909,23 +916,32 @@ async def _stream(
         tokens_out: int,
         mode: str = "full",
         total_ms: int | None = None,
+        answer: str | None = None,
+        abstained: bool | None = None,
     ) -> None:
         nonlocal settled
         settled = True
-        await asyncio.to_thread(
-            _save_query,
-            request_id=request_id,
-            request=request,
-            turn_index=turn_index,
-            rewritten_query=rewritten_query,
-            ttft_ms=ttft_ms,
-            chunks=chunks or [],
-            timings=timings,
-            total_ms=elapsed_ms(request_start_ts) if total_ms is None else total_ms,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cache_status=cache_status,
-            mode=mode,
+        # Written in a thread and awaited only in `finally`, after `done` is sent.
+        log_tasks.append(
+            answer_log.submit(
+                _save_query,
+                request_id=request_id,
+                request=request,
+                turn_index=turn_index,
+                rewritten_query=rewritten_query,
+                ttft_ms=ttft_ms,
+                chunks=chunks or [],
+                timings=timings,
+                total_ms=elapsed_ms(request_start_ts) if total_ms is None else total_ms,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cache_status=cache_status,
+                mode=mode,
+                answer=answer,
+                abstained=abstained,
+                route=route,
+                llm_model_id=llm_model_id,
+            )
         )
 
     async def stage(
@@ -971,6 +987,7 @@ async def _stream(
             return
         provider = get_embedding_provider()
         llm_provider = get_llm_provider()
+        llm_model_id = llm_provider.model_id
         # The answer route is appended per answer (route_model_id, prompt v18).
         answer_model_id = f"{provider.model_id}|{llm_provider.model_id}|{_PROMPT_VERSION}"
         history = bounded_history(request.history)
@@ -1040,6 +1057,7 @@ async def _stream(
                     answer_cache, request.corpus, answer_model_id, embedding
                 )
             else:
+                coalesced = True
                 answer_hit, hit_route = await _wait_for_answer(
                     answer_cache, request.corpus, answer_model_id, embedding
                 )
@@ -1051,7 +1069,8 @@ async def _stream(
         if answer_hit:
             LOGGER.info("Answer route for %s: %s (cached)", request_id, hit_route)
             chunks = [WorkerChunk.model_validate(item) for item in answer_hit["chunks"]]
-            cache_status = "answer_hit"
+            cache_status = "coalesced" if coalesced else "answer_hit"
+            route = hit_route
             # Defence in depth: a masked answer is never cached, but an entry written
             # before the guard existed is masked on the way out all the same.
             answer, masked = mask_answer(answer_hit["answer"])
@@ -1064,7 +1083,7 @@ async def _stream(
             )
             yield token_frame(answer)
             total_ms = elapsed_ms(request_start_ts)
-            await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0, answer=answer, abstained=False)
             yield frame(
                 "done",
                 {
@@ -1155,7 +1174,7 @@ async def _stream(
                 timings["answer_cache_skipped"] = 1
             yield token_frame(answer)
             total_ms = elapsed_ms(request_start_ts)
-            await save(total_ms=total_ms, tokens_in=0, tokens_out=0)
+            await save(total_ms=total_ms, tokens_in=0, tokens_out=0, answer=answer, abstained=True)
             yield frame(
                 "done",
                 {
@@ -1296,7 +1315,13 @@ async def _stream(
                 )
             except Exception:
                 LOGGER.warning("Answer cache write failed for %s", request_id, exc_info=True)
-        await save(total_ms=total_ms, tokens_in=tokens_in, tokens_out=tokens_out)
+        await save(
+            total_ms=total_ms,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            answer="".join(response_parts),
+            abstained=is_exact_abstention("".join(response_parts)),
+        )
         yield frame(
             "done",
             {
@@ -1323,7 +1348,12 @@ async def _stream(
                     if llm_prompt
                     else (0, 0)
                 )
-                await save(tokens_in=tokens_in, tokens_out=tokens_out, mode="stopped")
+                await save(
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    mode="stopped",
+                    answer="".join(response_parts) or None,
+                )
             except BaseException:
                 LOGGER.warning("Stopped query log failed for %s", request_id, exc_info=True)
         raise
@@ -1331,6 +1361,7 @@ async def _stream(
         LOGGER.exception("Ask request %s failed", request_id)
         yield frame("error", {"code": "internal", "message": "The request could not be completed"})
     finally:
+        await answer_log.settle(log_tasks)
         if lock_key is not None:
             try:
                 await client.eval(_ANSWER_LOCK_RELEASE, 1, lock_key, lock_token)

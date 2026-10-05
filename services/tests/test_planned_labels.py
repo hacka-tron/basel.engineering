@@ -252,7 +252,7 @@ PLANNED_UNITS = [
     ("docs/DESIGN.md", "A Cloudflare Worker injecting a secret header"),
     ("docs/DESIGN.md", "External Secrets Operator to sync automatically"),
     ("docs/DESIGN-005-rag-quality.md", "Planned: a **lexical-only retrieval eval**"),
-    ("docs/DESIGN-005-rag-quality.md", "| **Online (weekly, manual; planned)** |"),
+    ("docs/DESIGN-005-rag-quality.md", "| **Online (weekly, manual; sampling script planned)** |"),
     ("docs/DESIGN-002-followups.md", "## 8. Network: S3 gateway endpoint (not built yet)"),
     ("docs/DESIGN-002-followups.md", "ALTER TABLE documents ADD COLUMN metadata JSON NULL;"),
     ("docs/DESIGN-003-ingestion.md", "### 4.2 Why a raw zone at all (planned)"),
