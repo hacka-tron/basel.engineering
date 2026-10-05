@@ -302,6 +302,30 @@ async def test_hybrid_fuses_both_legs_and_scores_lexical_only_chunks_by_cosine()
 
 
 @pytest.mark.asyncio
+async def test_vector_anchor_keeps_the_best_vector_hits_in_fused_order():
+    # Chunk 1 is the vector leg's best hit but absent from BM25; four chunks found by
+    # both legs outrank it under RRF. With an anchor of 1 it stays in the top 3.
+    vector = [(1, 0.9, "docs/a.md"), (2, 0.8, "docs/b.md"), (3, 0.7, "docs/c.md")]
+    vector += [(4, 0.6, "docs/d.md")]
+    lexical = [(2, "docs/b.md"), (3, "docs/c.md"), (4, "docs/d.md")]
+    question = "What is demo:load:lock?"
+    plain = RetrievalConfig(top_k=3, per_document_cap=3)
+    anchored = RetrievalConfig(top_k=3, per_document_cap=3, vector_anchor=1)
+    client = _FakeSearchRedis(vector=vector, lexical=lexical)
+    chosen = await hybrid_search(client, EMBEDDING, question, "about_system", "m", plain)
+    assert [entry["chunk_id"] for entry in chosen] == [2, 3, 4]
+    chosen = await hybrid_search(client, EMBEDDING, question, "about_system", "m", anchored)
+    assert [entry["chunk_id"] for entry in chosen] == [2, 3, 1]
+
+
+def test_production_configs():
+    system = RETRIEVAL_CONFIGS["about_system"]
+    assert (system.top_k, system.per_document_cap, system.vector_anchor) == (8, 3, 4)
+    about_me = RETRIEVAL_CONFIGS["about_me"]
+    assert (about_me.top_k, about_me.per_document_cap, about_me.dual_experience) == (6, 2, True)
+
+
+@pytest.mark.asyncio
 async def test_hybrid_serves_vector_results_when_the_text_field_is_missing():
     client = _FakeSearchRedis(vector=[(1, 0.9, "docs/a.md")], lexical=[], lexical_error=True)
     chosen = await hybrid_search(client, EMBEDDING, "What is KEDA?", "about_system", "m")

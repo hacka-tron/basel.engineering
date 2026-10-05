@@ -42,14 +42,23 @@ class RetrievalConfig:
     rrf_k: int = 10
     lexical_weight: float = 1.0
     dual_experience: bool = False
+    # The vector leg's best ``vector_anchor`` chunks are always kept (ordered by
+    # fused score like the rest), so lexical noise can't push out a strong semantic hit.
+    vector_anchor: int = 0
+    # BM25 pool size; None means ``candidates``.
+    lexical_candidates: int | None = None
 
 
-# About Basel is small (about 15 chunks): 6 chunks, at most 2 per file, and the
-# dual-experience slots. About This System keeps 8 chunks, at most 3 per file.
+# About Basel is small (17 chunks): 6 chunks, at most 2 per file, and the
+# dual-experience slots. About This System keeps 8 chunks, at most 3 per file, the
+# vector leg's top 4 always among them, and a 10-chunk BM25 pool: common words
+# ("google drive ingest") otherwise let planned-work sections crowd out the vector
+# leg's best hit (the "Drive was dropped" chunk, vector rank 3).
+_SYSTEM = RetrievalConfig(top_k=8, per_document_cap=3, vector_anchor=4, lexical_candidates=10)
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
     "about_me": RetrievalConfig(top_k=6, per_document_cap=2, dual_experience=True),
-    "about_system": RetrievalConfig(top_k=8, per_document_cap=3),
-    "portfolio": RetrievalConfig(top_k=8, per_document_cap=3),
+    "about_system": _SYSTEM,
+    "portfolio": _SYSTEM,
 }
 # Part of the retrieval-cache key: entries computed by another retrieval mode
 # (vector-only before phase 8) are never reused.
@@ -423,7 +432,7 @@ async def hybrid_search(
     fails (no ``text`` field yet), the vector leg is served alone. ``legs``, when
     given, receives each leg's raw list (for the retrieval eval).
     """
-    config = config or RETRIEVAL_CONFIGS.get(corpus) or RetrievalConfig(top_k=8, per_document_cap=3)
+    config = config or RETRIEVAL_CONFIGS.get(corpus, _SYSTEM)
     vector_leg = await search_chunks(
         redis_client, embedding, corpus, model_id, top_k=config.candidates
     )
@@ -431,7 +440,11 @@ async def hybrid_search(
     tech_terms = tech_question_terms(question) if config.dual_experience else []
     try:
         lexical_leg = await lexical_search(
-            redis_client, terms, corpus, model_id, top_k=config.candidates
+            redis_client,
+            terms,
+            corpus,
+            model_id,
+            top_k=config.lexical_candidates or config.candidates,
         )
         tech_hits = (
             await lexical_search(
@@ -454,8 +467,19 @@ async def hybrid_search(
         for hit in tech_hits
         if hit["chunk_id"] in slots and hit["chunk_id"] not in known
     ]
+    anchors = [
+        m["chunk_id"] for m in vector_leg[: config.vector_anchor] if m["chunk_id"] not in slots
+    ]
     selected = select_chunks(
-        fused, top_k=config.top_k, per_document_cap=config.per_document_cap, slot_ids=slots
+        fused,
+        top_k=config.top_k,
+        per_document_cap=config.per_document_cap,
+        slot_ids=[*slots, *anchors],
+    )
+    # Dual-experience slots lead; everything else (anchors included) is in fused order.
+    rank = {entry["chunk_id"]: index for index, entry in enumerate(fused)}
+    selected = [e for e in selected if e["chunk_id"] in slots] + sorted(
+        (e for e in selected if e["chunk_id"] not in slots), key=lambda e: rank[e["chunk_id"]]
     )
     await _fill_scores(redis_client, selected, embedding)
     if legs is not None:
