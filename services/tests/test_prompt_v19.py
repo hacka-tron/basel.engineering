@@ -249,7 +249,7 @@ def test_overlay_maps_playful_items():
     assert approved_case(item)["category"] == "playful"
 
 
-def test_prompt_version_is_v19():
+def test_prompt_version_is_current():
     assert ask._PROMPT_VERSION == "v21"
 
 

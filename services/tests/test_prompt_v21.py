@@ -10,9 +10,18 @@ from services.glassbox.api import ask
 
 
 def _all_example_text() -> str:
-    return "\n".join(
-        [*ask._STRICT_PLACEHOLDER_EXAMPLES, *ask._CASUAL_PLACEHOLDER_EXAMPLES, ask._REAL_ME_EXAMPLE]
-    )
+    parts = []
+    for value in (
+        ask._STRICT_PLACEHOLDER_EXAMPLES,
+        ask._CASUAL_PLACEHOLDER_EXAMPLES,
+        ask._STRICT_FIXED_EXAMPLES,
+        ask._CASUAL_FIXED_EXAMPLES,
+        ask._PLAYFUL_PLACEHOLDER_EXAMPLES,
+        ask._PRODUCTION_EXAMPLE,
+        ask._REAL_ME_EXAMPLE,
+    ):
+        parts.extend([value] if isinstance(value, str) else value)
+    return "\n".join(parts)
 
 
 def test_prompt_version_is_v21():
