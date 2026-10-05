@@ -126,11 +126,18 @@ class LLMProvider(ABC):
 
     @abstractmethod
     async def generate(
-        self, prompt: str, *, max_tokens: int, system: str | None = None
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        system: str | None = None,
+        temperature: float | None = None,
     ) -> AsyncIterator[str]:
         """Stream generated text chunks for a prompt.
 
         `system` replaces the provider's default grounded-answer system prompt;
         None keeps the default. The follow-up rewrite call needs its own.
+        `temperature` overrides the provider default (the v18 casual route only);
+        callers pass it only when they need a non-default value.
         """
         yield ""
