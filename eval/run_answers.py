@@ -45,6 +45,7 @@ from services.glassbox.providers.base import (
     EmbeddingProvider,
     LLMProvider,
 )
+from services.glassbox.sources_line import strip_sources_lines
 
 HERE = Path(__file__).resolve().parent
 RUNS_DIR = HERE / "runs"
@@ -201,8 +202,12 @@ async def run_case(
                 row["content_filtered"] = True
                 if not "".join(answer_parts).strip():
                     answer_parts = [ABSTENTION_ANSWER]
-            answer = "".join(answer_parts)
-            tokens_in, tokens_out = _token_counts(prompt, answer, usage)
+            raw_answer = "".join(answer_parts)
+            # Same as the API (prompt v19): a "Sources: ..." line the model wrote is
+            # dropped before anything is sent; the row records that it happened.
+            answer = strip_sources_lines(raw_answer)
+            row["sources_line_dropped"] = answer != raw_answer
+            tokens_in, tokens_out = _token_counts(prompt, raw_answer, usage)
         row.update(
             {
                 "rewrite": rewrite,
