@@ -648,15 +648,23 @@ _STRICT_FIXED_EXAMPLES = (
     "then they expire.",
     "Q: How much does <service> cost to run? A: About <$A> a month today and about <$B> "
     "later, plus <usage>, which <cap> keeps under <$C>.",
-    # v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
-    # Abdel-Rahman" (third person, no premise, no contact); this example restores the
-    # owner's approved shape (replay: flips rec-casual-real). Last of these, right before
-    # the production example: second in the block (after the absent-tech one) it made
-    # "Kubernetes in production?" answer "Yes, I've used Kubernetes in production" (0/4
-    # replays; last: 4/4, rec-casual-real still flipped 4/4).
+)
+# v20: "am I really talking to Basel?" answered "Yes, you are talking to me, Basel
+# Abdel-Rahman" (third person, no premise, no contact); this example restores the
+# owner's approved shape (replay: flips rec-casual-real 4/4). Only for questions that
+# ask whether it's really me: in every strict prompt, wherever it sat, it cost other
+# answers (second: "Kubernetes in production?" claimed production use, 0/4; later:
+# a planned system feature abstained or copied the production answer, 0/4).
+_REAL_ME_EXAMPLE = (
     "Q: Am I really talking to <Name>? A: In a sense! I uploaded my consciousness into "
     "this site, so it's me answering, but only from my memory. The flesh-and-blood me "
-    "is at <email>.",
+    "is at <email>."
+)
+_REAL_ME_QUESTION = re.compile(
+    r"\b(really|actually|truly) (talking|speaking|chatting) (to|with)\b"
+    r"|\bis (this|it) (really|actually) (you|basel)\b"
+    r"|\bare you (really|actually|the real) ",
+    re.IGNORECASE,
 )
 _EXAMPLES_INTRO = (
     "Examples of voice and format only (not sources; never copy their content). Every "
@@ -689,7 +697,8 @@ def _example_lines(route: str, playful: bool = False, question: str = "") -> str
         absent, *rest = _STRICT_FIXED_EXAMPLES
         # The production example goes last, nearest the question (owner sign-off
         # round 3: placed first it lost the "No" on the live retrieval, 0/3).
-        lines = [absent, *approved, *rest, _PRODUCTION_EXAMPLE]
+        real_me = [_REAL_ME_EXAMPLE] if _REAL_ME_QUESTION.search(question) else []
+        lines = [absent, *approved, *rest, *real_me, _PRODUCTION_EXAMPLE]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 
