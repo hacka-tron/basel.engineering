@@ -58,19 +58,32 @@ The API then runs these steps in order, emitting `stage` events so the diagram c
 
 On an answer-cache miss, the request continues to the retrieval queue, described in "Request lifecycle, part 2".
 
-## Request lifecycle, part 2: queue, worker, vector search and LLM streaming
+## Request lifecycle, part 2: queue, worker, hybrid search and LLM streaming
 
 After a semantic answer-cache miss, the Glassbox API hands retrieval to a separate worker through Redis Streams:
 
 1. **Subscribe, then enqueue.** The API subscribes to the Redis pub/sub channel `trace:{request_id}` first, then adds a job to the Redis Stream `retrieval:jobs` with `XADD` (the stream is trimmed to about 10,000 entries). The job carries the request ID, corpus, retrieval query, request start timestamp, embedding model ID and the question vector packed as 512 float32 values. The `queue` stage wraps this step.
 2. **Worker picks up the job.** A `retrieval-worker` pod reads it with `XREADGROUP` in the consumer group `workers`, one message at a time, blocking up to 3 seconds per read. Each pod uses its hostname as its consumer name.
-3. **Vector search.** The worker checks the retrieval cache, then runs a KNN query (top 8, cosine distance) on the RediSearch index `idx:chunks`, filtered to the requested corpus and to chunks embedded with the same embedding model. The `vector_search` stage reports cache `hit` or `miss`.
+3. **Hybrid search.** The worker checks the retrieval cache, then runs a KNN vector query and a BM25 keyword query on the RediSearch index `idx:chunks`, both filtered to the requested corpus and embedding model, and fuses the two rankings (see the hybrid search section). The `vector_search` stage (the diagram's Hybrid Search node) reports cache `hit` or `miss`.
 4. **MySQL chunk fetch.** The worker loads chunk text, line ranges, source path and title for the matched IDs, first from the Redis chunk cache and otherwise from MySQL (`chunks` joined to `documents`). This is the `mysql` stage.
 5. **Publish results.** The worker publishes stage events and a final `retrieval` event with the ranked chunks to `trace:{request_id}`, then acknowledges the job with `XACK`. The worker acknowledges even when processing fails and publishes an `error` event instead, so a bad job is never retried forever.
 6. **API forwards the trace.** The API relays the worker's stage events to the browser and sends a `retrieval` event with each chunk's title, path, score (About Basel: a section label, not the private path) and a 180-character snippet (not the full text). If no worker answers within 30 seconds, the API sends an `error` event.
 7. **Guards before the LLM.** If retrieval found no chunks, the answer is "I don't know from what I have." with no LLM call. If the Redis kill switch is on, or the daily budget is used up, the request ends in `retrieval_only` mode: retrieved chunks, but no generated answer (chat shows a short reply).
 8. **LLM streaming.** The API builds a prompt from the numbered chunks and streams Amazon Nova Lite's answer through the Bedrock ConverseStream API (at most 600 output tokens, temperature 0). Each text delta becomes a `token` event, wrapped in the `llm` stage.
 9. **Finish.** For first questions the answer is written to the semantic answer cache, unless one of its source chunks was re-ingested or deleted mid-request or the answer is an abstention or empty. The query is logged to MySQL's `queries` table, and a `done` event reports `total_ms`, `mode`, `answer_cache` and token counts.
+
+## Hybrid search: BM25 plus vectors, rank fusion and dual-experience slots
+
+Glassbox retrieval combines two searches over the same Redis index, `idx:chunks`, both filtered by corpus and embedding model (`retrieval/search.py`):
+
+- **Vector leg:** a KNN query for the 20 chunks nearest the question vector (HNSW, cosine distance).
+- **Keyword leg:** a BM25 full-text query for 20 chunks on the `text` field. The question is lowercased and split into words the way RediSearch splits the indexed text (`demo:load:lock` becomes demo, load, lock; `_PLANNED_SOURCE_SIGNAL` stays one word), stopwords and one-letter words are dropped, and the rest are OR-joined, because `FT.SEARCH` ANDs bare words and a whole question would match nothing.
+
+**Fusion.** Reciprocal rank fusion scores each chunk by the sum of 1/(10 + rank) over the lists it appears in. The usual k=60 measured worse with 20-candidate lists. About This System then keeps 8 chunks, at most 3 from one file; About Basel keeps 6, at most 2 from one file. If the keyword query fails (an index without the `text` field), the vector results are served alone.
+
+**Dual-experience slots (About Basel).** A question that names a known technology with an experience cue ("Have you used Redis?", "Kubernetes in production?") triggers one more keyword query for that technology's spellings. The best-ranked work chunk (from the employer files) and the best personal-project chunk that name it take the first two slots, and fused rank fills the rest. A side the data lacks gets no slot, so no unrelated chunk is forced in.
+
+**Measured effect** (golden set, Titan V2, 2026-10-05): chunk-level recall@8 rose from 0.76 to 0.81 overall (About This System 0.55 to 0.63), file-level MRR from 0.70 to 0.76, and the three exact-identifier questions moved to rank 1. Retrieval adds about half a millisecond per question; the `text` field adds about 5 MB to Redis.
 
 ## SSE event contract and trace sequencing
 
@@ -90,7 +103,7 @@ The `/api/ask` response is wrapped in a heartbeat relay (`with_heartbeat` in `se
 
 ## Live architecture diagram: how the frontend lights up nodes
 
-The Glassbox architecture diagram is a React Flow graph defined as data in `frontend/src/architecture.ts`. It has 11 nodes (Edge, API, Rewrite, Answer Cache, Queue, Worker, Embed Cache, Embed, Vector Search, MySQL and LLM) and 11 edges that follow the request path. Each node carries a visitor-facing label, its concrete implementation (for example "Redis Streams" for Queue or "Amazon Titan Text Embeddings V2" for Embed), and a one-line description.
+The Glassbox architecture diagram is a React Flow graph defined as data in `frontend/src/architecture.ts`. It has 11 nodes (Edge, API, Rewrite, Answer Cache, Queue, Worker, Embed Cache, Embed, Hybrid Search, MySQL and LLM) and 11 edges that follow the request path. Each node carries a visitor-facing label, its concrete implementation (for example "Redis Streams" for Queue or "Amazon Titan Text Embeddings V2" for Embed), and a one-line description.
 
 Trace events drive the diagram. When a `stage` event with `status: start` arrives, the frontend marks that node active, filling the whole tile with cyan, the one accent color reserved for "active". When the matching `end` event arrives, the node goes back to idle. Any `cache` field on a stage event is shown on that node as `hit` or `miss`, so a visitor can see, for example, an embedding-cache hit followed by an answer-cache miss. A list of retrieved chunks shows each source's title, path and similarity score. The footer shows real numbers only: the last request's latency (time to first token, or total time when no answer text came) with the answer-cache status in its tooltip, and how many questions this visit has asked. It does not show invented rolling averages.
 
@@ -128,7 +141,7 @@ Glassbox has four Redis caches, each tied to whatever could make it stale: the m
 
 1. **Embedding cache** (`emb:{sha256}`): exact match on the embedding model ID plus the normalized question (whitespace collapsed, case-folded); 512 packed float32 values, 7-day TTL. A hit skips the Titan call. Follow-ups use the rewritten query.
 2. **Semantic answer cache** (`idx:answers:v2` over `ans2:{corpus}:{id}`): an HNSW index of previous question vectors, each stored with its answer and cited chunks for 24 hours, plus each chunk's `content_sha` (SHA-256 of its text). A lookup is a KNN search (nearest 3) filtered by corpus and a hashed `embedding model | LLM model | prompt version` tag, and it counts as a hit only at cosine similarity 0.95 or higher and only if every cited `chunk:{id}` hash still holds the same `content_sha`; a stale entry is deleted and the next-nearest is tried. A hit skips the queue, the worker and the LLM and uses no daily budget.
-3. **Retrieval cache** (`ret:{corpus}:v{version}:{sha256}`): ranked chunk IDs and scores for a query vector and embedding model, 1-hour TTL, checked by the worker before KNN.
+3. **Retrieval cache** (`ret:{corpus}:v{version}:{sha256}`): ranked chunk IDs and scores for a query vector, embedding model and the question's search terms (plus a retrieval-mode marker, `hybrid-v1`), 1-hour TTL, checked by the worker before searching.
 4. **Chunk cache** (`chunktxt:{chunk_id}`): each chunk's text, source path, title and line range, 1-day TTL; used only when every matched chunk is cached.
 
 On a first question the order is: embedding cache, Bedrock embedding on a miss, semantic answer cache, then the queue and worker with the retrieval and chunk caches.
@@ -207,7 +220,7 @@ Redis in Glassbox is `redis/redis-stack-server` 7.2, which includes RediSearch v
 
 Redis structures and keys:
 
-- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval vector index (HNSW, cosine distance, 512 dimensions, float32). Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id`, `content_sha` (SHA-256 of the chunk text; checked by the answer cache and the reconcile) and a `kind` tag. Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
+- **`idx:chunks` over `chunk:{id}` hashes**: the retrieval index: HNSW vectors (cosine distance, 512 dimensions, float32) plus a full-text `text` field for BM25. Each hash holds `corpus`, a hashed `model` tag, the `vector`, `source_path`, `document_id`, `content_sha` (SHA-256 of the chunk text; checked by the answer cache and the reconcile), a `kind` tag, `text` (the chunk text with whitespace runs collapsed, since RediSearch does not split words on newlines) and `text_v` (its format version). Searches filter on corpus and model tag, so vectors from different embedding models are never mixed.
 - **`idx:answers:v2` over `ans2:{corpus}:{id}` hashes**: the semantic answer cache index, also HNSW, cosine and 512 dimensions, with `corpus` and `model` tags and a JSON payload that includes each source chunk's id and `content_sha`. 24-hour TTL. (The older `idx:answers` over `ans:{corpus}:v{version}:{id}` is no longer read; ingest drops it without `DD`.)
 - **`emb:{sha256}`**: the embedding cache. 7-day TTL.
 - **`ret:{corpus}:v{version}:{sha256}`**: the retrieval cache. 1-hour TTL.
@@ -247,9 +260,9 @@ The Glassbox ingestion pipeline (`services/glassbox/ingest/run.py`) turns files 
 
 **Incremental re-embedding.** For each file, Glassbox ingestion computes a SHA-256 content hash. It skips the file only when the stored `content_hash` matches and every existing chunk was embedded with the currently configured embedding model. A changed file, or a change of embedding model, triggers re-chunking and re-embedding. It deletes the old `chunk:{id}` hashes, commits the new rows in one MySQL transaction, then writes new hashes (and drops those ids' `chunktxt:{id}` text cache), bumping `corpus:ver:{corpus}` after each Redis step (answers check `content_sha`). A crash leaves rows without keys; the reconcile repairs them. A typical release therefore embeds only the documents that changed.
 
-**Index fields.** Every chunk hash in Redis carries a hashed embedding-model tag and a `kind` tag (`doc`, `code`, `infra`, `manifest` or `test`). Ingestion adds any field the index lacks with `FT.ALTER` and backfills model tags from MySQL; the reconcile below adds `kind` to older keys. Untagged vectors stay invisible to search in the meantime, so switching embedding models never mixes vector spaces.
+**Index fields.** Every chunk hash in Redis carries a hashed embedding-model tag, a `kind` tag (`doc`, `code`, `infra`, `manifest` or `test`) and the BM25 `text` field. Ingestion adds any field the index lacks with `FT.ALTER` (never dropping the index) and backfills model tags from MySQL; the reconcile below adds `kind` and `text` to older keys (about 3 seconds for 670 keys; search keeps working, the BM25 leg just misses keys not yet rewritten). Untagged vectors stay invisible to search in the meantime, so switching embedding models never mixes vector spaces.
 
-**Redis reconcile.** Every run ends by comparing MySQL chunks with Redis `chunk:{id}` keys for the current embedding model (`ingest/reconcile.py`), even when no file changed. A missing key is written from the MySQL row and its stored vector, with no embedding call; a key whose `content_sha`, corpus, model, kind, document or path disagrees with its row is rewritten; a key with no MySQL row is deleted. So a lost Redis volume or a FLUSHALL is repaired by the next ingest run. A corpus with zero MySQL chunks, or one where over 30% of its keys would go, gets no deletions (`REDIS RECONCILE REFUSED`). Only one ingest or reindex runs at a time (Redis lock `ingest:lock`). `--reindex` rewrites every key from MySQL without scanning files; in production the owner-approved "Ops · Reindex" runbook runs it as a one-off Job with the api's current image. Every ingest and reindex also drops the unused v1 answer index `idx:answers` if it still exists.
+**Redis reconcile.** Every run ends by comparing MySQL chunks with Redis `chunk:{id}` keys for the current embedding model (`ingest/reconcile.py`), even when no file changed. A missing key is written from the MySQL row and its stored vector, with no embedding call; a key whose `content_sha`, corpus, model, kind, `text_v`, document or path disagrees with its row is rewritten; a key with no MySQL row is deleted. So a lost Redis volume or a FLUSHALL is repaired by the next ingest run. A corpus with zero MySQL chunks, or one where over 30% of its keys would go, gets no deletions (`REDIS RECONCILE REFUSED`). Only one ingest or reindex runs at a time (Redis lock `ingest:lock`). `--reindex` rewrites every key from MySQL without scanning files; in production the owner-approved "Ops · Reindex" runbook runs it as a one-off Job with the api's current image. Every ingest and reindex also drops the unused v1 answer index `idx:answers` if it still exists.
 
 ## Stale documents: the sweep and the --clear command
 
@@ -467,7 +480,7 @@ The code is organized by service under `services/glassbox/`:
 
 - `api/`: FastAPI routes: `ask.py` (the question pipeline and SSE), `demo.py` and `capacity.py` (stress test), `cluster.py` (pod watch stream), and the health checks in `main.py`.
 - `worker/main.py`: the Redis Streams consumer and the synthetic-job handler.
-- `retrieval/search.py`: the KNN query on `idx:chunks`.
+- `retrieval/search.py`: hybrid search on `idx:chunks` (KNN plus BM25, rank fusion, per-file cap, dual-experience slots).
 - `cache/`: the embedding, retrieval, chunk and semantic answer caches.
 - `limits.py` and `killswitch.py`: the rate limiter, daily budget and kill switch.
 - `trace.py`: the shared sequence and timing helpers for trace events.

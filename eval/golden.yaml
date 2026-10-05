@@ -62,6 +62,7 @@ cases:
     corpus: about_me
     category: fact
     needs_owner_review: true
+    holdout: true
     question: Have you used React?
     expected_sources: [private/google.md, private/projects.md]
     gold_snippets: [React]  # the technology name only: no About Basel text here

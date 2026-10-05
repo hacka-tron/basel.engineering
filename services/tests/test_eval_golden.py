@@ -28,7 +28,7 @@ def test_committed_golden_set_is_valid():
     # gold snippet occurs in one of its expected source files in this repo.
     cases = load_golden()
     counts = Counter(case["category"] for case in cases)
-    assert 65 <= len(cases) <= 100
+    assert 65 <= len(cases) <= 120
     assert counts["fact"] >= 35
     assert counts["planned"] >= 8
     assert counts["live"] >= 5

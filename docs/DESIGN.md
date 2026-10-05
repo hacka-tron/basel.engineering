@@ -219,8 +219,8 @@ A job queue is more than this traffic needs. It exists to demonstrate backpressu
 
 - Same codebase and image as the API, different entrypoint (`python -m services.glassbox.worker.main`).
 - Consumes `retrieval:jobs` with `XREADGROUP` (group `workers`, one message at a time), acks with `XACK` after publishing results.
-- Steps: embed (cached) then KNN search in Redis (top 8, filtered by corpus and embedding-model tag) then load chunk text from the chunk cache or MySQL then publish.
-- Not built yet: a light rerank (score threshold, dedupe by document). Retrieval returns the raw top 8; DESIGN-005 §4 plans hybrid search with a per-document cap instead.
+- Steps: embed (cached) then hybrid search in Redis (a KNN vector query and a BM25 full-text query, 20 candidates each, filtered by corpus and embedding-model tag, merged by reciprocal rank fusion with k=10; RAG plan phase 8) then load chunk text from the chunk cache or MySQL then publish. About This System keeps 8 chunks, at most 3 per file; About Basel keeps 6, at most 2 per file, with one slot each for the best work and personal-project chunk naming the technology in a "have you used X?" question (`retrieval/search.py`, `RETRIEVAL_CONFIGS`).
+- Not built: a score threshold or a reranker (DESIGN-005 §3.3: skipped on cost).
 - Emits `stage` events for each step to `trace:{request_id}`.
 - Synthetic jobs (from the stress test) run the same path with cached embeddings plus a fixed simulated work delay, and skip publishing to any client.
 
@@ -335,7 +335,7 @@ Privacy: questions are logged without IP addresses. Rate limiting uses a salted 
 
 | Key / structure | Type | Purpose | TTL |
 |---|---|---|---|
-| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + hashes | KNN retrieval, filtered by `corpus` and hashed embedding-model tags (optionally by the `kind` tag); each hash also holds `content_sha` (SHA-256 hex of the chunk text) for answer-cache validation. `ensure_index` adds any missing schema field with `FT.ALTER` | none (rebuilt from MySQL) |
+| `idx:chunks` over `chunk:{id}` | Vector index (HNSW, cosine, 512 dims) + full-text `text` field + hashes | Hybrid retrieval (KNN plus BM25 on `text`), filtered by `corpus` and hashed embedding-model tags (optionally by the `kind` tag); each hash also holds `content_sha` (SHA-256 hex of the chunk text) for answer-cache validation, and `text_v`, the text format version the reconcile compares. `ensure_index` adds any missing schema field with `FT.ALTER` | none (rebuilt from MySQL) |
 | `emb:{sha256(normalized_q)}` | string (packed vector) | Embedding cache | 7 days |
 | `ret:{corpus}:v{ver}:{sha}` | list of chunk IDs + scores | Retrieval cache | 1 hour |
 | `chunktxt:{id}` | hash | Chunk text/metadata cache (avoids MySQL round trip) | 1 day |
@@ -944,5 +944,4 @@ Fill in the numbers after Phase 7; don't claim them before they're measured. Non
 - **EKS for an afternoon:** an `envs/eks-demo` Terraform variant that deploys the same manifests to EKS, runs the load test, records results, then destroys. Proves portability for a few dollars.
 - **Production changes you would make** (good interview material): multi-node or managed control plane, Multi-AZ RDS, managed Redis/ElastiCache with replicas, private subnets with VPC endpoints for Bedrock/SSM, Cloudflare WAF rules, External Secrets Operator, OpenTelemetry distributed tracing.
 - **Live facts tool:** let the About This System assistant answer "what version is deployed right now?" from the cluster and ingestion tables, not just from documents.
-- **Hybrid search:** add BM25 keyword search in Redis alongside vectors and compare recall@5 in the eval.
 - **Feedback buttons:** thumbs up/down stored in MySQL, feeding the eval set.

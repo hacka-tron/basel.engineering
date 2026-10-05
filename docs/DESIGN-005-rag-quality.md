@@ -1,6 +1,6 @@
 # Glassbox Design Doc 005: RAG quality and validation
 
-**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned, except where a heading says built: phases 1 and 2 of the plan (the golden set, free answer graders and the retrieval eval at k=8) shipped in PRs #97 and #95, and the report-only stale-document sweep (part of phase 6) in PR #101.
+**Status:** planned, not built yet (research and scoping, 2026-10-01). Section 2 describes the system as it runs today. Everything after section 2 is planned, except where a heading says built: phases 1 and 2 of the plan (the golden set, free answer graders and the retrieval eval at k=8) shipped in PRs #97 and #95, the report-only stale-document sweep (part of phase 6) in PR #101, and hybrid search (phase 8) on 2026-10-05.
 **Plan:** `docs/superpowers/plans/2026-10-01-rag-quality.md`.
 **Replaces:** the BACKLOG "Answer thinness (prompt tuning)" item, which becomes phase 5 of the plan.
 **Ingested:** this document is part of About This System (about 15 chunks, plus 7 for its plan file). Section 2 avoids status words on purpose; every later section states its status in its heading, and section 5 marks its unbuilt rows one by one. `services/tests/test_planned_labels.py` pins which units carry the marker.
@@ -13,7 +13,7 @@ Glassbox's retrieval is decent (Titan recall@5 0.87 at the document level in the
 2. **The About This System corpus is 40% test code.** 307 of the 761 About This System chunks come from `services/tests/`, and they outrank the real sources: the rate-limit and budget questions in the eval set retrieve three test files and miss `DESIGN.md` and `ask.py` entirely. The six historical plan files under `docs/superpowers/plans/` add stale statements on top. (Research finding of 2026-10-01; phase 6, PR #157, now excludes both directories.)
 3. **Nothing measured answers.** At the time of writing the eval scored retrieval only (document-level recall@5 and MRR, at k=5 while production uses k=8), it was manual, and the baseline predated most of the current corpus. Faithfulness, completeness (the thinness problem), abstentions, planned-versus-live correctness and multi-turn were not measured at all. Since then the golden set, free graders and k=8 retrieval metrics have shipped (section 2.3), but no paid answer run has happened yet.
 
-The planned work (not built yet) is to build a small validation harness first, then make cheap, measured changes in this order: the prompt, corpus hygiene, structure-aware chunks with heading breadcrumbs, and hybrid BM25 plus vector search with reciprocal-rank fusion. A paid reranker, LLM-generated contextual chunks, and a Redis or embedding-model upgrade are not worth it at this scale yet (section 7).
+The planned work (not built yet) is to build a small validation harness first, then make cheap, measured changes in this order: the prompt, corpus hygiene, structure-aware chunks with heading breadcrumbs, and hybrid search. Hybrid BM25 plus vector search with reciprocal-rank fusion shipped in phase 8 (section 3.2). A paid reranker, LLM-generated contextual chunks, and a Redis or embedding-model upgrade are not worth it at this scale yet (section 7).
 
 ## 2. Current state (as of `main` 2484403, updated 2026-10-01 for PRs #95, #97 and #101)
 
@@ -26,10 +26,10 @@ The planned work (not built yet) is to build a small validation harness first, t
 | Chunking | Markdown: split on headings, then **merge consecutive sections until about 300 to 500 words**, sliding 450-word windows with 50-word overlap for long sections. Code: one chunk per top-level def/class (median 48 words; the largest is 2,405 words). Terraform: per top-level block. YAML: per document. | `ingest/chunkers/markdown.py:48-75`, `chunkers/code.py`, `chunkers/terraform.py`, `chunkers/yaml_doc.py` |
 | Chunk text | Embedded **raw**: no file path, document title or heading breadcrumb. A split window of a long section loses its heading. | `ingest/run.py:134-135` |
 | Embedding | Titan Text Embeddings V2, 512 dimensions, normalized question text. | `providers/bedrock.py`, `api/ask.py:515` |
-| Index | Redis Stack **7.2** (`redis-stack-server:7.2.0-v11`), `idx:chunks` HNSW cosine, fields `corpus` TAG, `model` TAG, `kind` TAG (`doc`, `code`, `infra`, `manifest`, `test`; `search_chunks` takes an optional kind filter, unused by the worker), `vector`. **No TEXT field**, so no lexical search; chunk text lives only in MySQL. | `ingest/redis_index.py` (`EXPECTED_FIELDS`, `chunk_kind`), `k8s/base/redis-statefulset.yaml:19` |
+| Index | Redis Stack **7.2** (`redis-stack-server:7.2.0-v11`), `idx:chunks` HNSW cosine, fields `corpus` TAG, `model` TAG, `kind` TAG (`doc`, `code`, `infra`, `manifest`, `test`; `search_chunks` takes an optional kind filter, unused by the worker), `vector`, and since phase 8 `text` TEXT (the chunk text with whitespace collapsed, because RediSearch 7.2 does not split words on newlines) for BM25, with `text_v` (its format version) on each hash. | `ingest/redis_index.py` (`EXPECTED_FIELDS`, `chunk_kind`), `k8s/base/redis-statefulset.yaml:19` |
 | Index migration | `ensure_index` compares an existing index against the full expected field list (`EXPECTED_FIELDS`) and adds each missing field with `FT.ALTER`. Model tags are backfilled from MySQL; reconcile rewrites any key whose `kind` is missing or wrong. | `ingest/redis_index.py`, `ingest/run.py` (`prepare_index`), `ingest/reconcile.py` |
 | Stale files | After a full scan, documents whose source file was deleted or renamed (or now excluded from the scan) are listed per corpus and model and deleted: the Job sets `GLASSBOX_INGEST_SWEEP=apply` (owner decision 2026-10-03; `report`, the default, only logs them). `--clear --corpus X` wipes one corpus and model by hand. | `ingest/sweep.py`, `ingest/run.py` |
-| Retrieval | KNN **top 8**, filtered by corpus and embedding-model tag. No score threshold, no per-document cap, no dedupe, no hybrid, no rerank. DESIGN.md §6.3 now lists that light rerank (score threshold, dedupe by document) as unbuilt. | `retrieval/search.py:11-56`, `worker/main.py:240` |
+| Retrieval | **Hybrid** (phase 8, 2026-10-05): KNN 20 plus BM25 20 on `text`, same corpus/model filters, reciprocal rank fusion with k=10; About This System keeps 8 chunks with at most 3 per file, About Basel 6 with at most 2 per file plus dual-experience slots for "have you used X?" questions (§3.2). No score threshold, no rerank. | `retrieval/search.py` (`hybrid_search`, `RETRIEVAL_CONFIGS`), `worker/main.py` |
 | Multi-turn | Follow-ups are rewritten into a standalone query by Nova Lite (60 tokens) and retrieval uses the rewrite; the answer prompt gets the original question plus up to 6 messages / 4,000 characters of history. | `api/ask.py:99-116`, `:480-507` |
 | Prompt | Numbered sources `[n] kind: text` (the kind is code, Kubernetes manifest, infrastructure, design document, About Basel or portfolio project; since v15 never the path, so answers don't name files); headings, list items and sentences that name unshipped work get a status prefix (the `PLANNED_MARK` constant), chosen by a keyword regex (`_PLANNED_SOURCE_SIGNAL`); DD3 marks its own unbuilt headings (no hard-coded label since prompt v14). Since prompt v15 (PR for plan phase 5) the brevity rules are gone: after the sources and the question, a "How to write the answer" block asks for a direct first sentence, then the specifics (numbers, thresholds, limits, durations, names, conditions; never rounded or dropped), a short paragraph or list, no file names, paths or source numbers, the site and system never called unbuilt, a note that Basel's portfolio site is the one the visitor is on, and a friendly assistant tone that is lighter only for casual personal questions and never changes the facts, with four short tone examples (owner, 2026-10-03). The system prompt treats the question as data. Since prompt v16 (2026-10-03) that block also names the audience (hiring managers, recruiters, prospective clients), asks for one short paragraph of about 40 to 120 words with each point once and a total instead of its breakdown, and forbids repeating paths, headings or "see ..." pointers found in source text (§2.2). Since prompt v17 (2026-10-04) a persona section in the system prompt makes Basel answer in the first person, the block asks for one or two sentences, dual-experience answers and "I don't have that in my memory" for gaps, document text loses its file pointers before the prompt, and the examples are first-person placeholders (§2.2). No bracketed citations in the answer. A Bedrock `content_filtered` stop becomes the abstention sentence (never cached). | `api/ask.py` `_prompt`; system prompt `providers/base.py` `GROUNDING_RULES` |
 | Generation | Nova Lite ConverseStream, `maxTokens` 600 (since v15), temperature 0 (0.2 before prompt v17). `BedrockLLMProvider.generate` rejects any `max_tokens` above `MAX_OUTPUT_TOKENS` (600) with a `ValueError`; a test checks that the API's `_ANSWER_MAX_TOKENS` is accepted, so the two cannot drift apart. | `api/ask.py` `_ANSWER_MAX_TOKENS`, `providers/bedrock.py` `MAX_OUTPUT_TOKENS`; `services/tests/test_bedrock_providers.py` |
@@ -126,10 +126,10 @@ Scale: about 760 chunks (about 400 after hygiene), roughly 120k tokens of About 
 Structure-aware chunking that follows the document's own sections is the standard advice; merging unrelated sections dilutes the embedding (DESIGN.md chunk 5 merges §4.5 Stress test, §4.6 Citations and §4.7 Degraded modes). Prefixing each chunk with its location ("contextual chunk headers": file path, document title, heading breadcrumb) is cheap and deterministic. Anthropic's Contextual Retrieval goes further and has an LLM write 50 to 100 tokens of context per chunk: in their benchmark, contextual embeddings cut top-20 retrieval failures by 35%, adding contextual BM25 by 49%, and adding a reranker by 67%. The same article says that a knowledge base under about 200k tokens can simply go into the prompt in full. ([Anthropic, Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval))
 *Here:* About Basel already gets everything in the prompt. For About This System, deterministic breadcrumbs capture most of the benefit for docs whose headings are descriptive (ours are). LLM-written context would add an ingest-time LLM dependency to every deploy for a small gain. Whole-corpus prompting (about 120k tokens, or about 60k after hygiene) would cost about $0.004 to $0.007 per answer on Nova Lite and add seconds of time to first token on a 2 GiB node's request path. Retrieval stays.
 
-### 3.2 Hybrid search (planned choice, not built yet)
+### 3.2 Hybrid search (built in plan phase 8)
 
 BM25 plus vector, fused with reciprocal-rank fusion (RRF, k=60), helps most on exact identifiers. This corpus is full of them: `demo:load:lock`, `_PLANNED_SOURCE_SIGNAL`, `retrieval:jobs`, `512 MiB`, `t4g.small`. Redis 8.4 added `FT.HYBRID` with built-in RRF or linear fusion; the Redis version this project runs (§2.1, "Index" row) has full-text `FT.SEARCH` with a BM25 scorer on TEXT fields, so the two legs can be fused in about 30 lines of Python. ([Redis search skill / FT.HYBRID notes](https://mcpservers.org/agent-skills/redis/redis-search))
-*Here:* worth it. It costs a TEXT field (about 1 to 2 MB of RAM) and one extra Redis query, and the lexical leg is deterministic and free, so it can run in CI without embeddings.
+*Here:* built (phase 8, 2026-10-05). Measured on Titan v2 with the private corpus at `0916c89` (82 retrieval cases), vector-only vs hybrid: chunk recall@8 0.756 to 0.805 (lexical leg alone 0.768), About This System 0.550 to 0.625; file MRR 0.700 to 0.761; chunk MRR 0.552 to 0.604 overall (About This System 0.392 to 0.374, a small dip; About Basel 0.705 to 0.822). The three identifier cases (`demo:load:lock`, `_PLANNED_SOURCE_SIGNAL`, `retrieval:jobs`) are at rank 1. Choices from the sweep: RRF k=10 (k=60 flattened 20-candidate lists: chunk recall 0.625 vs 0.600), lexical weight 1.0, per-file cap 3 (2 for About Basel, which returns 6 of its 17 chunks). The query splits identifiers into words the way the indexer does: an escaped `k8s\/base` matched nothing. Cost: about 5 MB of Redis (6.4 to 11.4 MB locally) and about 0.6 ms per question. **Dual experience:** a question naming a known technology with an experience cue fills one slot with the best work chunk (`microsoft.md`, `google.md`) and one with the best personal-project chunk (`projects.md`) that name it; it fired on all 7 technology cases and none of the other 35 About Basel cases.
 
 ### 3.3 Reranking (planned choice: skip)
 
@@ -142,7 +142,7 @@ Already built for follow-ups. The remaining gap is measurement, which is planned
 
 ### 3.5 Metadata filtering
 
-Already filters by corpus and model. The planned addition (not built yet) is a source-type prior: down-rank or exclude tests and historical plans, plus a per-document cap (at most 2 or 3 chunks from one file) so one long file cannot fill the context.
+Already filters by corpus and model. The per-document cap is built (phase 8: at most 3 chunks per file, 2 for About Basel). A source-type prior was not needed: tests and plans left the corpus in phase 6.
 
 ### 3.6 Prompting for grounded, specific answers (planned choice, not built yet)
 
@@ -156,7 +156,7 @@ Ask explicitly for the concrete values that answer the question (numbers, thresh
 - Practitioner guidance: binary pass/fail judges, one per failure mode, with written critiques. Calibrate each judge against the owner's labels (true-positive and true-negative rates) before trusting it. Avoid 1-to-5 scores. ([Hamel Husain's evals guidance, summarized](https://www.skills.sh/hamelsmu/evals-skills/write-judge-prompt))
 - *Here:* most of the failure modes seen so far are checkable deterministically: a required fact present (the "512 MiB" regex), a "No" for planned features, an abstention for unanswerable questions, no abstention for answerable ones. Deterministic graders are free, exact and CI-friendly. An LLM judge is needed only for faithfulness (unsupported claims) and is run in occasional paid runs.
 
-## 4. Target architecture (planned, not built yet)
+## 4. Target architecture (built except breadcrumb chunks and the answer log)
 
 ```mermaid
 flowchart LR
@@ -172,9 +172,9 @@ flowchart LR
     subgraph Ask["retrieval-worker"]
         Q[question or rewrite] --> KNN[KNN 20]
         Q --> BM[BM25 20]
-        KNN --> F[RRF k=60<br/>kind prior, per-doc cap 3]
+        KNN --> F[RRF k=10<br/>per-doc cap 3, About Basel 2 plus dual slots]
         BM --> F
-        F --> TOP[top 8 to the prompt]
+        F --> TOP[top 8 to the prompt, About Basel 6]
     end
     TOP --> P[prompt v15<br/>keep specifics, length follows the question]
     P --> LLM[Nova Lite]
@@ -183,11 +183,11 @@ flowchart LR
 Changes against today:
 
 1. **Corpus hygiene.** Drop `services/tests/**` and `docs/superpowers/plans/**` from About This System. Add a `kind` tag (`doc`, `code`, `infra`, `manifest`). Switch the stale-document sweep from report to apply once the owner has checked a release's log (the sweep and the `--clear` command themselves are in §2.1).
-2. **Chunking.** Markdown: one chunk per section at the deepest heading level that keeps it between about 120 and 450 words. Merge only *sibling subsections* that are too small (no more merging across unrelated `###` sections). Split long sections into windows that repeat the breadcrumb. Code: merge tiny adjacent definitions up to about 250 words, split anything over about 600 words, and prefix the module path plus docstring line.
-3. **Contextual header** prepended to both the embedded text and the BM25 text, for example `docs/architecture/deep-dive.md > Glassbox architecture deep dive > Stress test and KEDA autoscaling of retrieval workers`. The prompt shows the same header as the source label.
-4. **Hybrid retrieval** in `retrieval/search.py`: two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters; the lexical query is the question's stopword-stripped, escaped terms joined with `|`, because `FT.SEARCH` ANDs terms by default and a whole question would match nothing), RRF with k=60, a small multiplicative prior by kind (tuned by eval, may end at 1.0), a per-document cap of 3, top 8 out. The retrieval cache keys stay the same; the corpus version still invalidates.
+2. **Chunking** (not built yet, plan phase 7). Markdown: one chunk per section at the deepest heading level that keeps it between about 120 and 450 words. Merge only *sibling subsections* that are too small (no more merging across unrelated `###` sections). Split long sections into windows that repeat the breadcrumb. Code: merge tiny adjacent definitions up to about 250 words, split anything over about 600 words, and prefix the module path plus docstring line.
+3. **Contextual header** (not built yet, plan phase 7) prepended to both the embedded text and the BM25 text, for example `docs/architecture/deep-dive.md > Glassbox architecture deep dive > Stress test and KEDA autoscaling of retrieval workers`. The prompt shows the same header as the source label.
+4. **Hybrid retrieval** in `retrieval/search.py` (built, phase 8): two Redis queries (KNN 20 and BM25 20 on the TEXT field, same corpus/model filters; the lexical query is the question's stopword-stripped words, split the way the indexer splits text and joined with `|`, because `FT.SEARCH` ANDs terms by default), RRF with k=10, a per-document cap of 3 (About Basel: 6 chunks, cap 2, dual-experience slots), top 8 out. The retrieval cache key gains a `hybrid-v1` marker and the question's terms; the corpus version still invalidates.
 5. **Prompt v15** (section 6).
-6. **Answer log**: store `answer` and `abstained` in `queries` (next Alembic revision) so live traffic can be sampled into the golden set and reviewed.
+6. **Answer log** (not built yet, plan phase 10): store `answer` and `abstained` in `queries` (next Alembic revision) so live traffic can be sampled into the golden set and reviewed.
 
 `ensure_index` already adds any missing expected field (§2.1 "Index migration"), so the `text` field is one more `EXPECTED_FIELDS` entry plus its backfill.
 
@@ -215,7 +215,7 @@ The 30 cases in `questions.yaml` migrate into it unchanged, so old and new numbe
 | Layer | Metric | Grader | Cost |
 |---|---|---|---|
 | Retrieval | recall@8 and MRR at file level (comparable with today) **and** at chunk level (gold snippet); `noise@8` = share of top-8 from tests/plans (should become 0) | deterministic | Titan question embeddings: about $0.00002 per run |
-| Retrieval, lexical leg (planned with hybrid search) | lexical-leg recall | deterministic | free |
+| Retrieval, each leg alone (built with hybrid search) | vector-leg and lexical-leg recall and MRR (`legs` in the `run_eval` result) | deterministic | free |
 | Answer: completeness | `fact_coverage` = share of `must_include` patterns matched | deterministic regex | free once answers exist |
 | Answer: abstention | abstain rate on `unanswerable` (target 100%), false-abstain rate on answerable (target ≤ 5%) | `is_exact_abstention` / `is_abstention` | free |
 | Answer: status | planned/live correctness | regex | free |
