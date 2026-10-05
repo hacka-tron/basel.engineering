@@ -341,6 +341,28 @@ def test_overlay_cases_map_categories_and_flag_stale_checks():
     assert "forbidden_content" in stale["known_failure"]
 
 
+def test_a_denial_item_accepts_the_memory_phrasing():
+    from eval.graders import grade_case
+
+    case = approved_case(
+        {
+            "id": "rec-e",
+            "category": "Technology",
+            "question": "Do you write Cobol?",
+            "answer": "No, Cobol isn't one of my languages.",
+            "golden": {"must_include": [r"\bCobol\b"]},
+        }
+    )
+    assert case["category"] == "fact" and case["abstain_ok"] is True
+    assert grade_case(case, "I don't have Cobol in my memory.")["passed"]
+
+
+def test_the_absent_tech_example_comes_first_in_the_strict_block():
+    prompt = _prompt("Q?", [_chunk(1, WORK_TEXT)])
+    block = prompt.split("Examples of voice and format only", 1)[1]
+    assert block.index("I don't have <Language> in my memory.") < block.index("<Project>")
+
+
 def test_run_answers_keeps_the_overlay_out_of_the_golden_rates():
     from eval.run_answers import summarize
 

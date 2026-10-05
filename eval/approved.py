@@ -12,6 +12,8 @@ Each item becomes a golden-style case with its `golden` checks (`must_include`,
   is `unanswerable` with `expect_abstain`; every other item is `fact`. The file's
   own `expect_abstain` flag marks deflections (pay, availability: "email me"),
   which are answers, not abstentions, so it is not copied as is.
+- An item whose approved answer is a denial ("No, ...") accepts the memory
+  phrasing as well (`abstain_ok`): factuality and caching win over the wording.
 - Every case is graded against its own approved answer first. An item whose
   approved answer fails its own checks (a stale check written before a sign-off
   round changed the answer) gets `known_failure`, so it is reported separately
@@ -53,6 +55,10 @@ def approved_case(item: dict) -> dict:
         case["max_words"] = int(golden["max_words"])
     if abstains:
         case["expect_abstain"] = True
+    elif answer.lower().startswith("no,"):
+        # A denial: the owner rule's "I don't have X in my memory" (an abstention,
+        # never cached) is accepted too (owner decision, fix round 2026-10-05).
+        case["abstain_ok"] = True
     own = grade_case(case, answer)
     if not own["passed"]:
         case["known_failure"] = (

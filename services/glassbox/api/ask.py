@@ -575,8 +575,14 @@ def _example_lines(route: str) -> str:
     if route == CASUAL_ROUTE:
         lines = [e.line() for e in examples.casual] or list(_CASUAL_PLACEHOLDER_EXAMPLES)
     else:
-        approved = [e.line() for e in examples.strict]
-        lines = (approved or list(_STRICT_PLACEHOLDER_EXAMPLES)) + list(_STRICT_FIXED_EXAMPLES)
+        approved = [e.line() for e in examples.strict] or list(_STRICT_PLACEHOLDER_EXAMPLES)
+        # The absent-tech example goes first (fix round, 2026-10-05): placed after the
+        # approved examples, Nova Lite answered "Do you write Go?" with the bare
+        # abstention instead of "I don't have Go in my memory", and invented a work
+        # side for a personal project on "Any React experience?"; first, both are
+        # fixed (3 of 3 smoke runs each).
+        absent, *rest = _STRICT_FIXED_EXAMPLES
+        lines = [absent, *approved, *rest]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 
