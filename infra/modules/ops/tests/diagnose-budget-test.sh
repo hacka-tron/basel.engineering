@@ -129,7 +129,7 @@ check "every redis command answered" $?
 # The shipped path: main runs budget_section in `bash -c` with only the
 # functions in BUDGET_FUNCTIONS, so a helper missing from that list breaks it.
 export calls KILL_EXISTS KILL_VALUE CONFIGMAP_OK
-sub=$(bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" 2>&1)
+sub=$(bash -c "$(declare -f "${BUDGET_FUNCTIONS[@]}"); budget_section" 2>&1)
 ! grep -qF 'command not found' <<<"$sub"
 check "subshell: every helper is available (no command not found)" $?
 grep -qF 'by mode/cache: full miss = 31' <<<"$sub" && grep -qF 'generated answers (full, miss): 31' <<<"$sub"
@@ -274,7 +274,7 @@ check "sql: session is read-only (an INSERT after it is refused)" $?
 
 export cid
 export -f kc
-sub=$(bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" 2>&1)
+sub=$(bash -c "$(declare -f "${BUDGET_FUNCTIONS[@]}"); budget_section" 2>&1)
 grep -qF 'last ingest run #2:' <<<"$sub" && grep -qF 'ttft last 24h, cache_status miss: n 10' <<<"$sub" && grep -qF 'asks: ' <<<"$sub"
 check "subshell (as main runs it): ingest, ttft and query-log lines appear" $?
 

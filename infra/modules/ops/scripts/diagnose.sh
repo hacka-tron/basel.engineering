@@ -209,7 +209,7 @@ csp_section() {
 
 # Every function budget_section needs; main copies them into the bash -c
 # subshell, and the test runs that exact command.
-BUDGET_FUNCTIONS="kc redact as_int redis_read query_log_sql budget_section"
+BUDGET_FUNCTIONS=(kc redact as_int redis_read query_log_sql budget_section)
 
 main() {
   exec </dev/null 2>&1
@@ -304,7 +304,7 @@ main() {
   # Last, and bounded as a whole, so a slow Redis or MySQL exec can't push
   # the node sections above past the document's 300 s limit.
   section "LLM budget, kill switch, warm-up cap, query log, last ingest run, TTFT (counts only)"
-  timeout --kill-after=5 60 bash -c "$(declare -f $BUDGET_FUNCTIONS); budget_section" ||
+  timeout --kill-after=5 60 bash -c "$(declare -f "${BUDGET_FUNCTIONS[@]}"); budget_section" ||
     echo "(budget section did not finish within 60s)"
 
   section "end of diagnose"
