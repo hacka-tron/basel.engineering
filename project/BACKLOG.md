@@ -4,36 +4,32 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**State (2026-10-04 PT):** prompt v17 merged (#176); **prompt v18 PR `feature/rag-prompt-v18` open** (report `status/2026-10-04-2144-rag-prompt-v18.md`). Earlier state (2026-10-04): the site is live on prompt v16 (#170), Nova Lite v1, cap 500/day. KEDA is suspended; zram is on; `warm-answers` is running. Live state: `project/SNAPSHOT.md` (its header still says v15; the v17 PR updates it). No PRs open. Design drafts from the 2026-10-04 session: `project/drafts/2026-10-04-nova-lite-retrieval.md` (chunking rules, metadata schema, retrieval recipes) and `project/drafts/hybrid_rag_handler.py` (stand-alone prototype: rewrite with timeout fallback, filtered retrieval, model fallback; runs offline with `--offline`).
+**State (2026-10-05 PT, overnight session):** everything below is merged and live. Prompt **v18** (#182): the owner's approved example answers as few-shots, plus a playful casual route. **RAG phase 8** hybrid BM25 + vector retrieval (#183). **Phase 10** answer logging (#185). Review leftovers (#184). Ops · Diagnose additions (#180, **waiting for the owner's Terraform apply click**). Test ports (#181). The private corpus is first person throughout, resynced with the bullet bank, with the owner's sign-off answers (docs PRs #6–#11). Production stays on **Nova Lite** (owner, 2026-10-05: Haiku skipped; Nova 2 Lite tested and not adopted). No PRs open. Live state: `project/SNAPSHOT.md`. Playbooks: `orchestration/prompt-version-playbook.md`, `orchestration/corpus-resync.md`, `orchestration/token-log.md`.
 
-### Next up, in order (owner priorities, 2026-10-04)
+**Done 2026-10-04/05 (details in `project/status/`):**
+- v17 (#176): persona, brevity, dual experience, factuality.
+- Owner sign-off: two rounds, 51 approved answers.
+- v18 tone routing.
+- Phase 8 hybrid search with dual-experience slots.
+- Phase 10 answer log.
+- The answer-model A/B: Nova 2 Lite was wordier, slower, 5.6x the cost and worse on one injection case; Haiku skipped by the owner.
+- Phase 7 is effectively covered: the corpus is one H2 per chunk, sources carry topic and section labels, and slots use file names. Revisit only if retrieval misses show up.
 
-1. ~~**Prompt v17: persona, brevity, dual experience, factuality.**~~ **Done: merged as #176 (2026-10-05).** One spec; it replaces the 2026-10-03 v17 notes. **Status 2026-10-04: PR `feature/rag-prompt-v17` open** (report `status/2026-10-04-1936-rag-prompt-v17.md`); in review round 2; fixed: the db-terraform chip abstention and the cost answer's trial wording; left over: regenerate not built (checks are logged), the production-question rule depends on corpus wording, the approved example set replaces the placeholders in a follow-up PR. ~~`is_abstention` missed 5+ word tech names and an opener before the memory phrase; "per DESIGN.md §9.7" stripped to "per DESIGN".~~ Fixed in PR `fix/review-leftovers`, which also adds two golden cases (`me-favorite-database-unsupported`, `me-most-fun-project-unsupported`, marked `known_failure`) for the strict prompt's unsupported "favorite" framing (v18 report); the strict-prompt fix itself is still open.
-   - **Persona: Basel's uploaded consciousness.** The premise of every answer is that Basel uploaded his consciousness into this application and is answering visitors himself. Give it its own section of the system prompt, shared by the strict prompt and the casual one (item 3). Always first person ("I built…", "at Google I…"); never "Basel" in the third person, "the assistant" or "this AI". About This System answers are Basel explaining the system he built and now lives in, still technically precise. A light touch of the premise is fine where natural; don't open every answer with it.
-   - **Brevity.** Answer in 1–2 sentences unless detail is asked for; the old 40–120 word target is gone. Lower the `max_words` checks.
-   - **Dual-experience snapshot (owner rule, 2026-10-04).** A question about a tool or technology names the sides the data supports, in a warm, friendly tone: "Yes! I used [Tech] at [Company] for [X], and in my personal project [Name] for [Y]." Don't volunteer missing sides (no "I haven't used it at work"). Only a production, work or professional question with personal-only use gets "No, but I used it extensively in my personal project [Name], [what for]." Tech the data doesn't mention gets the memory phrasing ("I don't have [Tech] in my memory."), never a denial. Never invent a side.
-   - **Strict factuality.** Stay strictly grounded in the retrieved data; never invent employers, projects, dates, numbers or capacities. The persona never licenses invention: what isn't in the data gets "I don't have that in my memory" phrasing.
-   - **System answers.** No billing-plan details (Free plan, trials, credits); describe how the system works and what it costs in general.
-   - **#170 Codex minor.** Strip source-file pointers from the prompt context; one v16 answer named `release.yml` and said the version comes "by asking the cluster". Retest that case.
-   - **Cheap Nova Lite fixes, in the same PR.** Answer temperature 0.2 → 0. Add deterministic checks after generation: third-person "Basel"/"he" in an About Basel answer, and a word cap; regenerate once if one fails. Few-shot examples in the first person, strict rules placed after the question (this worked on Nova Lite before).
-   - **Evals.** Make About Basel `must_include` regexes accept the first person. Add a third-person check. Unsupported claims must not go up vs v16 (offline unsupported-claims review).
-2. ~~**Example Q&A set, with the owner's sign-off.**~~ **Done 2026-10-05:** 51 approved answers (13 few-shot) in the private repo (`examples/approved-answers.yaml`, docs PR #10); prompt v18 loads them as few-shots and as an eval overlay. **Left over (private repo):** 14 of the 51 `golden` checks fail on their own approved answer (written before the sign-off rounds changed the answers, e.g. freelance, work authorization, gRPC); the overlay marks them `known_failure` until the checks are fixed. Few-shot examples set the tone, so they matter most. The audience is **recruiters, hiring managers and potential freelance clients**: role fit, seniority and scope, impact and metrics, specific technologies across work and personal projects, availability and location, freelance engagements, working style, why hire me, contact. **Publish the set as an artifact for the owner to review and approve before it ships.** Gaps it exposes may need About Basel corpus edits in the private repo: propose them; the owner approves. Add golden cases for the same audience. Drafting can run alongside item 1; v17 ships with the approved examples.
-3. **Tone routing for casual questions** (owner approved, 2026-10-03). **Status 2026-10-05: in the prompt v18 PR** (casual route when the best-ranked About Basel chunk is mostly personal or fun sections; temperature 0.5; route in the trace, logs and cache key). **Next after v18: item 4.** When retrieved chunks come mostly from personal or fun-facts sections, use a short, warm, lightly playful prompt (same persona section). Work, skills and system questions keep the strict prompt. One model call, streaming kept. The casual prompt may use a slightly higher temperature than the strict prompt's 0.
-4. **Answer-model A/B on v17 (owner approved, 2026-10-04).** Test **Nova 2 Lite** and **Claude Haiku 4.5** against **Nova Lite v1** (the control) on the golden set, each run 3+ times.
-   - Score: first person, unsupported claims, dual-experience coverage, answer length, time to first token.
-   - **Nova 2 Lite:** can be tested now (GA, no form). In us-east-1 it runs only through the `us.` or `global.` inference profile, so check that the IAM policy allows the inference-profile ARN. Keep extended thinking off.
-   - **Haiku 4.5:** needs Anthropic's first-use form, which only the owner submits, never an agent.
-   - Optional cheap challenger: Gemma 4 31B. Skip: Nova Pro/Micro, Llama 4, Mistral, DeepSeek, Qwen3 32B, gpt-oss-120b (worst Vectara score, 14.2%), Sonnet 5.5 (too costly for 1–2 sentences), Nova 2 Pro (preview). Claude 3.5 Haiku and Nova Premier are retired.
-   - Monthly cost at 3K tokens in / 60 out, 100/200/500 questions a day: Nova Lite v1 $0.6/$1.2/$2.9; Nova 2 Lite (global) $3.2/$6.3/$15.8; Haiku 4.5 (global) $9.9/$19.8/$49.5. The daily cap bounds the worst case.
-   - Faithfulness (Vectara, 2026-09-22): Nova 2 Lite 5.1%, Nova Lite 6.1%, Haiku 4.5 9.8%. Haiku must prove itself on unsupported claims, not just tone.
-   - Embeddings: keep Titan v2 and don't re-ingest. Try Cohere Embed 4 in a side index only if the golden set shows retrieval misses.
-   - ~~After the winner is chosen, align the code default `BEDROCK_LLM_MODEL_ID`.~~ Done early: the code default is Nova Lite (owner chose to stay on Nova Lite and skip Haiku, 2026-10-05); the Haiku arm is dropped.
-   - Sources: Bedrock pricing, the Nova 2 Lite model card, the Vectara leaderboard, Artificial Analysis, and the outcomeops.ai write-ups (all seen 2026-10-04).
-5. **RAG phase 7: section-aware chunks** (read `orchestration/rag-plan-brief.md` first). Use the chunking rules in the draft: one H2 per chunk, under 300 words, a generated context header (company or project, role, period) on every chunk, first sentence names the subject, tags from a controlled vocabulary. Add the metadata fields (`experience_type`, `organization`, `project_name`, `tech_stack`, `skill_areas`).
-6. **RAG phase 8: hybrid BM25 + vector.** For "have you used X?", fill one slot with a professional chunk and one with a personal-project chunk (filtered queries). Use k=4–6 with at most 2 chunks per document. The site diagram's Vector Search node text updates in this PR.
-7. **RAG phase 10: answer logging.** Also record the answer-cache hit rate. **Status 2026-10-04: PR `feature/rag-p10-answer-log` open** (report `status/2026-10-04-2316-rag-p10-answer-log.md`): `queries` stores the masked answer, abstained, route, model ID, prompt version and `coalesced`; 90-day retention; hit-rate SQL in `eval/README.md`. **Follow-ups:** the hit-rate line in Ops · Diagnose (`diagnose.sh`, needs the ops Terraform apply); `eval/sample_live.py` (weekly sample of live answers into the graders and `golden.yaml`, plan phase 10).
-8. **Real portfolio projects** (the owner adds them; `project/PORTFOLIO_PROJECT.md`). The first one needs the planned-marker exemption ("Open items from the portfolio backend").
-9. **Server-side footer stats** (Phase 7 leftover).
+### Next up, in order
+
+1. **Watch the live answers for a few days**, using the answer log (#185). Hit rate: the SQL is in `eval/README.md`.
+   - Check that "have you used X?" answers name both sides where the data has both. Phase 8 now retrieves both, but Nova Lite still drops a side for Redis and React sometimes. If it persists, try a two-sided approved example again, now that slots supply both chunks (v18 dropped it because it invented a work side).
+   - Check the strict prompt's unsupported "favorite X" framing (golden cases are `known_failure`, see `status/2026-10-04-2144-rag-prompt-v18.md`).
+2. **Real portfolio projects** (the owner adds them; `project/PORTFOLIO_PROJECT.md`). The first one needs the planned-marker exemption ("Open items from the portfolio backend").
+3. **CSP enforce:** after about 2026-10-08, the owner runs Ops · Diagnose on a few days. If the "CSP Report-Only violations" section is quiet, switch to enforcing ("Security" section).
+4. **Small follow-ups:**
+   - an Ops · Diagnose answer-cache hit-rate line (needs a Terraform apply);
+   - `sample_live.py` weekly review of live answers (phase 10 follow-up);
+   - "Do you know Taylor Swift?" fires the `swift` tech detector (routes strict, tone only);
+   - the `team|teams` work veto makes the sports cue dead (harmless);
+   - `inj-history` still prints the injected word (client-supplied history, uncached, the attacker's own screen only);
+   - two cache KNN lookups per miss.
+5. **Server-side footer stats** (Phase 7 leftover). Low value.
 
 **Decided, don't build:**
 - Rewriting every question: keep the rewrite for follow-ups only, and look up the answer cache before any rewrite.
@@ -41,8 +37,8 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 - Synthetic per-skill "cheat sheet" chunks, unless phases 7 and 8 still miss dual-experience answers. If built: generate them offline from the private docs, set `derived_from`, gate them with the factuality grader, and keep them in the private repo (never public About Basel text). The 2026-10-04 corpus resync added professional Kafka and gRPC usage, so this gap is closed.
 
 **Owner to-dos:**
-- Submit Anthropic's first-use form when ready for the Haiku arm of item 4.
-- Confirm the SNS alarm email subscription.
+- Approve the pending Terraform workflow apply for the `ops` module (run 37265886746, Ops · Diagnose additions from #180): the plan should show only an in-place update to the `glassbox-ops-diagnose` SSM document.
+- ~~Confirm the SNS alarm email subscription.~~ Confirmed by the owner, 2026-10-05.
 - Check the AWS plan: Free auto-closes after 6 months; switch to Paid if so.
 - Run **Ops · List snapshots** once.
 - Consider an AWS Budgets alert: the EC2 T4g trial ends 2026-12-31, and about $5–6/month becomes $17–18.
