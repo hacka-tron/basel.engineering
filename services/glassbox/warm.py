@@ -18,7 +18,8 @@ answer that errored after the LLM started still spent a budget slot):
   error before generation);
 - the run stops at the first sign of the shared limits (HTTP 429/503, a
   ``rate_limited``/``budget_exhausted`` error, or a ``retrieval_only`` answer,
-  which the API sends when the daily LLM budget is spent or the LLM is off).
+  which the API sends when the daily LLM budget is spent, the LLM is off, or
+  the AWS budget stop denies the answer models).
 
 The warm-up goes through the same rate limiter and daily budget as visitors.
 
@@ -164,7 +165,9 @@ def classify(
             )
         elif event == "done":
             if data.get("mode") == "retrieval_only":
-                raise StopWarmup("daily LLM budget spent or LLM switched off (retrieval_only)")
+                raise StopWarmup(
+                    "daily LLM budget spent, LLM switched off or AWS budget stop (retrieval_only)"
+                )
             total_ms = data.get("total_ms")
             if data.get("answer_cache") == "hit":
                 return Outcome(corpus, question, "cached", total_ms, llm_attempted=False)
