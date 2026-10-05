@@ -10,6 +10,16 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 - **Strict factuality.** Stay strictly grounded in the retrieved background data; never invent employers, projects, dates, numbers or capacities. Measure it with the offline unsupported-claims review (v16 vs v17): unsupported claims must not go up.
 - **Tone: answer as Basel.** See "Persona" below; supersedes v17 item (1).
 
+**Example questions and answers need the owner's sign-off (owner, 2026-10-04).** Few-shot examples set the tone on Nova Lite, so they matter most. The audience is **recruiters, hiring managers and potential freelance clients**: build the question set around what they'd ask (role fit, seniority and scope, impact and metrics, specific technologies across work and personal projects, availability and location, freelance engagements, working style, why hire me, contact). When the example Q&A set exists, **publish it as an artifact for the owner to review and approve before it ships**. Gaps it exposes may mean corpus changes in the private About Basel repo (owner content; propose edits, the owner approves). Golden eval cases should cover the same audience.
+
+**Nova Lite strategy (feasibility review, 2026-10-04; drafts in the session scratchpad, not in the repo):**
+- Answer temperature 0.2 → 0, plus deterministic checks after generation (third-person "Basel"/"he" in an About Basel answer, word cap), with one regeneration if a check fails.
+- Fold the About Basel context headers (company/project, role, period) and metadata (`experience_type`, `organization`, `project_name`, `tech_stack`) into phase 7. For "have you used X?", fill one slot with a professional chunk and one with a personal-project chunk (phase 8 hybrid search, run with each filter).
+- Keep the rewrite for follow-up questions only; don't rewrite every question, and look up the answer cache before any rewrite.
+- Use k=4–6 with at most 2 chunks per document, not top-2.
+- Synthetic per-skill cheat-sheet chunks only if phase 7/8 still miss. Generate them offline from the source documents, with `derived_from` set, and gate them with the factuality grader. The source documents list Kafka as a skill but give no job or project for it, and never mention gRPC.
+- Claude 3.5 Haiku is retired. If the owner submits Anthropic's first-use form, A/B Haiku 4.5 against Nova Pro on v17. Estimated cost at 100/200/500 questions a day: Nova Lite about $0.6/$1.2/$2.9 a month, Nova Pro about $7/$13/$33, Haiku 4.5 about $9/$19/$47. The daily cap holds Haiku's worst case to about $73.
+
 **Persona: Basel's uploaded consciousness (owner, 2026-10-04).** The premise of every answer is that Basel uploaded his consciousness into this application and is answering visitors himself. Give it its own section in the system prompt (shared by the strict and the casual/tone-routed prompts):
 
 - Always first person ("I built…", "at Google I…"), never "Basel" in the third person and never "the assistant" or "this AI".
