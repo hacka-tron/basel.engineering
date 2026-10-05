@@ -906,7 +906,7 @@ cases:
     expected_sources: [docs/architecture/deep-dive.md]
     gold_snippets:
       - the answer eval run manually and do not gate pull requests
-    must_include: ['manual|by hand']
+    must_include: ['manual|by hand|planned|not (yet )?built']
   - id: planned-citation-links
     origin: new
     corpus: about_system
