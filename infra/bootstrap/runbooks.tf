@@ -67,6 +67,9 @@ locals {
   ]
 
   bootstrap_state_key = "bootstrap/terraform.tfstate"
+
+  # The node's instance role (infra/modules/compute/main.tf).
+  glassbox_instance_role_arn = "arn:aws:iam::${var.aws_account_id}:role/glassbox-instance"
 }
 
 data "aws_iam_policy_document" "runbook_trust" {
@@ -164,6 +167,16 @@ data "aws_iam_policy_document" "ops_read" {
       variable = "aws:RequestedRegion"
       values   = [var.aws_region]
     }
+  }
+
+  # Diagnose shows whether the AWS budget stop is on: is the answer-model
+  # deny policy (infra/modules/compute/budget.tf) attached to the node's
+  # role? Read-only, that one role.
+  statement {
+    sid       = "ReadBudgetStopAttachment"
+    effect    = "Allow"
+    actions   = ["iam:ListAttachedRolePolicies"]
+    resources = [local.glassbox_instance_role_arn]
   }
 }
 
@@ -381,6 +394,16 @@ data "aws_iam_policy_document" "ops" {
       variable = "aws:RequestedRegion"
       values   = [var.aws_region]
     }
+  }
+
+  # Diagnose shows whether the AWS budget stop is on: is the answer-model
+  # deny policy (infra/modules/compute/budget.tf) attached to the node's
+  # role? Read-only, that one role.
+  statement {
+    sid       = "ReadBudgetStopAttachment"
+    effect    = "Allow"
+    actions   = ["iam:ListAttachedRolePolicies"]
+    resources = [local.glassbox_instance_role_arn]
   }
 }
 

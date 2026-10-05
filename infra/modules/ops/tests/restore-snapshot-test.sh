@@ -39,6 +39,9 @@ case "$*" in
   *describe-volumes*)
     [ -n "${STUB_VOLS_FAIL:-}" ] && exit 254
     echo '{"Volumes": [{"VolumeId": "vol-0bbbbbbbbbbbbbbbb", "CreateTime": "2026-09-01T00:00:00Z", "Size": 20, "VolumeType": "gp3"}]}' ;;
+  *list-attached-role-policies*)
+    [ -n "${STUB_IAM_FAIL:-}" ] && exit 254
+    echo "${STUB_STOP_ATTACHED:-}" ;;
   *send-command*) echo cmd-1 ;;
   *get-command-invocation*) cat "$STUB_INVOCATION" ;;
 esac
@@ -186,5 +189,20 @@ rc=$?
 check "list without permission: still exits 0" "$rc"
 grep -qF 'could not list snapshots' <<<"$out" && grep -qF 'could not list volumes' <<<"$out"
 check "list without permission: says so" $?
+
+# 7. The budget stop line: off, on, and unreadable (before the Bootstrap run).
+out=$(bash "$script" snapshots 2>&1)
+grep -qF 'off (answers enabled)' <<<"$out"
+check "budget stop: off when the deny policy is not attached" $?
+out=$(STUB_STOP_ATTACHED=glassbox-budget-stop-answer-models bash "$script" snapshots 2>&1)
+grep -qF 'ON: glassbox-budget-stop-answer-models is attached to glassbox-instance' <<<"$out"
+check "budget stop: ON when the deny policy is attached" $?
+grep -q 'list-attached-role-policies --role-name glassbox-instance' "$STUB_LOG"
+check "budget stop: reads only the node's role" $?
+out=$(STUB_IAM_FAIL=1 bash "$script" snapshots 2>&1)
+rc=$?
+check "budget stop unreadable: still exits 0" "$rc"
+grep -qF "can't list the node role's policies" <<<"$out"
+check "budget stop unreadable: says so" $?
 
 exit "$fail"

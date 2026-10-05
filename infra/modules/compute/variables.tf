@@ -26,6 +26,12 @@ variable "ecr_repository_arn" {
 }
 
 variable "alert_email" {
-  description = "Address the glassbox-alerts topic emails (status-check alarms). Already public on the site, so not a secret. AWS sends a confirmation link first; nothing is delivered until it is clicked."
+  description = "Address the glassbox-alerts topic (status-check alarms) and the monthly budget alerts (budget.tf) email. Already public on the site, so not a secret. The topic sends a confirmation link first and delivers nothing until it is clicked; budget emails need no confirmation."
   type        = string
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly AWS cost budget in USD. Actual spend at 100% stops the Bedrock answer models."
+  type        = number
+  default     = 25
 }
