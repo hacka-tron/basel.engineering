@@ -1366,7 +1366,9 @@ async def _stream(
         if tail:
             response_parts.append(tail)
             yield token_frame(tail)
-        if content_filtered and not "".join(response_parts).strip():
+        if (content_filtered or sources_lines.dropped) and not "".join(response_parts).strip():
+            # v19 review round 2: an answer that was only "Sources: 1, 4" says nothing;
+            # it becomes the abstention (never cached), like a provider filter stop.
             response_parts.append(ABSTENTION_ANSWER)
             yield token_frame(ABSTENTION_ANSWER)
         yield await stage("llm", "end", duration_ms=round((time.monotonic() - llm_started) * 1000))

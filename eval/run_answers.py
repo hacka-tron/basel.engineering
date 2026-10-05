@@ -207,6 +207,8 @@ async def run_case(
             # dropped before anything is sent; the row records that it happened.
             answer = strip_sources_lines(raw_answer)
             row["sources_line_dropped"] = answer != raw_answer
+            if row["sources_line_dropped"] and not answer.strip():
+                answer = ABSTENTION_ANSWER  # same as the API
             tokens_in, tokens_out = _token_counts(prompt, raw_answer, usage)
         row.update(
             {

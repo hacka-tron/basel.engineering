@@ -94,6 +94,14 @@ def test_a_sources_line_split_across_tokens_never_reaches_the_client(monkeypatch
     assert saved[0]["timings"]["sources_line_dropped"] == 1
 
 
+def test_an_answer_that_is_only_a_sources_line_becomes_the_abstention(monkeypatch):
+    llm = TokenLLM(["Sour", "ces: 1, 4"])
+    cache, saved, streams, dones = _ask_twice(monkeypatch, llm)
+    assert "".join(_tokens(streams[0])) == ABSTENTION_ANSWER
+    assert cache.puts == []
+    assert all(row["timings"]["abstained"] == 1 for row in saved)
+
+
 def test_an_answer_without_a_sources_line_is_unchanged(monkeypatch):
     llm = TokenLLM(["Sure", ": it uses ", "Redis.\n", "Some more."])
     _, saved, streams, _ = _ask_twice(monkeypatch, llm)

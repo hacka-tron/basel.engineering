@@ -15,8 +15,10 @@ with no delay. Apply it before ``privacy.StreamMasker``, so the masker sees only
 text that will be sent.
 
 Two exceptions (v19 review): lines inside a fenced code block (a YAML ``sources:``
-key) are never dropped, and an answer is never emptied: if the stream ends with
-nothing sent but a dropped line, that line is sent after all.
+key) are never dropped, and an answer is never emptied by a line that says
+something: if the stream ends with nothing sent but such a line, it is sent after
+all. An answer that is only "Sources: 1, 4" comes out empty; the API then sends the
+abstention instead (review round 2), which is never cached.
 """
 
 from __future__ import annotations
@@ -43,6 +45,20 @@ _HOLD_MAX = 32
 def is_sources_line(line: str) -> bool:
     """True for a line that is a "Sources: ..." label (the whole line is dropped)."""
     return bool(_SOURCES_LABEL.match(line))
+
+
+# What follows a label when the line is only a list of source references:
+# numbers, brackets, commas, "and", dashes.
+_REFERENCES_ONLY = re.compile(r"[\s\d\[\](),;.&*_-]*(?:and[\s\d\[\](),;.&*_-]*)*", re.IGNORECASE)
+
+
+def is_bare_references(text: str) -> bool:
+    """True when every line is a sources label followed only by reference numbers."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    return bool(lines) and all(
+        (m := _SOURCES_LABEL.match(line)) and _REFERENCES_ONLY.fullmatch(line[m.end() :])
+        for line in lines
+    )
 
 
 def strip_sources_lines(text: str) -> str:
@@ -137,8 +153,14 @@ class SourcesLineFilter:
             self._buf = ""
             self._dropping = False
         held, self._buf = self._buf, ""
-        if not self._sent_text and not held.strip() and self._dropped_text.strip():
-            # Never empty a whole answer: the only line was a label line.
+        if (
+            not self._sent_text
+            and not held.strip()
+            and self._dropped_text.strip()
+            and not is_bare_references(self._dropped_text)
+        ):
+            # Never empty a whole answer whose only line starts like a label but says
+            # something ("Source: the retrieval worker reads the stream.").
             self.dropped = 0
             return self._dropped_text.strip()
         # Trailing blank lines are dropped too: they only ever preceded a label
