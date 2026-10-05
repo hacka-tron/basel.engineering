@@ -628,9 +628,13 @@ _PLAYFUL_PLACEHOLDER_EXAMPLES = (
 # chunks the project's k3s section ranks first and Nova Lite answered "Yes, I've used
 # Kubernetes in production" from it; this example, first in the block next to the
 # absent-tech one, restores the owner's "No, but..." shape.
+# Owner sign-off round 3: the k3s section no longer says "(not a job)"; with the owner's
+# new "orchestrates my workers" few-shot, the annotated wording above lost the "No" (0/3
+# replays). Mirroring the approved answer's shape ("I've used it ..., where ...")
+# restores it (5/5 replays on three retrievals).
 _PRODUCTION_EXAMPLE = (
-    "Q: <Tech> in production? (only personal-project use in the sources) A: No, but I "
-    "used it extensively in my personal project <Project>, for <purpose>."
+    "Q: <Tech> in production? A: No, but I've used it extensively in my personal project "
+    "<Project>, where <what it does>."
 )
 # Examples every strict prompt keeps, approved set or not: they teach behaviors the
 # approved set has no example for (absent tech, a partial answer, system answers).
