@@ -18,7 +18,17 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 - Keep the rewrite for follow-up questions only; don't rewrite every question, and look up the answer cache before any rewrite.
 - Use k=4–6 with at most 2 chunks per document, not top-2.
 - Synthetic per-skill cheat-sheet chunks only if phase 7/8 still miss. Generate them offline from the source documents, with `derived_from` set, and gate them with the factuality grader. The source documents list Kafka as a skill but give no job or project for it, and never mention gRPC.
-- Claude 3.5 Haiku is retired. If the owner submits Anthropic's first-use form, A/B Haiku 4.5 against Nova Pro on v17. Estimated cost at 100/200/500 questions a day: Nova Lite about $0.6/$1.2/$2.9 a month, Nova Pro about $7/$13/$33, Haiku 4.5 about $9/$19/$47. The daily cap holds Haiku's worst case to about $73.
+- **Answer-model plan (owner approved, 2026-10-04).** On the v17 prompt, A/B test **Nova 2 Lite** and **Claude Haiku 4.5** against **Nova Lite v1** (control) on the golden set.
+  - Run each model at least 3 times (run-to-run variance is high).
+  - Score: persona/first person, unsupported claims, dual-experience coverage, answer length, time to first token.
+  - **Nova 2 Lite** can be tested now (GA, no form). In us-east-1 it runs only through the `us.` or `global.` inference profile, so check the IAM policy for the inference-profile ARN. Extended thinking is off by default; keep it off.
+  - **Haiku 4.5** needs Anthropic's first-use form. Only the owner submits it, never an agent.
+  - Optional cheap challenger: Gemma 4 31B. gpt-oss-120b has the worst Vectara score (14.2%).
+  - Skip: Nova Pro/Micro, Llama 4, Mistral, DeepSeek, Qwen3 32B, Sonnet 5.5 (too costly for 1–2 sentences), and Nova 2 Pro (preview). Claude 3.5 Haiku and Nova Premier are retired.
+  - Monthly cost at 3K in / 60 out per answer, 100/200/500 questions a day: Nova Lite v1 $0.6/$1.2/$2.9; Nova 2 Lite (global) $3.2/$6.3/$15.8; Haiku 4.5 (global) $9.9/$19.8/$49.5. The daily cap bounds the worst case.
+  - Faithfulness evidence (Vectara, 2026-09-22): Nova 2 Lite 5.1%, Nova Lite 6.1%, Haiku 4.5 9.8%. So Haiku has to prove itself on unsupported claims too, not just tone.
+  - Embeddings: keep Titan v2 and don't re-ingest. Try Cohere Embed 4 in a side index only if the golden set shows retrieval misses.
+  - Sources: Bedrock pricing, the Nova 2 Lite model card, the Vectara hallucination leaderboard, Artificial Analysis, and the outcomeops.ai Reddit-author write-ups (all seen 2026-10-04).
 
 **Persona: Basel's uploaded consciousness (owner, 2026-10-04).** The premise of every answer is that Basel uploaded his consciousness into this application and is answering visitors himself. Give it its own section in the system prompt (shared by the strict and the casual/tone-routed prompts):
 
