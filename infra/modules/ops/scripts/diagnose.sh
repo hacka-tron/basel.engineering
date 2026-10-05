@@ -23,7 +23,8 @@
 #     else) plus a SCAN of rate-limit bucket names; values are printed only
 #     after checking they are numbers;
 #   - MySQL: one read-only session (SET SESSION TRANSACTION READ ONLY) of
-#     SELECT counts; the password comes from the mysql container's own
+#     SELECT counts (query log, last ingest run's sweep summary, TTFT
+#     p50/p95); the password comes from the mysql container's own
 #     environment inside the exec (MYSQL_PWD), so it is never on a command
 #     line, in this script or in the output; question text, IPs and hashes
 #     are never selected (only counts).
@@ -85,10 +86,11 @@ GET warm:budget:$today
 GET warm:budget:$yesterday
 GET corpus:ver:about_me
 GET corpus:ver:about_system
+GET corpus:ver:portfolio
 EOF
   )
-  if [ "${#replies[@]}" -lt 11 ]; then
-    echo "(redis did not answer: ${#replies[@]} of 11 replies)"
+  if [ "${#replies[@]}" -lt 12 ]; then
+    echo "(redis did not answer: ${#replies[@]} of 12 replies)"
   else
     local day answers rewrites used left
     printf 'cap: %s answers/day (= %s quarter-units; answer 4, follow-up rewrite 1)\n' \
@@ -120,8 +122,8 @@ EOF
     printf 'kill switch glassbox:kill:disable_llm: %s\n' "$kill_state"
     printf 'warm-up LLM calls: today %s, yesterday %s (cap %s/day, part of the cap above)\n' \
       "$(as_int "${replies[7]}")" "$(as_int "${replies[8]}")" "$warm_cap_label"
-    printf 'corpus versions (bumped per changed document; older cached answers go cold): about_me %s, about_system %s\n' \
-      "$(as_int "${replies[9]}")" "$(as_int "${replies[10]}")"
+    printf 'corpus versions (bumped per changed document; older cached answers go cold): about_me %s, about_system %s, portfolio %s\n' \
+      "$(as_int "${replies[9]}")" "$(as_int "${replies[10]}")" "$(as_int "${replies[11]}")"
   fi
 
   # Rate-limit buckets touched in the last 10 minutes (rl:<salted hash of
@@ -149,13 +151,21 @@ EOF
     done
   fi
 
-  # Today's query log (UTC), counts only.
-  echo "query log today (UTC):"
+  # Today's query log (UTC), the last ingest run and TTFT, counts only.
+  echo "query log today (UTC), last ingest run, TTFT:"
   # The variables expand inside the mysql container, from its own env.
+  # --force: a missing table or column fails only its own statement.
   # shellcheck disable=SC2016
-  kc -n data exec -i mysql-0 -c mysql -- sh -c \
-    'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --connect-timeout=10 -N -B -u "$MYSQL_USER" "$MYSQL_DATABASE"' \
-    2>&1 <<'SQL' | redact 160 | head -45 || true
+  query_log_sql | kc -n data exec -i mysql-0 -c mysql -- sh -c \
+    'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --connect-timeout=10 --force -N -B -u "$MYSQL_USER" "$MYSQL_DATABASE"' \
+    2>&1 | redact 160 | head -60 || true
+}
+
+# The read-only SQL of the query-log block (SELECT only; question text, IPs
+# and hashes are never selected, only counts and integers). Its own function
+# so the test can run exactly this text against a local MySQL.
+query_log_sql() {
+  cat <<'SQL'
 SET SESSION TRANSACTION READ ONLY;
 SET SESSION max_execution_time = 10000;
 SET time_zone = '+00:00';
@@ -167,6 +177,18 @@ SELECT CONCAT('  hour ', LPAD(HOUR(created_at), 2, '0'), 'Z: ', COUNT(*), ' asks
   FROM queries WHERE created_at >= UTC_DATE() GROUP BY HOUR(created_at) ORDER BY HOUR(created_at);
 SELECT CONCAT('  most repeated question #', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC), ': asked ', COUNT(*), ' times (', MIN(corpus), ', ', SUM(mode = 'full' AND cache_status = 'miss'), ' generated)')
   FROM queries WHERE created_at >= UTC_DATE() GROUP BY question ORDER BY COUNT(*) DESC LIMIT 3;
+SELECT '  last ingest run: none recorded' FROM (SELECT 1) d WHERE NOT EXISTS (SELECT 1 FROM ingestion_runs);
+SELECT CONCAT('  last ingest run #', id, ': ', status, ', started ', TIMESTAMPDIFF(MINUTE, started_at, NOW()), ' min ago, docs changed ', COALESCE(docs_changed, 0), ', chunks written ', COALESCE(chunks_written, 0), ', sweep mode ', CASE WHEN JSON_EXTRACT(notes, '$.sweep.mode') IS NULL THEN 'none' WHEN JSON_UNQUOTE(JSON_EXTRACT(notes, '$.sweep.mode')) REGEXP '^[a-z_]{1,12}$' THEN JSON_UNQUOTE(JSON_EXTRACT(notes, '$.sweep.mode')) ELSE '?' END, ', corpora in sweep ', COALESCE(JSON_LENGTH(JSON_EXTRACT(notes, '$.sweep.corpora')), 0))
+  FROM ingestion_runs ORDER BY id DESC LIMIT 1;
+SELECT CONCAT('    sweep ', CASE WHEN jt.corpus REGEXP '^[a-z_]{1,20}$' THEN jt.corpus ELSE '?' END, ': known ', COALESCE(jt.known, '?'), ', planned ', COALESCE(jt.planned, '?'), ', deleted ', COALESCE(jt.deleted, '?'), ', ', CASE WHEN jt.refused IS NULL OR JSON_TYPE(jt.refused) = 'NULL' THEN 'not refused' ELSE 'REFUSED (reason in ingestion_runs.notes)' END)
+  FROM (SELECT notes FROM ingestion_runs ORDER BY id DESC LIMIT 1) r,
+  JSON_TABLE(r.notes, '$.sweep.corpora[*]' COLUMNS (corpus VARCHAR(40) PATH '$.corpus', known INT PATH '$.known', planned INT PATH '$.planned', deleted INT PATH '$.deleted', refused JSON PATH '$.refused')) jt;
+SELECT '  ttft last 24h: no asks with a ttft_ms' FROM (SELECT 1) d
+  WHERE NOT EXISTS (SELECT 1 FROM queries WHERE created_at >= NOW() - INTERVAL 1 DAY AND ttft_ms IS NOT NULL);
+SELECT CONCAT('  ttft last 24h, cache_status ', cache_status, ': n ', MAX(n), ', p50 ', MAX(IF(rn = CEIL(n * 0.50), ttft_ms, NULL)), ' ms, p95 ', MAX(IF(rn = CEIL(n * 0.95), ttft_ms, NULL)), ' ms')
+  FROM (SELECT cache_status, ttft_ms, ROW_NUMBER() OVER (PARTITION BY cache_status ORDER BY ttft_ms) AS rn, COUNT(*) OVER (PARTITION BY cache_status) AS n
+          FROM queries WHERE created_at >= NOW() - INTERVAL 1 DAY AND ttft_ms IS NOT NULL) ranked
+  GROUP BY cache_status ORDER BY cache_status;
 SQL
 }
 
@@ -277,7 +299,7 @@ main() {
 
   # Last, and bounded as a whole, so a slow Redis or MySQL exec can't push
   # the node sections above past the document's 300 s limit.
-  section "LLM budget, kill switch, warm-up cap, query log (counts only)"
+  section "LLM budget, kill switch, warm-up cap, query log, last ingest run, TTFT (counts only)"
   timeout --kill-after=5 60 bash -c "$(declare -f kc redact as_int redis_read budget_section); budget_section" ||
     echo "(budget section did not finish within 60s)"
 
