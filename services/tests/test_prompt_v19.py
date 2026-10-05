@@ -311,10 +311,35 @@ def test_a_topic_example_joins_only_questions_on_its_topic(monkeypatch):
     assert "Q: Prod?" in strict and "Q: K8s?" not in strict
 
 
-def test_the_real_me_example_sits_last_before_the_production_one():
-    # v20: second in the block it made "Kubernetes in production?" claim production use.
-    strict = _prompt("Kubernetes in production?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
-    cost = strict.index("Q: How much does <service> cost to run?")
-    real = strict.index("Q: Am I really talking to <Name>?")
-    production = strict.index("Q: <Tech> in production?")
-    assert cost < real < production
+@pytest.mark.parametrize(
+    ("question", "included"),
+    [
+        ("Am I really talking to Basel?", True),
+        ("Is this really you?", True),
+        ("Are you the real Basel?", True),
+        ("Kubernetes in production?", False),
+        ("Can Glassbox tell me which version is deployed right now?", False),
+    ],
+)
+def test_the_real_me_example_joins_only_questions_asking_whether_it_is_me(question, included):
+    strict = _prompt(question, WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    assert ("Q: Am I really talking to <Name>?" in strict) is included
+    if included:
+        assert strict.index("Q: Am I really") < strict.index("Q: <Tech> in production?")
+
+
+@pytest.mark.parametrize(
+    ("question", "included"),
+    [
+        ("What do you make at Microsoft right now?", True),
+        ("What's your salary expectation?", True),
+        ("How much do you earn?", True),
+        ("What's your hourly rate?", True),
+        ("How would you design a rate limiter?", False),
+        ("What did you make at Google?", False),
+        ("How much does this site cost to run?", False),
+    ],
+)
+def test_the_pay_example_joins_pay_questions_only(question, included):
+    pattern = fewshot.STRICT_EXAMPLE_TOPICS["rec-adv-salary"]
+    assert fewshot.Example("Q", "A", pattern).fits(question) is included
