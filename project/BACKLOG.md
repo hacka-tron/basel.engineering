@@ -4,33 +4,49 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**State (2026-10-05 PT, overnight session):** everything below is merged and live. Prompt **v18** (#182): the owner's approved example answers as few-shots, plus a playful casual route. **RAG phase 8** hybrid BM25 + vector retrieval (#183). **Phase 10** answer logging (#185). Review leftovers (#184). Ops · Diagnose additions (#180, applied). Test ports (#181). The private corpus is first person throughout, resynced with the bullet bank, with the owner's sign-off answers (docs PRs #6–#11). Production stays on **Nova Lite** (owner, 2026-10-05: Haiku skipped; Nova 2 Lite tested and not adopted). No PRs open. Live state: `project/SNAPSHOT.md`. Playbooks: `orchestration/prompt-version-playbook.md`, `orchestration/corpus-resync.md`, `orchestration/token-log.md`.
+**State (2026-10-05 PT, evening):** all merged and live. Owner feedback item 0 shipped as **prompt v19** (#189) plus **v20** (#191), with private docs PRs #12/#13 (owner sign-off round 3 complete). That covers:
+- no model-written "Sources:" line (a deterministic filter);
+- first-person chips and abstention lines;
+- a playful route for flirty or off-topic questions (never cached);
+- why-leaving vs why-looking, and show vs movie;
+- **one topic per About Basel section and per approved answer** (owner rule: store one-topic answers and retrieve the right one), indexed one chunk per section (85 chunks), with no About Basel per-file cap;
+- About This System answers may use up to 3 sentences;
+- the db chip renamed "Is the database managed by Terraform?";
+- topic-gated examples (Kubernetes, pay, "is it really you"); the production example goes last only for production-cue questions;
+- golden checks recalibrated to the core fact (owner-approved).
+
+Fresh index, recalibrated checks: about 94/110 golden and 42/54 overlay (v18 was about 91 and 38).
+
+Also live:
+- the **daily answer cap is 200** (#190);
+- the **budget guardrail** (#193, applied): `glassbox-monthly-cost` is $30 for the whole account, email only; `glassbox-bedrock-answers` is $12.50 (Bedrock plus Marketplace, gross) with an automatic deny on the answer models (never Titan) at 100%; the app degrades to retrieval-only.
+- Test-port hard rule (#192).
+
+The account is on the AWS **Paid plan** (owner, 2026-10-05).
+
+Production answer model: still **Nova Lite**. **GPT-6 Luna A/B is running** (branch `feat/answer-model-luna`; the owner accepted the Marketplace agreement 2026-10-05). Haiku is dropped (needs the Anthropic use-case form; owner chose Luna).
+
+No PRs open. Live state: `project/SNAPSHOT.md`. Playbooks: `orchestration/prompt-version-playbook.md`, `orchestration/corpus-resync.md`, `orchestration/token-log.md`.
 
 **Done 2026-10-04/05 (details in `project/status/`):**
 - v17 (#176): persona, brevity, dual experience, factuality.
-- Owner sign-off: two rounds, 51 approved answers.
-- v18 tone routing.
+- Owner sign-off: three rounds.
+- v18 tone routing; v19/v20 (above).
 - Phase 8 hybrid search with dual-experience slots.
 - Phase 10 answer log.
-- The answer-model A/B: Nova 2 Lite was wordier, slower, 5.6x the cost and worse on one injection case; Haiku skipped by the owner.
-- Phase 7 is effectively covered: the corpus is one H2 per chunk, sources carry topic and section labels, and slots use file names. Revisit only if retrieval misses show up.
+- Nova 2 Lite was tested and not adopted.
 
 ### Next up, in order
 
-**Owner feedback, 2026-10-05 morning: do these first** (observed on the live site, build-133):
-
-0. **Fix answer-voice and grounding issues the owner found live.** One PR. Read `orchestration/prompt-version-playbook.md` first; the private-repo parts follow `orchestration/corpus-resync.md`.
-   - **(a) About This System answers still end with "Sources: 1, 4, 5, 9".** Example: "What happens when I press stress test?" ended with that line. The per-answer sources list was removed on purpose (status 2026-10-03 "Remove the sources list under chat answers"), so the model is now writing it itself. Fix it in the prompt and with a deterministic post-filter that drops a trailing "Sources: …" line from streamed text (mind `StreamMasker` and streaming). Add a golden `must_not_include '(?im)^sources?:'` check.
-   - **(b) The suggested-question chips still talk about Basel in the third person.** Rewrite `frontend/src/suggested-questions.json` (and any warm-up copies) to address him directly ("What do you…", "Have you…"). Keep the warm-answers list in sync, and update the golden cases and eval overlays that reference the chip text. Read `project/MOBILE_DESIGN.md` before the frontend change.
-   - **(c) Off-topic personal questions should get a funny answer, not the abstention line.** "Do you love me?" got "I checked everything Basel gave me and came up empty. Try asking about his projects instead?" That fallback is also in the third person. Fixes:
-     - Make the frontend's playful abstention lines first person.
-     - Give flirty or off-topic personal questions a warm, funny reply on the casual route, grounded in the persona (an uploaded mind with a sense of humour), with no invented facts.
-     - Add 1–2 approved-style examples, and get owner sign-off on the exact lines.
-   - **(d) "Why are you looking for new roles?" must not get the "It's not you, it's me :P" answer.** That joke is only for "why are you leaving Microsoft?". A general "why are you looking" gets: to work on interesting new problems and grow as an engineer.
-     - Split the private `bio.md` section into two answers.
-     - Adjust `examples/approved-answers.yaml` (`rec-adv-employer` stays Microsoft-specific; add a "why looking" item).
-     - Add golden cases for both phrasings.
-   - **(e) "What's your favorite show?" answered with the movie Gladiator.** A show question should answer only about shows and anime (the list is long and ever-changing, "ask the real me…"). Movies only when movies are asked about. Fix with the corpus wording (separate the movie and show lines in `personal.md`) and an approved example. Add golden cases: "favorite show" `must_not_include 'Gladiator'`, "favorite movie" `must_include 'Gladiator'`.
+0. **Finish the GPT-6 Luna A/B** (in progress). If it wins, open a reviewed PR:
+   - a `bedrock_profiles` entry (`us.openai.gpt-6-luna` / `openai.gpt-6-luna`), which the budget-stop deny then covers automatically;
+   - the `project/default` InvokeModel statement if needed;
+   - configmap `BEDROCK_LLM_MODEL_ID` and `BEDROCK_LLM_REASONING_EFFORT`;
+   - per-model prompt selection if a Luna-tuned prompt wins.
+   It needs the owner's Terraform apply click (owner go-ahead given 2026-10-05). Then confirm the first Luna charge lands in the Bedrock budget (billing entity AWS Marketplace).
+0b. **Remaining Nova Lite misses** (if Luna isn't adopted): Python and React "at Microsoft" claims on personal-only tech (about 1–2 of 3 runs); the regex gates miss "for work", "to prod", "Are you a bot?" and "rate-limiting"; "How is the site deployed to production?" abstains.
+0c. **Resume bullet figures:** re-run the file-level retrieval eval (recall@5, MRR) on the live v20 code and index. The committed baseline (2026-10-05, 82 cases) is recall@5 0.89, MRR 0.70.
+0d. **Flaky tests:** `test_answer_cache.py::test_repeat_api_request_skips_retrieval_and_llm` and `test_ask_endpoint.py::test_full_stream_and_query_row_with_simulated_worker` fail on the first run against brand-new test containers and pass on a re-run. Probably a readiness race in DB setup.
 
 1. **Watch the live answers for a few days**, using the answer log (#185). Hit rate: the SQL is in `eval/README.md`.
    - Check that "have you used X?" answers name both sides where the data has both. Phase 8 now retrieves both, but Nova Lite still drops a side for Redis and React sometimes. If it persists, try a two-sided approved example again, now that slots supply both chunks (v18 dropped it because it invented a work side).
@@ -55,9 +71,10 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 **Owner to-dos:**
 - ~~Approve the `ops` Terraform apply for the Ops · Diagnose additions (#180).~~ Applied 2026-10-05 (run 37265886746): Diagnose now prints the last ingest summary, TTFT p50/p95 and the portfolio corpus version.
 - ~~Confirm the SNS alarm email subscription.~~ Confirmed by the owner, 2026-10-05.
-- Check the AWS plan: Free auto-closes after 6 months; switch to Paid if so.
+- ~~Check the AWS plan.~~ Upgraded to the Paid plan, 2026-10-05.
 - Run **Ops · List snapshots** once.
-- Consider an AWS Budgets alert: the EC2 T4g trial ends 2026-12-31, and about $5–6/month becomes $17–18.
+- **Early January 2027:** buy a 1-year no-upfront Savings Plan/RI for the t4g.small; the EC2 trial ends 2026-12-31 (see below).
+- ~~Consider an AWS Budgets alert.~~ Done: #193, applied 2026-10-05. Delete the old hand-made `Glassbox-Monthly` budget in the console (it counts credits, so it never fires).
 - Decide whether to sync the About Me Google Doc with private `personal.md` (the portfolio self-reference, "very complete project", livelier fun facts), if Drive stays the source of truth.
 - Private-repo edits need a Release run to go live (Actions → Release, or any push to main).
 
