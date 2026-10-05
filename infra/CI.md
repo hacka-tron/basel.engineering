@@ -405,21 +405,51 @@ merged Diagnose changes #116/#121, and is expected); (4) click the AWS confirmat
 (5) run Ops · List snapshots (alarms `OK`; snapshots appear after the
 next 04:00 UTC window) and Ops · Diagnose.
 
-## Budget stop (monthly cost budget)
+## Budget stop (monthly budgets)
 
 Added on 2026-10-05 (`infra/modules/compute/budget.tf`). It takes effect once
 applied (order below).
 
-**Budget:** `glassbox-monthly-cost`, $25 a month (`monthly_budget_usd`), the
-whole account's unblended cost. Credits and refunds are left out, so it counts
-gross usage: promotional credits currently cover the whole bill, and a budget
-that counted them (like the older hand-made `Glassbox-Monthly` one, which reads
-$0.00) would never fire. It emails `alert_email` directly (no SNS topic, no
-confirmation click) at actual 50%, 80% and 100% and at forecasted 100%.
+**Two budgets (owner decision, 2026-10-05).** The node's fixed costs (instance,
+disk, IPv4 address: about $17.50 a month on demand once the EC2 trial ends on
+2026-12-31) would trip a whole-bill stop every month for reasons that have
+nothing to do with LLM spend, so the stop watches Bedrock alone:
+
+- `glassbox-monthly-cost`: the whole account, $30 a month
+  (`monthly_budget_usd`), unblended. **Email alerts only** at actual 50%, 80%
+  and 100% and at forecasted 100%; no action.
+- `glassbox-bedrock-answers`: Bedrock spend only, $12.50 a month
+  (`bedrock_budget_usd`), unblended. Emails at actual 80% and 100%, and
+  carries the automatic stop at actual 100%.
+
+Both count **gross** usage: credits and refunds are left out. Promotional
+credits currently cover the whole bill, and a budget that counted them (like
+the older hand-made `Glassbox-Monthly` one, which reads $0.00) would never
+fire. Both email `alert_email` directly (no SNS topic, no confirmation click).
 AWS sends each actual alert once per month. Forecast alerts need about five
 weeks of usage history before they can fire.
 
-**The stop:** at actual 100% a budget action with approval model `AUTOMATIC`
+**What counts as Bedrock.** The filter is `SERVICE = "Amazon Bedrock"` OR
+`BILLING_ENTITY = "AWS Marketplace"`, minus `RECORD_TYPE` Credit and Refund.
+Amazon's own models (Nova, Titan) bill under the service "Amazon Bedrock".
+Third-party models (Anthropic's, and the OpenAI GPT-6 Luna offer the owner
+plans to switch to) are sold through AWS Marketplace. They bill under their
+own product name (for example "... (Amazon Bedrock Edition)") with billing
+entity "AWS Marketplace", so a "Amazon Bedrock" service filter alone would
+miss them. Luna's product name can't be known before its first charge. The
+filter therefore uses the documented, stable dimension: Cost Explorer
+documents `Billing entity` "AWS Marketplace" as "a purchase in AWS
+Marketplace". **Trade-off:** any other Marketplace purchase in this account
+would also count toward the Bedrock budget and could fire the stop early.
+Today the account has none (checked 2026-10-05). After Luna's first charge,
+check in Cost Explorer (group by Service, billing entity "AWS Marketplace")
+that it appears. The expression was checked read-only against Cost Explorer:
+September and October show the gross Bedrock usage, where a plain
+"Amazon Bedrock" filter with credits shows $0. `filter_expression` can't be
+combined with `cost_types`, which is why credits are excluded through
+`RECORD_TYPE` there.
+
+**The stop:** at actual 100% of `glassbox-bedrock-answers`, a budget action with approval model `AUTOMATIC`
 attaches the managed policy `glassbox-budget-stop-answer-models` to the node's
 role `glassbox-instance`. It denies `bedrock:InvokeModel` and
 `bedrock:InvokeModelWithResponseStream` (Converse and ConverseStream have no
@@ -435,17 +465,16 @@ its first retrieval-only answer and hands its warm-up slot back. AWS emails `ale
 when the action runs.
 
 Budgets runs the action as `glassbox-budget-action`: trusted only by
-`budgets.amazonaws.com` with `aws:SourceAccount` and an `aws:SourceArn` of this
-budget (or one of its actions), and allowed only `iam:AttachRolePolicy` and
+`budgets.amazonaws.com` with `aws:SourceAccount` and `aws:SourceArn`
+`budget/*` of this account (AWS's documented form for Budgets), and allowed only `iam:AttachRolePolicy` and
 `iam:DetachRolePolicy` on `glassbox-instance` with `iam:PolicyARN` equal to the
 stop policy.
 
 **Overshoot:** AWS billing data, which Budgets evaluates, is updated at least
-once a day and lags usage by hours, so spend can pass $25 before the stop
-fires. The app's own daily LLM cap still bounds Bedrock spend per day in the
-meantime. The stop only cuts Bedrock answers: the node, its disk, the IP and
-the rest of the fixed monthly cost keep accruing, and they count toward the
-same $25.
+once a day and lags usage by hours, so Bedrock spend can pass $12.50 before
+the stop fires (Marketplace charges may lag more). The app's own daily LLM cap
+still bounds Bedrock spend per day in the meantime. The stop only cuts Bedrock
+answers; the whole-account budget only emails.
 
 **Is it on?** Ops · Diagnose (and Ops · List snapshots) prints an "AWS budget
 stop" line: `off (answers enabled)` or `ON: ... is attached`.
@@ -459,13 +488,13 @@ stop" line: `off (answers enabled)` or `ON: ... is attached`.
   Nothing to do; Diagnose shows `off` afterwards. Bedrock picks the change up
   within a minute or so (IAM propagation); no restart is needed.
 - **Earlier, by hand (one click):** AWS console → Billing and Cost Management
-  → Budgets → `glassbox-monthly-cost` → in the budget's **Action history**
+  → Budgets → `glassbox-bedrock-answers` → in the budget's **Action history**
   table select the completed action → **Reverse**. The policy is detached and
   the action shows **Reversed**: Budgets won't run it again this month, so
   only do this after raising the limit or deciding the extra spend is fine.
   To make it watch again in the same month, choose **Reset** on it (if spend
   is still over the threshold it fires again). To raise the limit instead,
-  change `monthly_budget_usd` in Terraform (a PR and the Terraform approval),
+  change `bedrock_budget_usd` in Terraform (a PR and the Terraform approval),
   not in the console, or the next apply puts it back.
 - Terraform never undoes the stop by itself: `glassbox-instance` doesn't
   manage its policy attachments, so an apply leaves an attached stop in
@@ -477,7 +506,7 @@ to run `budgets:ExecuteBudgetAction` and pass the action role, which is more
 access than one console click saves (BACKLOG follow-up).
 
 **Cost:** free. Monitoring-only budgets are free, and the first two
-action-enabled budgets in an account are free.
+action-enabled budgets in an account are free (this is the one).
 
 **Apply order** (IAM first, or the Terraform apply fails with
 AccessDenied): (1) merge; (2) Actions → Bootstrap → Run workflow on `main`,
@@ -485,13 +514,13 @@ approve: in-place updates to the `glassbox-ci` (Budgets writes on
 `budget/glassbox-*`, PassRole of `glassbox-budget-action` to Budgets),
 `glassbox-ci-plan` (Budgets reads), `glassbox-ops-read` and `glassbox-ops`
 (read the node role's attached policies) role policies; (3) approve the
-pending Terraform run on `main` (`terraform-prod`): 5 to add (the stop
-policy, `glassbox-budget-action` and its inline policy, the budget, the
+pending Terraform run on `main` (`terraform-prod`): 6 to add (the stop
+policy, `glassbox-budget-action` and its inline policy, the two budgets, the
 budget action), nothing changed or destroyed; (4) run Ops · Diagnose: the
 budget stop line says `off`; (5) optional: delete the old hand-made
 `Glassbox-Monthly` budget in the Budgets console (it counts credits and never
 fires). After the apply, the next PR plan should show no change to
-`module.compute.aws_budgets_budget.monthly`; a diff in its `notification`
+`module.compute.aws_budgets_budget.bedrock` (or `.monthly`); a diff in its `notification`
 set would mean the action's own notification doesn't match the 100% one
 in `budget.tf` (fix the module, not the console).
 
