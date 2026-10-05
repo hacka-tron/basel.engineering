@@ -293,8 +293,8 @@ def select_chunks(
     """The final list: slotted chunks first, then fused order, at most ``per_document_cap``
     chunks per source file and ``top_k`` in all.
 
-    ``slot_ids`` are chunk ids that must be included (the dual-experience slots);
-    an id not in ``fused`` is ignored.
+    ``slot_ids`` are chunk ids to include first (the dual-experience slots, then the
+    vector anchors), still within the per-file cap; an id not in ``fused`` is ignored.
     """
     by_id = {entry["chunk_id"]: entry for entry in fused}
     selected: list[dict] = []
@@ -305,8 +305,13 @@ def select_chunks(
         per_document[entry["source_path"]] = per_document.get(entry["source_path"], 0) + 1
 
     for chunk_id in slot_ids:
-        if chunk_id in by_id and len(selected) < top_k:
-            take(by_id[chunk_id])
+        entry = by_id.get(chunk_id)
+        if (
+            entry is not None
+            and len(selected) < top_k
+            and per_document.get(entry["source_path"], 0) < per_document_cap
+        ):
+            take(entry)
     chosen = {entry["chunk_id"] for entry in selected}
     for entry in fused:
         if len(selected) >= top_k:
@@ -335,9 +340,12 @@ TECH_ALIASES: dict[str, tuple[str, ...]] = {
     "terraform": ("terraform",),
     "docker": ("docker",),
     "typescript": ("typescript",),
-    "javascript": ("javascript", "nodejs"),
+    "javascript": ("javascript", "nodejs", '"node js"'),
     "java": ("java",),
+    # "C#" and ".NET" index as the generic tokens "c" and "net"; search the
+    # unambiguous spellings only (no hits means no slot, never a wrong one).
     "csharp": ("csharp", "dotnet"),
+    # "go" is too common a word to search for.
     "golang": ("golang",),
     "rust": ("rust",),
     "sql": ("sql", "mysql", "postgres", "postgresql"),
@@ -358,10 +366,25 @@ TECH_ALIASES: dict[str, tuple[str, ...]] = {
     "django": ("django",),
     "flask": ("flask",),
 }
+# Hyphens count as part of a word, so "rust-belt" or "spark-plug" don't match. A quoted
+# alias is a phrase search ("node js"); it is detected by _EXTRA_SPELLINGS instead.
 _ALIAS_PATTERNS = {
-    name: re.compile(r"\b(?:" + "|".join(aliases) + r")\b")
+    name: re.compile(
+        r"(?<![\w-])(?:"
+        + "|".join(re.escape(alias) for alias in aliases if '"' not in alias)
+        + r")(?![\w-])"
+    )
     for name, aliases in TECH_ALIASES.items()
 }
+# Spellings with punctuation, matched in the lowercased question.
+_EXTRA_SPELLINGS = {
+    "csharp": re.compile(r"(?<![\w-])c#|(?<![\w-])\.net(?![\w-])"),
+    "javascript": re.compile(r"(?<![\w-])node(?:\.?js)(?![\w-])"),
+    "react": re.compile(r"(?<![\w-])react-native(?![\w-])"),
+}
+# "Go" the language: only the capitalized word, not at the start of the question
+# ("Go on..."), matched on the original text.
+_GO = re.compile(r"(?<=\s)Go(?![\w-])")
 # A question about having used something: an experience verb or phrase, or a
 # production/work framing ("Kubernetes in production?").
 _EXPERIENCE_CUE = re.compile(
@@ -382,7 +405,13 @@ def tech_question_terms(question: str) -> list[str]:
     "Where do you work?" or "What do you do for fun?" names none.
     """
     text = question.casefold()
-    named = [name for name, pattern in _ALIAS_PATTERNS.items() if pattern.search(text)]
+    named = [
+        name
+        for name, pattern in _ALIAS_PATTERNS.items()
+        if pattern.search(text)
+        or (name in _EXTRA_SPELLINGS and _EXTRA_SPELLINGS[name].search(text))
+        or (name == "golang" and _GO.search(question))
+    ]
     if not named:
         return []
     if not _EXPERIENCE_CUE.search(text) and len(text.split()) > _SHORT_QUESTION_WORDS:
@@ -453,9 +482,10 @@ async def hybrid_search(
             if tech_terms
             else []
         )
+        fallback = False
     except ResponseError:
         LOGGER.warning("lexical search failed; serving vector results only", exc_info=True)
-        lexical_leg, tech_hits = [], []
+        lexical_leg, tech_hits, fallback = [], [], True
     fused = rrf_fuse(
         [vector_leg, lexical_leg], k=config.rrf_k, weights=[1.0, config.lexical_weight]
     )
@@ -485,7 +515,13 @@ async def hybrid_search(
     ) + [e for e in selected if e["chunk_id"] in slots]
     await _fill_scores(redis_client, selected, embedding)
     if legs is not None:
-        legs.update(vector=vector_leg, lexical=lexical_leg, tech_terms=tech_terms, slots=slots)
+        legs.update(
+            vector=vector_leg,
+            lexical=lexical_leg,
+            tech_terms=tech_terms,
+            slots=slots,
+            fallback=fallback,
+        )
     return selected
 
 

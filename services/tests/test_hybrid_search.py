@@ -129,6 +129,12 @@ def test_select_caps_chunks_per_document_and_fills_from_the_rest():
     assert [entry["chunk_id"] for entry in chosen] == [1, 2, 4, 6]
 
 
+def test_reserved_ids_respect_the_per_file_cap():
+    fused = _entries("a.md", "a.md", "a.md", "a.md", "b.md")
+    chosen = select_chunks(fused, top_k=4, per_document_cap=2, slot_ids=[1, 2, 3, 4])
+    assert [entry["chunk_id"] for entry in chosen] == [1, 2, 5]
+
+
 def test_select_puts_slots_first_and_counts_them_against_the_cap():
     fused = _entries("a.md", "a.md", "b.md", "c.md", "a.md")
     chosen = select_chunks(fused, top_k=3, per_document_cap=2, slot_ids=[5, 99])
@@ -180,6 +186,11 @@ def test_dual_slots_skip_a_side_the_data_lacks():
         ("Have you run k8s in production?", "kubernetes"),
         ("Kafka?", "kafka"),
         ("Are you familiar with Terraform?", "terraform"),
+        ("Have you used Go?", "golang"),
+        ("Have you used C#?", "csharp"),
+        ("Do you know .NET?", "csharp"),
+        ("Have you built anything with Node.js?", "javascript"),
+        ("Any React-Native experience?", "react"),
     ],
 )
 def test_tech_questions_fire(question, first_term):
@@ -201,7 +212,8 @@ def test_tech_questions_fire(question, first_term):
         "What is your biggest achievement?",
         "Tell me about Redis caching in Glassbox and its TTLs",
         "Do you have any pets?",
-        "Have you used Go?",  # "go" is too common a word to be a technology here
+        "Go on, what do you do for fun?",  # "Go" opening a sentence is not the language
+        "I grew up in the rust-belt and ran track; what do you do for fun?",
         "What is your working style?",
     ],
 )
@@ -328,8 +340,10 @@ def test_production_configs():
 @pytest.mark.asyncio
 async def test_hybrid_serves_vector_results_when_the_text_field_is_missing():
     client = _FakeSearchRedis(vector=[(1, 0.9, "docs/a.md")], lexical=[], lexical_error=True)
-    chosen = await hybrid_search(client, EMBEDDING, "What is KEDA?", "about_system", "m")
+    legs = {}
+    chosen = await hybrid_search(client, EMBEDDING, "What is KEDA?", "about_system", "m", legs=legs)
     assert [entry["chunk_id"] for entry in chosen] == [1]
+    assert legs["fallback"] is True
 
 
 @pytest.mark.asyncio

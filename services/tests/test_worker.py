@@ -372,11 +372,34 @@ async def test_repeat_worker_job_uses_retrieval_and_chunk_caches(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_worker_does_not_cache_a_vector_only_fallback(monkeypatch):
+    async def fallback_search(redis_client, embedding, question, corpus, model_id, legs):
+        legs["fallback"] = True
+        return [{"chunk_id": 42, "score": 0.8, "source_path": "x"}]
+
+    monkeypatch.setattr(worker_module, "hybrid_search", fallback_search)
+    monkeypatch.setattr(worker_module, "_load_chunks", lambda session_factory, matches: [])
+    client = RecordingRedis(
+        {
+            b"request_id": b"fallback-request",
+            b"request_start_ts": b"1000000",
+            b"corpus": b"about_me",
+            b"embedding_model": b"fake-v1",
+            b"embedding": struct.pack("512f", *([0.25] * 512)),
+            b"question": b"Have you used Redis?",
+        }
+    )
+    assert await process_one_message(client, None, consumer_name="test-worker", block_ms=1)
+    assert not [key for key in client.values if key.startswith("ret:")]
+
+
+@pytest.mark.asyncio
 async def test_worker_runs_hybrid_search_on_the_job_question(monkeypatch):
     seen = []
 
-    async def recorded_search(redis_client, embedding, question, corpus, model_id):
+    async def recorded_search(redis_client, embedding, question, corpus, model_id, legs):
         seen.append((question, corpus, model_id))
+        legs["fallback"] = False
         return [{"chunk_id": 42, "score": 0.8, "source_path": "x", "rrf": 0.1, "ranks": [1, 1]}]
 
     monkeypatch.setattr(worker_module, "hybrid_search", recorded_search)

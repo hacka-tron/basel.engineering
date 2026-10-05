@@ -83,7 +83,7 @@ Glassbox retrieval combines two searches over the same Redis index, `idx:chunks`
 
 **Dual-experience slots (About Basel).** A question that names a known technology with an experience cue ("Have you used Redis?", "Kubernetes in production?") triggers one more keyword query for that technology's spellings. The best-ranked work chunk (from the employer files) and the best personal-project chunk that name it are always included, and fused rank fills the rest. The two slots go last in the source list, nearest the question: with the work chunk first, Nova Lite more often credited a work-only technology to the personal project. A side the data lacks gets no slot, so no unrelated chunk is forced in.
 
-**Measured effect** (golden set, Titan V2, 2026-10-05): chunk-level recall@8 rose from 0.76 to 0.81 (About This System 0.55 to 0.63) every metric rose on the questions without slots, and the three exact-identifier questions moved to rank 1. Retrieval adds about half a millisecond per question; the `text` field adds about 5 MB to Redis.
+**Measured effect** (golden set, Titan V2, 2026-10-05): chunk-level recall@8 rose from 0.76 to 0.81 (About This System 0.55 to 0.63), and every metric rose on the questions without slots, and the three exact-identifier questions moved to rank 1. Retrieval adds about half a millisecond per question; the `text` field adds about 5 MB to Redis.
 
 ## SSE event contract and trace sequencing
 

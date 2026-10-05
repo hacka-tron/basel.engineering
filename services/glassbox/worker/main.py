@@ -259,13 +259,16 @@ async def process_one_message(
         matches = await retrieval_cache.get(retrieval_key)
         retrieval_hit = matches is not None
         if matches is None:
+            legs: dict = {}
             matches = [
                 {"chunk_id": match["chunk_id"], "score": match["score"]}
                 for match in await hybrid_search(
-                    redis_client, embedding, question, corpus, embedding_model
+                    redis_client, embedding, question, corpus, embedding_model, legs=legs
                 )
             ]
-            await retrieval_cache.put(retrieval_key, matches)
+            # A vector-only fallback (BM25 query failed) must not fill the hybrid key.
+            if not legs.get("fallback"):
+                await retrieval_cache.put(retrieval_key, matches)
         await stage(
             "vector_search",
             "end",
