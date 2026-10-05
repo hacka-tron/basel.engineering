@@ -37,5 +37,5 @@ test('selection questions (sent and retried without history) cover components an
   assert.ok(set.has(Q))
   assert.ok(set.has('Tell me about Ledger'))
   assert.ok(set.has(questionForComponent(architectureNodes[0].id)))
-  assert.equal(set.has('What can Basel build for me?'), false)
+  assert.equal(set.has('What can you build for me?'), false)
 })

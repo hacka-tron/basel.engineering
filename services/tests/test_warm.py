@@ -38,13 +38,13 @@ def test_suggested_questions_file_is_the_frontend_source():
     assert {corpus for corpus, _ in pairs} == set(CORPORA)
     assert 1 <= len(pairs) <= 10  # under the per-client rate limit of 10 per 10 minutes
     assert [q for corpus, q in pairs if corpus == "portfolio"] == [
-        "What can Basel build for me?",
+        "What can you build for me?",
         "Which project is most like a SaaS app?",
-        "Is Basel available for freelance work?",
+        "Are you available for freelance work?",
     ]
     chat = (REPO / "frontend/src/components/Chat.tsx").read_text()
     assert "suggested-questions.json" in chat
-    assert not re.search(r"'What did Basel work on at YouTube\?'", chat)
+    assert not re.search(r"'What did you work on at YouTube\?'", chat)
 
 
 def test_warm_up_fits_in_one_rate_limit_bucket():
