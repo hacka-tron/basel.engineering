@@ -268,6 +268,26 @@ def test_about_this_system_answers_may_use_three_sentences():
     assert grade_case({**case, "corpus": "about_me"}, answer)["too_long"] is True
 
 
+@pytest.mark.parametrize(
+    "question",
+    ["Have you used Kubernetes?", "How much AWS experience do you have?", "Terraform?"],
+)
+def test_other_questions_keep_the_production_example_first(approved, question):
+    strict = _prompt(question, WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    absent = strict.index("I don't have <Language> in my memory.")
+    production = strict.index("Q: <Tech> in production?")
+    assert absent < production < strict.index("Q: Have you used Widgets?")
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["Have you used Kafka at work?", "Do you use Go professionally?", "Redis in prod?"],
+)
+def test_production_cues_put_the_production_example_last(approved, question):
+    strict = _prompt(question, WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
+    assert strict.rstrip().endswith("where <what it does>.")
+
+
 def test_the_short_production_example_is_the_last_example(approved):
     strict = _prompt("Kubernetes in production?", WORK_CHUNKS, None, STRICT_ROUTE, "about_me")
     absent = strict.index("I don't have <Language> in my memory.")

@@ -628,13 +628,17 @@ _PLAYFUL_PLACEHOLDER_EXAMPLES = (
 # chunks the project's k3s section ranks first and Nova Lite answered "Yes, I've used
 # Kubernetes in production" from it; this example, first in the block next to the
 # absent-tech one, restores the owner's "No, but..." shape.
-# Owner sign-off round 3: the k3s section no longer says "(not a job)"; with the owner's
-# new "orchestrates my workers" few-shot, the annotated wording above lost the "No" (0/3
-# replays). Mirroring the approved answer's shape ("I've used it ..., where ...")
-# restores it (5/5 replays on three retrievals).
+# Owner sign-off round 3: with the reworded k3s section and the owner's new production
+# few-shot, the annotated wording above lost the "No" (0/3 replays). Mirroring the
+# approved answer's shape ("I've used it ..., where ...") restores it (5/5 replays on
+# three retrievals).
 _PRODUCTION_EXAMPLE = (
     "Q: <Tech> in production? A: No, but I've used it extensively in my personal project "
     "<Project>, where <what it does>."
+)
+_PRODUCTION_QUESTION = re.compile(
+    r"\b(production|in prod|at work|professionally|on the job|for an employer)\b",
+    re.IGNORECASE,
 )
 # Examples every strict prompt keeps, approved set or not: they teach behaviors the
 # approved set has no example for (absent tech, a partial answer, system answers).
@@ -676,9 +680,15 @@ def _example_lines(route: str, playful: bool = False, question: str = "") -> str
         # side for a personal project on "Any React experience?"; first, both are
         # fixed (3 of 3 smoke runs each).
         absent, *rest = _STRICT_FIXED_EXAMPLES
-        # The production example goes last, nearest the question (owner sign-off
-        # round 3: placed first it lost the "No" on the live retrieval, 0/3).
-        lines = [absent, *approved, *rest, _PRODUCTION_EXAMPLE]
+        # A production question gets the production example last, nearest the question
+        # (owner sign-off round 3: placed first it lost the "No" on the live retrieval,
+        # 0/3). Every other question keeps it first, next to the absent-tech one: last,
+        # it made "How much AWS experience do you have?" present Azure work as AWS work
+        # (v19 round-3 review: 4/6 replays, 0/6 with it first).
+        if _PRODUCTION_QUESTION.search(question):
+            lines = [absent, *approved, *rest, _PRODUCTION_EXAMPLE]
+        else:
+            lines = [absent, _PRODUCTION_EXAMPLE, *approved, *rest]
     return _EXAMPLES_INTRO + "\n".join(lines)
 
 
