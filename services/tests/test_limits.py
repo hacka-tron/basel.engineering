@@ -18,11 +18,12 @@ from services.glassbox.limits import (
     client_ip_hash,
     validate_ip_hash_salt,
 )
+from services.tests.stack_ports import redis_url_for
 
 
 @pytest.mark.asyncio
 async def test_token_bucket_refills_and_is_atomic():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
@@ -58,7 +59,7 @@ return 1
 
 
 async def _redis_or_skip():
-    client = redis.from_url("redis://127.0.0.1:6379/0")
+    client = redis.from_url(redis_url_for())
     try:
         await client.ping()
     except Exception as exc:
