@@ -51,13 +51,9 @@ APPROVED_EXAMPLES_ENV = "GLASSBOX_APPROVED_EXAMPLES_PATH"
 #   copy whole sources (one follow-ups answer went from 20 to 406 words); the
 #   freelance question is answered from the corpus, which has the same wording.
 # (Ablations, 2026-10-04/05.)
-# v19 review round 1: the production "No, but..." answer (rec-tech-k8s-prod) is out.
-# The owner's new wording explains how and why k3s is used, and Nova Lite copied it
-# verbatim into "Why k3s instead of EKS?", a GCP answer and "Kubernetes in
-# production?" (dropping the "No"); a placeholder example teaches that shape instead
-# (api/ask.py _STRICT_FIXED_EXAMPLES).
 STRICT_EXAMPLE_IDS = (
     "rec-tech-kafka",
+    "rec-tech-k8s-prod",
     "rec-impact-1",
     "rec-adv-employer",
 )
