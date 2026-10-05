@@ -239,6 +239,19 @@ cases:
     gold_snippets:
       - 'Hobbies: surfing, skating, Teamfight Tactics, tennis, badminton, and hiking.'
     must_include: ['(surf|skat|Teamfight|TFT|tennis|badminton|hik)[\s\S]*?(?!\1)(surf|skat|Teamfight|TFT|tennis|badminton|hik)']
+  - id: me-sports
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Does Basel follow any sports?
+    expected_sources: [private/personal.md]
+    # The snippet is the label only (no About Basel fact in this public repo). The
+    # source is a short college cheer; the casual temperature once expanded it to a
+    # pro team (v18 review round 1).
+    gold_snippets:
+      - 'Sports:'
+    must_not_include: ['Milwaukee', '\bNBA\b', 'basketball']
   - id: me-complexity
     origin: new
     corpus: about_me

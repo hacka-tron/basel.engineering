@@ -141,9 +141,9 @@ def load_examples(path: Path | None = None) -> ExampleSet:
     if path is None:
         override = os.getenv(APPROVED_EXAMPLES_ENV)
         path = Path(override) if override else APPROVED_EXAMPLES_PATH
-    if not path.is_file():
-        return EMPTY
     try:
+        if not path.is_file():
+            return EMPTY
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError):
         LOGGER.warning("Approved examples unreadable; using placeholder examples")

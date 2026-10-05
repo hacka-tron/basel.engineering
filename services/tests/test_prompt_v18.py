@@ -215,6 +215,7 @@ def test_a_casual_question_routes_casual_when_the_fun_chunk_is_lower_down():
     [
         "What kind of role are you looking for next?",
         "Which programming languages does Basel use?",
+        "What are your favorite programming languages?",
         "What's your working style like?",
         "What is Basel's favorite professional project?",
         "Have you used Redis in production?",
@@ -223,6 +224,59 @@ def test_a_casual_question_routes_casual_when_the_fun_chunk_is_lower_down():
 def test_work_questions_stay_strict_even_with_a_fun_top_chunk(question):
     chunks = [_chunk(1, CASUAL_TEXT), _chunk(2, CASUAL_TEXT)]
     assert answer_route(chunks, "about_me", question) == STRICT_ROUTE
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What is your favorite programming language?",
+        "What is your favorite database?",
+        "What is your favorite cloud provider?",
+        "What is the most fun project you built at Google?",
+        "Any fun facts about your time at Microsoft?",
+        "What's your favorite framework?",
+        "Favorite tool in your stack?",
+    ],
+)
+def test_work_and_tech_words_veto_casual_even_with_the_fun_chunk_on_top(question):
+    """Review round 1: these need the dual-experience and no-invention rules."""
+    chunks = [_chunk(1, CASUAL_TEXT), _chunk(2, CASUAL_TEXT)]
+    assert answer_route(chunks, "about_me", question) == STRICT_ROUTE
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What's your favorite color?",
+        "What's your favorite food?",
+        "Coffee or tea?",
+        "What kind of music do you listen to?",
+        "Do you follow any sports?",
+        "What's your favorite movie or anime?",
+        "Do you like to travel? Favorite place?",
+        "What do you do when you're not coding?",
+        "Dark mode or light mode?",
+    ],
+)
+def test_casual_questions_stay_casual(question):
+    chunks = [_chunk(1, WORK_TEXT), _chunk(5, CASUAL_TEXT)]
+    assert answer_route(chunks, "about_me", question) == CASUAL_ROUTE
+
+
+def test_the_casual_prompt_keeps_the_plain_refusal_and_role_play_lines():
+    casual = _prompt("Q?", [_chunk(1, CASUAL_TEXT)], route=CASUAL_ROUTE)
+    assert "Refusals are plain." in casual
+    assert "personal data, role-play" in casual
+
+
+def test_an_unreadable_examples_path_falls_back(monkeypatch, tmp_path):
+    path = tmp_path / "approved-answers.yaml"
+
+    def denied(self, *args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(type(path), "is_file", denied)
+    assert fewshot.load_examples(path) == fewshot.EMPTY
 
 
 def test_about_this_system_and_non_private_chunks_are_always_strict():
