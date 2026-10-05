@@ -485,3 +485,54 @@ def test_cache_hit_rate_query_runs(mysql):
     with mysql() as session:
         rows = session.execute(text(answer_log.CACHE_HIT_RATE_SQL)).all()
     assert all(len(row) == 5 for row in rows)
+
+
+def test_answer_cap_counts_utf8_bytes_without_splitting_characters():
+    answer = "é" * 40000 + "🙂" * 10000  # 80,000 + 40,000 bytes, far over TEXT's 65,535
+    row = answer_log.build_row(**_fields(answer=answer))
+    encoded = row.answer.encode("utf-8")
+    assert len(encoded) <= answer_log.ANSWER_MAX_BYTES < 65535
+    assert answer.startswith(row.answer)  # a clean prefix: no half character, no U+FFFD
+    assert answer_log.cap_utf8_bytes("a🙂", 3) == "a"
+    assert answer_log.cap_utf8_bytes("short", 10) == "short"
+    assert answer_log.cap_utf8_bytes(None, 10) is None
+
+
+def test_failed_write_logs_no_question_or_answer_text(caplog):
+    """SQLAlchemy errors quote bound parameters; the log line must carry only the type."""
+    from sqlalchemy.exc import OperationalError
+
+    question = "SECRET-QUESTION-TEXT about my plans"
+    answer = "SECRET-ANSWER-TEXT for you"
+
+    class LeakySession(RecordingSession):
+        def commit(self):
+            raise OperationalError(
+                "INSERT INTO queries", {"question": question, "answer": answer}, Exception("gone")
+            )
+
+    with caplog.at_level("DEBUG", logger=answer_log.LOGGER.name):
+        written = answer_log.record(
+            _factory(LeakySession()), **_fields(question=question, answer=answer)
+        )
+    assert written is False
+    assert "OperationalError" in caplog.text
+    assert "SECRET-QUESTION-TEXT" not in caplog.text and "SECRET-ANSWER-TEXT" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_engine_hides_bound_parameters_in_errors(monkeypatch):
+    from services.glassbox.db.session import create_db_engine
+
+    for key, value in {
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_USER": "glassbox",
+        "MYSQL_PASSWORD": "unused",  # pragma: allowlist secret (never connects)
+        "MYSQL_DATABASE": "glassbox",
+    }.items():
+        monkeypatch.setenv(key, value)
+    engine = create_db_engine()
+    try:
+        assert engine.hide_parameters is True
+    finally:
+        engine.dispose()

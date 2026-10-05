@@ -18,7 +18,9 @@ def get_database_url() -> URL:
 
 
 def create_db_engine() -> Engine:
-    return create_engine(get_database_url(), pool_pre_ping=True)
+    # hide_parameters: a failed statement's error text omits the bound values, so
+    # logged errors never carry visitor questions, answers or chunk text.
+    return create_engine(get_database_url(), pool_pre_ping=True, hide_parameters=True)
 
 
 @lru_cache(maxsize=1)

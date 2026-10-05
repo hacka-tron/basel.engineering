@@ -41,7 +41,8 @@ LOGGER = logging.getLogger(__name__)
 # What is masked in visitor text before it is stored.
 LOG_MASK_CATEGORIES = frozenset({EMAIL, PHONE, GOV_ID})
 QUESTION_MAX_CHARS = 1000  # queries.question and queries.rewritten_query: VARCHAR(1000)
-ANSWER_MAX_CHARS = 60000  # queries.answer: TEXT (65,535 bytes); answers are a few hundred
+# queries.answer is TEXT: 65,535 bytes, not characters. Answers are a few hundred bytes.
+ANSWER_MAX_BYTES = 65000
 DEFAULT_RETENTION_DAYS = 90
 PURGE_INTERVAL_S = 3600.0
 PURGE_BATCH = 1000
@@ -67,12 +68,22 @@ _purge_lock = threading.Lock()
 _last_purge: float | None = None
 
 
-def mask_text(value: str | None, max_chars: int) -> str | None:
+def mask_text(value: str | None, max_chars: int | None = None) -> str | None:
     """``value`` with emails, phone numbers and government IDs masked, then capped."""
     if value is None:
         return None
     masked, _ = redact(value, LOG_MASK_CATEGORIES)
-    return masked[:max_chars]
+    return masked if max_chars is None else masked[:max_chars]
+
+
+def cap_utf8_bytes(value: str | None, max_bytes: int) -> str | None:
+    """``value`` cut to at most ``max_bytes`` UTF-8 bytes, never mid-character."""
+    if value is None:
+        return None
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
 
 
 def retention_days() -> int:
@@ -120,9 +131,9 @@ def maybe_purge(session_factory: Callable, *, now: float | None = None) -> int:
         if deleted:
             LOGGER.info("Query log retention: deleted %d row(s)", deleted)
         return deleted
-    except Exception:
+    except Exception as exc:
         STATS["purge_failures"] += 1
-        LOGGER.warning("Query log retention purge failed", exc_info=True)
+        LOGGER.warning("Query log retention purge failed (%s)", type(exc).__name__)
         return 0
     finally:
         _purge_lock.release()
@@ -170,7 +181,7 @@ def build_row(
         turn_index=turn_index,
         rewritten_query=mask_text(rewritten_query, QUESTION_MAX_CHARS),
         ttft_ms=ttft_ms,
-        answer=mask_text(answer, ANSWER_MAX_CHARS),
+        answer=cap_utf8_bytes(mask_text(answer), ANSWER_MAX_BYTES),
         abstained=abstained,
         answer_route=route if generated else None,
         llm_model_id=llm_model_id if generated else None,
@@ -189,16 +200,18 @@ def record(session_factory: Callable, **fields) -> bool:
         with session_factory()() as session:
             session.add(row)
             session.commit()
-    except Exception:
+    except Exception as exc:
         # The query log is stats, not part of answering: a failed insert (for
         # example, new columns missing while migrate is still running) is logged and
         # dropped rather than turning an already-sent answer into an error.
         STATS["write_failures"] += 1
+        # Only the exception type: SQLAlchemy error text can quote the statement's
+        # bound values (the question and answer), which never belong in app logs.
         LOGGER.warning(
-            "Query log write failed for %s (%d failure(s) since start)",
+            "Query log write failed for %s: %s (%d failure(s) since start)",
             fields.get("request_id"),
+            type(exc).__name__,
             STATS["write_failures"],
-            exc_info=True,
         )
         return False
     STATS["writes"] += 1
@@ -209,9 +222,9 @@ def record(session_factory: Callable, **fields) -> bool:
 async def _run(function: Callable, kwargs: dict) -> None:
     try:
         await asyncio.to_thread(function, **kwargs)
-    except Exception:
+    except Exception as exc:
         STATS["submit_failures"] += 1
-        LOGGER.warning("Query log task failed", exc_info=True)
+        LOGGER.warning("Query log task failed: %s", type(exc).__name__)
 
 
 def submit(function: Callable, /, **kwargs) -> asyncio.Task:
