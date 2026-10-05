@@ -59,11 +59,13 @@ STRICT_EXAMPLE_IDS = (
 )
 # The casual prompt gets four fun answers. Favorite color and favorite food are
 # deliberately left out, so the eval can check that unseen casual questions take
-# the approved tone without copying an example.
+# the approved tone without copying an example. v19: the favorite-show answer
+# replaces the combined "movie or anime" one (owner, 2026-10-05: one topic per
+# answer; a show question was answered with the movie).
 CASUAL_EXAMPLE_IDS = (
     "rec-fun-lightmode",
     "rec-fun-coffee",
-    "rec-fun-movie",
+    "rec-fun-show",
     "rec-casual-fun",
 )
 CASUAL_CATEGORY = "Casual & personal"
