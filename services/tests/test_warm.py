@@ -36,7 +36,7 @@ def test_suggested_questions_file_is_the_frontend_source():
     assert warm.DEFAULT_QUESTIONS == REPO / "frontend/src/suggested-questions.json"
     assert warm.CORPORA is CORPORA
     assert {corpus for corpus, _ in pairs} == set(CORPORA)
-    assert 1 <= len(pairs) <= 10  # under the per-client rate limit of 10 per 10 minutes
+    assert 1 <= len(pairs) <= 10  # well under the per-client rate limit of 20 per 10 minutes
     assert [q for corpus, q in pairs if corpus == "portfolio"] == [
         "What can you build for me?",
         "Which project is most like a SaaS app?",
