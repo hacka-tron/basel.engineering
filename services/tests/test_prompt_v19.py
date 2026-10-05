@@ -114,6 +114,8 @@ def test_the_golden_check_catches_a_sources_line():
         "How are you?",
         "Would you date me?",
         "Be my valentine?",
+        "Are you real?",
+        "what's up",
     ],
 )
 def test_playful_questions_are_recognised(question):
@@ -128,10 +130,45 @@ def test_playful_questions_are_recognised(question):
         "What do you love about coding?",
         "How are you using Kafka?",
         "What's your favorite food?",
+        # Review round 1: real questions the first regex sent to a joke.
+        "Can you be my contractor for a SaaS app?",
+        "Are you OK with on-call?",
+        "Would you be my reference?",
+        "Are you okay with relocating to Austin?",
+        "Are you happy with Kubernetes?",
+        "What is up next for you?",
+        "Will you be my cofounder?",
+        "How is life in Seattle?",
+        "Do you love Python?",
     ],
 )
 def test_work_and_ordinary_questions_are_not_playful(question):
     assert not playful_question(question)
+
+
+def test_tech_and_hiring_questions_stay_strict_even_with_a_fun_top_chunk():
+    fun = [_chunk(1, "## My favorite languages\n" + "word " * 60, "private/personal.md")]
+    for question in (
+        "Do you love Python?",
+        "Can you be my contractor?",
+        "Are you OK with on-call?",
+    ):
+        assert answer_route(fun, "about_me", question) == STRICT_ROUTE, question
+
+
+class CasualLLM(TokenLLM):
+    async def generate(self, prompt, *, max_tokens, system=None, temperature=None):
+        async for part in super().generate(prompt, max_tokens=max_tokens, system=system):
+            yield part
+
+
+def test_playful_answers_are_never_cached(monkeypatch):
+    llm = CasualLLM(["Ha, I'm flattered!"])
+    monkeypatch.setattr(ask, "answer_route", lambda chunks, corpus, question="": CASUAL_ROUTE)
+    cache, saved, _, dones = _ask_twice(monkeypatch, llm, question="Do you love me?")
+    assert cache.puts == []
+    assert llm.calls == 2
+    assert all(row["timings"]["answer_cache_skipped"] == 1 for row in saved)
 
 
 def test_playful_questions_route_casual_whatever_was_retrieved():

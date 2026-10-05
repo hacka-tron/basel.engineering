@@ -401,6 +401,18 @@ _EXPERIENCE_CUE = re.compile(
 _SHORT_QUESTION_WORDS = 3
 
 
+def named_technologies(question: str) -> list[str]:
+    """The known technologies (``TECH_ALIASES`` names) a question mentions, any phrasing."""
+    text = question.casefold()
+    return [
+        name
+        for name, pattern in _ALIAS_PATTERNS.items()
+        if pattern.search(text)
+        or (name in _EXTRA_SPELLINGS and _EXTRA_SPELLINGS[name].search(text))
+        or (name == "golang" and _GO.search(question))
+    ]
+
+
 def tech_question_terms(question: str) -> list[str]:
     """The lexical terms of the technologies a "have you used X?" question names, or [].
 
@@ -409,13 +421,7 @@ def tech_question_terms(question: str) -> list[str]:
     "Where do you work?" or "What do you do for fun?" names none.
     """
     text = question.casefold()
-    named = [
-        name
-        for name, pattern in _ALIAS_PATTERNS.items()
-        if pattern.search(text)
-        or (name in _EXTRA_SPELLINGS and _EXTRA_SPELLINGS[name].search(text))
-        or (name == "golang" and _GO.search(question))
-    ]
+    named = named_technologies(question)
     if not named:
         return []
     if not _EXPERIENCE_CUE.search(text) and len(text.split()) > _SHORT_QUESTION_WORDS:

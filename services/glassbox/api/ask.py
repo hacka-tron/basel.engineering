@@ -48,7 +48,7 @@ from services.glassbox.providers.base import (
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
-from services.glassbox.retrieval.search import tech_question_terms
+from services.glassbox.retrieval.search import named_technologies, tech_question_terms
 from services.glassbox.sources_line import SourcesLineFilter
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
@@ -157,14 +157,18 @@ _CASUAL_QUESTION = re.compile(
 # "Basel's notes" in the third person (owner, live 2026-10-05). They route casual
 # whatever was retrieved, and the casual prompt adds the playful-reply rule for them
 # only. Work words still win (checked first in answer_route).
+# Review round 1: only flirty forms and whole-question greetings. "Can you be my
+# contractor?", "Are you OK with on-call?", "Are you happy with Kubernetes?" and
+# "What is up next for you?" are real questions and must not get a joke.
 _PLAYFUL_QUESTION = re.compile(
-    r"\b(?:(?:do|would|could|can|will) you (?:still )?(?:love|like|marry|date|kiss|hug|miss)"
-    r" me|love you|(?:marry|date) me|are you (?:single|married|taken|real|human|alive"
-    r"|lonely|happy|bored|ok(?:ay)?|sentient|conscious|seeing anyone)"
-    r"|how(?:'s| is) (?:it going|your day|life)|what(?:'s| is) up|(?:boy|girl)friend"
-    r"|crush|valentine|be my)\b"
-    # "How are you?" only as the whole question ("How are you using Kafka?" is not).
-    r"|\bhow are you(?: doing)?(?: today)?\s*[?!.]*$",
+    r"\b(?:(?:do|would|could|can|will) you (?:still )?(?:love|marry|date|kiss|hug|miss) me"
+    r"|(?:do|would) you (?:still )?like me|i love you|(?:marry|date) me"
+    r"|are you (?:single|married|taken|seeing anyone)"
+    r"|(?:boy|girl)friend|crush on|be my (?:valentine|girlfriend|boyfriend|date|husband|wife))\b"
+    # Greetings and "are you real?" only as the whole question.
+    r"|^\W*(?:how are you(?: doing)?(?: today)?|how(?:'s| is) (?:it going|your day)"
+    r"|what(?:'s| is) up|sup|are you (?:ok(?:ay)?|real|human|alive|happy|lonely|bored"
+    r"|sentient|conscious))\W*$",
     re.IGNORECASE,
 )
 
@@ -185,7 +189,10 @@ _WORK_QUESTION = re.compile(
     r"|build|built|building|projects?|languages?|frameworks?|librar(?:y|ies)|databases?"
     r"|db|cloud|aws|azure|gcp|tools?|tooling|stack|code|programming|tech\w*"
     r"|engineer\w*|software|systems?|apis?|google|microsoft|youtube|fitbit|amazon"
-    r"|intern\w*|interview\w*|team|teams|manager|lead|resume)\b",
+    r"|intern\w*|interview\w*|team|teams|manager|lead|resume"
+    # Review round 1 (v19): hiring logistics the playful cue must never catch.
+    r"|freelanc\w*|contract\w*|on-?call|references?|relocat\w*|cofounder|co-founder"
+    r"|remote|visa|sponsor\w*|availab\w*|start date)\b",
     re.IGNORECASE,
 )
 
@@ -223,6 +230,10 @@ def answer_route(chunks: list, corpus: str, question: str = "") -> str:
     if corpus != "about_me" or not chunks:
         return STRICT_ROUTE
     if _WORK_QUESTION.search(question) or tech_question_terms(question):
+        return STRICT_ROUTE
+    # v19 review: "Do you love Python?" names a technology; the strict prompt keeps
+    # the no-invention rules (the casual one added "versatile and powerful").
+    if named_technologies(question):
         return STRICT_ROUTE
     if playful_question(question):
         return CASUAL_ROUTE
@@ -1381,6 +1392,10 @@ async def _stream(
             for failure in answer_check_failures("".join(response_parts), request.corpus):
                 timings[f"answer_check_{failure}"] = 1
                 LOGGER.info("Answer for %s failed the %s check", request_id, failure)
+        if cache_skip is None and route == CASUAL_ROUTE and playful_question(request.question):
+            # v19 review: a playful reply is never cached, so a joke can't replay to a
+            # near-duplicate real question (cosine >= 0.95) for 24 hours.
+            cache_skip = "playful"
         if cache_skip and not history:
             timings["answer_cache_skipped"] = 1
             LOGGER.info("Answer cache write skipped for %s: %s", request_id, cache_skip)
