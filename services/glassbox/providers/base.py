@@ -61,7 +61,7 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 # first sentence (after an optional "unfortunately"/"sorry"). The prompt asks for
 # the canonical sentence; these catch drift.
 _REFUSAL_OPENERS = re.compile(
-    r"^(?:(?:unfortunately|sorry|im sorry|i am sorry) )*"
+    r"^(?:(?:unfortunately|sorry|im sorry|i am sorry|hmm+|um+|uh|well|oh|ok|okay|honestly|so) )*"
     r"(?:i dont know|i have no information|i dont have (?:enough |any )?information"
     r"|i cant (?:answer|tell|say|determine)|i am (?:unable|not able) to|im (?:unable|not able) to"
     r"|(?:the |these )?(?:provided |numbered |given )?sources? (?:dont|doesnt) "
@@ -69,7 +69,7 @@ _REFUSAL_OPENERS = re.compile(
     r"|none of the (?:provided |numbered )?sources|there is no information|theres no information"
     r"|no information|it is unclear|its unclear"
     # Prompt v17 persona wording for a gap ("I don't have that in my memory.").
-    r"|i dont have (?:\w+ ){1,4}in my memory|thats not in my memory)\b"
+    r"|i dont have (?:\w+ ){1,8}in my memory|thats not in my memory)\b"
 )
 # A refusal opener followed by one of these goes on to answer from the sources
 # ("None of the sources mention X, but they show Y"), so it is not an abstention.

@@ -399,6 +399,16 @@ def test_v17_memory_phrasing_is_a_refusal_only_on_its_own():
     assert is_abstention("Sorry, I don't have that in my memory.")
     # Absent tech (round 1 review): the memory phrase, never a cached denial.
     assert is_abstention("I don't have Go in my memory.")
+    # Review leftovers: a long tech name and an opener before the phrase.
+    assert is_abstention("I don't have Ruby on Rails or Go in my memory.")
+    assert is_abstention("Hmm, I don't have Go in my memory.")
+    assert is_abstention("Well, honestly, I don't have Ruby on Rails or Go in my memory.")
+    assert not is_abstention("Hmm, I used Go in my personal project, a rate limiter.")
+    assert not is_abstention("Well, I don't have Go in my memory, but I know Python well.")
+    assert not is_abstention(
+        "I don't have a lot of free time, but I built the whole system and keep it in my memory."
+    )
+    assert not is_abstention("Hmm, at Google I built tests; I don't have Go in my memory.")
     assert not is_abstention("No, I don't write Go.")  # the phrasing the prompt avoids
     assert not is_abstention("I don't have that in my memory, but at Google I built tests.")
     assert not is_abstention(

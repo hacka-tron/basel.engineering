@@ -131,9 +131,17 @@ def test_provider_factory_defaults_to_fake_and_rejects_unknown_mode(monkeypatch)
 def test_provider_factory_selects_bedrock(monkeypatch):
     monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrock")
     monkeypatch.setenv("BEDROCK_EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0")
-    monkeypatch.setenv("BEDROCK_LLM_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+    monkeypatch.setenv("BEDROCK_LLM_MODEL_ID", "us.amazon.nova-lite-v1:0")
     assert isinstance(get_embedding_provider(), BedrockEmbeddingProvider)
     assert isinstance(get_llm_provider(), BedrockLLMProvider)
+
+
+def test_llm_model_default_is_nova_lite_like_production(monkeypatch):
+    # Owner decision 2026-10-05: stay on Nova Lite, skip Haiku; the code default
+    # matches k8s/base/configmap-app.yaml.
+    monkeypatch.setenv("GLASSBOX_PROVIDER", "bedrock")
+    monkeypatch.delenv("BEDROCK_LLM_MODEL_ID", raising=False)
+    assert get_llm_provider().model_id == "us.amazon.nova-lite-v1:0"
 
 
 class ClosableStream:
