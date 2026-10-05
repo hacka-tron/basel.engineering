@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**State (2026-10-05 PT, overnight session):** everything below is merged and live. Prompt **v18** (#182): the owner's approved example answers as few-shots, plus a playful casual route. **RAG phase 8** hybrid BM25 + vector retrieval (#183). **Phase 10** answer logging (#185). Review leftovers (#184). Ops · Diagnose additions (#180, **waiting for the owner's Terraform apply click**). Test ports (#181). The private corpus is first person throughout, resynced with the bullet bank, with the owner's sign-off answers (docs PRs #6–#11). Production stays on **Nova Lite** (owner, 2026-10-05: Haiku skipped; Nova 2 Lite tested and not adopted). No PRs open. Live state: `project/SNAPSHOT.md`. Playbooks: `orchestration/prompt-version-playbook.md`, `orchestration/corpus-resync.md`, `orchestration/token-log.md`.
+**State (2026-10-05 PT, overnight session):** everything below is merged and live. Prompt **v18** (#182): the owner's approved example answers as few-shots, plus a playful casual route. **RAG phase 8** hybrid BM25 + vector retrieval (#183). **Phase 10** answer logging (#185). Review leftovers (#184). Ops · Diagnose additions (#180, applied). Test ports (#181). The private corpus is first person throughout, resynced with the bullet bank, with the owner's sign-off answers (docs PRs #6–#11). Production stays on **Nova Lite** (owner, 2026-10-05: Haiku skipped; Nova 2 Lite tested and not adopted). No PRs open. Live state: `project/SNAPSHOT.md`. Playbooks: `orchestration/prompt-version-playbook.md`, `orchestration/corpus-resync.md`, `orchestration/token-log.md`.
 
 **Done 2026-10-04/05 (details in `project/status/`):**
 - v17 (#176): persona, brevity, dual experience, factuality.
@@ -52,7 +52,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 - Synthetic per-skill "cheat sheet" chunks, unless phases 7 and 8 still miss dual-experience answers. If built: generate them offline from the private docs, set `derived_from`, gate them with the factuality grader, and keep them in the private repo (never public About Basel text). The 2026-10-04 corpus resync added professional Kafka and gRPC usage, so this gap is closed.
 
 **Owner to-dos:**
-- Approve the pending Terraform workflow apply for the `ops` module (run 37265886746, Ops · Diagnose additions from #180): the plan should show only an in-place update to the `glassbox-ops-diagnose` SSM document.
+- ~~Approve the `ops` Terraform apply for the Ops · Diagnose additions (#180).~~ Applied 2026-10-05 (run 37265886746): Diagnose now prints the last ingest summary, TTFT p50/p95 and the portfolio corpus version.
 - ~~Confirm the SNS alarm email subscription.~~ Confirmed by the owner, 2026-10-05.
 - Check the AWS plan: Free auto-closes after 6 months; switch to Paid if so.
 - Run **Ops · List snapshots** once.
