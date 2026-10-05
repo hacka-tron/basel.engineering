@@ -14,6 +14,7 @@ from services.glassbox.api.csp_report import router as csp_report_router
 from services.glassbox.api.db import ping_mysql
 from services.glassbox.api.demo import router as demo_router
 from services.glassbox.api.security_headers import SecurityHeadersMiddleware
+from services.glassbox.fewshot import get_examples
 from services.glassbox.limits import validate_ip_hash_salt
 from services.glassbox.providers.factory import validate_provider_config
 
@@ -22,6 +23,9 @@ from services.glassbox.providers.factory import validate_provider_config
 async def lifespan(app: FastAPI):
     validate_provider_config()
     validate_ip_hash_salt()
+    # Prompt v18: load the owner-approved few-shot examples once (placeholders when
+    # the private file is absent); logs counts only.
+    get_examples()
     yield
     await cluster.HUB.aclose()
 
