@@ -353,6 +353,33 @@ cases:
     gold_snippets:
       - staggered rollouts to staging, canary deployments, gradual release, and metric validation
     must_include: ['onboard', 'canary|stagger']
+  # Strict-prompt framing leftovers (prompt v18 status report, project/status/
+  # 2026-10-04-2144-rag-prompt-v18.md, "The strict prompt still adds framing"): the sources
+  # state no favorite database or most fun project, so the answer must not claim one.
+  - id: me-favorite-database-unsupported
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: What's your favorite database?
+    known_failure: "Strict prompt adds unsupported 'my favorite database is Redis' framing (project/status/2026-10-04-2144-rag-prompt-v18.md); needs a strict-prompt follow-up"
+    expected_sources: [private/projects.md]
+    gold_snippets:
+      - Titan Text Embeddings V2 and RediSearch HNSW vector search over chunks stored in MySQL
+    must_include: ['Redis|MySQL']
+    must_not_include: ['(?i)\bfavou?rite (database|db)\b']
+  - id: me-most-fun-project-unsupported
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: What's the most fun project you built at Google?
+    known_failure: "Strict prompt adds unsupported 'the most fun project I built at Google' framing (project/status/2026-10-04-2144-rag-prompt-v18.md); needs a strict-prompt follow-up"
+    expected_sources: [private/google.md]
+    gold_snippets:
+      - parallelizing execution across about 30 shared job runners
+    must_include: ['Fitbit|YouTube|framework|test']
+    must_not_include: ['(?i)most fun project']
   - id: me-fav-languages
     origin: new
     corpus: about_me

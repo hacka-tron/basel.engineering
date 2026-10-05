@@ -16,7 +16,7 @@ from services.glassbox.providers.base import (
 )
 
 DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
-DEFAULT_LLM_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+DEFAULT_LLM_MODEL = "us.amazon.nova-lite-v1:0"
 # Output-token guard for generate(); api/ask.py _ANSWER_MAX_TOKENS must stay within it.
 MAX_OUTPUT_TOKENS = 600
 # Text Nova streams before a content_filtered stop (seen 2026-10-03).

@@ -460,6 +460,10 @@ _POINTER_SEE = re.compile(
     + _POINTER_SECTION
     + r"))*(?:\s+for (?:more )?details)?(?=\s*[.;)]|\s*$)"
 )
+# "per DESIGN.md §9.7" keeps a readable name instead of stripping to "per DESIGN".
+_POINTER_PER_DESIGN = re.compile(
+    rf"\b(per)\s+(?:DESIGN(?:-\d{{3}})?(?:\.md)?(?:\s*{_POINTER_SECTION})?|{_POINTER_SECTION})"
+)
 _POINTER_DOUBLE_STOP = re.compile(r"(?<!\.)\.\.(?!\.)")
 
 
@@ -490,6 +494,7 @@ def strip_source_pointers(text: str) -> str:
     """
     text = _PARENTHETICAL.sub(_drop_pointer_only_parenthetical, text)
     text = _POINTER_SEE.sub("", text)
+    text = _POINTER_PER_DESIGN.sub(r"\1 the design doc", text)
     text = _POINTER_TOKEN.sub(_bare_name, text)
     text = re.sub(r"[ \t]+([.,;)])", r"\1", text)
     text = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", text)
