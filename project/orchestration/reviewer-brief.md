@@ -9,9 +9,8 @@ works. Work from the current directory — read the actual files, the
 diff, and the git history; don't trust this brief or the implementer's
 report.
 
-Read project/orchestration/reviewer-primer.md first: system map, hard
-rules, known traps by area, per-area checklist. Never read or open any
-terraform.tfstate file.
+Read project/orchestration/reviewer-primer.md first: system map, known
+traps by area, per-area checklist.
 
 You may use the network, docker and local ports to validate, but NOT to
 change anything:

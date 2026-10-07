@@ -1,26 +1,21 @@
 # Reviewer primer (read this first)
 
-For the review gate: an Opus subagent by default, or Codex when it has usage (same brief, `reviewer-brief.md`, same rules). A compact orientation plus the traps earlier review rounds found, so a review starts warm. It is a map, not a spec: the dispatch prompt's requirements win, and anything here that contradicts the code is stale (fix the primer in the same PR). Last mined: 33 Codex results through 2026-09-30.
+For the review gate: an Opus subagent by default, or Codex when it has usage (same brief, `reviewer-brief.md`, same rules). A compact orientation plus the traps earlier review rounds found, so a review starts warm. It is a map, not a spec: the dispatch prompt's requirements win, and anything here that contradicts the code is stale (fix the primer in the same PR). Traps were first mined from 33 Codex results (through 2026-09-30) and are added to as reviews find new ones.
 
 ## System in one screen
 
 - **Request path:** browser, then Cloudflare (TLS/proxy), then Traefik, then FastAPI `api` (`POST /api/ask`, SSE: `stage`/`retrieval`/`token`/`done`/`error`, `: ping` heartbeat every 15 s). `api` enqueues a job on a Redis Stream (`retrieval:jobs`). `retrieval-worker` pods read it, run KNN on the Redis index `idx:chunks`, hydrate chunks from MySQL, and publish trace events. `api` then streams the answer from Bedrock (Titan V2 512-d embeddings, Nova Lite ConverseStream). Follow-ups add a `rewrite` stage. Both processes share one `seq`/`t_ms` convention (`services/glassbox/trace.py`).
 - **Caches and limits (Redis):** embedding, retrieval, chunk, semantic answer cache (cosine >= 0.95, scoped by corpus + model + prompt version, not corpus version: each read checks the answer's source `chunk:{id}` hashes still hold the same `content_sha`; miss lock with NX/PX). Retrieval cache keeps the corpus-version key. Rate limit 20 per 10 min per salted IP hash; daily LLM budget via Lua scripts (answers 4 quarter-units, rewrites 1, so rolling deploys keep counting). Kill switch `disable_llm`. Bump the prompt version when prompt or grounding text changes, or old answers replay.
-- **Corpora:** `about_me` and `about_system`. The system corpus is this repo's own docs, so docs edits change answers and must reach the image (release path filter, then ingest).
+- **Corpora:** `about_me` (private repo), `about_system` and `portfolio` (`corpus/portfolio/`, hidden until a project is published). The system corpus is this repo's own docs, so docs edits change answers and must reach the image (release path filter, then ingest).
 - **Platform:** one `t4g.small` EC2 running k3s, about 1.84 GiB allocatable. Memory and disk have thrashed before (swap use, probe timeouts during rollouts, MySQL OOM at 250Mi); zram swap was added to cope. Rollouts are `maxSurge: 0` by design (old pod stops first, seconds of downtime). KEDA (workers 1 to 3) is currently suspended, and the stress test falls back to a simulation when the live free-memory gate (`capacity.py`, metrics-server) says no or does not know. Budget table: `docs/DESIGN.md` 9.7.
 - **GitOps:** merge to `main`, then `release.yml` pushes ECR `build-N` (the `build-` prefix matters, see traps), then Flux `ImagePolicy` picks the highest, `ImageUpdateAutomation` commits the tag to branch `deploy` (`sync-deploy-branch.yml` also writes it), then Kustomizations apply in order: `flux-system` (root, includes `migrate`) then `app-ready` health checks then `ingest`; KEDA is its own ordered pair (`keda` waits, then `keda-scaling`). Jobs are immutable, so Flux force-recreates them via an annotation.
 - **Terraform:** `infra/envs/prod` is planned on same-repo PRs and applied by CI after merge behind the `terraform-prod` environment approval (OIDC, `terraform.yml`). `infra/bootstrap` (state bucket, CI and ops roles) keeps its state in S3 (`bootstrap/terraform.tfstate`, out of CI's reach) and is applied by `bootstrap.yml` after owner approval, only if the re-plan's fingerprint matches the reviewed plan. Node operations go through the "Ops · ..." workflows (`ops.yml`, Terraform-managed `glassbox-ops-*` SSM documents). Nobody applies Terraform or touches AWS by hand. Only the plan role is read-only; apply role and policies live in bootstrap.
 - **OIDC:** this account has GitHub's immutable subject on. Every trust `sub` must be `repo:hacka-tron@<owner-id>/basel.engineering@<repo-id>:...` via `local.github_oidc_subject_prefix` in `infra/bootstrap/main.tf`, never the plain `repo:owner/repo` form. STS errors say only "Not authorized".
 - **The repo is public.** Nothing sensitive may appear in code, docs, status reports or logs (account IDs, IPs, tokens, state, tfvars).
 
-## Hard rules for reviewers
+## Hard rules
 
-- Review and validate only. Do NOT edit, create or delete tracked files; do NOT commit, push, rebase or touch PRs.
-- Do NOT touch live AWS or Kubernetes (no aws/ssm/kubectl against a real cluster, no terraform apply).
-- NEVER read, open, cat, grep or copy any `terraform.tfstate` (or `*.tfstate.backup`, `*.tfvars`, plan files). Review Terraform from `.tf` source and `init -backend=false`.
-- You MAY run tests, linters, builds, `kubectl kustomize`, docker compose, local dev servers and throwaway scripts outside the repo. Clean up what you start; use the ports you were given and never stop an existing compose stack.
-- Do not trust the brief, the PR body or the implementer's report. Read the diff and every file it integrates with. Cite file:line.
-- Report in the dispatch's format. Every Critical/Important needs a concrete failure scenario, ideally one you reproduced.
+The hard rules are in your dispatch prompt (`reviewer-brief.md`) and are not optional. Also: review Terraform from `.tf` source and `init -backend=false`; do not trust the brief, the PR body or the implementer's report (read the diff and every file it integrates with, cite file:line); every Critical/Important needs a concrete failure scenario, ideally one you reproduced.
 
 ## Known traps by area
 
@@ -78,17 +73,17 @@ Workflows (`.github/workflows/`):
 
 - **All:** `git diff origin/main...HEAD --stat`; read every touched file plus what it integrates with; `git diff --check`; grep the diff for secrets, account IDs, IPs.
 - **Frontend:** `cd frontend && npm ci && npm run lint && npm test && npm run build`; for UI changes, check 375/414/768/1024/1440 px plus landscape phones 568x320/667x375/740x360/896x414 per `MOBILE_DESIGN.md` (`md` also needs more than 500 px of height below 1024 px of width; use `DESKTOP_QUERY` from `lib/layout.ts`, never a bare `(min-width: 768px)`) (no horizontal scroll, tap targets, arrows visible, focus order); exercise Stop, error and reload paths with a mocked or local `/api/ask`.
-- **Backend:** `GLASSBOX_TEST_MYSQL_PORT=<own> GLASSBOX_TEST_REDIS_PORT=<own> .venv/bin/python -m pytest services/tests -q` (own throwaway containers; never the shared stack's default ports) (about 134 tests; note skipped DB-backed ones) and `.venv/bin/ruff check services eval`; for ask/cache/budget changes run a real local compose stack and one end-to-end SSE (`curl -N`) plus a concurrent or failure case.
+- **Backend:** `GLASSBOX_TEST_MYSQL_PORT=<own> GLASSBOX_TEST_REDIS_PORT=<own> .venv/bin/python -m pytest services/tests -q` (own throwaway containers; never the shared stack's default ports) (about 780 tests; note skipped DB-backed ones) and `.venv/bin/ruff check services eval`; for ask/cache/budget changes run a real local compose stack and one end-to-end SSE (`curl -N`) plus a concurrent or failure case.
 - **k8s:** `kubectl kustomize k8s/base`, `k8s/overlays/prod`, and each flux/ingest/keda overlay; confirm ordering (`dependsOn`, `wait`), memory limits, RBAC rules, annotation values.
 - **Terraform:** `terraform fmt -check -recursive`; in each root `terraform init -backend=false && terraform validate`. No plan, no apply, no state.
 - **Workflows:** `actionlint`; trace the trigger, filters, permissions and environment for the claimed behavior.
-- **Docs-only:** facts match code (numbers, names, paths); stale SNAPSHOT/handoff roles; conflicting instructions between files.
+- **Docs-only:** facts match code (numbers, names, paths); stale SNAPSHOT/BACKLOG state; conflicting instructions between files.
 - Clean up: stop what you started, remove `node_modules`/`dist`/`.terraform` you created.
 
 ## Where to read more
 
-- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`), `project/BACKLOG.md` (current state; older checkpoints, including the Task 5 Flux lessons, are in `project/archive/`), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
-- Design: `docs/DESIGN.md` (4 UX, 5 architecture, 8 SSE contract, 9 k8s and memory budget, 10 Terraform, 12 CI/CD), `docs/DESIGN-002-followups.md` (chat, resilience), `docs/DESIGN-003-ingestion.md` (planned), `docs/architecture/deep-dive.md`.
+- Orientation: `project/SNAPSHOT.md`, `project/BACKLOG.md` (`> RESUME HERE`; older checkpoints, including the Task 5 Flux lessons, are in `project/archive/`), `project/status/README.md` (system diagram, per-feature reports with prior review findings).
+- Design: `docs/DESIGN.md` (4 UX, 5 architecture, 8 SSE contract, 9 k8s and memory budget, 10 Terraform, 12 CI/CD), `docs/DESIGN-002-followups.md` (chat, resilience), `docs/DESIGN-003-ingestion.md` (ingestion; its M4 pipeline parts were dropped 2026-10-03), `docs/DESIGN-005-rag-quality.md` (RAG quality), `docs/architecture/deep-dive.md`.
 - Frontend: `project/MOBILE_DESIGN.md`, `frontend/src/index.css` (token pitfalls).
 - Backend: `services/glassbox/api/ask.py`, `trace.py`, `limits.py`, `worker/main.py`, `retrieval/search.py`.
 - k8s: `k8s/README.md` (release effects, KEDA section), `k8s/overlays/prod/flux/`.
@@ -97,6 +92,4 @@ Workflows (`.github/workflows/`):
 
 ## Machine constraints
 
-- Disk is tight: delete `node_modules`, `dist`, `.terraform` and docker build leftovers you create; do not `npm ci` if the area is untouched.
-- Other agents share the machine and ports: use the ports in the dispatch, never stop an already-running compose stack, kill only your own processes.
-- At most about 3 concurrent reviews. If a review is blocked on resources, say so in the report instead of guessing.
+Disk is tight and other agents share the machine: don't `npm ci` if the area is untouched, delete the `node_modules`, `dist`, `.terraform` and docker build leftovers you create, use only the ports in the dispatch, and kill only your own processes. If a review is blocked on resources, say so in the report instead of guessing.
