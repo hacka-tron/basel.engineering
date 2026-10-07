@@ -30,7 +30,7 @@ Check these once, before the first non-draft project merges. Each is a BACKLOG i
    - `python -m services.glassbox.portfolio` validates every project and fails with a message naming the field.
    - `cd frontend && npm run build` builds the site with the project in it.
    - Optional: `cd frontend && npm run phone` to see the card and details sheet at phone size (`project/MOBILE_DESIGN.md`).
-7. **PR:** branch `content/portfolio-<slug>` in `.worktrees/`. Corpus changes run full CI. Get the standard review gate (`orchestration/reviewer-brief.md`), with the reviewer checking facts against what the owner provided, privacy, and links. Merge once approved and green (`project/CLAUDE.md` "Working style").
+7. **PR:** branch `content/portfolio-<slug>` in `.worktrees/`. Corpus changes run full CI. Get the standard review gate (`orchestration/reviewer-brief.md`), with the reviewer checking facts against what the owner provided, privacy, and links. Merge once approved and green (`project/CLAUDE.md` "Merge").
 8. **After release:** the Release workflow builds the image and the ingest Job indexes the project. On the live site, check that the card shows, the details sheet opens, screenshots load, and that asking "Tell me about <project>" cites `corpus/portfolio/<slug>.md`.
 
 ## Changing or removing a project

@@ -16,19 +16,13 @@ Order: 0 golden-set refresh, 1 phase 3 paid baseline, 2 phase 6 part 2 (corpus s
 - Paid runs: `GLASSBOX_PROVIDER=bedrock`, `GLASSBOX_EVAL_ALLOW_PAID=1`. Report measured cost. Stop and report if a run would exceed $1.
 - Docs under `docs/` are ingested into the live corpus. Keep `docs/architecture/deep-dive.md` sections under 500 words (one chunk each); the conversational chat section is at the limit.
 
-## Rules for every task
+## RAG task inputs
 
-- Worktree `.worktrees/<name>` on its own branch from `origin/main`; open a PR; **don't merge** (the orchestrator merges after review).
-- Hard rules: the list in `orchestration/README.md` "Working rules" (your dispatch restates it). The one RAG work trips most: every pytest run, including `-x`/`-k`/single tests, exports `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` for your own throwaway containers.
-- Checks: `ruff check services eval`, `pytest services/tests -q` (with the docker stack up, DB tests run too), a status report in `project/status/` per its README.
+- Read only the plan phase and `DESIGN-005` sections needed for the task.
+- Every pytest run, including `-x`/`-k`/single tests, exports `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` for its own throwaway containers. Use `project/orchestration/README.md` for the complete hard rules.
+- Checks: `.venv/bin/ruff check services eval` and isolated `.venv/bin/python -m pytest services/tests -q -rs`; DB tests need their own MySQL/Redis containers. Record measured paid cost.
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-- Final report: under 250 words. PR URL, what changed, checks and results, numbers, open questions.
-
-## Token discipline
-
-- Read this brief, then only the plan phase and DESIGN-005 sections you need. Use `grep -n` and line ranges, not whole files; `docs/DESIGN.md` (945 lines) and the deep dive (470+) are never read whole.
-- Don't poll long jobs: run them in the background and wait for the completion signal.
-- If you discover a fact the next agent would need (a command, a gotcha), add one line to "Gotchas" below in your PR.
+- Add any newly discovered RAG-specific gotcha below.
 
 ## Gotchas
 
