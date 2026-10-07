@@ -32,6 +32,5 @@ Ablate. Remove one prompt part at a time on the failing case (smoke runs) until 
 - Temperature 0 on Nova Lite is still not deterministic (about 11 of 95 answers differ between runs). Compare 2+ runs.
 - Nova 2 Lite (`us.amazon.nova-2-lite-v1:0`) was tested on v17: more fact coverage, but 2.7x the words, about 4x slower to the first token, about 5.6x the cost, an injection miss and an invented claim. Not adopted (2026-10-04). Haiku 4.5 needs the owner's Anthropic form.
 
-## Dispatch and review
-- One implementer (Opus for prompt judgment) in `.worktrees/prompt-vN`. Resume the same agent for fix rounds. Budget the paid runs ($1 cap; report spend). Review with an Opus reviewer per `reviewer-brief.md`, then resume the same reviewer for round 2.
-- The review focus that paid off: whether pointer or label processing loses facts; whether the cache treats a denial as an answer; whether the measurement matches what ships (fresh index); whether About Basel text leaked into the repo.
+## Prompt-version review focus
+- Budget the paid runs ($1 cap; report spend). Check whether pointer or label processing loses facts; whether the cache treats a denial as an answer; whether the measurement matches what ships (fresh index); whether About Basel text leaked into the repo. Use `reviewer-brief.md` for the review dispatch.

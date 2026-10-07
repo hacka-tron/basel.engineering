@@ -1,44 +1,66 @@
-# CLAUDE.md
+# basel.engineering
 
-Instructions for Claude Code when working in this repository.
+Public production site: React/Vite and a FastAPI RAG chatbot on MySQL, Redis, Bedrock, k3s/Flux and AWS. `docs/` is chatbot corpus; `project/` is not.
 
 ## Repo layout
 
-- `docs/` — design docs (`DESIGN.md` core architecture, `DESIGN-002-followups.md` resilience/chat features, `DESIGN-003-ingestion.md` content pipeline, `DESIGN-004-action-plan.md` build sequencing, `DESIGN-005-rag-quality.md` RAG quality) and `docs/superpowers/plans/` implementation plans.
-- `project/` — this file, `SNAPSHOT.md`, `BACKLOG.md` (see below), `status/` (owner-facing feature reports, see below), `PORTFOLIO_PROJECT.md` (playbook for adding a portfolio project), `MOBILE_DESIGN.md` (responsive/typography rules and the screenshot checklist — required reading before any `frontend/` change), `orchestration/` (model roles, the review gate, merging; use its templates instead of writing dispatch prompts from scratch) and `archive/` (old handoff checkpoints, the 09-29/30 pilot notes and legacy Codex/Gemini guides). Kept out of the repo root; the root `CLAUDE.md` is a stub that imports this file. Not ingested into the chatbot corpus (only `docs/`, `infra/`, `k8s/`, `services/` and the About Basel files are).
-- `services/` — application code.
+| Path | Purpose |
+|---|---|
+| `frontend/` | UI and phone preview. |
+| `services/`, `eval/` | API, worker, tests and RAG evaluation. |
+| `corpus/portfolio/` | Published portfolio entries. |
+| `infra/`, `k8s/`, `.github/workflows/` | AWS/Terraform, Flux and CI. |
+| `docs/` | Design and chatbot corpus. |
+| `project/` | Instructions, guides, state, reports and history. |
 
-Read the relevant design doc before implementing a feature. If an implementation needs to diverge from what's written, update the doc in the same change rather than letting it drift.
+## Commands and shared resources
 
-## Working style (owner preferences)
+- Python 3.12; `.venv/bin/python -m pytest services/tests -q -rs` with `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` exported to **your own throwaway containers** for every pytest run. Tests use Redis DB 0 and 15. Lint: `.venv/bin/ruff check services eval`.
+- `cd frontend && npm run lint && npm test && npm run build`; `npm run dev` serves the site; `npm run phone` starts phone preview. Backend: `docker compose up -d`. See `eval/README.md` for evaluation.
+- Before a **full** suite, check none is running. Serialize full suites across agents; never dispatch an implementer whose suite will overlap yours. Do not rerun an identical tested tree.
 
-Details and the why are in `orchestration/README.md`.
+## Project hard rules and owner approval
 
-- **Orchestrate, parallelize.** Claude orchestrates with parallel worktree subagents (`.worktrees/<name>`): Opus for judgment and review, Sonnet for mechanical work and verification loops. Scope new features with a subagent, not in the main conversation. When work waits on review or the owner, start the next backlog item.
-- **Track expensive work.** Log costly loops and workflows in `orchestration/token-log.md` with the fix, and turn repeated work into a brief, playbook or script (`orchestration/README.md`).
-- **Review gate:** an Opus subagent with `orchestration/reviewer-brief.md` (reads `orchestration/reviewer-primer.md` first). Codex is optional, only when it has usage; Gemini is legacy. **Round cap 2:** after that only Critical findings, or Important ones with a reachable failure scenario, block; the rest go to `BACKLOG.md`. Track each open PR's round, verdict and fixes since.
-- **PRs:** record the review in the PR body with `gh api -X PATCH` (`gh pr edit` fails here). Chain or stack PRs that touch the same files, and trial-merge parallel ones.
-- **Merge without asking** once review is APPROVED and CI is green: `gh pr update-branch`, full test suite on the merged tree, wait for green CI, then `gh pr merge` as its own command. Exception: changes needing the owner's go-ahead (live infra, IAM, RBAC; `orchestration/README.md` "What checked in means" step 6).
-- **Process-doc changes just check in.** A PR touching only `project/**` (except `SNAPSHOT.md`, which a test reads) or repo-root `*.md` (exclusively; renames or moves from other directories count as code) skips the test jobs (CI's `changes` gate, `.github/scripts/ci-code-changed.sh`) and needs no review round: open it and merge once the skipped checks report. `docs/**` is chatbot corpus and keeps full CI.
-- **The owner never runs AWS or Terraform by hand.** Production changes go through the Terraform, Bootstrap and "Ops · ..." workflows (`infra/CI.md`); ask the owner for approval clicks, never commands. **Every dispatch restates the hard rules** (the canonical list is in `orchestration/README.md` "Working rules"; copy it, don't paraphrase it).
-- **Owner content rules:** RAG evaluations are approved as of 2026-10-03 (the owner added documents); any RAG-plan task reads `orchestration/rag-plan-brief.md` first (owner decisions, environment, spend limits, gotchas). The About Basel files mirror the owner's resume: don't edit them to fix architecture facts (raise it with the owner). About Basel content lives only in the private repo `hacka-tron/basel.engineering-docs`; there is no public About Basel text in this repo, and none may be added.
-- **Adding a portfolio project** (a common owner request): follow `PORTFOLIO_PROJECT.md`; don't explore the portfolio code.
-- **Mobile testing:** use the phone preview (`cd frontend && npm run phone`, see `MOBILE_DESIGN.md`) and side-by-side pages when the owner chooses between designs. Record each mobile design decision in `MOBILE_DESIGN.md`.
-- **Status reports** for every substantial change (below), and add generalizable lessons to `~/Coding/template` as you go, in the guide they belong to.
+Every relevant dispatch copies the hard rules verbatim from `project/orchestration/README.md`. In particular:
 
-## Session memory (read this before scanning the repo)
+- never read, open or copy any `terraform.tfstate`, `*.tfstate.backup`, `*.tfvars` or plan file;
+- no `terraform apply`, no AWS/SSM/`kubectl` writes against the live system, no GitHub environment or secret changes;
+- never run `git stash`;
+- pytest only against your own throwaway MySQL/Redis containers, with `GLASSBOX_TEST_MYSQL_PORT` and `GLASSBOX_TEST_REDIS_PORT` exported for every run (including `-x`, `-k` and single-test runs): without them the tests default to 3306/6379, the owner's shared local compose stack (`services/tests/stack_ports.py`), and leave test rows in it.
 
-- **`project/SNAPSHOT.md`** is the architecture/repo-state blueprint. Read it first when starting a session instead of scanning the repo tree.
-- **`project/BACKLOG.md`** holds the `> RESUME HERE` pointer to the next action, open decisions only the owner can make, deferred milestones, bugs, and ideas.
-- **When a task or phase completes**, update `project/SNAPSHOT.md` (what now exists), `project/BACKLOG.md` (move the resume point forward, log anything new), and this file if the working process itself changed. This is what keeps future sessions cheap — they orient from these three files instead of re-deriving context from the full repo and design docs every time.
-- On long scoping/planning sessions, `/compact` periodically to keep context costs down.
+Live changes happen only through the Terraform, Bootstrap and "Ops · ..." workflows after the owner's approval click; give the owner the click, never commands. Anything that changes the live cluster or AWS on merge beyond a normal release (a new Flux component or Kustomization, ConfigMap/infra applied by GitOps) or grants permissions (RBAC, IAM, trust policies) needs the owner's explicit go-ahead before merge. The owner never runs AWS or Terraform by hand.
 
-## Status reports (owner preference)
+RAG evaluations are approved as of 2026-10-03; `project/orchestration/rag-plan-brief.md` gives the approved small-run budget and the $1 per-run stop point. Do not start bulk paid runs without the owner's go-ahead. The About Basel files mirror the owner's resume: do not edit them to fix architecture facts; raise that with the owner. No public About Basel text may be added here.
 
-After each substantial feature or change, write or update a report in `project/status/` (`YYYY-MM-DD-HHMM-<slug>.md`, Pacific time first written; the H1 ends with `(YYYY-MM-DD HH:MM PT)`) and add it to the index in `project/status/README.md`. Write it when the PR opens, then update its status at merge and again at deploy. The reader is the owner, a technical boss who wants a strong grasp of the system: TL;DR, visitor-visible change, architecture with a small Mermaid diagram, design decisions and why, what review caught, operational risks, how to verify, open items. `project/status/README.md` has the format. Delegating the writing to a subagent is fine. Never put account IDs, IPs or tokens in a report.
+## Review gate
 
-## Commit discipline
+Use the global `~/Coding/template/core/skills/review-gate/SKILL.md`. Reviewer primer: `project/orchestration/reviewer-primer.md`; dispatch specifics: `project/orchestration/reviewer-brief.md`. Record reviewer identity, round, verdict and validation in the PR body through GitHub REST (`gh api -X PATCH`; `gh pr edit` fails here), and in the feature's `project/status/` report. The process-doc-only exception **is enabled** only when the changed paths are exclusively `project/**` except `project/SNAPSHOT.md`, or repo-root `*.md`; moves from other directories and mixed changes do not qualify. These PRs skip test jobs through `.github/scripts/ci-code-changed.sh` and need no review round. `docs/**` is corpus and receives full CI.
 
-Commit after each meaningfully complete unit of work (a build-plan phase, a feature, a fix) rather than batching unrelated changes together or leaving work uncommitted across sessions. Each commit should leave the repo in a working, reviewable state.
+## Merge
 
-This matters even with an AI agent driving the work: commits are the checkpoints a human reviews, reverts, or bisects from if something turns out wrong. Since this project is explicitly built phase-by-phase (`docs/DESIGN.md` §17), frequent commits keep that phase structure visible in history instead of collapsing large spans of work into one diff.
+Variant: **PR + CI**. Required checks: `backend-tests` and `frontend-checks` on the updated PR head (the process-doc-only exception reports them skipped). For code, run the backend suite and Ruff; for frontend changes, also run frontend lint, tests and build on the merged tree if that exact tree has not passed. Update the branch with `gh pr update-branch`, wait for green CI, and merge with `gh pr merge <n> --merge` as its own command. Push rule: push feature branches and use a merge commit into `main`; do not push directly to `main` or rebase a pushed branch. Owner approval above precedes a live-effect merge.
+
+## Status reports
+
+One report per substantial feature in `project/status/`, named `YYYY-MM-DD-HHMM-<slug>.md` using Pacific time when first written; H1 ends `(YYYY-MM-DD HH:MM PT)`. Create at PR open, update at merge and deployment, and index it in `project/status/README.md`. Never put account IDs, IPs, tokens or private About Basel content in a report.
+
+## Session memory
+
+- `project/SNAPSHOT.md` — verified architecture and repository state.
+- `project/BACKLOG.md` — `> RESUME HERE`, open decisions and next actions.
+- `project/archive/` — older handoff checkpoints; there is no active `AGENT_HANDOFF.md`.
+
+## Before you touch X, read Y
+
+| Work | Project-specific guide |
+|---|---|
+| Architecture or a feature | Relevant section of `docs/DESIGN*.md`; update it when implementation diverges. |
+| Any `frontend/` change | `project/MOBILE_DESIGN.md` (breakpoints, screenshot checklist and phone preview). |
+| Portfolio content | `project/PORTFOLIO_PROJECT.md`; do not explore the portfolio code for a content request. |
+| RAG plan or prompt | `project/orchestration/rag-plan-brief.md`; for prompt changes also `prompt-version-playbook.md`. |
+| Private About Basel corpus resync | `project/orchestration/corpus-resync.md`. |
+| Infra or operations | `project/orchestration/README.md`, `infra/CI.md`, and the relevant runbook. |
+
+## Central instructions
+
+Global layers load from `~/Coding/template`. This project overrides them with the PR + CI merge variant, the narrow process-doc-only review exception, the site-specific hard rules and approvals above, its status report format, and BACKLOG + SNAPSHOT handoffs without a separate handoff file. Claude owns implementation by default; Codex reviews only when it has usage, unless the owner explicitly hands it implementation.
