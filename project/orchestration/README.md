@@ -4,7 +4,7 @@ How work is split between models on this project, how every change passes the re
 
 - `reviewer-brief.md` — the review-gate dispatch template (Opus subagent by default, Codex optional) and the Codex CLI form.
 - `rag-plan-brief.md` — shared context for every RAG-plan agent (owner decisions, environment, rules, gotchas); point dispatches at it instead of restating.
-- `reviewer-primer.md` — what every reviewer reads first (system map, hard rules, known traps, per-area checklist).
+- `reviewer-primer.md` — what every reviewer reads first (system map, known traps, per-area checklist).
 - Legacy, kept for history: `project/archive/CODEX.md` (Codex as implementer) and `project/archive/gemini-reviewer.md` (Gemini via `agy`).
 
 ## Roles (as of 2026-10-02)
@@ -49,7 +49,7 @@ Agents merge **without asking** once the review is APPROVED and CI is green (own
 
 1. **Record the review in the PR body** through REST: `gh api -X PATCH repos/hacka-tron/basel.engineering/pulls/<n> -F body=@<scratch>/pr<n>-body.md`. `gh pr edit` fails on this repo (the deprecated projectCards GraphQL field errors); use REST for retargets too (`-f base=main`).
 2. **Re-sync:** `gh pr update-branch <n>`, pull the new head into the worktree, and run the **full** test suite on that merged tree (`.venv/bin/python -m pytest services/tests -q`, plus frontend lint/test/build when `frontend/` changed).
-3. **Wait for CI:** `gh pr checks <n> --watch --fail-fast` in the background.
+3. **Wait for CI** on the run itself, in the background: `gh run list --branch <b>` for its id, then `gh run watch <id> --exit-status` (`gh pr checks --watch` started before CI registers exits early).
 4. **Merge as its own command:** `gh pr merge <n> --merge` (this repo uses merge commits), not chained with other commands. Then update the status report and the PR's dependents.
 
 ## Coordinator handoff
@@ -58,4 +58,4 @@ There is no separate handoff doc (owner, 2026-10-03: one agent, no coordinator s
 
 ## History
 
-Until 2026-09-30 Codex implemented from exact specs and Gemini reviewed; from 2026-09-30 Claude implemented and Codex was the gate; since 2026-10-01 Codex has mostly been out of usage and an Opus subagent has been the gate, which is now the default. Pilot lessons are in `project/BACKLOG.md` "Multi-model pipeline notes".
+Until 2026-09-30 Codex implemented from exact specs and Gemini reviewed; from 2026-09-30 Claude implemented and Codex was the gate; since 2026-10-01 Codex has mostly been out of usage and an Opus subagent has been the gate, which is now the default. Pilot lessons are in `project/archive/pipeline-pilot-notes-2026-09.md`.
