@@ -1,6 +1,6 @@
 # Basel reviewer brief inputs
 
-Follow the global `~/Coding/template/core/skills/review-gate/SKILL.md` for the review procedure, verdict format and round handling. Read `project/orchestration/reviewer-primer.md` first for this site's system map, traps and per-area checks. Fill a uniquely named `pr<n>-review-r<round>-prompt.md` with the literal requirements, base/branch/worktree, diff, prior verdict and fixes, status report, exact validation commands, one realistic end-to-end check, and any known deviation. Record the reviewer and result in the PR body and status report.
+Follow the global `~/.claude/template/core/skills/review-gate/SKILL.md` for the review procedure, verdict format and round handling. Read `project/orchestration/reviewer-primer.md` first for this site's system map, traps and per-area checks. Fill a uniquely named `pr<n>-review-r<round>-prompt.md` with the literal requirements, base/branch/worktree, diff, prior verdict and fixes, status report, exact validation commands, one realistic end-to-end check, and any known deviation. Record the reviewer and result in the PR body and status report.
 
 ## Copy into every relevant reviewer prompt
 

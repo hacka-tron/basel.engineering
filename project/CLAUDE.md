@@ -34,7 +34,7 @@ RAG evaluations are approved as of 2026-10-03; `project/orchestration/rag-plan-b
 
 ## Review gate
 
-Use the global `~/Coding/template/core/skills/review-gate/SKILL.md`. Reviewer primer: `project/orchestration/reviewer-primer.md`; dispatch specifics: `project/orchestration/reviewer-brief.md`. Record reviewer identity, round, verdict and validation in the PR body through GitHub REST (`gh api -X PATCH`; `gh pr edit` fails here), and in the feature's `project/status/` report. The process-doc-only exception **is enabled** only when the changed paths are exclusively `project/**` except `project/SNAPSHOT.md`, or repo-root `*.md`; moves from other directories and mixed changes do not qualify. These PRs skip test jobs through `.github/scripts/ci-code-changed.sh` and need no review round. `docs/**` is corpus and receives full CI.
+Use the global `~/.claude/template/core/skills/review-gate/SKILL.md`. Reviewer primer: `project/orchestration/reviewer-primer.md`; dispatch specifics: `project/orchestration/reviewer-brief.md`. Record reviewer identity, round, verdict and validation in the PR body through GitHub REST (`gh api -X PATCH`; `gh pr edit` fails here), and in the feature's `project/status/` report. The process-doc-only exception **is enabled** only when the changed paths are exclusively `project/**` except `project/SNAPSHOT.md`, or repo-root `*.md`; moves from other directories and mixed changes do not qualify. These PRs skip test jobs through `.github/scripts/ci-code-changed.sh` and need no review round or security pass (state the exception when the merge gate asks). `docs/**` changes are chatbot corpus (external data): full review gate and security pass. `docs/**` is corpus and receives full CI.
 
 ## Merge
 
@@ -63,4 +63,4 @@ One report per substantial feature in `project/status/`, named `YYYY-MM-DD-HHMM-
 
 ## Central instructions
 
-Global layers load from `~/Coding/template`. This project overrides them with the PR + CI merge variant, the narrow process-doc-only review exception, the site-specific hard rules and approvals above, its status report format, and BACKLOG + SNAPSHOT handoffs without a separate handoff file. Claude owns implementation by default; Codex reviews only when it has usage, unless the owner explicitly hands it implementation.
+Global layers load from `~/.claude/template`. This project overrides them with the PR + CI merge variant, the narrow process-doc-only review exception, the site-specific hard rules and approvals above, its status report format, and BACKLOG + SNAPSHOT handoffs without a separate handoff file. Claude owns implementation by default; Codex reviews only when it has usage, unless the owner explicitly hands it implementation.

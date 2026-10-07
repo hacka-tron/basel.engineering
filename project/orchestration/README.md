@@ -1,6 +1,6 @@
 # basel.engineering orchestration inputs
 
-Generic dispatch, review and merge procedures load from `~/Coding/template/core/CLAUDE.md` and its `review-gate`, `merge`, `status-report` and `handoff-checkpoint` skills. This file supplies the facts and hard rules those procedures need for this production site. Use `reviewer-brief.md` for a review and `reviewer-primer.md` for the system map and known traps. RAG work also uses `rag-plan-brief.md`.
+Generic dispatch, review and merge procedures load from `~/.claude/template/core/CLAUDE.md` and its `review-gate`, `merge`, `status-report` and `handoff-checkpoint` skills. This file supplies the facts and hard rules those procedures need for this production site. Use `reviewer-brief.md` for a review and `reviewer-primer.md` for the system map and known traps. RAG work also uses `rag-plan-brief.md`.
 
 ## Hard rules for every dispatch
 
