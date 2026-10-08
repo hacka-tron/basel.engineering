@@ -38,6 +38,7 @@ import projects from 'virtual:portfolio'
 import PortfolioPanel from './components/PortfolioPanel'
 import { questionForProject } from './lib/portfolioView'
 import { selectionAnswer, selectionQuestions } from './lib/selection'
+import { parseDeepLink } from './lib/deepLink'
 
 const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight'
 
@@ -52,9 +53,11 @@ const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project
 const HAS_PORTFOLIO = projects.length > 0
 const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
 const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
+// A shareable link (?project=<slug> or ?topic=...), read once at load (lib/deepLink.ts).
+const DEEP_LINK = parseDeepLink(window.location.search, projects.map((project) => project.slug))
 
 function App() {
-  const [corpus, setCorpus] = useState<Corpus>('basel')
+  const [corpus, setCorpus] = useState<Corpus>(DEEP_LINK.corpus ?? 'basel')
   // Below md the diagram replaces the conversation in place (no overlay).
   // A reload while in the diagram keeps it (its history entry survives).
   const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state, SHOWN_VIEWS))
@@ -63,7 +66,7 @@ function App() {
   const [askFocused, setAskFocused] = useState(false)
   const [activeNode, setActiveNode] = useState<NodeId | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
-  const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [selectedProject, setSelectedProject] = useState<string | null>(DEEP_LINK.project)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   // One conversation per corpus tab (DESIGN-002 §5.1): switching the toggle
@@ -656,6 +659,14 @@ function App() {
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
+  }, [viewNav])
+  // A deep link is applied once: its query is dropped from the address bar
+  // (later clicks and reloads behave as usual), and on phones a Portfolio link
+  // opens the Portfolio view as its own history entry, so Back returns to Chat.
+  useEffect(() => {
+    if (!window.location.search) return
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash)
+    if (DEEP_LINK.corpus === 'portfolio' && !isDesktopRef.current) viewNav.showView('portfolio')
   }, [viewNav])
   useEffect(() => {
     if (!showOtherView) return
