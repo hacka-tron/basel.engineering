@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseDeepLink } from './deepLink.ts'
+import { linkSearch, parseDeepLink } from './deepLink.ts'
 
 const slugs = ['goalbuddy']
 const none = { corpus: null, project: null }
@@ -26,4 +26,20 @@ test('unknown, draft or hidden values are ignored', () => {
   // No published project: the Portfolio topic is hidden, so a link to it reads as no link.
   assert.deepEqual(parseDeepLink('?topic=portfolio', []), none)
   assert.deepEqual(parseDeepLink('?project=goalbuddy', []), none)
+})
+
+test('linkSearch writes what is shown: the project, else the topic; About Basel has no query', () => {
+  assert.equal(linkSearch('', { corpus: 'portfolio', project: 'goalbuddy' }), '?project=goalbuddy')
+  assert.equal(linkSearch('?project=goalbuddy', { corpus: 'portfolio', project: null }), '?topic=portfolio')
+  assert.equal(linkSearch('?project=goalbuddy', { corpus: 'system', project: null }), '?topic=system')
+  assert.equal(linkSearch('?topic=system', { corpus: 'basel', project: null }), '')
+  assert.equal(linkSearch('?utm_source=x&topic=system', { corpus: 'portfolio', project: 'goalbuddy' }), '?utm_source=x&project=goalbuddy')
+  assert.equal(linkSearch('?utm_source=x&project=goalbuddy', { corpus: 'basel', project: null }), '?utm_source=x')
+})
+
+test('a written link reads back as the same view', () => {
+  for (const link of [{ corpus: 'portfolio', project: 'goalbuddy' }, { corpus: 'portfolio', project: null }, { corpus: 'system', project: null }] as const) {
+    assert.deepEqual(parseDeepLink(linkSearch('', link), slugs), link)
+  }
+  assert.deepEqual(parseDeepLink(linkSearch('', { corpus: 'basel', project: null }), slugs), none)
 })
