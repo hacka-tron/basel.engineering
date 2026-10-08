@@ -33,6 +33,8 @@ Check these once, before the first non-draft project merges. Each is a BACKLOG i
 7. **PR:** branch `content/portfolio-<slug>` in `.worktrees/`. Corpus changes run full CI. Get the standard review gate (`orchestration/reviewer-brief.md`), with the reviewer checking facts against what the owner provided, privacy, and links. Merge once approved and green (`project/CLAUDE.md` "Merge").
 8. **After release:** the Release workflow builds the image and the ingest Job indexes the project. On the live site, check that the card shows, the details sheet opens, screenshots load, and that asking "Tell me about <project>" cites `corpus/portfolio/<slug>.md`.
 
+**Share link:** `https://basel.engineering/?project=<slug>` opens the Portfolio with that project's details sheet (phones: the Portfolio view; Back returns to Chat). `?topic=portfolio` opens just the Portfolio. The link does not ask the chatbot by itself (`frontend/src/lib/deepLink.ts`).
+
 ## Changing or removing a project
 
 - **Edit:** change the file and merge; the next release re-indexes it.
