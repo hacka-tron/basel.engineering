@@ -10,4 +10,4 @@ resources:
   - ingest-job.yaml
 images:
   - name: 404379474987.dkr.ecr.us-east-1.amazonaws.com/glassbox
-    newTag: build-142 # {"$imagepolicy": "flux-system:glassbox:tag"}
+    newTag: build-143 # {"$imagepolicy": "flux-system:glassbox:tag"}
