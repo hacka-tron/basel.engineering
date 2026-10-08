@@ -28,6 +28,8 @@ from services.glassbox.cache.embedding import (
     embedding_cache_key,
     normalize_question,
 )
+from services.glassbox.codename import CodenameFilter
+from services.glassbox.codename import rewrite as rewrite_codename
 from services.glassbox.corpora import Corpus
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.fewshot import get_examples
@@ -1228,7 +1230,8 @@ async def _stream(
             route = hit_route
             # Defence in depth: a masked answer is never cached, but an entry written
             # before the guard existed is masked on the way out all the same.
-            answer, masked = mask_answer(answer_hit["answer"])
+            # An entry cached before the codename rewrite still says "Glassbox".
+            answer, masked = mask_answer(rewrite_codename(answer_hit["answer"]))
             if masked:
                 timings["answer_pii_masked"] = masked
                 LOGGER.warning("Cached answer for %s needed %d mask(s)", request_id, masked)
@@ -1395,6 +1398,8 @@ async def _stream(
         # Prompt v19: drops a "Sources: 1, 4" line the model writes on its own (owner,
         # live 2026-10-05). It runs first, so the masker sees only text that is sent.
         sources_lines = SourcesLineFilter()
+        # Visitors read "this site", not the docs' codename (owner, 2026-10-08).
+        codename = CodenameFilter()
         content_filtered = False
         # Set when the provider refuses the call before any output (the AWS budget
         # stop: IAM denies the answer models). Answered like the kill switch.
@@ -1416,7 +1421,7 @@ async def _stream(
             try:
                 async for part in parts:
                     received_output = True
-                    safe = masker.push(sources_lines.push(part))
+                    safe = masker.push(codename.push(sources_lines.push(part)))
                     if safe:
                         response_parts.append(safe)
                         yield token_frame(safe)
@@ -1459,9 +1464,11 @@ async def _stream(
                 },
             )
             return
-        tail = masker.push(sources_lines.flush()) + masker.flush()
+        tail = masker.push(codename.push(sources_lines.flush()) + codename.flush()) + masker.flush()
         if sources_lines.dropped:
             timings["sources_line_dropped"] = sources_lines.dropped
+        if codename.rewritten:
+            timings["codename_rewritten"] = codename.rewritten
         if tail:
             response_parts.append(tail)
             yield token_frame(tail)
