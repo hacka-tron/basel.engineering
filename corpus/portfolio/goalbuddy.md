@@ -7,7 +7,7 @@ order: 1
 stack: [React Native, Expo, TypeScript, Node.js, Express, PostgreSQL, TanStack Query, Zustand]
 links:
   code: https://github.com/hacka-tron/goalbuddy
-cover: goalbuddy/icon.png
+cover: goalbuddy/cover.png
 visuals:
   - src: goalbuddy/milestones.png
     alt: Goals screen listing today's pending milestones, each with its goal, most with a Daily badge and a due date
