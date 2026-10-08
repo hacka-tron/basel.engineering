@@ -53,7 +53,7 @@ const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project
 const HAS_PORTFOLIO = projects.length > 0
 const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
 const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
-// A shareable link (?project=<slug> or ?topic=...), read once at load (lib/deepLink.ts).
+// A shareable link (?project=<slug> or ?topic=...), read at load (lib/deepLink.ts).
 const DEEP_LINK = parseDeepLink(window.location.search, projects.map((project) => project.slug))
 
 function App() {
@@ -664,16 +664,11 @@ function App() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [viewNav])
-  // A deep link is applied once: its parameters are dropped from the address bar
-  // (later clicks and reloads behave as usual), and on phones a Portfolio link
-  // opens the Portfolio view as its own history entry, so Back returns to Chat.
+  // A deep link stays in the address bar (owner, 2026-10-07), so it can be copied
+  // and a reload opens it again. On phones a Portfolio link opens the Portfolio
+  // view as its own history entry, so Back returns to Chat; showView adds no
+  // entry when that view is already shown (a reload there, or StrictMode's rerun).
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (!params.has('project') && !params.has('topic')) return
-    params.delete('project')
-    params.delete('topic')
-    const query = params.toString()
-    window.history.replaceState(window.history.state, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash)
     if (DEEP_LINK.corpus === 'portfolio' && !isDesktopRef.current) viewNav.showView('portfolio')
   }, [viewNav])
   useEffect(() => {
