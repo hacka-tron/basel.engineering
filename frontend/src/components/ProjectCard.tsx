@@ -4,6 +4,7 @@ import { initials, placeholderColors, stackPreview } from '../lib/portfolioView'
 
 /** The project's cover, else its first visual, else a generated placeholder (decorative: the card's text names it). */
 function ProjectThumb({ project, className }: { project: Project; className: string }) {
+  // A cover's width/height are only intrinsic-size hints: both thumb boxes are fixed-aspect with object-cover.
   const first = project.cover ? { src: project.cover, width: 1600, height: 1000 } : project.visuals[0]
   if (first) {
     return <img src={first.src} alt="" width={first.width} height={first.height} loading="lazy" decoding="async" className={`block rounded-[2px] border border-hairline bg-canvas object-cover ${className}`} />
