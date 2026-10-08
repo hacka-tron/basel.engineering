@@ -82,9 +82,11 @@ test('loads valid files sorted by order, skipping drafts, dotfiles and non-Markd
   }
 })
 
-test('the repository corpus (only the draft example) gives an empty portfolio', () => {
+test('the repository corpus loads and leaves out the draft example', () => {
   const corpus = new URL('../../corpus/portfolio', import.meta.url).pathname
-  assert.deepEqual(loadPortfolio(corpus, new URL('../public', import.meta.url).pathname), [])
+  const projects = loadPortfolio(corpus, new URL('../public', import.meta.url).pathname)
+  assert.ok(projects.length > 0)
+  assert.ok(!projects.some((p) => p.slug === '_example'))
   assert.match(readFileSync(join(corpus, '_example.md'), 'utf8'), /draft: true/)
 })
 
