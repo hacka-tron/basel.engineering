@@ -9,7 +9,7 @@ links:
   code: https://github.com/hacka-tron/goalbuddy
 visuals:
   - src: goalbuddy/milestones.png
-    alt: Goals screen listing today's pending milestones, each with its goal, a Daily badge and a due date
+    alt: Goals screen listing today's pending milestones, each with its goal, most with a Daily badge and a due date
     caption: Today's milestones across every goal, logged with one tap.
     aspect: "9/19.5"
   - src: goalbuddy/my-goals.png
@@ -35,8 +35,7 @@ the same kind of goal, such as working out, studying or learning an instrument, 
 skipping a day means letting someone down. The app is meant to take seconds per visit:
 mark progress, send a nudge, check a streak, and get back to your day.
 
-GoalBuddy is a work in progress. It runs locally on Android and in a browser preview, and
-it is not on the app stores. The code is public on GitHub.
+GoalBuddy is a work in progress. It runs locally on Android and is not on the app stores. The code is public on GitHub.
 
 ## GoalBuddy: what I built
 
@@ -49,14 +48,15 @@ GoalBuddy is an Expo (React Native) app with an Express and TypeScript API on Po
 - **Buddy mode:** two people pursue their own goals in the same category and coach each
   other, seeing each other's streaks and completion rates.
 - **Co-op mode:** one person publishes a goal with milestones, and a partner joins and
-  gets an exact copy, so both work through the same plan together.
+  gets their own copy of the goal and its milestones, so both work toward the same
+  objective together.
 - **Finding a partner:** a swipe deck suggests people with goals in the same category, and
   a mutual swipe creates the connection. A search lists public goals.
-- **Check-in chat:** each partnership has a chat that shows deadline warnings when a
-  milestone is due within a day.
+- **Check-in chat:** each partnership has a chat that shows a deadline warning when a
+  partner's milestone is close to its due time.
 
-The mobile app keeps server data in TanStack Query with query-key factories and keeps only
-session and UI state (sign-in, theme, notifications) in Zustand. Every request goes
+The mobile app keeps server data in TanStack Query with query-key factories and keeps session
+and UI state (sign-in, theme, notifications) and an outbox of unsent check-ins in Zustand. Every request goes
 through one API client, and screens handle loading, empty and error states.
 
 ## GoalBuddy: what was interesting
