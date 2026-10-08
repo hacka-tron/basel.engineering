@@ -15,7 +15,9 @@ keep it in step with these rules.
 Rules. Required: ``title`` and ``one_liner`` (text), ``kind`` (``personal`` or
 ``freelance``), ``year`` (a whole number, 1990 to 2100), ``stack`` (a non-empty list
 of text). Optional: ``order`` (whole number; grid order, ascending), ``links``
-(``live`` and/or ``code``, each an ``https://`` URL), ``visuals`` (a list of ``src``,
+(``live`` and/or ``code``, each an ``https://`` URL), ``cover`` (the card picture: a
+path under ``frontend/public/portfolio/`` starting with the file's slug; never shown
+in the visuals gallery), ``visuals`` (a list of ``src``,
 ``alt``, ``aspect`` and an optional ``caption``; ``src`` is a path under
 ``frontend/public/portfolio/`` starting with the file's slug; ``aspect`` is ``16/10``,
 ``4/3`` or ``9/19.5``) and ``draft`` (``true`` or ``false``). Any other field is an
@@ -44,7 +46,7 @@ PUBLIC_DIR = ("frontend", "public", "portfolio")
 # content hash, so each project is re-embedded once in the new format.
 INDEX_VERSION = "1"
 REQUIRED_FIELDS = ("title", "one_liner", "kind", "year", "stack")
-OPTIONAL_FIELDS = ("order", "links", "visuals", "draft")
+OPTIONAL_FIELDS = ("order", "links", "cover", "visuals", "draft")
 KINDS = ("personal", "freelance")
 KIND_LABELS = {"personal": "Personal project", "freelance": "Freelance project"}
 ASPECTS = ("16/10", "4/3", "9/19.5")
@@ -79,6 +81,7 @@ class Project:
     body: str
     order: int | None = None
     links: dict[str, str] = field(default_factory=dict)
+    cover: str | None = None
     visuals: tuple[Visual, ...] = ()
     draft: bool = False
 
@@ -162,6 +165,16 @@ def _whole_number(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _check_src(src: str, slug: str, label: str, errors: list[str]) -> None:
+    parts = PurePosixPath(src).parts
+    outside = "\\" in src or src.startswith("/") or ".." in parts
+    if outside or len(parts) < 2 or parts[0] != slug:
+        errors.append(
+            f"{label} must be a path like {slug}/picture.png under "
+            f"frontend/public/portfolio/ (got {src!r})"
+        )
+
+
 def _visual(index: int, item, slug: str, errors: list[str]) -> Visual | None:
     where = f"visuals[{index}]"
     if not isinstance(item, dict):
@@ -175,13 +188,7 @@ def _visual(index: int, item, slug: str, errors: list[str]) -> Visual | None:
     if not _text(src):
         errors.append(f"{where}.src is missing")
     else:
-        parts = PurePosixPath(src).parts
-        outside = "\\" in src or src.startswith("/") or ".." in parts
-        if outside or len(parts) < 2 or parts[0] != slug:
-            errors.append(
-                f"{where}.src must be a path like {slug}/picture.png under "
-                f"frontend/public/portfolio/ (got {src!r})"
-            )
+        _check_src(src, slug, f"{where}.src", errors)
     if not _text(alt):
         errors.append(f"{where}.alt is missing (describe the image for screen readers)")
     if aspect not in ASPECTS:
@@ -235,6 +242,12 @@ def parse_project(text: str, slug: str) -> Project:
             errors.append(f"unknown link '{key}' (use {', '.join(LINK_KEYS)})")
         elif not (isinstance(url, str) and _HTTPS_URL.fullmatch(url)):
             errors.append(f"links.{key} must be an https:// URL (got {url!r})")
+    cover = data.get("cover") or None
+    if cover is not None:
+        if not _text(cover):
+            errors.append(f"cover must be a path like {slug}/cover.png (got {cover!r})")
+        else:
+            _check_src(cover, slug, "cover", errors)
     raw_visuals = data.get("visuals") or []
     if not isinstance(raw_visuals, list):
         errors.append("visuals must be a list")
@@ -255,6 +268,7 @@ def parse_project(text: str, slug: str) -> Project:
         body=body,
         order=order,
         links={key: links[key] for key in LINK_KEYS if key in links},
+        cover=cover,
         visuals=tuple(visuals),
         draft=draft,
     )
@@ -309,14 +323,14 @@ def _symlinked(public_root: Path, src: str) -> bool:
 def missing_visual_files(project: Project, public_root: Path) -> list[str]:
     """Screenshots that aren't committed as real files (symlinks are never read)."""
     problems = []
-    for visual in project.visuals:
-        if _symlinked(public_root, visual.src):
+    srcs = ([project.cover] if project.cover else []) + [visual.src for visual in project.visuals]
+    for src in srcs:
+        if _symlinked(public_root, src):
             problems.append(
-                f"visual {visual.src} is a symlink; commit the image itself "
-                "(symlinks are never read)"
+                f"visual {src} is a symlink; commit the image itself (symlinks are never read)"
             )
-        elif not (public_root / visual.src).is_file():
-            problems.append(f"visual {visual.src} is not in frontend/public/portfolio/")
+        elif not (public_root / src).is_file():
+            problems.append(f"visual {src} is not in frontend/public/portfolio/")
     return problems
 
 

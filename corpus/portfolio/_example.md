@@ -13,6 +13,7 @@ stack: [Python, FastAPI, React] # tags; the card shows the first three, then "+N
 links:                          # optional; https only; leave a key out to hide its button
   live: https://example.com     # the "Live site" button
   # code: https://github.com/hacka-tron/example   # the "Code" button
+# cover: jobpilot/cover.png     # optional card picture (a thumbnail; never in the gallery); without it the card shows the first visual
 visuals: []                     # optional screenshots, in display order; replace [] with:
 #  - src: jobpilot/board.png    # a file in frontend/public/portfolio/, starting with the slug
 #    alt: Pipeline board with applications grouped by stage   # required, for screen readers

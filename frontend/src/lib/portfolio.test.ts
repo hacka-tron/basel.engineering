@@ -108,6 +108,18 @@ test('image paths must start with the slug and stay inside frontend/public/portf
   assert.equal(project.visuals[0].src, '/portfolio/jobpilot/My%20Screen.png')
 })
 
+test('cover is the card picture, kept out of the visuals, with the same path rules and file check', () => {
+  const project = validateProject('jobpilot', { ...valid, cover: 'jobpilot/cover.png' }, '', ok).project!
+  assert.equal(project.cover, '/portfolio/jobpilot/cover.png')
+  assert.equal(project.visuals.length, 2)
+  assert.equal(validateProject('jobpilot', valid, '', ok).project!.cover, null)
+  for (const cover of ['../cover.png', 'other/cover.png', 'jobpilot/.hidden.png', 'jobpilot/notes.txt']) {
+    assert.ok(has(errorsFor({ ...valid, cover }), 'cover must be'), cover)
+  }
+  assert.ok(has(errorsFor({ ...valid, cover: ['jobpilot/cover.png'] }), 'cover must be a path'))
+  assert.ok(has(errorsFor({ ...valid, cover: 'jobpilot/cover.png' }, '', (src) => (src === 'jobpilot/cover.png' ? 'visual jobpilot/cover.png is not in frontend/public/portfolio/' : null)), 'cover.png is not in'))
+})
+
 test('file names must be lowercase slugs (one leading underscore allowed), and errors name the file', () => {
   const errors = errorsFor(valid, '', ok, 'Job Pilot')
   assert.ok(errors[0].startsWith('Job Pilot.md: '))
