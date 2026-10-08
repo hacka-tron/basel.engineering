@@ -671,11 +671,20 @@ function App() {
   // The address bar follows the view (owner, 2026-10-08): the open project, else
   // the topic. Replaced in place, so Back doesn't step through every click; a
   // reload or a copied link opens the same view.
+  // Back/Forward also re-syncs: a view entry may hold an older URL than what
+  // is shown (a topic picked inside the Diagram view, then Back to Chat).
+  const shownLinkRef = useRef({ corpus, project: selectedProject })
+  shownLinkRef.current = { corpus, project: selectedProject }
   useEffect(() => {
-    const search = linkSearch(window.location.search, { corpus, project: selectedProject })
-    if (search !== window.location.search) {
-      window.history.replaceState(window.history.state, '', window.location.pathname + search + window.location.hash)
+    function syncAddressBar() {
+      const search = linkSearch(window.location.search, shownLinkRef.current)
+      if (search !== window.location.search) {
+        window.history.replaceState(window.history.state, '', window.location.pathname + search + window.location.hash)
+      }
     }
+    syncAddressBar()
+    window.addEventListener('popstate', syncAddressBar)
+    return () => window.removeEventListener('popstate', syncAddressBar)
   }, [corpus, selectedProject])
   // On load, a project link on a phone opens the Portfolio view as its own
   // history entry, so Back returns to Chat; showView adds no entry when that
