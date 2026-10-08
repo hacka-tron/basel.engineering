@@ -67,6 +67,9 @@ function App() {
   const [activeNode, setActiveNode] = useState<NodeId | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeId | null>(null)
   const [selectedProject, setSelectedProject] = useState<string | null>(DEEP_LINK.project)
+  // The deep-linked project, until the visitor asks about it: a link never asks,
+  // so its sheet leaves out the phone answer section instead of waiting forever.
+  const [unaskedProject, setUnaskedProject] = useState<string | null>(DEEP_LINK.project)
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   // One conversation per corpus tab (DESIGN-002 §5.1): switching the toggle
@@ -610,6 +613,7 @@ function App() {
     const project = projects.find((candidate) => candidate.slug === slug)
     if (!project) return
     setSelectedProject(slug)
+    setUnaskedProject(null)
     setSelectedNode(null)
     setCorpus('portfolio')
     askAboutSelection(questionForProject(project.title), 'portfolio')
@@ -660,12 +664,16 @@ function App() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [viewNav])
-  // A deep link is applied once: its query is dropped from the address bar
+  // A deep link is applied once: its parameters are dropped from the address bar
   // (later clicks and reloads behave as usual), and on phones a Portfolio link
   // opens the Portfolio view as its own history entry, so Back returns to Chat.
   useEffect(() => {
-    if (!window.location.search) return
-    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash)
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('project') && !params.has('topic')) return
+    params.delete('project')
+    params.delete('topic')
+    const query = params.toString()
+    window.history.replaceState(window.history.state, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash)
     if (DEEP_LINK.corpus === 'portfolio' && !isDesktopRef.current) viewNav.showView('portfolio')
   }, [viewNav])
   useEffect(() => {
@@ -735,7 +743,7 @@ function App() {
       projects={projects}
       phone={phone}
       selectedSlug={selectedProject}
-      answerText={phone ? projectAnswer : undefined}
+      answerText={phone && selectedProject !== unaskedProject ? projectAnswer : undefined}
       onSelect={handleSelectProject}
       onDeselect={handleDeselectProject}
       onContinueInChat={phone ? () => showMobileView('chat') : undefined}
