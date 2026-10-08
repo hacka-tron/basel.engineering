@@ -1,6 +1,7 @@
 // Shareable links into the site: `?project=<slug>` opens the Portfolio with
 // that project's details sheet, and `?topic=basel|system|portfolio` picks the
-// topic. Pure, so the parsing is unit tested. A deep link never asks the
+// topic. The address bar follows what is shown (linkSearch), so copying it
+// shares the current view. Pure, so the parsing is unit tested. A deep link never asks the
 // chatbot by itself (a shared link must not spend an answer per visit); the
 // sheet already shows the write-up. Unknown, hidden or draft values are ignored.
 
@@ -20,4 +21,18 @@ export function parseDeepLink(search: string, projectSlugs: readonly string[]): 
     return { corpus: topic, project: null }
   }
   return { corpus: null, project: null }
+}
+
+/**
+ * The query for what is shown: the open project, else the topic (About Basel,
+ * the home view, has none). Other parameters (say, utm_*) are kept.
+ */
+export function linkSearch(search: string, link: DeepLink): string {
+  const params = new URLSearchParams(search)
+  params.delete('project')
+  params.delete('topic')
+  if (link.project !== null) params.set('project', link.project)
+  else if (link.corpus !== null && link.corpus !== 'basel') params.set('topic', link.corpus)
+  const query = params.toString()
+  return query ? `?${query}` : ''
 }

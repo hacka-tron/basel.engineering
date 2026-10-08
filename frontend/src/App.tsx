@@ -38,7 +38,7 @@ import projects from 'virtual:portfolio'
 import PortfolioPanel from './components/PortfolioPanel'
 import { questionForProject } from './lib/portfolioView'
 import { selectionAnswer, selectionQuestions } from './lib/selection'
-import { parseDeepLink } from './lib/deepLink'
+import { linkSearch, parseDeepLink } from './lib/deepLink'
 
 const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold tracking-tight'
 
@@ -53,7 +53,7 @@ const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project
 const HAS_PORTFOLIO = projects.length > 0
 const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
 const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
-// A shareable link (?project=<slug> or ?topic=...), read at load (lib/deepLink.ts).
+// A shareable link (?project=<slug> or ?topic=...), read at load; the address bar then follows the view (lib/deepLink.ts).
 const DEEP_LINK = parseDeepLink(window.location.search, projects.map((project) => project.slug))
 
 function App() {
@@ -69,7 +69,11 @@ function App() {
   const [selectedProject, setSelectedProject] = useState<string | null>(DEEP_LINK.project)
   // The deep-linked project, until the visitor asks about it: a link never asks,
   // so its sheet leaves out the phone answer section instead of waiting forever.
-  const [unaskedProject, setUnaskedProject] = useState<string | null>(DEEP_LINK.project)
+  const [unaskedProject, setUnaskedProject] = useState<string | null>(() => {
+    // A reload keeps the link; an answer already saved for it still shows.
+    const project = projects.find((candidate) => candidate.slug === DEEP_LINK.project)
+    return project && !latestQuestionAnswered(loadConversation('portfolio'), questionForProject(project.title)) ? project.slug : null
+  })
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
   // One conversation per corpus tab (DESIGN-002 §5.1): switching the toggle
@@ -664,12 +668,22 @@ function App() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [viewNav])
-  // A deep link stays in the address bar (owner, 2026-10-07), so it can be copied
-  // and a reload opens it again. On phones a Portfolio link opens the Portfolio
-  // view as its own history entry, so Back returns to Chat; showView adds no
-  // entry when that view is already shown (a reload there, or StrictMode's rerun).
+  // The address bar follows the view (owner, 2026-10-08): the open project, else
+  // the topic. Replaced in place, so Back doesn't step through every click; a
+  // reload or a copied link opens the same view.
   useEffect(() => {
-    if (DEEP_LINK.corpus === 'portfolio' && !isDesktopRef.current) viewNav.showView('portfolio')
+    const search = linkSearch(window.location.search, { corpus, project: selectedProject })
+    if (search !== window.location.search) {
+      window.history.replaceState(window.history.state, '', window.location.pathname + search + window.location.hash)
+    }
+  }, [corpus, selectedProject])
+  // On load, a project link on a phone opens the Portfolio view as its own
+  // history entry, so Back returns to Chat; showView adds no entry when that
+  // view is already shown (a reload there, or StrictMode's rerun). A topic link
+  // only picks the topic: the URL can't tell Chat from the Portfolio view, and
+  // a reload keeps whichever view was shown through its history entry.
+  useEffect(() => {
+    if (DEEP_LINK.project !== null && !isDesktopRef.current) viewNav.showView('portfolio')
   }, [viewNav])
   useEffect(() => {
     if (!showOtherView) return
