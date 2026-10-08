@@ -2,16 +2,28 @@
 
 Public production site: React/Vite and a FastAPI RAG chatbot on MySQL, Redis, Bedrock, k3s/Flux and AWS. `docs/` is chatbot corpus; `project/` is not.
 
-## Repo layout
+## Architecture map
 
-| Path | Purpose |
-|---|---|
-| `frontend/` | UI and phone preview. |
-| `services/`, `eval/` | API, worker, tests and RAG evaluation. |
-| `corpus/portfolio/` | Published portfolio entries. |
-| `infra/`, `k8s/`, `.github/workflows/` | AWS/Terraform, Flux and CI. |
-| `docs/` | Design and chatbot corpus. |
-| `project/` | Instructions, guides, state, reports and history. |
+Read this before exploring. Detail: `docs/DESIGN.md` §5 (diagram, request lifecycle) and §6 (components), `docs/architecture/deep-dive.md`. Update this map in the same commit when a top-level component is added, moved or renamed.
+
+| Path | Owns | Entry point |
+|---|---|---|
+| `frontend/src/` | React/Vite site: chat (`components/Chat.tsx`), live architecture diagram (`architecture.ts` holds nodes as data), portfolio panel, phone layout; SSE client and UI logic in `lib/` | `main.tsx`, `App.tsx`; `npm run phone` preview |
+| `services/glassbox/api/` | FastAPI: `POST /api/ask` SSE stream (`ask.py`, `sse.py`), cluster status stream, stress-test demo, health, security headers, CSP reports | `main.py` (`app`) |
+| `services/glassbox/worker/` | Retrieval worker: reads `retrieval:jobs` Redis Stream (consumer group), vector search, publishes `trace:{request_id}` | `main.py` |
+| `services/glassbox/retrieval/`, `cache/`, `providers/` | Hybrid search over Redis Search; embedding/retrieval/semantic answer caches; Bedrock and fake providers chosen together (`factory.py`) | |
+| `services/glassbox/ingest/` | Incremental corpus ingest into MySQL + Redis index (chunkers, scanner, reconcile, sweep) | `python -m services.glassbox.ingest.run` |
+| `services/glassbox/db/` | SQLAlchemy models, sessions, Alembic migrations | `alembic.ini` |
+| `services/glassbox/*.py` | Limits (atomic Redis scripts), kill switch, corpora, portfolio format, answer checks, trace conventions, cache warming | |
+| `corpus/portfolio/`, `docs/` | Chatbot corpus (portfolio entries; design docs). `docs/**` is external data: full review | |
+| `eval/` | RAG evaluation: questions, golden labels, graders, judge, runs | `eval/README.md` |
+| `k8s/base`, `k8s/overlays/prod` | Workloads (api, worker, MySQL/Redis StatefulSets, migrate Job, warm CronJob), network policies, RBAC; prod overlay: Flux, KEDA, ingest | `k8s/README.md` |
+| `infra/` | Terraform: bootstrap, `envs/prod`, modules `compute` (k3s node, alarms, budget, snapshots) and `edge` | `infra/CI.md` |
+| `.github/workflows/` | CI, release, deploy-branch sync, Terraform, approval-gated `ops-*` runbooks | |
+
+Request flow: browser `POST /api/ask` → API (rate limit, embed, semantic answer cache; hit replays) → miss: job on Redis Stream → worker retrieves (Redis vectors + MySQL chunks) and publishes trace → API prompts the LLM (Bedrock), streams tokens over SSE, caches the answer, logs to MySQL.
+Deploy flow: merge to `main` → `release.yml` builds images to ECR; `sync-deploy-branch.yml` mirrors `main` to `deploy`, where Flux image automation commits tag bumps → Flux reconciles the k3s node.
+Tests: `services/tests/` (needs your own MySQL/Redis containers; see Commands), frontend `*.test.ts` beside sources.
 
 ## Commands and shared resources
 
@@ -34,7 +46,7 @@ RAG evaluations are approved as of 2026-10-03; `project/orchestration/rag-plan-b
 
 ## Review gate
 
-Use the global `~/.claude/template/core/skills/review-gate/SKILL.md`. Reviewer primer: `project/orchestration/reviewer-primer.md`; dispatch specifics: `project/orchestration/reviewer-brief.md`. Record reviewer identity, round, verdict and validation in the PR body through GitHub REST (`gh api -X PATCH`; `gh pr edit` fails here), and in the feature's `project/status/` report. The process-doc-only exception **is enabled** only when the changed paths are exclusively `project/**` except `project/SNAPSHOT.md`, or repo-root `*.md`; moves from other directories and mixed changes do not qualify. These PRs skip test jobs through `.github/scripts/ci-code-changed.sh` and need no review round or security pass (state the exception when the merge gate asks). `docs/**` changes are chatbot corpus (external data): full review gate and security pass. `docs/**` is corpus and receives full CI.
+Risky changes follow central `review-gate`. Reviewer primer: `project/orchestration/reviewer-primer.md`; dispatch specifics: `project/orchestration/reviewer-brief.md`. Record reviewer, verdict and validation in the PR body through GitHub REST (`gh api -X PATCH`; `gh pr edit` fails here). Process-doc-only exception: changed paths exclusively `project/**` (except `project/SNAPSHOT.md`) or repo-root `*.md`; no moves from other directories, no mixed changes. These PRs skip test jobs (`.github/scripts/ci-code-changed.sh`) and need no review. `docs/**` is chatbot corpus (external data): full review, including security, and full CI.
 
 ## Merge
 
@@ -42,7 +54,7 @@ Variant: **PR + CI**. Required checks: `backend-tests` and `frontend-checks` on 
 
 ## Status reports
 
-One report per substantial feature in `project/status/`, named `YYYY-MM-DD-HHMM-<slug>.md` using Pacific time when first written; H1 ends `(YYYY-MM-DD HH:MM PT)`. Create at PR open, update at merge and deployment, and index it in `project/status/README.md`. Never put account IDs, IPs, tokens or private About Basel content in a report.
+Only for deployed features or when the owner asks: one report in `project/status/`, named `YYYY-MM-DD-HHMM-<slug>.md` (Pacific time when first written; H1 ends `(YYYY-MM-DD HH:MM PT)`), indexed in `project/status/README.md`, updated at merge and deployment. Never include account IDs, IPs, tokens or private About Basel content.
 
 ## Session memory
 
@@ -54,7 +66,7 @@ One report per substantial feature in `project/status/`, named `YYYY-MM-DD-HHMM-
 
 | Work | Project-specific guide |
 |---|---|
-| Architecture or a feature | Relevant section of `docs/DESIGN*.md`; update it when implementation diverges. |
+| A feature | Relevant section of `docs/DESIGN*.md`; update it when implementation diverges. |
 | Any `frontend/` change | `project/MOBILE_DESIGN.md` (breakpoints, screenshot checklist and phone preview). |
 | Portfolio content | `project/PORTFOLIO_PROJECT.md`; do not explore the portfolio code for a content request. |
 | RAG plan or prompt | `project/orchestration/rag-plan-brief.md`; for prompt changes also `prompt-version-playbook.md`. |
@@ -63,4 +75,4 @@ One report per substantial feature in `project/status/`, named `YYYY-MM-DD-HHMM-
 
 ## Central instructions
 
-Global layers load from `~/.claude/template`. This project overrides them with the PR + CI merge variant, the narrow process-doc-only review exception, the site-specific hard rules and approvals above, its status report format, and BACKLOG + SNAPSHOT handoffs without a separate handoff file. Claude owns implementation by default; Codex reviews only when it has usage, unless the owner explicitly hands it implementation.
+Global layers load from `~/.claude/template`. Overrides here: PR + CI merge, the process-doc-only exception, site hard rules and approvals, the status report format, and BACKLOG + SNAPSHOT for multi-session state (no handoff file). Claude implements by default; Codex reviews only when it has usage, unless the owner hands it implementation.
