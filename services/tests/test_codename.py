@@ -1,5 +1,7 @@
 """The codename rewrite (services/glassbox/codename.py): "Glassbox" -> "this site"."""
 
+import random
+
 import pytest
 
 from services.glassbox.codename import CodenameFilter, rewrite
@@ -20,6 +22,10 @@ CASES = [
     ("Costs: Glassbox runs on one node.", "Costs: This site runs on one node."),
     ("A.\nGlassbox caches answers.", "A.\nThis site caches answers."),
     ("It is the Glassbox, not a box.", "It is this site, not a box."),
+    ("I built the Glassbox's cache.", "I built this site's cache."),
+    ("# Glassbox architecture", "# This site architecture"),
+    ("- Glassbox uses Redis", "- This site uses Redis"),
+    ("Caches, e.g. Glassbox uses Redis.", "Caches, e.g. this site uses Redis."),
 ]
 
 UNCHANGED = [
@@ -30,6 +36,9 @@ UNCHANGED = [
     "a Glassboxes word",
     "MyGlassbox is not it.",
     "No codename here at all.",
+    "See Glassbox.com for more.",
+    "Run `Glassbox` now.",
+    "Tag @Glassbox or #Glassbox.",
 ]
 
 
@@ -53,6 +62,50 @@ def _stream(text: str, size: int) -> tuple[str, int]:
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 7, 1000])
 def test_streaming_matches_the_whole_text_rewrite(text, expected, size):
     assert _stream(text, size)[0] == expected
+
+
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        ["I built the", " Glass", "box", "'s", " cache."],
+        ["In the", " Glassbox", "'s", " retrieval"],
+    ],
+)
+def test_the_possessive_after_the_is_one_phrase_when_streamed(tokens):
+    f = CodenameFilter()
+    streamed = "".join(f.push(token) for token in tokens) + f.flush()
+    assert streamed == rewrite("".join(tokens))
+    assert "the this" not in streamed
+
+
+def test_streaming_always_matches_the_whole_text_rewrite_fuzz():
+    rng = random.Random(205)
+    words = [
+        "the",
+        "The",
+        "Glassbox",
+        "Glassbox's",
+        "system",
+        "API",
+        "uses",
+        "Redis",
+        ".",
+        "\n",
+        "e.g.",
+        "services/glassbox",
+        "Glassbox.com",
+        "`Glassbox`",
+        "#",
+        "-",
+        "I",
+        "built",
+    ]
+    for _ in range(3000):
+        text = " ".join(rng.choice(words) for _ in range(rng.randint(1, 14)))
+        cuts = sorted(rng.sample(range(1, len(text)), min(len(text) - 1, rng.randint(0, 8))))
+        tokens = [text[a:b] for a, b in zip([0, *cuts], [*cuts, len(text)], strict=True)]
+        f = CodenameFilter()
+        assert "".join(f.push(token) for token in tokens) + f.flush() == rewrite(text), tokens
 
 
 def test_counts_rewrites_and_releases_plain_text_without_delay():

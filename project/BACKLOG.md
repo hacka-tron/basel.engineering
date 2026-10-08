@@ -4,7 +4,7 @@ Bugs, stubs, future ideas, and the cross-session resume point. Update whenever a
 
 ## > RESUME HERE
 
-**2026-10-08 (owner):** answers no longer say the codename "Glassbox": a deterministic stream rewrite (`services/glassbox/codename.py`) turns "the Glassbox system" into "this site" (also on cached replays). The docs still use the codename; renaming it in `docs/**` is an option if answers still read oddly.
+**2026-10-08 (owner):** answers no longer say the codename "Glassbox": a deterministic stream rewrite (`services/glassbox/codename.py`) turns "the Glassbox system" into "this site" (also on cached replays). The docs still use the codename; renaming it in `docs/**` is an option if answers still read oddly. Known rough grammar left as is (#205 review minors): "a Glassbox feature" -> "a this site feature", "Glassbox ingestion" -> "this site ingestion".
 
 **State (2026-10-05 PT, evening):** all merged and live. Owner feedback item 0 shipped as **prompt v19** (#189) plus **v20** (#191); **v21** (#195) put the public contact address in the examples so no `<email>` placeholder reaches an answer, with private docs PRs #12/#13 (owner sign-off round 3 complete). That covers:
 - no model-written "Sources:" line (a deterministic filter);
