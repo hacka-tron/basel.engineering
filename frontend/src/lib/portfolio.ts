@@ -10,6 +10,7 @@
 // personal | freelance, `year` a whole number 1990 to 2100, `order` a whole
 // number, `stack` a non-empty list of text, `links` live/code as https://
 // URLs, `visuals` src/alt/aspect (+ caption) with src under the file's slug,
+// `cover` (the card picture) a path under the file's slug,
 // `draft` exactly true or false, and file names lowercase slugs after at most
 // one leading underscore. YAML-level rules (only the literal words true/false
 // are booleans, a repeated field is an error, floats are never whole numbers)
@@ -40,13 +41,15 @@ export type Project = {
   order: number | null
   stack: string[]
   links: { live?: string; code?: string }
+  /** The card picture when set; otherwise the card shows the first visual. Never in the visuals gallery. */
+  cover: string | null
   visuals: Visual[]
   body: Block[]
 }
 
 const SLUG = /^_?[a-z0-9][a-z0-9-]*$/
 const REQUIRED_FIELDS = ['title', 'one_liner', 'kind', 'year', 'stack'] as const
-const KNOWN_FIELDS = new Set<string>([...REQUIRED_FIELDS, 'order', 'links', 'visuals', 'draft'])
+const KNOWN_FIELDS = new Set<string>([...REQUIRED_FIELDS, 'order', 'links', 'cover', 'visuals', 'draft'])
 const LINK_KEYS = ['live', 'code'] as const
 const VISUAL_FIELDS = new Set(['src', 'alt', 'caption', 'aspect'])
 const MIN_YEAR = 1990
@@ -158,17 +161,22 @@ export function parseBody(markdown: string, onError: (message: string) => void =
  * and must start with the file's slug (portfolio.py's rule), plus this
  * module's own: an image file, no hidden segment.
  */
-function srcProblem(src: string, slug: string, where: string): string | null {
+function srcProblem(src: string, slug: string, label: string): string | null {
   // PurePosixPath(src).parts: empty and "." segments drop out.
   const parts = src.split('/').filter((part) => part !== '' && part !== '.')
   const outside = src.includes('\\') || src.startsWith('/') || parts.includes('..')
   if (outside || parts.length < 2 || parts[0] !== slug) {
-    return `${where}.src must be a path like ${slug}/picture.png under frontend/public/portfolio/ (got ${shown(src)})`
+    return `${label} must be a path like ${slug}/picture.png under frontend/public/portfolio/ (got ${shown(src)})`
   }
   if (parts.some((part) => part.startsWith('.')) || !IMAGE.test(src)) {
-    return `${where}.src must be an image file (.png, .jpg, .webp, .avif, .gif or .svg) with no hidden folder or file (got ${shown(src)})`
+    return `${label} must be an image file (.png, .jpg, .webp, .avif, .gif or .svg) with no hidden folder or file (got ${shown(src)})`
   }
   return null
+}
+
+/** The served URL of an image under frontend/public/portfolio/. */
+function publicUrl(src: string): string {
+  return VISUALS_URL_BASE + src.split('/').filter((part) => part !== '' && part !== '.').map(encodeURIComponent).join('/')
 }
 
 export type ValidationResult = { project: Project; errors: [] } | { project: null; errors: string[] }
@@ -213,6 +221,17 @@ export function validateProject(slug: string, data: unknown, body: string, check
     }
   }
 
+  let cover: string | null = null
+  if (!isFalsy(data.cover)) {
+    if (!isText(data.cover)) {
+      fail(`cover must be a path like ${slug}/cover.png (got ${shown(data.cover)})`)
+    } else {
+      const problem = srcProblem(data.cover, slug, 'cover') ?? checkVisual?.(data.cover) ?? null
+      if (problem) fail(problem)
+      else cover = publicUrl(data.cover)
+    }
+  }
+
   const visuals: Visual[] = []
   const rawVisuals = isFalsy(data.visuals) ? [] : data.visuals
   if (!Array.isArray(rawVisuals)) {
@@ -231,7 +250,7 @@ export function validateProject(slug: string, data: unknown, body: string, check
       if (!isText(src)) {
         fail(`${where}.src is missing`)
       } else {
-        const problem = srcProblem(src, slug, where) ?? checkVisual?.(src) ?? null
+        const problem = srcProblem(src, slug, `${where}.src`) ?? checkVisual?.(src) ?? null
         if (problem) fail(problem)
       }
       if (!isText(alt)) fail(`${where}.alt is missing (describe the image for screen readers)`)
@@ -244,7 +263,7 @@ export function validateProject(slug: string, data: unknown, body: string, check
       if (errors.length > before) return
       const fit = aspect as Aspect
       visuals.push({
-        src: VISUALS_URL_BASE + (src as string).split('/').filter((part) => part !== '' && part !== '.').map(encodeURIComponent).join('/'),
+        src: publicUrl(src as string),
         alt: (alt as string).trim(),
         ...(isText(caption) ? { caption: caption.trim() } : {}),
         aspect: fit,
@@ -267,6 +286,7 @@ export function validateProject(slug: string, data: unknown, body: string, check
       order: order as number | null,
       stack: (stack as string[]).map((name) => name.trim()),
       links,
+      cover,
       visuals,
       body: blocks,
     },

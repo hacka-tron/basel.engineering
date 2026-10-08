@@ -107,6 +107,7 @@ def test_a_full_project_parses():
 def test_optional_fields_default():
     project = parse_project(doc(BASE), "jobpilot")
     assert project.order is None and project.links == {} and project.visuals == ()
+    assert project.cover is None
     assert project.draft is False
 
 
@@ -143,6 +144,9 @@ def test_each_required_field_is_required(name):
         ),
         ({"year": 1850}, "year must be a whole number like 2026"),
         ({"order": "first"}, "order must be a whole number"),
+        ({"cover": "../cover.png"}, "cover must be a path like jobpilot/picture.png"),
+        ({"cover": "other/cover.png"}, "cover must be a path like jobpilot/picture.png"),
+        ({"cover": ["jobpilot/cover.png"]}, "cover must be a path like jobpilot/cover.png"),
     ],
 )
 def test_schema_errors(change, message):
@@ -303,6 +307,23 @@ def test_missing_screenshot_fails_published_projects_only(tmp_path):
         ]
     }
     _tree(tmp_path, {"frontend/public/portfolio/jobpilot/board.png": "png bytes"})
+    assert validate_tree(tmp_path) == {}
+
+
+def test_cover_is_the_card_picture_and_not_a_visual():
+    project = parse_project(doc({**BASE, "cover": "jobpilot/cover.png"}), "jobpilot")
+    assert project.cover == "jobpilot/cover.png"
+    assert project.visuals == ()
+
+
+def test_missing_cover_file_fails_the_check(tmp_path):
+    _tree(tmp_path, {"corpus/portfolio/jobpilot.md": doc({**BASE, "cover": "jobpilot/cover.png"})})
+    assert validate_tree(tmp_path) == {
+        "corpus/portfolio/jobpilot.md": [
+            "visual jobpilot/cover.png is not in frontend/public/portfolio/"
+        ]
+    }
+    _tree(tmp_path, {"frontend/public/portfolio/jobpilot/cover.png": "png bytes"})
     assert validate_tree(tmp_path) == {}
 
 
