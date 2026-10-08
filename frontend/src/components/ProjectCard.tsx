@@ -2,9 +2,9 @@ import { useId } from 'react'
 import type { Project } from '../lib/portfolio'
 import { initials, placeholderColors, stackPreview } from '../lib/portfolioView'
 
-/** The project's first visual, or a generated placeholder (decorative: the card's text names it). */
+/** The project's cover, else its first visual, else a generated placeholder (decorative: the card's text names it). */
 function ProjectThumb({ project, className }: { project: Project; className: string }) {
-  const first = project.visuals[0]
+  const first = project.cover ? { src: project.cover, width: 1600, height: 1000 } : project.visuals[0]
   if (first) {
     return <img src={first.src} alt="" width={first.width} height={first.height} loading="lazy" decoding="async" className={`block rounded-[2px] border border-hairline bg-canvas object-cover ${className}`} />
   }
