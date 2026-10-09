@@ -6,11 +6,13 @@ from pathlib import Path
 import yaml
 
 from eval.graders import ANSWERABLE_CATEGORIES, CATEGORIES
+from services.glassbox.corpora import search_corpora
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 GOLDEN_PATH = HERE / "golden.yaml"
-CORPORA = frozenset({"about_me", "about_system"})
+CORPORA = frozenset({"about_me", "about_system", "portfolio"})
+PORTFOLIO_PREFIX = "corpus/portfolio/"
 _CASE_KEYS = frozenset(
     {
         "id",
@@ -68,6 +70,15 @@ KNOWN_PRIVATE_SOURCES = frozenset(
 )
 
 
+def source_corpus(source: str) -> str:
+    """The indexed corpus an expected source belongs to (About Basel also searches portfolio)."""
+    if source.startswith(PRIVATE_PREFIX):
+        return "about_me"
+    if source.startswith(PORTFOLIO_PREFIX):
+        return "portfolio"
+    return "about_system"
+
+
 def _source_file(root: Path, source: str) -> Path | None:
     """The file behind an expected source, or None for a private file with no local checkout.
 
@@ -122,7 +133,7 @@ def validate_case(case: dict, root: Path = REPO_ROOT) -> None:
                 _fail(case_id, f"unknown private source {source} (add it to KNOWN_PRIVATE_SOURCES)")
         elif not (root / source).is_file():
             _fail(case_id, f"expected source {source} does not exist")
-        if (case["corpus"] == "about_me") != source.startswith(PRIVATE_PREFIX):
+        if source_corpus(source) not in search_corpora(case["corpus"]):
             _fail(case_id, f"expected source {source} is outside corpus {case['corpus']}")
     snippets = case.get("gold_snippets", [])
     if snippets and not sources:

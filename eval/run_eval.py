@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from services.glassbox.cache.embedding import normalize_question
 from services.glassbox.cache.retrieval import RedisRetrievalCache
+from services.glassbox.corpora import search_corpora
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import create_db_engine
 from services.glassbox.ingest.redis_index import INDEX_NAME as CHUNK_INDEX_NAME
@@ -46,7 +47,7 @@ LEG_CASE_KEYS = ("hit_at_8", "reciprocal_rank_at_8", "chunk_hit", "chunk_recipro
 CONTINUITY_K = 5
 # Sources that should never ground an answer: test code and implementation plans.
 NOISE_PREFIXES = ("services/tests/", "docs/superpowers/plans/")
-CORPORA = ("about_me", "about_system")
+CORPORA = ("about_me", "about_system", "portfolio")
 TOLERANCE = 0.05
 # DESIGN-005 §5.4: chunk-level recall@8 must not drop at all.
 CHUNK_TOLERANCE = 0.0
@@ -268,14 +269,15 @@ async def evaluate(questions: list[dict]) -> dict:
             missing = [
                 path
                 for path in item["expected_sources"]
-                if (item["corpus"], path) not in source_paths
+                if not any((name, path) in source_paths for name in search_corpora(item["corpus"]))
             ]
             if missing:
                 raise ValueError(f"{item['id']} expected sources are not indexed: {missing}")
             snippets = item.get("gold_snippets") or []
             expected = set(item["expected_sources"])
             if snippets and not any(
-                corpus == item["corpus"] and is_gold_chunk(path, text, expected, snippets)
+                corpus in search_corpora(item["corpus"])
+                and is_gold_chunk(path, text, expected, snippets)
                 for _, corpus, path, text in chunk_rows
             ):
                 # The snippet straddles a chunk boundary or the text moved: no chunk can hit.

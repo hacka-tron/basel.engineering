@@ -51,7 +51,11 @@ from services.glassbox.providers.base import (
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
-from services.glassbox.retrieval.search import named_technologies, tech_question_terms
+from services.glassbox.retrieval.search import (
+    RETRIEVAL_MODE,
+    named_technologies,
+    tech_question_terms,
+)
 from services.glassbox.sources_line import SourcesLineFilter
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
@@ -100,7 +104,10 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # invented facts instead of the abstention.
 # v20 (owner, 2026-10-05): golden checks recalibrated to the core fact, and one
 # targeted fix per real-miss pattern that survived ablation (see the v20 status report).
-_PROMPT_VERSION = "v21"
+# v22 (owner, 2026-10-09): About Basel also retrieves the portfolio files. Each
+# portfolio source is labelled with its project, its text is never planned-marked,
+# and a rule keeps facts with their own project (this site's RAG is never GoalBuddy's).
+_PROMPT_VERSION = "v22"
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -258,6 +265,10 @@ def route_temperature(route: str) -> dict:
 
 # Code, manifests and infrastructure describe what runs; they are never "planned".
 _CODE_SOURCE_PREFIXES = ("services/", "k8s/", "infra/")
+# Portfolio write-ups describe other projects, so this site's planned-work keywords
+# ("SQS", "ASG", "deferred") say nothing about them: they are never planned-marked
+# (prompt v22; the open item from the portfolio backend PR 2).
+_PORTFOLIO_PREFIX = "corpus/portfolio/"
 # Labels go on the planned text itself, not the whole chunk: one chunk often mixes a
 # live component with a sentence about future work, and a chunk-wide "not built"
 # label steered answers about the live part toward "No". A marked heading covers its
@@ -393,6 +404,8 @@ class WorkerRetrieval(BaseModel):
     seq: int
     t_ms: int
     chunks: list[WorkerChunk]
+    # The worker's search.RETRIEVAL_MODE; None from a worker older than prompt v22.
+    retrieval_mode: str | None = None
 
 
 class WorkerError(BaseModel):
@@ -561,9 +574,33 @@ def _source_line(chunk: WorkerChunk) -> str:
         # MEAN stack on the portfolio site). The stem is never a path.
         topic = chunk.source_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         label = f"{label} ({topic} · {about_me_label(chunk.text, chunk.title)})"
+    if chunk.source_path.startswith(_PORTFOLIO_PREFIX):
+        # The project's name (its document title) plus the section, so a fact stays
+        # with its project (prompt v22).
+        project = _project_name(chunk)
+        section = about_me_label(chunk.text, chunk.title)
+        same = section in (project, _GENERIC_LABEL)
+        label = f"{label} ({project})" if same else f"{label} ({project} · {section})"
+        return f"[{chunk.n}] {label}: {strip_source_pointers(chunk.text)}"
     if chunk.source_path.startswith(_CODE_SOURCE_PREFIXES):
         return f"[{chunk.n}] {label}: {chunk.text}"
     return f"[{chunk.n}] {label}: {_mark_planned(strip_source_pointers(chunk.text))}"
+
+
+def _project_name(chunk: WorkerChunk) -> str:
+    """A portfolio chunk's project: its document title, else the file's slug."""
+    if chunk.title and "/" not in chunk.title and not chunk.title.lower().endswith(".md"):
+        return chunk.title.strip()[:80]
+    return chunk.source_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+
+# Prompt v22: only when a portfolio source is in the prompt.
+_PROJECT_SCOPE_RULE = (
+    "Each portfolio project source names its project in parentheses after the label. A fact "
+    "from one project's source belongs only to that project: never give it to another "
+    "project or to this site. This site's own features (this chat, its retrieval, RAG "
+    "and infrastructure) belong only to this site, never to a portfolio project.\n"
+)
 
 
 def _sources_block(
@@ -571,6 +608,11 @@ def _sources_block(
 ) -> str:
     """The part every answer prompt shares: grounding, sources, conversation, question."""
     sources = "\n".join(_source_line(chunk) for chunk in chunks)
+    project_rule = (
+        _PROJECT_SCOPE_RULE
+        if any(chunk.source_path.startswith(_PORTFOLIO_PREFIX) for chunk in chunks)
+        else ""
+    )
     return (
         "Answer the question using only the following numbered sources. "
         "Do not include bracketed citation markers like [1] or [2] in your answer text; "
@@ -588,7 +630,7 @@ def _sources_block(
         "If the sources answer the question even in part, answer from them. Only if they "
         "do not answer it at all, reply with exactly "
         f'"{ABSTENTION_ANSWER}" and nothing else.\n\n'
-        f"{sources}\n\n{_conversation_block(history)}"
+        f"{sources}\n\n{project_rule}{_conversation_block(history)}"
         # Owner rule: an answer about his portfolio site says the visitor is on it.
         "Note: this chat runs on my portfolio site, so if the answer is about my "
         "portfolio site or platform, say it is the portfolio the visitor is on right now.\n"
@@ -918,7 +960,8 @@ def _public_chunk(chunk: WorkerChunk, corpus: str | None = None) -> dict:
     source paths (owner, 2026-10-03): the path becomes a section label."""
     payload = chunk.model_dump(exclude={"text"}, exclude_none=True)
     payload["snippet"] = " ".join(chunk.text.split())[:180]
-    if corpus == "about_me":
+    # Portfolio chunks retrieved for About Basel are public and keep their paths.
+    if corpus == "about_me" and not chunk.source_path.startswith(_PORTFOLIO_PREFIX):
         label = about_me_label(chunk.text, chunk.title)
         payload["source_path"] = label
         payload["title"] = label
@@ -1274,6 +1317,7 @@ async def _stream(
 
             deadline = time.monotonic() + RETRIEVAL_TIMEOUT_S
             chunks = None
+            retrieval_mode = None
             while chunks is None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -1314,6 +1358,7 @@ async def _stream(
                     if event.request_id != request_id:
                         raise ValueError("worker trace request_id mismatch")
                     chunks = event.chunks
+                    retrieval_mode = event.retrieval_mode
                     retrieval_payload: dict = {
                         "chunks": [_public_chunk(chunk, request.corpus) for chunk in chunks]
                     }
@@ -1493,6 +1538,10 @@ async def _stream(
         if content_filtered:
             timings["content_filtered"] = 1
             cache_skip = cache_skip or "content_filtered"
+        if retrieval_mode != RETRIEVAL_MODE:
+            # Mid-rollout skew (#208 review): an older worker searched About Basel
+            # without the portfolio, so its answer must not fill the v22 cache.
+            cache_skip = cache_skip or "retrieval_mode"
         if cache_skip == "abstention":
             timings["abstained"] = 1
         # Prompt v17 post-generation checks: logged, not regenerated (the answer has

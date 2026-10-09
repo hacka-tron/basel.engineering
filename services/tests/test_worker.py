@@ -121,7 +121,7 @@ async def test_search_uses_existing_index_and_converts_distance_to_similarity():
     assert client.command[:3] == (
         "FT.SEARCH",
         "idx:chunks",
-        f"(@corpus:{{about_me}} @model:{{{_model_tag('fake-v1')}}})"
+        f"(@corpus:{{about_me|portfolio}} @model:{{{_model_tag('fake-v1')}}})"
         "=>[KNN 8 @vector $vec AS distance]",
     )
     assert len(client.command[client.command.index("vec") + 1]) == 2048

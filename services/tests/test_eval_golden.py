@@ -116,6 +116,19 @@ def test_schema_rejects_duplicate_ids_and_unreviewed_about_basel(tmp_path):
         validate_case(about_me)
 
 
+def test_about_basel_cases_may_expect_portfolio_sources_and_others_may_not():
+    # About Basel also searches corpus/portfolio/ (prompt v22); About This System doesn't.
+    case = copy.deepcopy(next(c for c in load_golden() if c["id"] == "me-portfolio-goalbuddy"))
+    validate_case(case)
+    case.update(corpus="about_system")
+    with pytest.raises(GoldenError, match="outside corpus about_system"):
+        validate_case(case)
+    case = _valid_case()
+    case.update(expected_sources=["corpus/portfolio/goalbuddy.md"], gold_snippets=["GoalBuddy"])
+    with pytest.raises(GoldenError, match="outside corpus"):
+        validate_case(case)
+
+
 def _stub_retriever(calls: list):
     async def retrieve(vector, query, corpus, model_id):
         calls.append((corpus, model_id, len(vector)))

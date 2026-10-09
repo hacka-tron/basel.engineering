@@ -451,5 +451,5 @@ def test_run_answers_keeps_the_overlay_out_of_the_golden_rates():
 
 
 def test_module_constants_are_wired():
-    assert ask._PROMPT_VERSION == "v21"
+    assert ask._PROMPT_VERSION == "v22"
     assert ask.ANSWER_ROUTES == (STRICT_ROUTE, CASUAL_ROUTE)
