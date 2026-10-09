@@ -36,6 +36,50 @@ cases:
     gold_snippets:
       - catalog about 100 million virtual containers and physical assets globally
     must_include: ['Azure', '100\s?million']
+  # ---------------------------------- portfolio on About Basel (owner, 2026-10-09)
+  # About Basel also retrieves corpus/portfolio/ (prompt v22). A project's facts stay
+  # with that project: RAG is this site's, never GoalBuddy's.
+  - id: me-portfolio-goalbuddy
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Tell me about GoalBuddy.
+    expected_sources: [corpus/portfolio/goalbuddy.md]
+    gold_snippets:
+      - It pairs you with someone working toward the same kind of goal
+    must_include: ['GoalBuddy', 'goal', 'partner|buddy|someone|person']
+  - id: me-portfolio-goalbuddy-stack
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: What is GoalBuddy built with?
+    expected_sources: [corpus/portfolio/goalbuddy.md]
+    gold_snippets:
+      - GoalBuddy is an Expo (React Native) app with an Express and TypeScript API on PostgreSQL
+    must_include: ['React Native|Expo', 'PostgreSQL|Postgres']
+    must_not_include: ['\bRAG\b', 'Redis', 'Bedrock']
+  - id: me-portfolio-rag-scope
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    question: Which of your projects uses RAG?
+    expected_sources: [private/projects.md]
+    gold_snippets: [RAG]  # the technique name only: no About Basel text here
+    must_include: ['basel\.engineering|this site|Glassbox|portfolio site']
+    must_not_include: ['GoalBuddy']
+  - id: me-portfolio-projects
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    holdout: true
+    question: What projects have you built?
+    expected_sources: [private/projects.md, corpus/portfolio/goalbuddy.md]
+    gold_snippets: [GoalBuddy]
+    must_include: ['GoalBuddy']
   # ---------------------------------- dual experience (RAG plan phase 8, owner rule)
   # "Have you used X?": name every side the data has (work and personal project),
   # never invent a missing one; personal-only use in production gets "No, but...".
