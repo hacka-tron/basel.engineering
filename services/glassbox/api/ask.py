@@ -51,7 +51,11 @@ from services.glassbox.providers.base import (
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
-from services.glassbox.retrieval.search import named_technologies, tech_question_terms
+from services.glassbox.retrieval.search import (
+    RETRIEVAL_MODE,
+    named_technologies,
+    tech_question_terms,
+)
 from services.glassbox.sources_line import SourcesLineFilter
 from services.glassbox.trace import elapsed_ms, next_seq
 from services.glassbox.worker.main import enqueue_retrieval_job
@@ -400,6 +404,8 @@ class WorkerRetrieval(BaseModel):
     seq: int
     t_ms: int
     chunks: list[WorkerChunk]
+    # The worker's search.RETRIEVAL_MODE; None from a worker older than prompt v22.
+    retrieval_mode: str | None = None
 
 
 class WorkerError(BaseModel):
@@ -590,7 +596,7 @@ def _project_name(chunk: WorkerChunk) -> str:
 
 # Prompt v22: only when a portfolio source is in the prompt.
 _PROJECT_SCOPE_RULE = (
-    "Each portfolio project source names its project in brackets after the label. A fact "
+    "Each portfolio project source names its project in parentheses after the label. A fact "
     "from one project's source belongs only to that project: never give it to another "
     "project or to this site. This site's own features (this chat, its retrieval, RAG "
     "and infrastructure) belong only to this site, never to a portfolio project.\n"
@@ -1311,6 +1317,7 @@ async def _stream(
 
             deadline = time.monotonic() + RETRIEVAL_TIMEOUT_S
             chunks = None
+            retrieval_mode = None
             while chunks is None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -1351,6 +1358,7 @@ async def _stream(
                     if event.request_id != request_id:
                         raise ValueError("worker trace request_id mismatch")
                     chunks = event.chunks
+                    retrieval_mode = event.retrieval_mode
                     retrieval_payload: dict = {
                         "chunks": [_public_chunk(chunk, request.corpus) for chunk in chunks]
                     }
@@ -1530,6 +1538,10 @@ async def _stream(
         if content_filtered:
             timings["content_filtered"] = 1
             cache_skip = cache_skip or "content_filtered"
+        if retrieval_mode != RETRIEVAL_MODE:
+            # Mid-rollout skew (#208 review): an older worker searched About Basel
+            # without the portfolio, so its answer must not fill the v22 cache.
+            cache_skip = cache_skip or "retrieval_mode"
         if cache_skip == "abstention":
             timings["abstained"] = 1
         # Prompt v17 post-generation checks: logged, not regenerated (the answer has

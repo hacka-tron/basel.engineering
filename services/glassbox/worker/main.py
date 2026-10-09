@@ -300,7 +300,7 @@ async def process_one_message(
             round((time.monotonic() - mysql_started) * 1000),
             cache="hit" if chunk_hit else "miss",
         )
-        await emit("retrieval", {"chunks": chunks})
+        await emit("retrieval", {"chunks": chunks, "retrieval_mode": RETRIEVAL_MODE})
     except Exception:
         LOGGER.exception("Retrieval job %s failed", message_id)
         if channel:

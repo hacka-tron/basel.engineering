@@ -14,6 +14,7 @@ from sqlalchemy import delete, select
 from services.glassbox.api.main import app
 from services.glassbox.db.models import Chunk, Document, Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
+from services.glassbox.retrieval.search import RETRIEVAL_MODE
 from services.glassbox.worker.main import STREAM_NAME
 from services.tests.stack_ports import redis_url_for
 
@@ -176,6 +177,8 @@ class MemoryRedis:
             payload["chunks"] = []
         else:
             payload["chunks"] = [self.chunk]
+        if kind == "retrieval" and self.outcome != "old_worker":
+            payload["retrieval_mode"] = RETRIEVAL_MODE
         await self.subscription.messages.put({"data": json.dumps(payload).encode()})
 
     async def aclose(self):
@@ -246,6 +249,33 @@ def test_second_question_uses_embedding_cache(monkeypatch):
         == "hit"
     )
     assert all(data.get("node") != "embed" for name, data in second if name == "stage")
+
+
+def test_answer_from_a_worker_older_than_the_api_is_never_cached(monkeypatch):
+    # #208 review: mid-rollout, an old worker searches About Basel without the
+    # portfolio; its answer must not fill the new prompt version's cache.
+    from services.glassbox.api import ask
+
+    class RecordingAnswerCache:
+        puts = 0
+
+        async def get(self, corpus, model_id, vector):
+            return None
+
+        async def put(self, corpus, model_id, vector, payload):
+            self.puts += 1
+
+    cache = RecordingAnswerCache()
+    monkeypatch.setenv("REDIS_URL", "redis://unused")
+    monkeypatch.setattr(ask, "get_answer_cache", lambda client: cache)
+    monkeypatch.setattr(ask, "_save_query", lambda **kwargs: None)
+    http = TestClient(app)
+    body = {"question": "What have you built?", "corpus": "about_me"}
+    for outcome, puts in (("old_worker", 0), ("retrieval", 1)):
+        monkeypatch.setattr(ask.redis, "from_url", lambda url, o=outcome: MemoryRedis(o))
+        stream = events(http.post("/api/ask", json=body))
+        assert [name for name, _ in stream][-1] == "done"
+        assert cache.puts == puts
 
 
 def test_second_question_uses_answer_cache_without_worker_or_llm(monkeypatch):
@@ -619,6 +649,7 @@ def test_full_stream_and_query_row_with_simulated_worker(integration_stack, monk
                 json.dumps(
                     {
                         "type": "retrieval",
+                        "retrieval_mode": RETRIEVAL_MODE,
                         "request_id": request_id,
                         "seq": await client.incr(f"seq:{request_id}"),
                         "t_ms": 12,
