@@ -54,10 +54,6 @@ def test_suggested_questions_are_covered():
     suggested = json.loads((repo_root / "frontend/src/suggested-questions.json").read_text())
     golden = {(case["corpus"], case["question"]) for case in load_golden()}
     for corpus, questions in suggested.items():
-        if corpus == "portfolio":
-            # No Portfolio golden cases until the owner adds real projects (owner rule:
-            # no golden-set additions or RAG evaluations before then; BACKLOG).
-            continue
         for question in questions:
             assert (corpus, question) in golden, question
 

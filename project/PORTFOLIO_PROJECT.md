@@ -6,17 +6,17 @@ The playbook for the most common owner request: "add my new project to the portf
 
 One Markdown file, `corpus/portfolio/<slug>.md`, plus optional screenshots in `frontend/public/portfolio/<slug>/`. The same file feeds two things:
 
-- **The site:** the Portfolio topic, project cards and the details sheet are built from the front matter and body at frontend build time.
-- **The chatbot:** the release's ingest Job indexes the body as the `portfolio` corpus, so visitors can ask about the project.
+- **The site:** About Basel's "Projects" grid (its panel since 2026-10-09; the Portfolio topic merged into About Basel), the project cards and the details sheet are built from the front matter and body at frontend build time.
+- **The chatbot:** the release's ingest Job indexes the body as the `portfolio` corpus, which About Basel searches (prompt v22), so visitors can ask about the project there.
 
-The Portfolio topic, the phone "Portfolio" segment and "See portfolio →" stay hidden until at least one project has `draft: false`.
+With no project at `draft: false`, About Basel shows the diagram instead of the grid and "See projects →" is hidden.
 
 ## First real project only: prerequisites
 
 Check these once, before the first non-draft project merges. Each is a BACKLOG item under "Open items from the portfolio backend". Delete this section once they are done.
 
-1. **Planned-marker exemption (blocking; needs the owner's go-ahead).** `_mark_planned` in `services/glassbox/api/ask.py` runs over every non-code source. A write-up that says "planned", "deferred", "SQS" or "ASG" gets labelled `[PLANNED, not built yet]`, and the chatbot then says the project isn't built. Exempt `corpus/portfolio/` (a prompt change, portfolio spec §6.3). Ask the owner, then ship it as its own reviewed PR before the project PR.
-2. **Eval support.** `eval/run_eval.py` and `eval/schema.py` know only `about_me` and `about_system`. Add `portfolio` and 2–3 golden cases per project (owner rule: only once real projects exist). Can follow the project PR.
+1. **Done 2026-10-09 (#208): portfolio sources are never planned-marked.** Was: **Planned-marker exemption (blocking; needs the owner's go-ahead).** `_mark_planned` in `services/glassbox/api/ask.py` runs over every non-code source. A write-up that says "planned", "deferred", "SQS" or "ASG" gets labelled `[PLANNED, not built yet]`, and the chatbot then says the project isn't built. Exempt `corpus/portfolio/` (a prompt change, portfolio spec §6.3). Ask the owner, then ship it as its own reviewed PR before the project PR.
+2. **Eval support: done 2026-10-09 (#208)** for GoalBuddy (`me-portfolio-*` golden cases, asked on About Basel). For a new project, add 2–3 `about_me` golden cases with a `corpus/portfolio/<slug>.md` source. Was: `eval/run_eval.py` and `eval/schema.py` knew only `about_me` and `about_system`; add `portfolio` and 2–3 golden cases per project (owner rule: only once real projects exist). Can follow the project PR.
 3. **Ops · Diagnose** prints corpus versions for two corpora only. Add `portfolio` with the next `ops` Terraform apply. Not blocking.
 
 ## Steps
@@ -33,7 +33,7 @@ Check these once, before the first non-draft project merges. Each is a BACKLOG i
 7. **PR:** branch `content/portfolio-<slug>` in `.worktrees/`. Corpus changes run full CI. Get the standard review gate (`orchestration/reviewer-brief.md`), with the reviewer checking facts against what the owner provided, privacy, and links. Merge once approved and green (`project/CLAUDE.md` "Merge").
 8. **After release:** the Release workflow builds the image and the ingest Job indexes the project. On the live site, check that the card shows, the details sheet opens, screenshots load, and that asking "Tell me about <project>" cites `corpus/portfolio/<slug>.md`.
 
-**Share link:** `https://basel.engineering/?project=<slug>` opens the Portfolio with that project's details sheet (phones: the Portfolio view; Back returns to Chat). `?topic=portfolio` selects the Portfolio topic. The address bar follows what is shown (the open project, else the topic; About Basel has none), so copying it shares the current view. A link does not ask the chatbot by itself (`frontend/src/lib/deepLink.ts`).
+**Share link:** `https://basel.engineering/?project=<slug>` opens About Basel with that project's details sheet (phones: the Projects view; Back returns to Chat). The old `?topic=portfolio` opens About Basel with its grid (phones: the Projects view). The address bar follows what is shown (the open project, else the topic; About Basel has none), so copying it shares the current view. A link does not ask the chatbot by itself (`frontend/src/lib/deepLink.ts`).
 
 ## Changing or removing a project
 

@@ -9,7 +9,7 @@
 //   3. a selected diagram component or portfolio project is deselected
 //      (document, capture phase; `deselectsOnKey` in lib/detailsPanel.ts,
 //      used by ArchitecturePanel and PortfolioPanel),
-//   4. the phone Diagram or Portfolio view returns to Chat (document, bubble;
+//   4. the phone Diagram or Projects view returns to Chat (document, bubble;
 //      createViewNav in lib/diagramNav.ts).
 
 type ControlLike = { contains: (node: never) => boolean } | null

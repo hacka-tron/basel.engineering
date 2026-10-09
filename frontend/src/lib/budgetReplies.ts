@@ -41,13 +41,13 @@ export const BUDGET_REPLIES: readonly string[] = [
  * The reply when the server returns `retrieval_only` (no answer text). Chat
  * shows no sources list in any topic (owner, 2026-10-03). About This System
  * points to the "Retrieved chunks" list in the diagram pane, which still shows
- * what was found; About Basel and Portfolio, whose private/portfolio sources
- * are never shown, get a playful reply with nothing to point to.
+ * what was found; About Basel, whose private sources are never shown, gets a
+ * playful reply with nothing to point to.
  */
 export const SYSTEM_RETRIEVAL_ONLY_REPLY = "I can't write an answer right now, but what I found is listed under Retrieved chunks in the diagram."
 
 export function retrievalOnlyReply(
-  topic: 'basel' | 'system' | 'portfolio',
+  topic: 'basel' | 'system',
   avoid: Avoid = null,
   random: () => number = Math.random,
 ): string {
