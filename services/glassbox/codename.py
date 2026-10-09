@@ -38,17 +38,39 @@ _PATTERN = re.compile(
 )
 # What a held tail may still become, plus one more character to decide it: "the
 # Glassbox system", "the Glassbox's" (review #205: without it "the" was released
-# alone and the stream said "the this site's"), and "Glassbox.com" (an identifier).
+# alone and the stream said "the this site's"), and "Glassbox.com" or
+# "Glassbox system.Next" (a "." joined to a word is not a sentence end).
 _CANDIDATES = tuple(
     article + rest
     for article in ("the ", "The ", "")
-    for rest in ("Glassbox system ", "Glassbox's ", "Glassbox. ")
+    for rest in ("Glassbox system ", "Glassbox system. ", "Glassbox's ", "Glassbox. ")
 )
 _HOLD_MAX = max(len(candidate) for candidate in _CANDIDATES)
 _SENTENCE_END = re.compile(
     # Start of text, a sentence end, or a line start with list or heading markers.
     r"(?:(?<!\be\.g)(?<!\bi\.e)[.!?:]\s+|(?:^|\n)[ \t]*(?:(?:[#>*-]+|\d+[.)])[ \t]+)?)$"
 )
+# Runs whose length never changes a _SENTENCE_END result: blank lines, spaces and
+# tabs, markers, digits. Collapsing them lets a short tail stand for all the text.
+_COLLAPSE = (
+    (re.compile(r"\s*\n(?=\s*\n)"), ""),
+    (re.compile(r"[ \t]+"), " "),
+    (re.compile(r"[#>*-]{2,}"), "-"),
+    (re.compile(r"\d{2,}"), "0"),
+)
+_CONTEXT_KEEP = 16
+
+
+def _context(text: str) -> str:
+    """A short tail of ``text`` with the same ``_SENTENCE_END`` result.
+
+    Keeps capitalization exact after any amount of text (review #205: a fixed 8-char
+    window lost "e.g." behind long space runs) at a constant cost per call. A cut tail
+    starts with NUL so "^" can't match the cut.
+    """
+    for pattern, repl in _COLLAPSE:
+        text = pattern.sub(repl, text)
+    return text if len(text) <= _CONTEXT_KEEP else "\0" + text[-_CONTEXT_KEEP:]
 
 
 def _replacement(match: re.Match[str], before: str) -> str:
@@ -70,16 +92,20 @@ def _rewrite_span(full: str, start: int, end: int, out_before: str) -> tuple[str
 
     ``full[:start]`` is context only (the lookbehind keeps "Glassbox" in "MyGlassbox"
     from matching) and ``full[end:]`` lets the lookaheads see the next characters.
-    ``out_before`` is the rewritten text before ``start``, for capitalization.
+    ``out_before`` is the rewritten text before ``start`` (or its ``_context``), for
+    capitalization.
     """
     out: list[str] = []
     last = start
     count = 0
+    context = out_before
     for match in _PATTERN.finditer(full, start):
         if match.start() >= end:
             break
         out.append(full[last : match.start()])
-        out.append(_replacement(match, out_before + "".join(out)))
+        context = _context(context + out[-1])
+        out.append(_replacement(match, context))
+        context = _context(context + out[-1])
         last = match.end()
         count += 1
     out.append(full[last:end])
@@ -113,7 +139,7 @@ class CodenameFilter:
     def __init__(self) -> None:
         self._buf = ""
         self._src = ""  # the last released characters as received (match context)
-        self._out = ""  # the last released characters as sent (capitalization)
+        self._out = ""  # _context of everything sent (capitalization)
         self.rewritten = 0
 
     def _release(self, cut: int) -> str:
@@ -122,7 +148,7 @@ class CodenameFilter:
         out, count = _rewrite_span(full, base, base + cut, self._out)
         self.rewritten += count
         self._src = full[: base + cut][-8:]
-        self._out = (self._out + out)[-8:]
+        self._out = _context(self._out + out)
         self._buf = self._buf[cut:]
         return out
 
