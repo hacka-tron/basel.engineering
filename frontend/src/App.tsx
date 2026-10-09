@@ -23,6 +23,7 @@ import { holdSaveDuringRetry, planRetry, withoutFailedAttempt, type RetryPlan } 
 import { isCanonicalIdk, pickIdkReply } from './lib/idkReplies'
 import { connectClusterStream, podMapFromSnapshot } from './lib/clusterStream'
 import {
+  dropRetiredConversations,
   historyForRequest,
   latestQuestionAnswered,
   loadConversation,
@@ -33,7 +34,7 @@ import {
   writeConversation,
   type ChatMessage,
 } from './lib/conversation'
-import { apiCorpus, CORPORA, idkCorpus, topicLabel, visibleTopics, type Corpus } from './lib/topics'
+import { apiCorpus, CORPORA, idkCorpus, panelView, topicForView, topicLabel, TOPICS, type Corpus } from './lib/topics'
 import projects from 'virtual:portfolio'
 import PortfolioPanel from './components/PortfolioPanel'
 import { questionForProject } from './lib/portfolioView'
@@ -46,21 +47,27 @@ const NAME_TEXT = 'text-[clamp(1rem,0.9rem+0.5vw,1.25rem)] font-semibold trackin
 // answer-cache eligible); Retry recognises them by their exact wording.
 const SELECTION_QUESTIONS = selectionQuestions(projects.map((project) => project.title))
 
-// Owner (2026-10-02): the Portfolio topic, the phone Portfolio view and the
-// footer's "See portfolio →" are left out until the build has at least one
-// published (non-draft) project; they appear by themselves on the first
-// release with one. A history entry saved on the Portfolio view reads as Chat.
-const HAS_PORTFOLIO = projects.length > 0
-const SHOWN_TOPICS = visibleTopics(HAS_PORTFOLIO)
-const SHOWN_VIEWS = HAS_PORTFOLIO ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
+// Two topics (owner, 2026-10-09): About Basel, whose panel is the project grid
+// ("Projects"), and About This System, whose panel is the diagram. A phone
+// view belongs to its topic (option A): the switch is Chat | Projects or
+// Chat | Diagram, and opening a view by any route (the switch, Back/Forward, a
+// reload, a link, the stress test) also picks its topic. With no published
+// project, About Basel falls back to the diagram and "See projects →" is left
+// out (owner, 2026-10-02); a saved Projects history entry then reads as Chat.
+const HAS_PROJECTS = projects.length > 0
+const SHOWN_VIEWS = HAS_PROJECTS ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
 // A shareable link (?project=<slug> or ?topic=...), read at load; the address bar then follows the view (lib/deepLink.ts).
 const DEEP_LINK = parseDeepLink(window.location.search, projects.map((project) => project.slug))
+// A reload inside a phone view restores it from its history entry, and with it the view's topic.
+const INITIAL_VIEW = viewFromHistoryState(window.history.state, SHOWN_VIEWS)
+// The Portfolio topic's saved conversation is dropped, not merged (lib/conversation.ts).
+dropRetiredConversations()
 
 function App() {
-  const [corpus, setCorpus] = useState<Corpus>(DEEP_LINK.corpus ?? 'basel')
-  // Below md the diagram replaces the conversation in place (no overlay).
-  // A reload while in the diagram keeps it (its history entry survives).
-  const [mobileView, setMobileView] = useState<MobileView>(() => viewFromHistoryState(window.history.state, SHOWN_VIEWS))
+  const [corpus, setCorpus] = useState<Corpus>(INITIAL_VIEW === 'chat' ? DEEP_LINK.corpus ?? 'basel' : topicForView(INITIAL_VIEW))
+  // Below md the topic's panel replaces the conversation in place (no overlay).
+  // A reload while in a panel keeps it (its history entry survives).
+  const [mobileView, setMobileView] = useState<MobileView>(INITIAL_VIEW)
   // Focus mode: below md, the header and footer slide away while the ask box
   // has focus, so the conversation keeps its room with the keyboard up.
   const [askFocused, setAskFocused] = useState(false)
@@ -72,7 +79,7 @@ function App() {
   const [unaskedProject, setUnaskedProject] = useState<string | null>(() => {
     // A reload keeps the link; an answer already saved for it still shows.
     const project = projects.find((candidate) => candidate.slug === DEEP_LINK.project)
-    return project && !latestQuestionAnswered(loadConversation('portfolio'), questionForProject(project.title)) ? project.slug : null
+    return project && !latestQuestionAnswered(loadConversation('about_me'), questionForProject(project.title)) ? project.slug : null
   })
   const [nodeCacheStatus, setNodeCacheStatus] = useState<Partial<Record<NodeId, 'hit' | 'miss'>>>({})
   const [retrievedChunks, setRetrievedChunks] = useState<RetrievalChunk[]>([])
@@ -82,7 +89,6 @@ function App() {
   const [conversations, setConversations] = useState<Record<Corpus, ChatMessage[]>>(() => ({
     basel: loadConversation('about_me'),
     system: loadConversation('about_system'),
-    portfolio: loadConversation('portfolio'),
   }))
   const messages = conversations[corpus]
   const conversationsRef = useRef(conversations)
@@ -227,9 +233,20 @@ function App() {
   // details and never taps. Refs: the nav is created further down.
   const isDesktopRef = useRef(false)
   const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
-  const onStressTap = useCallback(() => {
-    revealDiagramRef.current(isDesktopRef.current)
+  // Opening a view picks its topic and drops the other topic's selection.
+  // Only state setters, so the view nav (created once) can call it.
+  const followView = useCallback((view: Exclude<MobileView, 'chat'>) => {
+    const topic = topicForView(view)
+    setCorpus(topic)
+    if (topic !== 'system') setSelectedNode(null)
+    if (topic !== 'basel') setSelectedProject(null)
   }, [])
+  // The stress test jumps to About This System and its diagram (owner,
+  // 2026-10-09), on desktop too, where the diagram is that topic's pane.
+  const onStressTap = useCallback(() => {
+    if (isDesktopRef.current) followView('diagram')
+    else revealDiagramRef.current(false)
+  }, [followView])
   const stressTest = useStressTest(startVisualStressTest, startRealStressTest)
   const shownWorkerPods = simulatedPodCount === null
     ? podsById && Object.values(podsById)
@@ -588,7 +605,7 @@ function App() {
     setRetrievedChunks([])
     setNodeCacheStatus({})
     if (corpus === 'system') setSelectedNode(null)
-    if (corpus === 'portfolio') setSelectedProject(null)
+    if (corpus === 'basel') setSelectedProject(null)
   }
 
   // Asks about a selected component or project, unless its answer is already
@@ -611,7 +628,7 @@ function App() {
     askAboutSelection(questionForComponent(id), 'system')
   }
 
-  // Picking a project switches the topic to Portfolio and asks
+  // Picking a project switches the topic to About Basel and asks
   // "Tell me about <title>", like a component tap does for About This System.
   function handleSelectProject(slug: string) {
     const project = projects.find((candidate) => candidate.slug === slug)
@@ -619,8 +636,8 @@ function App() {
     setSelectedProject(slug)
     setUnaskedProject(null)
     setSelectedNode(null)
-    setCorpus('portfolio')
-    askAboutSelection(questionForProject(project.title), 'portfolio')
+    setCorpus('basel')
+    askAboutSelection(questionForProject(project.title), 'basel')
   }
 
   // The chevron, Escape or a tap in the strip. An answer still streaming
@@ -640,6 +657,8 @@ function App() {
   const showRotateScreen = useRotateScreen()
   const showDiagramView = !isDesktop && mobileView === 'diagram'
   const showPortfolioView = !isDesktop && mobileView === 'portfolio'
+  // The topic's own panel: the desktop right pane and the phone switch's second segment.
+  const topicPanel = panelView(corpus, HAS_PROJECTS)
   const showOtherView = showDiagramView || showPortfolioView
   const focusMode = !isDesktop && askFocused
 
@@ -652,7 +671,10 @@ function App() {
   const [viewNav] = useState(() => createViewNav({
     history: window.history,
     views: SHOWN_VIEWS,
-    setView: setMobileView,
+    setView: (view) => {
+      setMobileView(view)
+      if (view !== 'chat') followView(view)
+    },
     afterRender: (callback) => { requestAnimationFrame(callback) },
     focusViewToggle: (view) => (view === 'portfolio' ? portfolioButtonRef : diagramButtonRef).current?.focus(),
     // Leaving a view closes its details sheet (spec §5.5: Back closes the sheet).
@@ -686,14 +708,22 @@ function App() {
     window.addEventListener('popstate', syncAddressBar)
     return () => window.removeEventListener('popstate', syncAddressBar)
   }, [corpus, selectedProject])
-  // On load, a project link on a phone opens the Portfolio view as its own
-  // history entry, so Back returns to Chat; showView adds no entry when that
-  // view is already shown (a reload there, or StrictMode's rerun). A topic link
-  // only picks the topic: the URL can't tell Chat from the Portfolio view, and
-  // a reload keeps whichever view was shown through its history entry.
+  // On load, a project link (or an old ?topic=portfolio link) on a phone opens
+  // the Projects view as its own history entry, so Back returns to Chat;
+  // showView adds no entry when that view is already shown (a reload there, or
+  // StrictMode's rerun). A topic link only picks the topic: the URL can't tell
+  // Chat from a panel, and a reload keeps whichever view was shown through its
+  // history entry.
   useEffect(() => {
-    if (DEEP_LINK.project !== null && !isDesktopRef.current) viewNav.showView('portfolio')
+    if (DEEP_LINK.projects && !isDesktopRef.current) viewNav.showView('portfolio')
   }, [viewNav])
+  // Safety net for option A: a phone panel always belongs to the current
+  // topic. Every route keeps them together; this catches the rest (say, a topic
+  // picked on desktop with a panel's history entry, then the window narrowed)
+  // by switching to the topic's panel in place (no extra history entry).
+  useEffect(() => {
+    if (!isDesktop && mobileView !== 'chat' && mobileView !== topicPanel) viewNav.showView(topicPanel)
+  }, [isDesktop, mobileView, topicPanel, viewNav])
   useEffect(() => {
     if (!showOtherView) return
     document.addEventListener('keydown', viewNav.handleKeyDown)
@@ -738,7 +768,7 @@ function App() {
   }, [])
 
   // Focus rescue when the chips unmount while holding focus: on a switch to
-  // Diagram or Portfolio view it goes to that view's toggle segment (a ref:
+  // Diagram or Projects view it goes to that view's toggle segment (a ref:
   // the chips call this from a commit, before any later view change); when the window widens past md
   // (chips replaced by the desktop topic nav) it goes to the nav button for the
   // current topic. Runs after the commit, so isDesktopRef and the nav are current.
@@ -751,8 +781,8 @@ function App() {
 
   const selectedAnswer = selectionAnswer(conversations.system, selectedNode ? questionForComponent(selectedNode) : null)
   const selectedProjectData = projects.find((project) => project.slug === selectedProject)
-  const projectAnswer = selectionAnswer(conversations.portfolio, selectedProjectData ? questionForProject(selectedProjectData.title) : null)
-  // Receives the first card (or the empty-state text) for "See portfolio →".
+  const projectAnswer = selectionAnswer(conversations.basel, selectedProjectData ? questionForProject(selectedProjectData.title) : null)
+  // Receives the first card (or the empty-state text) for "See projects →".
   const portfolioFocusRef = useRef<HTMLElement | null>(null)
   // Phones show the answer in the sheet ("Ask about this"); desktop shows it
   // in the chat column beside the pane.
@@ -779,14 +809,14 @@ function App() {
     if (next === corpus) return
     setCorpus(next)
     if (next !== 'system') setSelectedNode(null)
-    if (next !== 'portfolio') setSelectedProject(null)
+    if (next !== 'basel') setSelectedProject(null)
     pendingSelectionRef.current = null
   }
-  // Footer popover "See portfolio →" (spec §5.7): the Portfolio topic and, on
-  // phones, the Portfolio view; an open project sheet closes, and focus moves
-  // to the first card (or the empty state) once the panel has rendered.
-  function handleSeePortfolio() {
-    selectTopic('portfolio')
+  // Footer popover "See projects →" (spec §5.7): About Basel and, on phones,
+  // its Projects view; an open project sheet closes, and focus moves to the
+  // first card (or the empty state) once the panel has rendered.
+  function handleSeeProjects() {
+    selectTopic('basel')
     setSelectedProject(null)
     pendingSelectionRef.current = null
     if (!isDesktopRef.current) showMobileView('portfolio')
@@ -798,7 +828,7 @@ function App() {
   // (Chat view only; Diagram view keeps the topic, it just hides the chips).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
-        {SHOWN_TOPICS.map((topic, index) => (
+        {TOPICS.map((topic, index) => (
           <span key={topic.value} className="contents">
             {index > 0 && <span aria-hidden="true" className="text-hairline">|</span>}
             <button
@@ -904,7 +934,7 @@ function App() {
             </div>
           ) : undefined}
           inputTopic={isDesktop || showOtherView ? undefined : (
-            <TopicChips value={corpus} options={SHOWN_TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
+            <TopicChips value={corpus} options={TOPICS} onChange={selectTopic} onUnmountWithFocus={rescueChipFocus} />
           )}
           inputAccessory={
             <PipelineStrip
@@ -912,7 +942,7 @@ function App() {
               onViewChange={showMobileView}
               activeNode={activeNode}
               toggleRefs={{ diagram: diagramButtonRef, portfolio: portfolioButtonRef }}
-              views={SHOWN_VIEWS}
+              views={[topicPanel]}
             />
           }
         />
@@ -923,12 +953,12 @@ function App() {
           portrait diagram above mounts only in the diagram view. Only one
           ArchitecturePanel ever exists at a time.
         */}
-        {/* The right pane follows the topic (spec 2026-10-02 §5.2): the
-            portfolio for Portfolio, the diagram otherwise; no tabs. Only one
-            ArchitecturePanel is ever mounted, and it unmounts while the
-            portfolio shows (a stress test still runs and shakes; its workers
-            show after switching topic). */}
-        {isDesktop && (corpus === 'portfolio'
+        {/* The right pane follows the topic (spec 2026-10-02 §5.2; owner,
+            2026-10-09): the project grid for About Basel, the diagram for About
+            This System; no tabs. Only one ArchitecturePanel is ever mounted, and
+            it unmounts while the grid shows (a stress test switches to About
+            This System, so its workers show). */}
+        {isDesktop && (topicPanel === 'portfolio'
           ? portfolioPanel(false)
           : <ArchitecturePanel fitMinZoom={0.65} activeNode={activeNode} nodeCacheStatus={nodeCacheStatus} retrievedChunks={retrievedChunks} selectedNode={selectedNode} onInspect={handleInspectComponent} onDeselect={handleDeselectComponent} workerPods={shownWorkerPods} backlog={shownBacklog} />)}
       </main>
@@ -943,7 +973,7 @@ function App() {
         stressTestSubmitting={stressTest.isSubmitting}
         stressTestCapacity={stressTest.capacity}
         stressTestRealCooldownSeconds={stressTest.realCooldownSeconds}
-        onSeePortfolio={HAS_PORTFOLIO ? handleSeePortfolio : undefined}
+        onSeeProjects={HAS_PROJECTS ? handleSeeProjects : undefined}
         {...(isDesktop ? {} : {
           onNewChat: handleNewChat,
           newChatDisabled: isStreaming || messages.length === 0,

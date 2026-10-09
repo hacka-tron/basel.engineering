@@ -23,7 +23,7 @@ test('no reply points to a sources list (none is shown)', () => {
 test('retrieval_only: About This System points to the chunk list; the others get a playful reply', () => {
   assert.equal(retrievalOnlyReply('system', null, () => 0), SYSTEM_RETRIEVAL_ONLY_REPLY)
   assert.match(SYSTEM_RETRIEVAL_ONLY_REPLY, /Retrieved chunks/)
-  for (const topic of ['basel', 'portfolio'] as const) {
+  for (const topic of ['basel'] as const) {
     assert.equal(retrievalOnlyReply(topic, null, () => 0), BUDGET_REPLIES[0])
     assert.ok(BUDGET_REPLIES.includes(retrievalOnlyReply(topic)))
   }

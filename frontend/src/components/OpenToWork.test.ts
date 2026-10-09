@@ -17,6 +17,6 @@ test('the footer item uses the approved wording, verbatim', () => {
   }
 })
 
-test('the portfolio link uses the approved wording (spec §5.7)', () => {
-  assert.ok(source.includes("'See portfolio →'"))
+test('the projects link names the grid (owner, 2026-10-09: "Projects")', () => {
+  assert.ok(source.includes("'See projects →'"))
 })

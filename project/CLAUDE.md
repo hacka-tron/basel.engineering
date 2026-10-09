@@ -8,7 +8,7 @@ Read this before exploring. Detail: `docs/DESIGN.md` §5 (diagram, request lifec
 
 | Path | Owns | Entry point |
 |---|---|---|
-| `frontend/src/` | React/Vite site: chat (`components/Chat.tsx`), live architecture diagram (`architecture.ts` holds nodes as data), portfolio panel, phone layout; SSE client and UI logic in `lib/` | `main.tsx`, `App.tsx`; `npm run phone` preview |
+| `frontend/src/` | React/Vite site: chat (`components/Chat.tsx`), live architecture diagram (`architecture.ts` holds nodes as data), project grid (About Basel's panel, `PortfolioPanel`), phone layout; SSE client and UI logic in `lib/` | `main.tsx`, `App.tsx`; `npm run phone` preview |
 | `services/glassbox/api/` | FastAPI: `POST /api/ask` SSE stream (`ask.py`, `sse.py`), cluster status stream, stress-test demo, health, security headers, CSP reports | `main.py` (`app`) |
 | `services/glassbox/worker/` | Retrieval worker: reads `retrieval:jobs` Redis Stream (consumer group), vector search, publishes `trace:{request_id}` | `main.py` |
 | `services/glassbox/retrieval/`, `cache/`, `providers/` | Hybrid search over Redis Search; embedding/retrieval/semantic answer caches; Bedrock and fake providers chosen together (`factory.py`) | |

@@ -8,13 +8,14 @@ type PipelineStripProps = {
   view: MobileView
   onViewChange: (view: MobileView) => void
   activeNode?: NodeId | null
-  /** The Diagram and Portfolio segments; focus returns to the one whose view closes. */
+  /** The Diagram and Projects segments; focus returns to the one whose view closes. */
   toggleRefs?: Record<OtherView, RefObject<HTMLButtonElement | null>>
-  /** The non-Chat views offered: Portfolio is left out until there is a published project. */
+  /** The non-Chat views offered: the current topic's panel only (App.tsx), so the switch is Chat | Projects or Chat | Diagram. */
   views?: readonly OtherView[]
 }
 
-const LABELS: Record<MobileView, string> = { chat: 'Chat', diagram: 'Diagram', portfolio: 'Portfolio' }
+// The `portfolio` view is the project grid, labelled Projects (owner, 2026-10-09).
+const LABELS: Record<MobileView, string> = { chat: 'Chat', diagram: 'Diagram', portfolio: 'Projects' }
 
 /** Below 360px the segments are icons: a speech bubble, a node graph, a 2x2 grid. */
 function ViewIcon({ view }: { view: MobileView }) {
@@ -29,13 +30,14 @@ function ViewIcon({ view }: { view: MobileView }) {
 
 /**
  * Below md, the row above the ask box: the live pipeline stages (no heading;
- * the labelled dots explain themselves) and a Chat | Diagram | Portfolio
- * switch (always shown). The diagram and the portfolio replace the
+ * the labelled dots explain themselves) and the topic's view switch (owner,
+ * 2026-10-09, option A): Chat | Projects under About Basel, Chat | Diagram
+ * under About This System. The project grid and the diagram replace the
  * conversation in place, so the ask box stays usable while a request runs.
  */
 function PipelineStrip({ view, onViewChange, activeNode, toggleRefs, views = OTHER_VIEWS }: PipelineStripProps) {
   const options: readonly MobileView[] = ['chat', ...views]
-  // Three segments need icons below 360px; two (Chat | Diagram) fit as text down to 280px.
+  // Three segments would need icons below 360px; two (Chat | Projects, Chat | Diagram) fit as text down to 280px.
   const compact = options.length > 2
   const stagesRef = useRef<HTMLOListElement>(null)
   const activeLabel = architectureNodes.find((node) => node.id === activeNode)?.data.label

@@ -101,7 +101,7 @@ function PortfolioPanel({ projects, phone = false, selectedSlug, answerText, onS
   }, [hasSelection, deselect])
 
   return (
-    <section aria-label="Portfolio" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-panel">
+    <section aria-label="Projects" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-panel">
       {/* Desktop title bar; on phones the toggle already says where you are. */}
       <div className="flex shrink-0 items-center max-md:sr-only md:min-h-14 md:border-b md:border-hairline md:px-7">
         <h2 className="text-xs font-medium text-primary">{portfolioHeading(projects.length)}</h2>

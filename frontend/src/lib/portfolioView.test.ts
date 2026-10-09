@@ -10,9 +10,9 @@ test('copy matches the spec', () => {
 })
 
 test('the heading counts projects, singular for one, plain when empty', () => {
-  assert.equal(portfolioHeading(0), 'Portfolio')
-  assert.equal(portfolioHeading(1), 'Portfolio · 1 project')
-  assert.equal(portfolioHeading(4), 'Portfolio · 4 projects')
+  assert.equal(portfolioHeading(0), 'Projects')
+  assert.equal(portfolioHeading(1), 'Projects · 1')
+  assert.equal(portfolioHeading(4), 'Projects · 4')
 })
 
 test('cards show the first three stack tags, then +N', () => {
