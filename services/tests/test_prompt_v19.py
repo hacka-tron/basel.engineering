@@ -250,7 +250,7 @@ def test_overlay_maps_playful_items():
 
 
 def test_prompt_version_is_current():
-    assert ask._PROMPT_VERSION == "v21"
+    assert ask._PROMPT_VERSION == "v22"
 
 
 def test_about_this_system_answers_may_use_three_sentences():

@@ -19,6 +19,7 @@ from services.glassbox.cache.retrieval import (
     RedisRetrievalCache,
     RetrievalCache,
 )
+from services.glassbox.corpora import search_corpora
 from services.glassbox.db.models import Chunk, Document
 from services.glassbox.db.session import get_session_factory
 from services.glassbox.retrieval.search import (
@@ -35,6 +36,16 @@ GROUP_NAME = "workers"
 LOGGER = logging.getLogger(__name__)
 # The only text a failed retrieval job publishes (see process_one_message).
 RETRIEVAL_FAILED_MESSAGE = "Retrieval failed"
+
+
+async def search_version(retrieval_cache: RetrievalCache, corpus: str) -> int:
+    """The retrieval-cache version for a topic: the sum over the corpora it searches.
+
+    About Basel also searches the portfolio files, so an ingest of either corpus must
+    retire its cached results. Each ``corpus:ver`` counter only grows, so the sum
+    does too and never returns to a value an older entry was written under.
+    """
+    return sum([await retrieval_cache.version(name) for name in search_corpora(corpus)])
 
 
 async def ensure_consumer_group(redis_client) -> None:
@@ -237,7 +248,7 @@ async def process_one_message(
             embedding_model = embedding_model.decode()
         retrieval_cache: RetrievalCache = RedisRetrievalCache(redis_client)
         chunk_cache: ChunkCache = RedisChunkCache(redis_client)
-        version = await retrieval_cache.version(corpus)
+        version = await search_version(retrieval_cache, corpus)
         question = _field(fields, "question") or b""
         if isinstance(question, bytes):
             question = question.decode(errors="replace")
@@ -289,7 +300,7 @@ async def process_one_message(
             round((time.monotonic() - mysql_started) * 1000),
             cache="hit" if chunk_hit else "miss",
         )
-        await emit("retrieval", {"chunks": chunks})
+        await emit("retrieval", {"chunks": chunks, "retrieval_mode": RETRIEVAL_MODE})
     except Exception:
         LOGGER.exception("Retrieval job %s failed", message_id)
         if channel:

@@ -687,7 +687,7 @@ def test_grounding_rules_treat_the_question_as_data():
         ("infra/modules/compute/main.tf", "infrastructure (Terraform)"),
         ("docs/DESIGN.md", "design document"),
         ("private/bio.md", "About Basel (bio · t)"),
-        ("corpus/portfolio/x.md", "portfolio project"),
+        ("corpus/portfolio/x.md", "portfolio project (t)"),
         ("README.md", "document"),
     ],
 )

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from redis.exceptions import ResponseError
 
 from services.glassbox.cache.answer import _model_tag
-from services.glassbox.corpora import CORPORA
+from services.glassbox.corpora import CORPORA, search_corpora
 from services.glassbox.ingest.redis_index import INDEX_NAME, KINDS
 
 LOGGER = logging.getLogger(__name__)
@@ -66,14 +66,17 @@ _SYSTEM = RetrievalConfig(
     vector_anchor=4,
     lexical_candidates=10,
 )
+# From 2026-10-09 About Basel also searches the portfolio files, under the same
+# settings: a project's chunks compete with the About Basel sections, no separate cap.
 RETRIEVAL_CONFIGS: dict[str, RetrievalConfig] = {
     "about_me": RetrievalConfig(top_k=8, per_document_cap=8, vector_anchor=4, dual_experience=True),
     "about_system": _SYSTEM,
     "portfolio": _SYSTEM,
 }
 # Part of the retrieval-cache key: entries computed by another retrieval mode
-# (vector-only before phase 8) are never reused.
-RETRIEVAL_MODE = "hybrid-v1"
+# (vector-only before phase 8) are never reused. v2: About Basel also searches the
+# portfolio corpus (2026-10-09), so its older entries, which lack project chunks, miss.
+RETRIEVAL_MODE = "hybrid-v2"
 
 # Where an About Basel chunk's experience comes from: the private file it is in.
 PROFESSIONAL = "professional"
@@ -132,7 +135,9 @@ def _filters(corpus: str, model_id: str, kinds: Iterable[str] | None) -> str:
         if not kinds or any(kind not in KINDS for kind in kinds):
             raise ValueError(f"kinds must be a non-empty subset of {KINDS}")
         kind_filter = f" @kind:{{{'|'.join(kinds)}}}"
-    return f"@corpus:{{{corpus}}} @model:{{{_model_tag(model_id)}}}{kind_filter}"
+    # About Basel also searches the portfolio files (corpora.SEARCH_CORPORA).
+    corpus_tags = "|".join(search_corpora(corpus))
+    return f"@corpus:{{{corpus_tags}}} @model:{{{_model_tag(model_id)}}}{kind_filter}"
 
 
 def knn_query(corpus: str, model_id: str, top_k: int, kinds: Iterable[str] | None = None) -> str:

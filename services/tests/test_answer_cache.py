@@ -28,6 +28,7 @@ from services.glassbox.cache.embedding import embedding_cache_key
 from services.glassbox.db.models import Query
 from services.glassbox.db.session import create_db_engine, get_session_factory
 from services.glassbox.ingest.redis_index import replace_document_vectors
+from services.glassbox.retrieval.search import RETRIEVAL_MODE
 from services.glassbox.trace import next_seq
 from services.tests.stack_ports import redis_url_for
 from services.tests.test_ask_endpoint import TEST_MYSQL_PORT, skip_unless_query_log_migrated
@@ -569,6 +570,7 @@ def test_repeat_api_request_skips_retrieval_and_llm(monkeypatch):
             json.dumps(
                 {
                     "type": "retrieval",
+                    "retrieval_mode": RETRIEVAL_MODE,
                     "request_id": request_id,
                     "seq": await next_seq(redis_client, request_id),
                     "t_ms": 1,

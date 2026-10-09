@@ -24,8 +24,8 @@ def _all_example_text() -> str:
     return "\n".join(parts)
 
 
-def test_prompt_version_is_v21():
-    assert ask._PROMPT_VERSION == "v21"
+def test_prompt_version_is_current():
+    assert ask._PROMPT_VERSION == "v22"
 
 
 def test_no_example_carries_an_email_placeholder():
