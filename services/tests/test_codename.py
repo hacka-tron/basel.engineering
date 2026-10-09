@@ -1,6 +1,7 @@
 """The codename rewrite (services/glassbox/codename.py): "Glassbox" -> "this site"."""
 
 import random
+import time
 
 import pytest
 
@@ -88,6 +89,9 @@ def test_the_possessive_after_the_is_one_phrase_when_streamed(tokens):
         ["e.g.          Gla", "ssbox's"],
         ["Hi.", "            ", "Glassbox"],
         ["I use -", "          ", "Glassbox"],
+        ["e.g." + " " * 100, "Glassbox"],
+        ["x\n\n\n" + " \t" * 40 + "12345. ", "Glassbox"],
+        ["a ---- ", "Glassbox"],
     ],
 )
 def test_streaming_matches_the_whole_text_rewrite_at_the_edges(tokens):
@@ -125,6 +129,14 @@ def test_streaming_always_matches_the_whole_text_rewrite_fuzz():
         tokens = [text[a:b] for a, b in zip([0, *cuts], [*cuts, len(text)], strict=True)]
         f = CodenameFilter()
         assert "".join(f.push(token) for token in tokens) + f.flush() == rewrite(text), tokens
+
+
+def test_a_long_streamed_answer_costs_linear_time():
+    # Review: a whole-text capitalization context made this ~30x slower (quadratic).
+    text = "Glassbox is a site. The Glassbox system works.\n- item e.g. Glassbox\n" * 500
+    started = time.perf_counter()
+    assert _stream(text, 1)[0] == rewrite(text)
+    assert time.perf_counter() - started < 5
 
 
 def test_counts_rewrites_and_releases_plain_text_without_delay():
