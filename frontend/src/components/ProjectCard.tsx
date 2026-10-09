@@ -25,7 +25,7 @@ type ProjectCardProps = {
   project: Project
   selected: boolean
   onPress: () => void
-  /** Set on the first card so "See portfolio →" can focus it. */
+  /** Set on the first card so "See projects →" can focus it. */
   buttonRef?: (element: HTMLButtonElement | null) => void
 }
 

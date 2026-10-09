@@ -34,7 +34,7 @@ import {
   writeConversation,
   type ChatMessage,
 } from './lib/conversation'
-import { apiCorpus, CORPORA, idkCorpus, panelView, topicForView, topicLabel, TOPICS, type Corpus } from './lib/topics'
+import { apiCorpus, CORPORA, idkCorpus, initialTopic, panelView, topicForView, topicLabel, TOPICS, type Corpus } from './lib/topics'
 import projects from 'virtual:portfolio'
 import PortfolioPanel from './components/PortfolioPanel'
 import { questionForProject } from './lib/portfolioView'
@@ -58,13 +58,17 @@ const HAS_PROJECTS = projects.length > 0
 const SHOWN_VIEWS = HAS_PROJECTS ? OTHER_VIEWS : OTHER_VIEWS.filter((view) => view !== 'portfolio')
 // A shareable link (?project=<slug> or ?topic=...), read at load; the address bar then follows the view (lib/deepLink.ts).
 const DEEP_LINK = parseDeepLink(window.location.search, projects.map((project) => project.slug))
-// A reload inside a phone view restores it from its history entry, and with it the view's topic.
+// A reload inside a phone view restores it from its history entry; the topic
+// comes from the address bar, else from that view (initialTopic).
 const INITIAL_VIEW = viewFromHistoryState(window.history.state, SHOWN_VIEWS)
 // The Portfolio topic's saved conversation is dropped, not merged (lib/conversation.ts).
 dropRetiredConversations()
 
 function App() {
-  const [corpus, setCorpus] = useState<Corpus>(INITIAL_VIEW === 'chat' ? DEEP_LINK.corpus ?? 'basel' : topicForView(INITIAL_VIEW))
+  const [corpus, setCorpus] = useState<Corpus>(() => initialTopic(DEEP_LINK.corpus, INITIAL_VIEW, HAS_PROJECTS))
+  // For callbacks created once (the view nav): the topic shown now.
+  const corpusRef = useRef(corpus)
+  corpusRef.current = corpus
   // Below md the topic's panel replaces the conversation in place (no overlay).
   // A reload while in a panel keeps it (its history entry survives).
   const [mobileView, setMobileView] = useState<MobileView>(INITIAL_VIEW)
@@ -233,13 +237,16 @@ function App() {
   // details and never taps. Refs: the nav is created further down.
   const isDesktopRef = useRef(false)
   const revealDiagramRef = useRef<(isDesktop: boolean) => void>(() => {})
-  // Opening a view picks its topic and drops the other topic's selection.
-  // Only state setters, so the view nav (created once) can call it.
+  // Opening a view picks its topic and drops the other topic's selection,
+  // including a selection question queued behind a streaming answer (#210
+  // review: else it was asked on the topic just left). Refs and setters only,
+  // so the view nav (created once) can call it.
   const followView = useCallback((view: Exclude<MobileView, 'chat'>) => {
-    const topic = topicForView(view)
+    const topic = topicForView(view, corpusRef.current, HAS_PROJECTS)
     setCorpus(topic)
     if (topic !== 'system') setSelectedNode(null)
     if (topic !== 'basel') setSelectedProject(null)
+    if (pendingSelectionRef.current && pendingSelectionRef.current.corpus !== topic) pendingSelectionRef.current = null
   }, [])
   // The stress test jumps to About This System and its diagram (owner,
   // 2026-10-09), on desktop too, where the diagram is that topic's pane.
@@ -825,7 +832,7 @@ function App() {
   const showFullName = useFullNameFits(headerRef, nameMeasureRef, isDesktop ? [actionsRef, navRef] : [actionsRef])
 
   // md+ only; below md the topic is chosen with the chips above the ask box
-  // (Chat view only; Diagram view keeps the topic, it just hides the chips).
+  // (Chat view only; the Projects and Diagram views belong to their topics).
   const topicNav = (
       <nav ref={navRef} aria-label="Question topic" className="order-2 ml-4 flex items-center gap-2 text-xs">
         {TOPICS.map((topic, index) => (

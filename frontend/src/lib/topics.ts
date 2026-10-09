@@ -41,7 +41,22 @@ export function panelView(corpus: Corpus, hasProjects: boolean): OtherView {
   return corpus === 'basel' && hasProjects ? 'portfolio' : 'diagram'
 }
 
-/** The topic a panel belongs to: opening a view by any route also picks its topic. */
-export function topicForView(view: OtherView): Corpus {
-  return view === 'portfolio' ? 'basel' : 'system'
+/**
+ * The topic a panel belongs to: opening a view by any route also picks its
+ * topic. With no published project the diagram is both topics' panel, so
+ * opening it keeps the current topic (#210 review).
+ */
+export function topicForView(view: OtherView, current: Corpus, hasProjects: boolean): Corpus {
+  if (view === 'portfolio') return 'basel'
+  return hasProjects ? 'system' : current
+}
+
+/**
+ * The topic on load: the address bar's (it always mirrors the shown topic),
+ * else the topic of the phone view a reload restored, else About Basel. A
+ * phone panel that disagrees is then switched to the topic's own (App.tsx).
+ */
+export function initialTopic(linked: Corpus | null, view: OtherView | 'chat', hasProjects: boolean): Corpus {
+  if (linked !== null) return linked
+  return view === 'chat' ? 'basel' : topicForView(view, 'basel', hasProjects)
 }

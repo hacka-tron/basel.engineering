@@ -1,7 +1,8 @@
-// History and focus for the phone views (spec 2026-10-02 §5.3): Chat |
-// Diagram | Portfolio. Each non-Chat view is one history entry above Chat:
-// opening one from Chat pushes it, switching between Diagram and Portfolio
-// replaces it, so Back always returns to Chat and Forward reopens the last
+// History and focus for the phone views (spec 2026-10-02 §5.3): Chat and
+// the two panels, Diagram and Projects (internal id `portfolio`), each shown
+// under its own topic since 2026-10-09 (App.tsx). Each non-Chat view is one
+// history entry above Chat: opening one from Chat pushes it, switching
+// between the panels (say, a stress tap from Projects) replaces it, so Back always returns to Chat and Forward reopens the last
 // non-Chat view. Every way back to Chat (Back/popstate, Escape, the Chat
 // segment, "Continue in chat") moves focus to the toggle segment of the view
 // that was left, because whatever had focus (including the Chat segment
@@ -23,11 +24,11 @@ export interface ViewNavDeps {
   focusViewToggle: (view: OtherView) => void
   /** Called once whenever the view returns to Chat, by any route. */
   onReturnToChat?: () => void
-  /** The non-Chat views offered (Portfolio is hidden until there is content); others read as Chat. */
+  /** The non-Chat views offered (Projects is left out until there is a published project); others read as Chat. */
   views?: readonly OtherView[]
 }
 
-/** The view a history entry holds; an unknown or hidden view (say, Portfolio saved before it was hidden) reads as Chat. */
+/** The view a history entry holds; an unknown or hidden view (say, Projects with no published project) reads as Chat. */
 export function viewFromHistoryState(state: unknown, views: readonly OtherView[] = OTHER_VIEWS): MobileView {
   const view = (state as { glassboxView?: unknown } | null)?.glassboxView
   return views.includes(view as OtherView) ? view as OtherView : 'chat'
