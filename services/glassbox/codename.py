@@ -38,11 +38,12 @@ _PATTERN = re.compile(
 )
 # What a held tail may still become, plus one more character to decide it: "the
 # Glassbox system", "the Glassbox's" (review #205: without it "the" was released
-# alone and the stream said "the this site's"), and "Glassbox.com" (an identifier).
+# alone and the stream said "the this site's"), and "Glassbox.com" or
+# "Glassbox system.Next" (a "." joined to a word is not a sentence end).
 _CANDIDATES = tuple(
     article + rest
     for article in ("the ", "The ", "")
-    for rest in ("Glassbox system ", "Glassbox's ", "Glassbox. ")
+    for rest in ("Glassbox system ", "Glassbox system. ", "Glassbox's ", "Glassbox. ")
 )
 _HOLD_MAX = max(len(candidate) for candidate in _CANDIDATES)
 _SENTENCE_END = re.compile(
@@ -113,7 +114,9 @@ class CodenameFilter:
     def __init__(self) -> None:
         self._buf = ""
         self._src = ""  # the last released characters as received (match context)
-        self._out = ""  # the last released characters as sent (capitalization)
+        # Everything sent so far: capitalization can depend on text before any number
+        # of spaces ("e.g.      Glassbox"), and "^" must mean the true start.
+        self._out = ""
         self.rewritten = 0
 
     def _release(self, cut: int) -> str:
@@ -122,7 +125,7 @@ class CodenameFilter:
         out, count = _rewrite_span(full, base, base + cut, self._out)
         self.rewritten += count
         self._src = full[: base + cut][-8:]
-        self._out = (self._out + out)[-8:]
+        self._out += out
         self._buf = self._buf[cut:]
         return out
 

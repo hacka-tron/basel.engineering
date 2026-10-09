@@ -78,6 +78,23 @@ def test_the_possessive_after_the_is_one_phrase_when_streamed(tokens):
     assert "the this" not in streamed
 
 
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        # "system." glued to a word: the "." alone can't decide it (#205 re-check).
+        ["Glass", "box system.", "N", "ext"],
+        ["I like the Glassbox system.", "Next"],
+        # The context before a long run of spaces still decides capitalization.
+        ["e.g.          Gla", "ssbox's"],
+        ["Hi.", "            ", "Glassbox"],
+        ["I use -", "          ", "Glassbox"],
+    ],
+)
+def test_streaming_matches_the_whole_text_rewrite_at_the_edges(tokens):
+    f = CodenameFilter()
+    assert "".join(f.push(token) for token in tokens) + f.flush() == rewrite("".join(tokens))
+
+
 def test_streaming_always_matches_the_whole_text_rewrite_fuzz():
     rng = random.Random(205)
     words = [
@@ -94,6 +111,8 @@ def test_streaming_always_matches_the_whole_text_rewrite_fuzz():
         "e.g.",
         "services/glassbox",
         "Glassbox.com",
+        "system.Next",
+        "      ",
         "`Glassbox`",
         "#",
         "-",
