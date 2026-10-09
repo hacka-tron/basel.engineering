@@ -1,18 +1,19 @@
-// Portfolio panel copy and small view helpers (spec 2026-10-02 §5.4).
+// Project grid copy and small view helpers (spec 2026-10-02 §5.4; the grid is
+// "Projects", About Basel's panel, since 2026-10-09).
 
 export const PORTFOLIO_DETAILS_HINT = 'Select a project for details'
-/** Phone status text left of the view toggle in Portfolio view. */
+/** Phone status text left of the view toggle in the Projects view. */
 export const PORTFOLIO_STATUS_HINT = 'Select a project'
 export const PORTFOLIO_EMPTY_TEXT = 'Projects are on their way. Ask the chat in the meantime.'
 
-/** Selecting a project asks this on the Portfolio topic, without history (like component inspect). */
+/** Selecting a project asks this on About Basel, without history (like component inspect). */
 export function questionForProject(title: string): string {
   return `Tell me about ${title}`
 }
 
 export function portfolioHeading(count: number): string {
-  if (count === 0) return 'Portfolio'
-  return `Portfolio · ${count} ${count === 1 ? 'project' : 'projects'}`
+  if (count === 0) return 'Projects'
+  return `Projects · ${count}`
 }
 
 export function stackPreview(stack: readonly string[], limit = 3): { shown: string[]; rest: number } {

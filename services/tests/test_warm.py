@@ -35,13 +35,11 @@ def test_suggested_questions_file_is_the_frontend_source():
     pairs = warm.load_questions(warm.DEFAULT_QUESTIONS)
     assert warm.DEFAULT_QUESTIONS == REPO / "frontend/src/suggested-questions.json"
     assert warm.CORPORA is CORPORA
-    assert {corpus for corpus, _ in pairs} == set(CORPORA)
+    # Two topics since 2026-10-09: About Basel covers the projects, and the
+    # portfolio corpus has no suggested questions of its own.
+    assert {corpus for corpus, _ in pairs} == {"about_me", "about_system"}
     assert 1 <= len(pairs) <= 10  # well under the per-client rate limit of 20 per 10 minutes
-    assert [q for corpus, q in pairs if corpus == "portfolio"] == [
-        "What can you build for me?",
-        "Which project is most like a SaaS app?",
-        "Are you available for freelance work?",
-    ]
+    assert ("about_me", "What projects have you built?") in pairs
     chat = (REPO / "frontend/src/components/Chat.tsx").read_text()
     assert "suggested-questions.json" in chat
     assert not re.search(r"'What did you work on at YouTube\?'", chat)
@@ -327,7 +325,7 @@ def test_an_api_without_portfolio_fails_only_those_questions_and_spends_nothing(
             return warm.Outcome(corpus, question, "failed", detail="HTTP 422", llm_attempted=False)
         return warm.Outcome(corpus, question, "cached", llm_attempted=False)
 
-    questions = warm.load_questions(warm.DEFAULT_QUESTIONS)
+    questions = [("about_me", "q1"), *(("portfolio", f"p{n}") for n in range(3))]
     outcomes, stopped = warm.warm(
         "http://api",
         questions,

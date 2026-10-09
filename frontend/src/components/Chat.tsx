@@ -13,7 +13,6 @@ import suggestedQuestions from '../suggested-questions.json'
 const questions: Record<Corpus, string[]> = {
   basel: suggestedQuestions.about_me,
   system: suggestedQuestions.about_system,
-  portfolio: suggestedQuestions.portfolio,
 }
 
 type ChatProps = {

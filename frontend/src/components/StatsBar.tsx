@@ -21,8 +21,8 @@ type StatsBarProps = {
   newChatDisabled?: boolean
   /** Topic whose conversation New chat clears, e.g. "About Basel". */
   topicLabel?: string
-  /** The Open to work popover's "See portfolio →". */
-  onSeePortfolio?: () => void
+  /** The Open to work popover's "See projects →". */
+  onSeeProjects?: () => void
 }
 
 const TOOLTIP_AUTO_HIDE_MS = 4000
@@ -57,7 +57,7 @@ function StatsBar({
   onNewChat,
   newChatDisabled = false,
   topicLabel = 'this',
-  onSeePortfolio,
+  onSeeProjects,
 }: StatsBarProps) {
   const onCooldown = stressTestCooldownSeconds !== null
   // The API's `reason` (memory estimate vs. node allocatable) is for
@@ -166,7 +166,7 @@ function StatsBar({
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {/* First in the right group: left of New chat (phones) or Stress
             test (desktop), and before them in focus order. */}
-        <OpenToWork onSeePortfolio={onSeePortfolio} />
+        <OpenToWork onSeeProjects={onSeeProjects} />
         {/* Below md: the "+" New chat icon sits at the right, in the same
             group as the capacity icon, so it comes after the stats in DOM and
             focus order. At md+ New chat lives under the ask box. */}

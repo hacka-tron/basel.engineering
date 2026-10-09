@@ -5,7 +5,7 @@
 import { LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { CANONICAL_IDK } from './idkReplies.ts'
 
-export type ApiCorpus = 'about_me' | 'about_system' | 'portfolio'
+export type ApiCorpus = 'about_me' | 'about_system'
 
 export type SettledState = 'done' | 'stopped' | 'retrieval_only'
 
@@ -183,6 +183,20 @@ export function serializeConversation(messages: ChatMessage[], now = Date.now())
     })),
   }
   return JSON.stringify(stored)
+}
+
+// The Portfolio topic's conversation (2026-10-02 to 2026-10-09). Its topic merged
+// into About Basel; the saved turns are dropped rather than merged, since a
+// merged history would interleave two conversations the visitor never had.
+const RETIRED_STORAGE_KEYS = ['glassbox:conv:v1:portfolio']
+
+/** Remove conversations saved under retired topics; storage errors are ignored. */
+export function dropRetiredConversations(): void {
+  try {
+    for (const key of RETIRED_STORAGE_KEYS) window.localStorage.removeItem(key)
+  } catch {
+    // Storage blocked or unavailable: nothing to clean up.
+  }
 }
 
 export function writeConversation(corpus: ApiCorpus, serialized: string | null): void {

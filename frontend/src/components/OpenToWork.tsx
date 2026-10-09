@@ -8,7 +8,7 @@ const LABEL = 'Open to work'
 const HEADLINE = 'Open to full-time work and freelancing'
 const BODY = 'Talking to teams about full-time roles and taking on freelance projects. Copy my email and say hi.'
 const COPY_LABEL = 'Copy email'
-const PORTFOLIO_LINK = 'See portfolio →'
+const PROJECTS_LINK = 'See projects →'
 
 /** Green "available" dot with a soft ping (none with reduced motion). */
 function StatusDot() {
@@ -52,11 +52,11 @@ function CopyEmailButton() {
  *   trigger). Rules in lib/popover.ts; Escape order in lib/escapeKey.ts.
  * - It stays mounted (`hidden` while closed) so `aria-controls` always
  *   points at an element.
- * - "See portfolio →" (spec §5.7) closes it and hands focus to the portfolio.
+ * - "See projects →" (spec §5.7) closes it and hands focus to the project grid.
  */
-function OpenToWork({ onSeePortfolio }: {
-  /** Selects the Portfolio topic and, on phones, opens the Portfolio view (spec §5.7). Omitted, the link is not shown. */
-  onSeePortfolio?: () => void
+function OpenToWork({ onSeeProjects }: {
+  /** Selects About Basel and, on phones, opens its Projects view (spec §5.7). Omitted, the link is not shown. */
+  onSeeProjects?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const popoverId = useId()
@@ -121,17 +121,17 @@ function OpenToWork({ onSeePortfolio }: {
         <div className="mt-2 flex">
           <CopyEmailButton />
         </div>
-        {onSeePortfolio && (
+        {onSeeProjects && (
           <button
             type="button"
             onClick={() => {
-              // Close without returning focus to the trigger: focus moves to the portfolio instead.
+              // Close without returning focus to the trigger: focus moves to the project grid instead.
               setOpen(false)
-              onSeePortfolio()
+              onSeeProjects()
             }}
             className="mt-1 inline-flex min-h-11 items-center text-xs text-primary underline underline-offset-4 outline-none transition-colors hover:text-cyan focus-visible:ring-1 focus-visible:ring-cyan md:mt-2 md:min-h-0"
           >
-            {PORTFOLIO_LINK}
+            {PROJECTS_LINK}
           </button>
         )}
       </div>

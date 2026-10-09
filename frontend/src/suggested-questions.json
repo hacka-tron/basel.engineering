@@ -2,17 +2,13 @@
   "about_me": [
     "What have you built with distributed systems?",
     "What did you work on at YouTube?",
-    "Are you a fit for a platform engineering role?"
+    "Are you a fit for a platform engineering role?",
+    "What projects have you built?"
   ],
   "about_system": [
     "How does the caching work?",
     "Why k3s instead of EKS?",
     "What happens when I press stress test?",
     "Is the database managed by Terraform?"
-  ],
-  "portfolio": [
-    "What can you build for me?",
-    "Which project is most like a SaaS app?",
-    "Are you available for freelance work?"
   ]
 }

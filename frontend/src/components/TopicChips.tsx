@@ -12,9 +12,9 @@ type TopicChipsProps<T extends string> = {
 
 /**
  * Below md, the question topic as a radio group directly above the ask box:
- * "Asking about (● Basel) (○ System) (○ Portfolio)". One 44px row, Chat view only (the
- * Diagram view unmounts it and gives the diagram that height; the topic is
- * unchanged, so a question typed there still uses it). Roving
+ * "Asking about (● Basel) (○ System)". One 44px row, Chat view only (the
+ * Projects and Diagram views unmount it and give their panel that height; each
+ * view belongs to its topic, so a question typed there uses that topic). Roving
  * tabindex: Tab reaches the checked chip; arrows (and Home/End) move and
  * select, as in a native radio group. Accessible names are the full topic
  * names; the visible short labels are contained in them.
@@ -52,11 +52,10 @@ function TopicChips<T extends string>({ value, options, onChange, onUnmountWithF
 
   return (
     <div ref={rootRef} className="flex min-h-11 items-center gap-1 md:hidden">
-      {/* Three chips and the label need about 400px: below 440px the label is
-          screen-reader-only (the radiogroup keeps it as its name); below 360px
-          the chips' padding tightens and below 320px their dots hide, so all
-          three fit at 280px (spec 2026-10-02 §5.1). With two chips (Portfolio
-          hidden until it has content) the label shows down to 320px. */}
+      {/* Two chips (since 2026-10-09) and the label fit down to 320px; below
+          that the label is screen-reader-only (the radiogroup keeps it as its
+          name). Below 360px the chips' padding tightens and below 320px their
+          dots hide. Three chips would hide the label below 440px. */}
       <span id="topic-chips-label" className={`mr-1 whitespace-nowrap text-xs text-muted ${options.length > 2 ? 'max-[440px]:sr-only' : 'max-[320px]:sr-only'}`}>Asking about</span>
       <div role="radiogroup" aria-labelledby="topic-chips-label" onKeyDown={onKeyDown} className="flex items-center">
         {options.map((option, index) => {

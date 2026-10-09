@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { BUDGET_REPLIES, LEGACY_BUDGET_ERROR_REPLY } from './budgetReplies.ts'
 import { planRetry } from './chatRetry.ts'
-import { historyForRequest, latestQuestionAnswered, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
+import { dropRetiredConversations, historyForRequest, latestQuestionAnswered, loadConversation, serializeConversation, type ChatMessage } from './conversation.ts'
 
 const now = 1_700_000_000_000
 const messages: ChatMessage[] = [
@@ -263,12 +263,14 @@ test('latestQuestionAnswered: a settled answer to the latest question means re-s
   assert.equal(latestQuestionAnswered(turn('done'), 'A different question'), false)
 })
 
-test('the Portfolio conversation is saved and restored like the others', () => {
+test('the retired Portfolio conversation is dropped, never merged into About Basel', () => {
   const serialized = serializeConversation(messages.slice(0, 2), now)
   assert.ok(serialized)
-  withStorage({ 'glassbox:conv:v1:portfolio': serialized }, () => {
-    assert.deepEqual(loadConversation('portfolio', now).map((message) => message.id), ['u1', 'a1'])
-    assert.deepEqual(loadConversation('about_me', now), [])
+  const values: Record<string, string> = { 'glassbox:conv:v1:portfolio': serialized, 'glassbox:conv:v1:about_me': serialized }
+  withStorage(values, () => {
+    dropRetiredConversations()
+    assert.deepEqual(Object.keys(values), ['glassbox:conv:v1:about_me'])
+    assert.deepEqual(loadConversation('about_me', now).map((message) => message.id), ['u1', 'a1'])
   })
 })
 

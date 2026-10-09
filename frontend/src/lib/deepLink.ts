@@ -1,25 +1,31 @@
-// Shareable links into the site: `?project=<slug>` opens the Portfolio with
-// that project's details sheet, and `?topic=basel|system|portfolio` picks the
-// topic. The address bar follows what is shown (linkSearch), so copying it
-// shares the current view. Pure, so the parsing is unit tested. A deep link never asks the
-// chatbot by itself (a shared link must not spend an answer per visit); the
-// sheet already shows the write-up. Unknown, hidden or draft values are ignored.
+// Shareable links into the site: `?project=<slug>` opens About Basel with that
+// project's details sheet, and `?topic=basel|system` picks the topic. The
+// retired `?topic=portfolio` (2026-10-02 to 2026-10-09) opens About Basel with
+// its project grid. The address bar follows what is shown (linkSearch), so
+// copying it shares the current view. Pure, so the parsing is unit tested. A
+// deep link never asks the chatbot by itself (a shared link must not spend an
+// answer per visit); the sheet already shows the write-up. Unknown, hidden or
+// draft values are ignored.
 
 import type { Corpus } from './topics.ts'
 
-export type DeepLink = { corpus: Corpus | null; project: string | null }
+export type DeepLink = {
+  corpus: Corpus | null
+  project: string | null
+  /** Open the project grid on phones (a project link, or an old Portfolio link). */
+  projects?: boolean
+}
 
-const TOPICS: readonly Corpus[] = ['basel', 'system', 'portfolio']
+const TOPICS: readonly Corpus[] = ['basel', 'system']
 
-/** `projectSlugs` are the published projects; Portfolio counts only when there is one. */
+/** `projectSlugs` are the published projects; a project link counts only for one of them. */
 export function parseDeepLink(search: string, projectSlugs: readonly string[]): DeepLink {
   const params = new URLSearchParams(search)
   const slug = params.get('project')
-  if (slug !== null && projectSlugs.includes(slug)) return { corpus: 'portfolio', project: slug }
-  const topic = params.get('topic') as Corpus | null
-  if (topic !== null && TOPICS.includes(topic) && (topic !== 'portfolio' || projectSlugs.length > 0)) {
-    return { corpus: topic, project: null }
-  }
+  if (slug !== null && projectSlugs.includes(slug)) return { corpus: 'basel', project: slug, projects: true }
+  const topic = params.get('topic')
+  if (topic === 'portfolio' && projectSlugs.length > 0) return { corpus: 'basel', project: null, projects: true }
+  if (topic !== null && TOPICS.includes(topic as Corpus)) return { corpus: topic as Corpus, project: null }
   return { corpus: null, project: null }
 }
 

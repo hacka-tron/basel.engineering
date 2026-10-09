@@ -327,7 +327,7 @@ function ArchitecturePanel({ activeNode, nodeCacheStatus, retrievedChunks = [], 
         <ReactFlow
           onInit={(instance) => {
             flowRef.current = instance
-            // A component already selected when the diagram mounts (say, after Portfolio -> Diagram).
+            // A component already selected when the diagram mounts (say, after Projects -> Diagram).
             const box = flowBoxRef.current
             if (portrait && selectedRef.current && box) void instance.setViewport(viewportFor(box.clientWidth, box.clientHeight))
           }}
