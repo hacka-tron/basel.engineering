@@ -9,6 +9,9 @@ links:
   code: https://github.com/hacka-tron/buildpair
 cover: buildpair/logo.png
 visuals:
+  - src: buildpair/overview.png
+    alt: Buildpair overview with the headline Set goals. Bring people along. beside the Today view on a phone and on desktop
+    aspect: "16/10"
   - src: buildpair/phone-signin.png
     alt: Buildpair sign-in screen on a phone with the headline Set goals. Bring people along. and an email field
     caption: Sign in with a code from your email. No password to remember.
