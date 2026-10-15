@@ -22,7 +22,7 @@ visuals:
     caption: Adding a to-do takes a few taps.
     aspect: "9/19.5"
   - src: buildpair/phone-spaces.png
-    alt: Spaces list on a phone showing Ledgerly, Life and Running with the people in each
+    alt: Spaces list on a phone showing Ledgerly, Life and Running
     caption: A space for each part of your life, from a side project to a half marathon.
     aspect: "9/19.5"
   - src: buildpair/phone-space.png
@@ -47,8 +47,8 @@ draft: false
 ## Why I built Buildpair
 
 Building something on your own gets lonely. You set a goal, nobody notices when it slips,
-and it fades away. I wanted a to-do app with a small audience. Not a public feed, just two
-or three people who care enough to ask how it's going.
+and it fades away. I wanted a to-do app with a small audience. Not a public feed, just a few
+people who care enough to ask how it's going.
 
 Buildpair is a to-do and goals app for builders that you share with a few people you trust.
 It's still a work in progress. It runs on a test site for invited people, and the code is
@@ -59,7 +59,7 @@ on GitHub.
 Everything lives in a space, like a side project, a training plan or family life. Each
 space is a list with a chat beside it. When you check something off, the chat says so, and
 your friends can cheer you on or ask what's next. If a goal goes quiet, they get a nudge to
-check in, so it feels like a friend reaching out and not an app nagging you.
+check in, so it feels like a friend reaching out.
 
 You invite people with a link, sign in with a code from your email, and keep working when
 you're offline.
