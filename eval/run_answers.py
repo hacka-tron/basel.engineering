@@ -32,6 +32,7 @@ from services.glassbox.api.ask import (
     _clean_rewrite,
     _prompt,
     _rewrite_prompt,
+    _split_question,
     _token_counts,
     answer_route,
     answer_system,
@@ -45,6 +46,7 @@ from services.glassbox.providers.base import (
     EmbeddingProvider,
     LLMProvider,
 )
+from services.glassbox.question_parts import looks_multi_part
 from services.glassbox.sources_line import strip_sources_lines
 
 HERE = Path(__file__).resolve().parent
@@ -177,11 +179,16 @@ async def run_case(
         first_token_ms = None
         route = answer_route(chunks, case["corpus"], case["question"])
         row["route"] = route
+        # Prompt v23, like the API: a multi-part question's parts close the prompt.
+        parts = None
+        if chunks and looks_multi_part(case["question"]):
+            parts = await _split_question(llm, case["id"], case["question"])
+        row["question_parts"] = parts
         if not chunks:
             # Same as the API: no sources means the canonical abstention, no LLM call.
             answer, tokens_in, tokens_out = ABSTENTION_ANSWER, 0, 0
         else:
-            prompt = _prompt(case["question"], chunks, history, route, case["corpus"])
+            prompt = _prompt(case["question"], chunks, history, route, case["corpus"], parts)
             system_kwargs = {"system": answer_system(history)}
             usage_kwargs = {"usage": usage} if getattr(llm, "reports_usage", False) else {}
             answer_parts = []
