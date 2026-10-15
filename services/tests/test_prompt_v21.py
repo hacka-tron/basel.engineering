@@ -25,7 +25,7 @@ def _all_example_text() -> str:
 
 
 def test_prompt_version_is_current():
-    assert ask._PROMPT_VERSION == "v22"
+    assert ask._PROMPT_VERSION == "v23"
 
 
 def test_no_example_carries_an_email_placeholder():

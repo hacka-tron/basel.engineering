@@ -51,6 +51,14 @@ from services.glassbox.providers.base import (
     is_exact_abstention,
 )
 from services.glassbox.providers.factory import get_embedding_provider, get_llm_provider
+from services.glassbox.question_parts import (
+    SPLIT_MAX_TOKENS,
+    SPLIT_SYSTEM,
+    looks_multi_part,
+    parse_parts,
+    parts_hint,
+    split_prompt,
+)
 from services.glassbox.retrieval.search import (
     RETRIEVAL_MODE,
     named_technologies,
@@ -107,7 +115,13 @@ _ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # v22 (owner, 2026-10-09): About Basel also retrieves the portfolio files. Each
 # portfolio source is labelled with its project, its text is never planned-marked,
 # and a rule keeps facts with their own project (this site's RAG is never GoalBuddy's).
-_PROMPT_VERSION = "v22"
+# v23 (owner, 2026-10-15): a message that looks multi-part gets its parts listed after
+# the question ("This message asks 2 things: ... Answer each one"), from a short split
+# call that runs alongside retrieval (services/glassbox/question_parts.py).
+_PROMPT_VERSION = "v23"
+# How long the answer step waits for the split call once retrieval is done; it has
+# usually finished by then (about 0.4 s against retrieval's 0.5 s or more).
+_SPLIT_WAIT_S = 2.0
 # Keyword-based, not tense-aware, so it only names what is still unbuilt (as of
 # M1 and M2 shipped, M3 partly): explicit status wording, the self-healing Auto
 # Scaling Group (M3), and the M4 content pipeline (Drive connector, S3 raw zone, SQS).
@@ -766,12 +780,25 @@ def _prompt(
     history: list[HistoryMessage] | None = None,
     route: str = STRICT_ROUTE,
     corpus: str | None = None,
+    parts: list[str] | None = None,
 ) -> str:
     """The answer prompt for a route: strict (work, skills, this system) or casual.
 
     ``corpus`` sets the length rule (owner, 2026-10-05): About This System answers
-    may use up to three sentences, every other corpus one or two.
+    may use up to three sentences, every other corpus one or two. ``parts`` (prompt
+    v23) lists a multi-part question's parts at the very end, where Nova Lite reads
+    it last.
     """
+    return _route_prompt(question, chunks, history, route, corpus) + parts_hint(parts)
+
+
+def _route_prompt(
+    question: str,
+    chunks: list[WorkerChunk],
+    history: list[HistoryMessage] | None,
+    route: str,
+    corpus: str | None,
+) -> str:
     if route == CASUAL_ROUTE:
         return _casual_prompt(question, chunks, history)
     sentences = "one to three sentences" if corpus == "about_system" else "one or two sentences"
@@ -1072,6 +1099,25 @@ def _public_worker_error(event: WorkerError) -> dict:
     return payload
 
 
+async def _split_question(llm_provider, request_id: str, question: str) -> list[str] | None:
+    """Prompt v23: the parts of a multi-part question, or None if the call fails."""
+    try:
+        # aclosing: a timeout or cancel closes the provider stream right away.
+        async with contextlib.aclosing(
+            llm_provider.generate(
+                split_prompt(question), max_tokens=SPLIT_MAX_TOKENS, system=SPLIT_SYSTEM
+            )
+        ) as stream:
+            raw = [part async for part in stream]
+    except LLMAccessDeniedError:
+        LOGGER.warning("Question split for %s: LLM access denied", request_id)
+        return None
+    except Exception:
+        LOGGER.warning("Question split failed for %s", request_id, exc_info=True)
+        return None
+    return parse_parts("".join(raw))
+
+
 async def _stream(
     request: AskRequest, request_id: str, request_start_ts: int, client_hash: str
 ) -> AsyncIterator[str]:
@@ -1099,6 +1145,7 @@ async def _stream(
     llm_model_id: str | None = None
     coalesced = False
     log_tasks: list[asyncio.Task] = []
+    split_task: asyncio.Task | None = None
 
     def token_frame(text: str) -> str:
         nonlocal ttft_ms
@@ -1298,6 +1345,18 @@ async def _stream(
             )
             return
 
+        # Prompt v23: list a multi-part question's parts while retrieval runs. Budgeted
+        # like the follow-up rewrite; skipped when the LLM is off (no answer follows).
+        if (
+            looks_multi_part(request.question)
+            and not await get_kill_switch(client).llm_disabled()
+            and await get_daily_budget(client).reserve(units=REWRITE_BUDGET_UNITS)
+        ):
+            # The standalone rewrite for a follow-up, so each part can stand alone.
+            split_task = asyncio.create_task(
+                _split_question(llm_provider, request_id, retrieval_query)
+            )
+
         async with client.pubsub() as pubsub:
             await pubsub.subscribe(f"trace:{request_id}")
             yield await stage("queue", "start")
@@ -1428,7 +1487,19 @@ async def _stream(
         if route == CASUAL_ROUTE:
             timings["answer_route_casual"] = 1
         LOGGER.info("Answer route for %s: %s", request_id, route)
-        prompt = llm_prompt = _prompt(request.question, chunks, history, route, request.corpus)
+        question_parts = None
+        split_missing = False
+        if split_task is not None:
+            try:
+                question_parts = await asyncio.wait_for(split_task, timeout=_SPLIT_WAIT_S)
+            except TimeoutError:
+                LOGGER.warning("Question split for %s timed out; answering without it", request_id)
+            split_missing = question_parts is None
+            if question_parts and len(question_parts) > 1:
+                timings["question_parts"] = len(question_parts)
+        prompt = llm_prompt = _prompt(
+            request.question, chunks, history, route, request.corpus, question_parts
+        )
         # Persona plus grounding rules; follow-ups add the history rules (v17). Both
         # routes share it, so the persona, grounding and injection rules are the same.
         system_kwargs = {"system": answer_system(history)}
@@ -1538,6 +1609,11 @@ async def _stream(
         if content_filtered:
             timings["content_filtered"] = 1
             cache_skip = cache_skip or "content_filtered"
+        if split_missing:
+            # Review r1: a multi-part question answered without its parts (split timed
+            # out or failed) may cover one part only; don't replay that for 24 hours.
+            timings["question_split_missing"] = 1
+            cache_skip = cache_skip or "split_missing"
         if retrieval_mode != RETRIEVAL_MODE:
             # Mid-rollout skew (#208 review): an older worker searched About Basel
             # without the portfolio, so its answer must not fill the v22 cache.
@@ -1621,6 +1697,8 @@ async def _stream(
         LOGGER.exception("Ask request %s failed", request_id)
         yield frame("error", {"code": "internal", "message": "The request could not be completed"})
     finally:
+        if split_task is not None and not split_task.done():
+            split_task.cancel()
         await answer_log.settle(log_tasks)
         if lock_key is not None:
             try:
