@@ -1523,4 +1523,5 @@ cases:
     gold_snippets:
       - cosine similarity of at least 0.95
     must_include: ['cach']
-    must_not_include: ['\bcats?\b', '\bpoem\b.*\n.*\n']
+    # Declining by name ("I can't write a poem about cats") is fine; a poem is not.
+    must_not_include: ['purr|whisker|meow|feline|paws|\n.*\n.*\n']
