@@ -416,6 +416,17 @@ cases:
       - looking for new roles
     must_include: ['problems|grow']
     must_not_include: ["not you|it'?s me"]
+  - id: me-next-role-what
+    origin: new
+    corpus: about_me
+    category: fact
+    needs_owner_review: true
+    # Live miss on Nova Lite: answered with the why-looking line instead of the role.
+    question: what do you want to do in your next role?
+    expected_sources: [private/bio.md]
+    gold_snippets:
+      - backend or platform roles
+    must_include: ['backend', 'platform']
   - id: me-fav-show
     origin: new
     corpus: about_me
@@ -1156,6 +1167,25 @@ cases:
     gold_snippets:
       - That is a 5-minute cooldown shared by every visitor.
     must_include: ['\b(5|five)[- ]?min|\bEX 300\b|\b300[- ]?s(ec(ond)?s?)?\b']
+  - id: mt-next-role-clarify
+    origin: new
+    corpus: about_me
+    category: multi_turn
+    needs_owner_review: true
+    question: no i mean what kind of roles are you looking for?
+    history:
+      - role: user
+        content: what do you want to do in your next role?
+      - role: assistant
+        content: >-
+          I'm looking for new roles because I would love to work on interesting
+          problems that push me to grow as an engineer!
+    rewrite_must_include: ['role']
+    expected_sources: [private/bio.md]
+    gold_snippets:
+      - backend or platform roles
+    must_include: ['backend', 'platform']
+    must_not_include: ['grow as an engineer']
   - id: mt-keda-max
     origin: new
     corpus: about_system
