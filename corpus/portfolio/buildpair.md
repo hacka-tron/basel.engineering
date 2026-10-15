@@ -14,8 +14,8 @@ visuals:
     caption: A space is a list plus one chat. Finishing a to-do posts a line that supporters react to.
     aspect: "16/10"
   - src: buildpair/desktop-today.png
-    alt: Today view on desktop listing to-dos and habits grouped by space, with each space's supporters shown as avatars
-    caption: Today pulls every space's to-dos and habits into one list.
+    alt: Today view on desktop listing to-dos grouped by space, with each space's supporters shown as avatars
+    caption: Today pulls every space's to-dos into one list.
     aspect: "16/10"
   - src: buildpair/phone-space.png
     alt: The Ledgerly space at phone width, with its to-dos above its chat
