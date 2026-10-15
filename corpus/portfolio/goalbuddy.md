@@ -25,7 +25,7 @@ visuals:
     alt: GoalBuddy sign-in screen with Google sign-in and email and password fields
     caption: Sign in with Google or email.
     aspect: "9/19.5"
-draft: false
+draft: true
 ---
 
 ## GoalBuddy: the problem it solves
