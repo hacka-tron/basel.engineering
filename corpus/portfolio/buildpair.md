@@ -7,8 +7,10 @@ order: 1
 stack: [React Native, Cloudflare Workers, Durable Objects, TypeScript, Expo, Hono, D1, Drizzle, Zod]
 links:
   code: https://github.com/hacka-tron/buildpair
-cover: buildpair/cover.png
 visuals:
+  - src: buildpair/cover.png
+    alt: The Buildpair logo and name
+    aspect: "16/10"
   - src: buildpair/phone-signin.png
     alt: Buildpair sign-in screen on a phone with the headline Set goals. Bring people along. and an email field
     caption: Sign in with a code from your email. No password to remember.
