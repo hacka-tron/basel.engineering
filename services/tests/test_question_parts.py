@@ -214,15 +214,8 @@ def test_pending_split_is_cancelled_on_an_early_return(harness):  # noqa: F811
             self.reservations.append(units)
             return units == 1  # the split's unit, but no answer budget left
 
-    harness["budget"] = budget = SplitOnlyBudget()
-    from services.glassbox.api import ask
-
-    ask_budget = ask.get_daily_budget
-    try:
-        ask.get_daily_budget = lambda client: budget
-        stream = events(harness["post"](question=TWO_PART, history=None))
-    finally:
-        ask.get_daily_budget = ask_budget
+    harness["budget"] = SplitOnlyBudget()
+    stream = events(harness["post"](question=TWO_PART, history=None))
     done = next(data for name, data in stream if name == "done")
     assert done["mode"] == "retrieval_only"
     assert llm.cancelled
