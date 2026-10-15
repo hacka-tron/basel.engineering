@@ -350,7 +350,7 @@ Privacy: questions and answers are logged without IP addresses or any client ide
 | `seq:{request_id}` | counter | Shared event sequence for API and worker | refreshed to 5 minutes on each event |
 | `rl:{ip_hash}` | token bucket | 20 questions per 10 minutes per IP | 10 minutes |
 | `budget:llm:{yyyy-mm-dd}` | counter | Generated answers today, one per answer (code default cap 100; production sets 500) | 2 days |
-| `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites today in quarter-units, 1 per rewrite (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
+| `budget:llm:rw:{yyyy-mm-dd}` | counter | Follow-up rewrites and multi-part question splits (prompt v23: a short call, made during retrieval, that lists a message's questions for the answer prompt) today in quarter-units, 1 per call (DD2 §5.4). A reservation checks `4 × answers + rewrites` against `4 × cap` atomically across both keys | 2 days |
 | `demo:load:lock` | string (`SET NX EX 300`) | Stress test cooldown | 5 minutes |
 | `stats:*` | counters / HyperLogLog | Footer stats, hit rates, latency samples (not built yet: the footer is client-side today) | rolling |
 

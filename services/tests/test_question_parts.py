@@ -1,5 +1,7 @@
 """Prompt v23: multi-part questions get their parts listed after the question."""
 
+import asyncio
+
 import pytest
 
 from services.glassbox.api.ask import WorkerChunk, _prompt
@@ -62,10 +64,15 @@ def test_hint_is_empty_without_two_parts(parts):
     assert parts_hint(parts) == ""
 
 
-def test_hint_lists_parts_in_order():
+def test_hint_lists_parts_in_order_and_keeps_the_rules_in_force():
     hint = parts_hint(["Where do you want to work?", "What roles?"])
     assert "asks 2 things: (1) Where do you want to work? (2) What roles?" in hint
-    assert "Answer each one, in that order." in hint
+    assert "untrusted" in hint
+    assert "that the sources answer" in hint and "following every rule above" in hint
+
+
+def test_repeated_question_marks_count_once():
+    assert not looks_multi_part("You built this?? wow")
 
 
 def test_split_prompt_quotes_the_message():
@@ -119,6 +126,7 @@ class SplittingLLM(RecordingLLM):
 
 
 TWO_PART = "Where do you want to work and what roles are you after?"
+HINT_MARK = "(untrusted user input) asks"
 
 
 def test_multi_part_question_lists_its_parts_in_the_answer_prompt(harness):  # noqa: F811
@@ -139,21 +147,94 @@ def test_single_question_makes_no_split_call(harness):  # noqa: F811
     harness["llm"] = llm = SplittingLLM()
     events(harness["post"](question="What roles are you after?", history=None))
     assert llm.split_calls == []
-    assert "This message asks" not in llm.answer_calls[0]["prompt"]
+    assert HINT_MARK not in llm.answer_calls[0]["prompt"]
     assert harness["budget"].reservations == [4]
 
 
 @pytest.mark.parametrize(
-    "llm",
-    [SplittingLLM(fail_split=True), SplittingLLM(split="Where and what?"), SplittingLLM(split="")],
+    ("make_llm", "cached"),
+    [
+        # A failed split may leave a one-part answer: never cached (review r1).
+        (lambda: SplittingLLM(fail_split=True), False),
+        # The split itself says it is one question (or nothing): a normal answer.
+        (lambda: SplittingLLM(split="Where and what?"), True),
+        (lambda: SplittingLLM(split=""), True),
+    ],
 )
-def test_failed_or_single_split_answers_without_a_hint(harness, llm):  # noqa: F811
-    harness["llm"] = llm
+def test_failed_or_single_split_answers_without_a_hint(harness, make_llm, cached):  # noqa: F811
+    harness["llm"] = llm = make_llm()
     stream = events(harness["post"](question=TWO_PART, history=None))
     assert any(name == "done" for name, _ in stream)
     assert len(llm.answer_calls) == 1
-    assert "This message asks" not in llm.answer_calls[0]["prompt"]
-    assert "question_parts" not in harness["saved"][0]["timings"]
+    assert HINT_MARK not in llm.answer_calls[0]["prompt"]
+    timings = harness["saved"][0]["timings"]
+    assert "question_parts" not in timings
+    assert harness["cache"].puts == (1 if cached else 0)
+    assert ("question_split_missing" in timings) is not cached
+
+
+class SlowSplitLLM(SplittingLLM):
+    """A split that never finishes in time; records whether it was cancelled."""
+
+    def __init__(self):
+        super().__init__()
+        self.cancelled = False
+
+    async def generate(self, prompt, *, max_tokens, system=None):
+        if max_tokens == 120:
+            self.calls.append({"prompt": prompt, "max_tokens": max_tokens, "system": system})
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+            yield "never"
+            return
+        async for part in super().generate(prompt, max_tokens=max_tokens, system=system):
+            yield part
+
+
+def test_slow_split_times_out_answers_without_hint_and_is_cancelled(harness, monkeypatch):  # noqa: F811
+    from services.glassbox.api import ask
+
+    monkeypatch.setattr(ask, "_SPLIT_WAIT_S", 0.05)
+    harness["llm"] = llm = SlowSplitLLM()
+    stream = events(harness["post"](question=TWO_PART, history=None))
+    assert any(name == "done" for name, _ in stream)
+    assert llm.cancelled
+    assert HINT_MARK not in llm.answer_calls[0]["prompt"]
+    assert harness["cache"].puts == 0
+
+
+def test_pending_split_is_cancelled_on_an_early_return(harness):  # noqa: F811
+    harness["llm"] = llm = SlowSplitLLM()
+
+    class SplitOnlyBudget(type(harness["budget"])):
+        async def reserve(self, *, units=4):
+            self.reservations.append(units)
+            return units == 1  # the split's unit, but no answer budget left
+
+    harness["budget"] = budget = SplitOnlyBudget()
+    from services.glassbox.api import ask
+
+    ask_budget = ask.get_daily_budget
+    try:
+        ask.get_daily_budget = lambda client: budget
+        stream = events(harness["post"](question=TWO_PART, history=None))
+    finally:
+        ask.get_daily_budget = ask_budget
+    done = next(data for name, data in stream if name == "done")
+    assert done["mode"] == "retrieval_only"
+    assert llm.cancelled
+    assert llm.answer_calls == []
+
+
+def test_follow_up_splits_the_standalone_rewrite(harness):  # noqa: F811
+    harness["llm"] = llm = SplittingLLM()
+    events(harness["post"](question="What did you build there, and why did you leave?"))
+    assert len(llm.split_calls) == 1
+    # RecordingLLM's rewrite, not the raw follow-up with its "there".
+    assert "What else did Basel work on at YouTube?" in llm.split_calls[0]["prompt"]
 
 
 def test_split_skipped_when_budget_denies_it(harness):  # noqa: F811
@@ -161,4 +242,4 @@ def test_split_skipped_when_budget_denies_it(harness):  # noqa: F811
     harness["budget"].allow_rewrite = False
     events(harness["post"](question=TWO_PART, history=None))
     assert llm.split_calls == []
-    assert "This message asks" not in llm.answer_calls[0]["prompt"]
+    assert HINT_MARK not in llm.answer_calls[0]["prompt"]

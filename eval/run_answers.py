@@ -182,7 +182,8 @@ async def run_case(
         # Prompt v23, like the API: a multi-part question's parts close the prompt.
         parts = None
         if chunks and looks_multi_part(case["question"]):
-            parts = await _split_question(llm, case["id"], case["question"])
+            # Like the API: a follow-up splits its standalone rewrite.
+            parts = await _split_question(llm, case["id"], rewrite or case["question"])
         row["question_parts"] = parts
         if not chunks:
             # Same as the API: no sources means the canonical abstention, no LLM call.

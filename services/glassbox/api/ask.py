@@ -1102,14 +1102,13 @@ def _public_worker_error(event: WorkerError) -> dict:
 async def _split_question(llm_provider, request_id: str, question: str) -> list[str] | None:
     """Prompt v23: the parts of a multi-part question, or None if the call fails."""
     try:
-        raw = [
-            part
-            async for part in llm_provider.generate(
-                split_prompt(question),
-                max_tokens=SPLIT_MAX_TOKENS,
-                system=SPLIT_SYSTEM,
+        # aclosing: a timeout or cancel closes the provider stream right away.
+        async with contextlib.aclosing(
+            llm_provider.generate(
+                split_prompt(question), max_tokens=SPLIT_MAX_TOKENS, system=SPLIT_SYSTEM
             )
-        ]
+        ) as stream:
+            raw = [part async for part in stream]
     except LLMAccessDeniedError:
         LOGGER.warning("Question split for %s: LLM access denied", request_id)
         return None
@@ -1353,8 +1352,9 @@ async def _stream(
             and not await get_kill_switch(client).llm_disabled()
             and await get_daily_budget(client).reserve(units=REWRITE_BUDGET_UNITS)
         ):
+            # The standalone rewrite for a follow-up, so each part can stand alone.
             split_task = asyncio.create_task(
-                _split_question(llm_provider, request_id, request.question)
+                _split_question(llm_provider, request_id, retrieval_query)
             )
 
         async with client.pubsub() as pubsub:
@@ -1488,11 +1488,13 @@ async def _stream(
             timings["answer_route_casual"] = 1
         LOGGER.info("Answer route for %s: %s", request_id, route)
         question_parts = None
+        split_missing = False
         if split_task is not None:
             try:
                 question_parts = await asyncio.wait_for(split_task, timeout=_SPLIT_WAIT_S)
             except TimeoutError:
                 LOGGER.warning("Question split for %s timed out; answering without it", request_id)
+            split_missing = question_parts is None
             if question_parts and len(question_parts) > 1:
                 timings["question_parts"] = len(question_parts)
         prompt = llm_prompt = _prompt(
@@ -1607,6 +1609,11 @@ async def _stream(
         if content_filtered:
             timings["content_filtered"] = 1
             cache_skip = cache_skip or "content_filtered"
+        if split_missing:
+            # Review r1: a multi-part question answered without its parts (split timed
+            # out or failed) may cover one part only; don't replay that for 24 hours.
+            timings["question_split_missing"] = 1
+            cache_skip = cache_skip or "split_missing"
         if retrieval_mode != RETRIEVAL_MODE:
             # Mid-rollout skew (#208 review): an older worker searched About Basel
             # without the portfolio, so its answer must not fill the v22 cache.
