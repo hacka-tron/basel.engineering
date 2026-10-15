@@ -1,6 +1,6 @@
 # Prompt v23: answers cover every part of a multi-part question (2026-10-15 06:51 PT)
 
-**Status:** PR open (branch `feat/multi-part-answers`). Goes live with the normal release after merge.
+**Status:** merged (#216, 779a167); the release started automatically on merge and also picks up the private bio changes (docs #14, #15). Live check not done in this session.
 
 ## TL;DR
 
