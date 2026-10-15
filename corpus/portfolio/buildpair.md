@@ -8,7 +8,7 @@ stack: [React Native, Cloudflare Workers, Durable Objects, TypeScript, Expo, Hon
 links:
   code: https://github.com/hacka-tron/buildpair
 visuals:
-  - src: buildpair/cover.png
+  - src: buildpair/logo.png
     alt: The Buildpair logo and name
     aspect: "16/10"
   - src: buildpair/phone-signin.png
